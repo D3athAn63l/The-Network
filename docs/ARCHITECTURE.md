@@ -328,7 +328,8 @@ hold **who may exist in new worlds**; each world holds **what happened to them i
 
 - On bootstrap a world **snapshots** the enabled templates into its own `WorldCastSnapshot` and
   instantiates actors from that snapshot with world-local `ActorId`s; the template ID is kept as
-  provenance only.
+  provenance only. A contractor always gets `ContractorProfile`, and gets `IssuerProfile` only
+  when its template's explicit `canIssueWork` flag is set.
 - Runtime outcomes are **never** written back to `ModSettings`. Global edits, renames and
   regeneration affect future worlds only, and never silently rename, replace or resurrect an
   actor in an existing save.

@@ -270,6 +270,10 @@ It therefore has **its own version**, `NetworkSettingsVersion`, separate from
   migrations (§ 4): structural reads for renamed or moved fields, semantic transforms for
   changed meaning. They cover the generated-template schema, custom templates, renamed fields and
   new actor-template capabilities (a new field gets a safe default; an old style key is mapped).
+  The documented default for `ContractorTemplate.canIssueWork` is **`false`**: a template read
+  without it (an older or hand-edited file) does not gain `IssuerProfile` implicitly, and the
+  value is never inferred from form, fame, experience, size, wealth or mobility. The migrated
+  value is written explicitly and kept; a `Custom` entry's existing value is always preserved.
 - **Custom entries are preserved whenever possible.** A migration may regenerate or drop only
   `Generated` data, and only when it cannot be migrated; it never discards a `Custom` entry that
   can still be read.

@@ -209,7 +209,7 @@ and relationships.
 | `OrganizationProfile` | group structure of an **NPC organization or crew** | see [§ 6.3](#63-organizationprofile-npc-organizations-and-crews-only). Organizations only; never a Solo or the player. |
 | `FixerProfile` | can broker: mediate Intel, procurement, deposits and insurance | see [§ 4.3](#43-fixers-and-brokers-fixerprofile). Normally an `Individual`. |
 | `IntelSourceProfile` | can provide Intel | `specialties: string[]`, `coverage: RegionKey[]` (geographic reach), `topicStrengths` (reads KnowledgeBook), `speedProfile`, `reliabilityProfile`, `feePolicyKey`, `continuationPolicyKey` (whether and how a search continues after a lead: free, per round, reduced, limited), `discretion`. Profiles are small bands plus replaceable policy keys, never formulas. Held by Fixers, faction proxies (derived lazily in Phase 1 from master § 13 signals: tech level, faction type, goodwill, geography and **source-package overlap with the topic**), known contractors, and the Exchange institution. Not every Intel source is a Fixer. The player sees descriptors learned from how the source's leads turned out. |
-| `IssuerProfile` | **creates, offers and funds work** for other contractors: drafts and posts contracts, invites contractors, receives and selects bids, acts as the employer or client, pays the terms | `budgetBand: int`, `preferredKinds: string[]`, `legitimacy: float` (0 = criminal, 1 = lawful), `paysOnTime: float`. Held by the `PlayerProxy` from the start, by faction proxies and institutions that post work, and by **contractor actors too**: most established organizations carry both profiles (to buy gear, post a rescue for a captured member, hire recovery work, later subcontract). A poor Solo may have only `ContractorProfile`. |
+| `IssuerProfile` | **creates, offers and funds work** for other contractors: drafts and posts contracts, invites contractors, receives and selects bids, acts as the employer or client, pays the terms | `budgetBand: int`, `preferredKinds: string[]`, `legitimacy: float` (0 = criminal, 1 = lawful), `paysOnTime: float`. Held by the `PlayerProxy` from the start, by faction proxies and institutions that post work, and by **contractor actors too**: most established organizations carry both profiles (to buy gear, post a rescue for a captured member, hire recovery work, later subcontract). A poor Solo may have only `ContractorProfile`. For cast contractors the starting value comes from the template's explicit `canIssueWork` ([§ 18](#18-global-network-cast-modsettings-cross-save)). |
 | `SponsorProfile` | can sponsor | `sponsored: ActorId[]`, `contributions` per sponsee (silver and items given or loaned, with ticks), `leases: LeaseId[]`. Sponsorship is an investment in capability and the relationship, with no guaranteed return (master § 31). |
 | `SponsoredProfile` | receives sponsorship | `sponsor: ActorId`, `sinceTick`, `obligationsTo: ObligationId[]` |
 | `IntroducerProfile` | can provide introductions | `introducibleActors: ActorId[]` (bounded), `introductionCooldownUntil` |
@@ -969,6 +969,7 @@ ContractorTemplate
   specialties: string[]
   doctrineStyle: string?                 // broad style (Aggressive, Cautious, …) where applicable
   mobility: MobilityTag[]?               // starting mobility, independent of experience and fame
+  canIssueWork: bool = false             // starts with IssuerProfile; explicit, never re-derived (below)
   originHints: { factionDefName?, packageId?, regionHint? }   // strings; missing content is ignored at import
   generation: { generatorVersion, seed, nameParts: string[] }  // enough to recreate or audit a generated entry
 
@@ -981,6 +982,13 @@ FixerTemplate
   reach: { contractorReach: ReachBand, geographicReach: ReachBand }
   generation: { … }
 ```
+
+`canIssueWork` is the template's one stored starting capability: whether the contractor also
+starts with an `IssuerProfile` (can post, fund and hire work). It is independent of fame,
+experience, form, organization size, wealth and mobility, so it is never inferred from any of
+them. The generator picks it once from archetype probabilities (most established organizations
+true, most poor Solos false; exact odds are tuning) and stores the result; a custom entry sets
+it directly. Dead Red: `true`. A poor Solo: `false`.
 
 Bands and style keys only; no formulas, no giant stat sheets. The generated default is roughly
 **100 contractor identities** (Solos, duos, tiny crews, teams, companies, specialists; many
@@ -1006,6 +1014,11 @@ WorldCastSnapshot                          // world-local, saved with the world
 - Actors are instantiated **from the snapshot**, never from live settings: Fixers in Phase 1,
   contractors when Phase 2 activates them (so a save started under Phase 1 later gets its
   contractors from its own snapshot, not from whatever the global roster says by then).
+  `canIssueWork` travels in the snapshot copy with the rest of the template.
+- **Contractor composition at instantiation**: always `ContractorProfile` (plus
+  `ContractorSimulation`, and `OrganizationProfile` for organization forms); **`IssuerProfile`
+  if and only if the snapshotted `canIssueWork` is true**. Nothing else decides it; the flag is
+  read once here and never re-derived.
 - Every instantiated actor gets **world-local ActorIds**; `provenance.templateId` is retained
   for display and diagnostics only. Identity inside the world is the `ActorId`.
 - All runtime state stays world-local: relationships, history, deaths, injuries, contracts,
@@ -1030,6 +1043,8 @@ Fixers (a custom Legendary included), edit names and profiles, and enable or dis
   generated + the same 4 + the same Fixer. Deleting custom entries is a separate, explicit action.
 - New generated entries get **new** template IDs. Existing worlds are unaffected because they
   hold their own snapshots.
+- `canIssueWork` is editable like the other profile fields. A `Custom` entry keeps the value it
+  was given; only regeneration, which replaces `Generated` entries, rolls new values.
 - Renaming keeps the `templateId`. Duplicate active names are avoided where practical (the
   generator re-rolls; custom names are always allowed, with a warning).
 - Runtime code only **reads** the roster, at world import and in the settings UI.

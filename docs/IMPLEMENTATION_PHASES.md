@@ -163,9 +163,10 @@ ADR-015 already names).
 
 - **The contractor side of the cast**: about 100 configurable contractor identities
   instantiated from the world's snapshot (Solos, duos, crews, teams, companies, specialists),
-  with `ContractorProfile` (capability), `ContractorSimulation` (NPC state) and, for
-  organizations, `OrganizationProfile`. A population manager for world-generated newcomers,
-  daily upkeep, morale v1, doctrine, roster tiers, wounded recovery, recruitment, **minimal
+  with `ContractorProfile` (capability), `ContractorSimulation` (NPC state), for
+  organizations `OrganizationProfile`, and `IssuerProfile` where the template's `canIssueWork`
+  is set (the component only; issuing behaviour is later scope). A population manager for
+  world-generated newcomers, daily upkeep, morale v1, doctrine, roster tiers, wounded recovery, recruitment, **minimal
   succession**. Fame and operational experience tracked separately; Legendary is never
   protection.
 - Known Characters as **records only** (leaders, lieutenants, notable fates). There are no pawns
