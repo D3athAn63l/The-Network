@@ -1,0 +1,318 @@
+# Implementation Phases
+
+> "One-shot architecture, phased implementation." Each phase is a **vertical slice** that is
+> playable, saveable and removable, and each builds on persistent structures that do not need
+> rewriting. Related: [ARCHITECTURE § 10](ARCHITECTURE.md#10-what-is-stable-now-and-what-stays-replaceable),
+> [RIMWORLD_INTEGRATION § 5](RIMWORLD_INTEGRATION.md#5-runtime-spikes), [RISKS](RISKS.md).
+
+## Contents
+
+1. [Phase plan at a glance](#1-phase-plan-at-a-glance)
+2. [Changes to the proposed sequence, and why](#2-changes-to-the-proposed-sequence-and-why)
+3. [Rules for every phase](#3-rules-for-every-phase)
+4. [Phase 1: Foundation + Intel](#4-phase-1-foundation--intel)
+5. [Phase 2: Contractors (abstract) + Procurement](#5-phase-2-contractors-abstract--procurement)
+6. [Phase 3: Abstract ↔ physical lifecycle](#6-phase-3-abstract--physical-lifecycle)
+7. [Phase 4: Player as contractor, contract board, bidding](#7-phase-4-player-as-contractor-contract-board-bidding)
+8. [Phase 5: Social layer](#8-phase-5-social-layer)
+9. [Phase 6: Organizational lifecycle and legends](#9-phase-6-organizational-lifecycle-and-legends)
+10. [Phase 7+: Expansions](#10-phase-7-expansions)
+11. [Deliberately deferred](#11-deliberately-deferred)
+
+---
+
+## 1. Phase plan at a glance
+
+| Phase | Theme | Proves | Highest-risk spike(s) |
+|---|---|---|---|
+| **0** | Architecture (this branch) | the design | — |
+| **1** | Foundation + Intel + Fixer foundation | global cast in ModSettings → world snapshot → Fixers → Comms Console gate → catalog → persistence → scheduling → multi-lead Intel → source/context resolution → opportunity → vanilla site → physical loot, taken in part or in full → cleanup → history | S1, S2, S5, S6, S8, S19 |
+| **2** | Contractors (abstract) + Procurement | about 100 contractor identities (Solos to companies) from the world's cast, capability split from NPC simulation, Open and Direct contracts with the offer path, Fixer-mediated quotes, deposits and insurance, deterministic resolver, drop-pod delivery, willingness/refusal, relationships core, history changing behaviour, failures that leave a last known location | S13 |
+| **3** | Abstract ↔ physical lifecycle | Known Characters as pawns, custody, deployments, encounter factions, in-person delivery, rescue follow-ups, contract inheritance | **S9**, S10, S11, S12, S14 |
+| **4** | Player as contractor + NPC contract board + full bidding | player registration (same faction), NPC-issued contracts, competing offers, competitors at opportunities, public reputation epithets | — |
+| **5** | Social layer | rumors and beliefs, gossip, favors and debts, introductions, perceived reputation, sanctions and blacklists, morale v2 | — |
+| **6** | Organizational lifecycle + legends | contested succession, retirement transformation, fragmentation, mergers, legends | — |
+| **7+** | Expansions | black and confidential contracts, evidence and witnesses, joint operations, Odyssey orbital work, smuggling, compat packs, optional vanilla presentation adapters | S15, S16 |
+
+## 2. Changes to the proposed sequence, and why
+
+The Phase 0 brief proposed: 2 = contractors + procurement + abstract→physical; 3 = player registration
++ NPC board + physical delivery; 4 = relationships, rumors, …; 5 = leadership, succession,
+retirement, legends.
+
+**Changes:**
+
+1. **The abstract ↔ physical lifecycle is split out of Phase 2 into its own Phase 3.** This is
+   the highest-risk system. It depends on the registry-quest custody mechanism (Spike S9), which
+   cannot be proven statically. Putting it in the same phase as the first contractors would
+   leave Phase 2 blocked on its riskiest unknown. As its own phase, Phase 2 still ships a
+   complete loop (procurement resolved abstractly, delivered by drop pods), and Phase 3 can fail
+   over to the documented fallback without disturbing contracts.
+2. **A relationships *core* (standing, trust, counters, lazy decay) moves into Phase 2.**
+   Refusal and willingness need it, and "history must alter future behaviour" should be true
+   from the first contractors onward. Rumors, gossip, favors and introductions stay in Phase 5.
+3. **Minimal succession (leader dies, next in line takes over) moves into Phase 2.** Contractors
+   can die from Phase 2 onward, so organizations must survive leader death from then on.
+   Contested succession and fragmentation stay in Phase 6.
+4. **Physical delivery by contractors *in person* goes to Phase 3** with the lifecycle. Phase 4
+   (the proposed Phase 3) focuses on the player-as-contractor and the NPC board, which reuse the
+   Phase 3 machinery.
+5. **Public reputation epithets arrive in Phase 4**, when there is enough history and enough
+   actors to make them meaningful. Summaries and counters exist from Phase 1.
+6. **Reconciled with the master design** ([ARCHITECTURE § 14](ARCHITECTURE.md#14-master-design-reconciliation)).
+   The phase split is unchanged. Phase 1 gains the player's choice of contact, a simplified
+   source resolver, a subset of the Intel divergence classes, extra cargo and a proof of partial
+   recovery (S19). Phase 2 gains one consequence rule, a "last known location" recovery
+   opportunity, because the design says failure must create content (master § 3.4, § 24).
+7. **Final owner decisions** ([ARCHITECTURE § 14.3](ARCHITECTURE.md#143-final-owner-decisions-foundation-pass)).
+   The phase split is still unchanged. Phase 1 adds the global cast (settings schema, generation
+   when missing, world snapshot), Fixers as Intel sources, the Comms Console gate and multi-lead
+   searches. Phase 2 activates the contractor side of the cast and Fixer-mediated procurement.
+
+## 3. Rules for every phase
+
+- **Only build what the phase uses.** No speculative managers, no Defs for systems not yet
+  built, no fake interfaces. Store *slots* in the root layout are the one exception: they are
+  added as empty nodes from Phase 1 so the layout never shifts.
+- **Every new persisted field has a default and a documented migration story.**
+- **Every phase ends with**: save/load tests at each new state; the mod-removal test (S6
+  extended); the external-mod-removal test (S7 extended); a performance report; updated docs.
+- **Update this documentation in the same PR** as any architectural deviation.
+- **Spikes first**: a phase's listed spikes are run and documented before its content is built.
+
+---
+
+## 4. Phase 1: Foundation + Intel
+
+### 4.1 Target playable flow (Phase 0 brief, aligned with master § 9 and § 17)
+
+1. Start a game (the world snapshots the global cast). 2. With a usable Comms Console, open The
+Network. 3. Choose a contact (a Fixer, a faction or the Exchange) and search the eligible item
+catalog. 4. Request Intel about an item, **with no quantity**. 5. Pay the fee that contact
+charges. 6. The search persists over time ("several days", depending on the contact). 7. A round
+resolves. 8. One plausible opportunity is generated from the item and the world context, or
+nothing credible is found. 9. A physical world location is added. 10. The player travels there,
+and may keep the same search going for another lead meanwhile. 11. The desired item physically
+exists there, in the amount the opportunity decided (which may differ from the report). 12. The
+player can acquire some or all of it, without having to kill every defender. 13. The site
+resolves and cleans up. 14. Meaningful history is recorded. 15. Save and load work throughout.
+
+### 4.2 Smallest slice that proves the chain
+
+| Link | Phase 1 implementation | Explicitly not in Phase 1 |
+|---|---|---|
+| **Catalog** | full catalog (verdicts, reasons, overrides in ModSettings, source mod, market value); UI search, filter and sort; dev reports | rarity-driven pricing beyond the fee |
+| **Global cast** | `NetworkSettings` schema with `NetworkSettingsVersion` and tolerant template loading (a malformed entry is quarantined, the rest kept); generation of the roster when none exists (about 100 contractor templates and a small set of Fixer templates, compositional names from Phase 1 name pools); "regenerate generated entries" preserving custom ones; stable template IDs | a full cast editor UI (a minimal path is enough); importing new templates into an existing world |
+| **World snapshot** | first-tick import of enabled templates into `WorldCastSnapshot`; **Fixers instantiated** as actors (world-local ids, template provenance); contractor entries kept as snapshot data for Phase 2; nothing written back to settings | contractor actors |
+| **Persistence** | `NetworkWorldComponent` root with every store slot (most empty); `saveVersion = 1`; tolerant list loading; typed IDs; `DefRef`, `FactionRef`, `WorldObjectRef`, `TileRef`; Known Character **records** for Fixers (no pawns) | `PawnRef` (unused until Phase 3) |
+| **Scheduling** | scheduler with budget and staggering; job kinds `intel.round`, `opp.sample`, `opp.close`, `history.sweep`, `compact.sweep` | periodic contractor upkeep |
+| **Events** | event bus + journal; the Phase 1 events from the [catalog](EVENTS_AND_HISTORY.md#2-event-catalog) | consequence engine, gossip |
+| **Actors** | `PlayerProxy`; **Fixers** (`Individual` + `FixerProfile` + `IntelSourceProfile`, each embodying a Known Character record) from the snapshot; one `Institution` "the Exchange" (the generic information network) with `IntelSourceProfile`; lazy `FactionProxy` actors, both for the site's holder or defenders (so history can name them) and as **Intel contacts** (non-hostile factions, with a derived `IntelSourceProfile`) | contractors; the Fixer's brokerage role (Phase 2) |
+| **Comms gate** | `CommsAccessAdapter`: every outgoing Network command requires a usable vanilla Comms Console; refusal with a reason and a disabled button; reading the Network needs no console; nothing in progress is affected when the console is lost | other communication methods |
+| **Intel state** | the full Intel machine ([STATE_MACHINES § 1](STATE_MACHINES.md#1-intel-request)): **one request, many leads**, search rounds, continue or end after a lead, cancel and invalidate with refunds; **fee, round duration, reliability and continuation policy from the chosen contact**, frozen at submission; **topic only, no quantity anywhere** | intel topics other than items; quality intent (master § 79) |
+| **Opportunity generation** | a **simplified source resolver** that keeps the full rule set ([ARCHITECTURE § 6.14.1](ARCHITECTURE.md#6141-opportunity-source-and-context-resolution)): candidates from the item's package, live factions (stance, defeated, hidden, tech) and world; the master § 15 hierarchy as the prior; a non-hostile same-package faction is never made a guard; "no credible source" is a real result. Archetype **`GuardedCache`** (vanilla `ItemStash` + one threat part chosen by the resolved context and threat points from `Outpost` / `BanditCamp` / `AmbushHidden` / `Manhunters` / `SleepingMechanoids`, or unguarded for an abandoned cache) **and** outcome **`NoCredibleLead`**. Quantity chosen by the generator. **Divergence subset:** Accurate, Partial, Outdated, Bad, Jackpot, Complication, Trap (the cache variants can express these); a confidence descriptor on the lead. A little archetype-appropriate **extra cargo**. | other archetypes (trader or owner holds it, convoys, salvage, orbital); Misinformation (needs source motives, Phase 5); Contested (competitors, Phase 4) |
+| **World object / site** | `SiteAdapter` with a vanilla `Site`, `TimeoutComp` (the lead's operational window), and `WorldObjectComp_NetworkSite` injected by XML patch into the vanilla `Site` def; quest tag `TheNetwork.Opp.<id>` | custom SitePartDefs, custom WorldObjectDefs (unless S19 requires a minimal site part) |
+| **Physical loot** | Things created at materialization into `SitePart.things` (seeded quality and stuff where applicable); placed by vanilla `GenStep_ItemStash`. Taking part of it and leaving with defenders alive is a valid, recorded outcome (S19). | — |
+| **Cleanup** | comp callbacks + fallback sampling + reconciliation for vanished sites; closing and archiving | — |
+| **History** | ledger (Notable+ records with participants, place, subject, awareness Public/Involved); player summary counters; retention sweep; History tab list with narrative lines | epithets, legends, gossip |
+| **Payment** | `PaymentAdapter` with beacon silver (`LaunchSilver`) and drop-pod refunds (Spike S4 picks the final UX) | debts, obligations |
+| **UI** | `MainButtonDef` → tabs **Intel** (contact choice with Fixer descriptors, catalog search with the "show unusual items" toggle and per-item overrides, request dialog with fee and no quantity field, active requests with elapsed time and a vague estimate, continue / end search, leads with reported cargo, threat, distance, window and confidence, and look-at-site) and **History**; a minimal Mod Settings section for the global cast (regenerate generated entries, enable or disable, rename). The Procurement, Contracts and Contractors tabs are **not shown** until their phases. | — |
+| **Letters** | vanilla letters: lead delivered, search concluded with nothing, invalidated, expired soon (optional), claimed | — |
+| **Diagnostics** | logging policy; validators (IDs, orphans, external refs, scheduler agreement, caps); dev actions from the Phase 1 rows of [DEBUGGING § 3](DEBUGGING.md#3-dev-actions); timing | — |
+| **Removal** | "Prepare save for removal" | — |
+
+**Defs created in Phase 1 (and only these):** `TheNetwork_MainButton` (`MainButtonDef`), one
+XML patch adding `WorldObjectCompProperties_NetworkSite` to the vanilla `Site` def, the name pools
+for organization and Fixer names (vanilla `RulePackDef` grammar or a small Network def), and keyed
+translation strings. **No** QuestScriptDef, SitePartDef, WorldObjectDef, FactionDef or IncidentDef,
+unless S19 shows that partial recovery needs one minimal Network SitePartDef (ADR-015).
+
+### 4.3 Phase 1 acceptance criteria
+
+| # | Criterion |
+|---|---|
+| A1 | All 15 flow steps work in a vanilla + DLC game **and** with Beyond Our Reach (Tenebrite) loaded. |
+| A2 | Save and load at each persisted Intel state (Submitted, Searching, **between search rounds**, AwaitingDecision, Concluded, Cancelled, Invalidated, Closed) and each Opportunity state (Materialized, Engaged, Claimed/Abandoned/Expired) gives identical outcomes: a continued search resumes deterministically with the same next round, and nothing is rerolled (S8). |
+| A3 | Removing BOR mid-search and mid-site gives Invalidated with a refund and letters; zero Network-originated errors (S7). |
+| A4 | Removing The Network, prepared or not, gives exactly 1 error in Phase 1 (the missing WorldComponent class; the site comp contributes none), and the game stays playable (S6). |
+| A5 | Adding The Network to an existing save bootstraps cleanly. |
+| A6 | Idle per-tick cost is unmeasurable; the S18 harness report is attached. |
+| A7 | History shows a coherent narrative line for each resolved Intel and each claimed or abandoned opportunity; records survive the retention sweep as specified. |
+| A8 | No Harmony. No Network code runs per tick beyond the idle check (verified by timing). |
+| A9 | Headless tests: NetRng, scheduler ordering and budget, the Intel transition table (including rounds and continuation), settings migrations and template quarantine (fixture settings files), retention policy, tolerant loader (fixture with a corrupted element), **catalog verdicts** (every hard exclusion, every heuristic, overrides), **source resolver** (cases in A11), and a check that no Intel type, command or formula has a quantity input. |
+| A10 | **Loot without extermination (S19).** On a guarded Network opportunity the player enters, recovers **only part** of the target payload, and leaves by caravan and by pods while some defenders are still alive. The caravan or pods can leave; recovered items stay recovered; the opportunity resolves as Claimed with a partial `recoveredBand`; history records a partial recovery, not a required victory; no loot is duplicated (including re-entry or a second departure); the site cleans up as vanilla does. Leaving empty-handed resolves as Abandoned. |
+| A11 | **Source resolution.** With an active, undefeated, fitting faction from the item's own package, that faction is a preferred candidate; with it absent, defeated or unfitting, generation falls back down the hierarchy or finds no credible lead; a non-hostile same-package faction is never turned into a hostile guard; vanilla items and other mods work with no Beyond Our Reach installed; no code path names a specific item, faction or mod. |
+| A12 | **Catalog safety.** `Allowed` makes an Unusual def requestable; an Ineligible technical exclusion cannot be allowed and the UI says why; a def whose Things fail to generate at runtime is marked unusable for the session, and the affected Intel is invalidated with a full refund, a letter and one diagnostic line. |
+| A13 | **Comms Console gate.** With no usable console (none built, unpowered, or an electricity-disabling condition) every outgoing Network command is refused with its reason and charges nothing; reading still works; an active search keeps running and its leads still arrive; once a console is usable again the same commands work, with no request lost. |
+| A14 | **Multi-lead Intel.** One request delivers a lead, the player keeps the same search going (under the contact's continuation policy), pursues Lead A, and later receives Lead B from the same request; ending the search keeps both leads; save and load at every Intel state and between rounds gives identical rounds. |
+| A15 | **Global cast.** A fresh settings file generates a cast (about 100 contractor and some Fixer templates) with stable IDs; a new world snapshots it and gets world-local actors; runtime events never change `ModSettings`; renaming or regenerating the global cast leaves an existing save's actors unchanged; "regenerate" keeps custom entries; a malformed template is quarantined and the rest load. |
+
+### 4.4 Phase 1 spikes
+
+S1, S2, S3, S4, S5, S6, S7, S8, S18, **S19** ([RIMWORLD_INTEGRATION § 5](RIMWORLD_INTEGRATION.md#5-runtime-spikes)).
+If S19 shows that the vanilla `ItemStash` + threat-part composition forces extermination or
+breaks partial recovery, Phase 0 is **not** redesigned: the result is recorded, and Phase 1
+switches to a different vanilla composition or a minimal Network site part (the upgrade path
+ADR-015 already names).
+
+---
+
+## 5. Phase 2: Contractors (abstract) + Procurement
+
+**Scope**
+
+- **The contractor side of the cast**: about 100 configurable contractor identities
+  instantiated from the world's snapshot (Solos, duos, crews, teams, companies, specialists),
+  with `ContractorProfile` (capability), `ContractorSimulation` (NPC state), for
+  organizations `OrganizationProfile`, and `IssuerProfile` where the template's `canIssueWork`
+  is set (the component only; issuing behaviour is later scope). A population manager for
+  world-generated newcomers, daily upkeep, morale v1, doctrine, roster tiers, wounded recovery, recruitment, **minimal
+  succession**. Fame and operational experience tracked separately; Legendary is never
+  protection.
+- Known Characters as **records only** (leaders, lieutenants, notable fates). There are no pawns
+  yet.
+- Contracts: the full core, parts and lineage fields. Kind `Procurement` via
+  `NetworkContractKindDef`, with an exact item and quantity. **Open** and **Direct** contracts
+  (master § 22); Premium contracts with silver contributions as a resolver input. The offers
+  path is used, with 1–3 bidders; an Open contract may bring a new organization into the world.
+  **Fixer-mediated procurement**: the Fixer brokers the contract, reaches the contractors, and
+  wraps each bid into one client-facing quote (contractor components + Fixer fee, markup,
+  deposit terms, insurance offer, validity), and mediates a contractor who disappears before
+  work starts.
+  Refusals carry reasons. The money rules of [STATE_MACHINES § 4.2](STATE_MACHINES.md#42-money-rules):
+  a default 50/50 split, the deposit normally lost on failure, optional insurance, full refunds
+  only on technical invalidation; deposit and insurance terms from the Fixer's policies. The
+  client's choices on partial results and renegotiation.
+- **Consequence Engine v0**: one rule. A failed, missing or catastrophically lost procurement
+  can leave a **last known location** (master § 24): a recovery opportunity built with the
+  Phase 1 site machinery, holding the cargo the contractor had secured (or nothing) and the
+  threat that stopped them, with a letter in the master § 81 style. It has no contractor pawns
+  yet; survivors, captives and bodies arrive in Phase 3.
+- Operations plus the **abstract resolver** (bands, casualties, captures as records, delays),
+  frozen inputs, committed outcomes.
+- **Delivery by drop pods** to a player home map, with fallbacks (S13).
+- **Relationships core**: edges, counters, salient records, lazy decay. Willingness and pricing
+  read them.
+- Knowledge v1: topic experience from operations; preparedness in the resolver.
+- UI: the **Procurement** and **Contractors** tabs (actor cards built from summaries and
+  records, with the descriptor vocabulary of master § 28–29, § 43 and § 73, not raw stats), and
+  a **Contracts** tab (the player's contracts). Known contractors become selectable Intel
+  contacts.
+- Dev: create contractor, force outcome band, simulate N contracts, fast-forward.
+
+**Proves**: persistent orgs at decade scale (soak test); history changing behaviour
+(willingness, pricing); branch-ready contracts (lineage fields populated; Troubled states
+without physical follow-ups yet, which resolve abstractly by deadline).
+
+---
+
+## 6. Phase 3: Abstract ↔ physical lifecycle
+
+**Spikes first:** S9 (registry quest), S10 (encounter factions), S11 (site-part pawn holder),
+S12 (catch-up), S14 (walk-in Lord), S17 (tag hygiene).
+
+**Scope**
+
+- `CustodyService`, registry quest (or the documented fallback), `PawnRef`, binding invariants,
+  deployments, reconciliation, collapse, leases.
+- `EncounterFactionAdapter` (temporary per-org factions).
+- Scenarios: **in-person delivery** (walk-in contractors hand over goods) and **rescue**
+  (captured, stranded or missing contractors become an Opportunity with pawns in the site holder).
+  Last known locations gain survivors, captives, bodies and left-behind gear.
+- **Sponsorship with equipment** (master § 30–31): gear the player gives or lends becomes
+  tracked leases that reappear physically with the org's pawns.
+- Consequence Engine v1: rules for rescue, recovery and continuation. **Contract inheritance and
+  continuation** (repost, successor inheritance).
+- Promotion of generic pawns to Known Characters from encounters.
+- Events: `Contractor.Rescued`, `KnownCharacter.CapturedByPlayer` / `.Defected` / `.Lost`,
+  `Player.BetrayedContractor`.
+- Deployment Monitor dev window.
+
+---
+
+## 7. Phase 4: Player as contractor, contract board, bidding
+
+- The player registers as a contractor (a setting enables it). A `ContractorProfile` with the
+  chosen name and public profile is added to the `PlayerProxy`, reputation starts at Unknown,
+  and the player keeps their faction (master § 35). **No abstract roster or simulation**: the
+  player's execution state is read from the real colony (`ColonyReader`).
+- Faction sponsorship of the player: loaned gear with return expected (master § 41).
+- NPC issuers (faction proxies, institutions, and contractor organizations that hold an
+  `IssuerProfile`) post contracts to a **board**, usually through a Fixer. The player bids or
+  accepts. Completion is physical (deliver items, reach a site, escort).
+- **Full bidding** among NPC contractors on player contracts. Competitors can race the player to
+  opportunities (`Opportunity.LostToCompetitor`).
+- **Public reputation epithets and fame tiers** v1 (hysteresis, persisted; master § 39, § 66).
+- Contested leads (another group has the same information, master § 12) and non-exclusive
+  contracts (master § 42).
+- The ContactBook v1 (listings; the player sees orgs they have dealt with).
+
+## 8. Phase 5: Social layer
+
+- `BeliefStore`: rumors with distortion; personal experience outranks hearsay.
+- Gossip propagation jobs.
+- **Favors and debts**: `ObligationLedger` + calling in favors in bidding and pricing.
+- **Introductions**: `IntroducerProfile`; the ContactBook grows organically.
+- Perceived reputation (`Reputation.As`), **sanctions and blacklists** (legitimate vs criminal
+  observers).
+- Morale v2 (trauma baselines; Reckless and Desperate behaviours; fraud chance).
+- Deeper Fixer play: Fixers introducing contractors, favors and debts owed to Fixers, Fixer
+  rivalries and misinformation from low-trust sources. **Geographic Intel quality** by region
+  knowledge. (Fixers themselves exist from Phase 1.)
+
+## 9. Phase 6: Organizational lifecycle and legends
+
+- Contested succession, **fragmentation**, **mergers and absorption**, dissolution.
+- **Retirement transformation** (a leader becomes a broker, trader or recruiter; knowledge
+  transfer).
+- **Legends** v1 (promotion, frozen deeds, History tab "Legends", successor legacy text).
+- Tombstone compaction at scale; long-soak tests (30+ in-game years).
+
+## 10. Phase 7+: Expansions
+
+- **Black and confidential contracts** (assassination, theft, sabotage, kidnapping,
+  intelligence theft, secret recovery). Confidentiality exposure.
+- **Evidence and witnesses**: exposure rules at encounter reconciliation; knowledge-gated
+  political consequences.
+- **Joint operations** (player + NPC crews, NPC + NPC).
+- **Subcontracting** (master § 50): the player hires a known group to help with a contract they
+  accepted, as a linked child contract.
+- **Odyssey** module: orbital salvage, asteroid sites, space contractor operations (S15).
+- **Optional DLC-aware transport presentation** of contractor mobility: Royalty shuttles,
+  Odyssey passenger transport, possibly a Gravship-style presence for exceptional actors. These
+  are directions, not commitments.
+- **Smuggling** and trader integration.
+- **Royalty shuttle delivery** (S16).
+- Optional presentation adapters: a Quests-tab mirror, vanilla Tales for art, Ideology
+  HistoryEvents.
+- Mod-specific compat packs (for example a Beyond Our Reach flavour pack).
+
+## 11. Deliberately deferred
+
+These are **designed for** (data slots, event types, lineage fields), but **not implemented**
+before their phase:
+
+rumors and beliefs · gossip · favors and debts · introductions · perceived reputation ·
+sanctions and blacklists · black contracts · evidence and witnesses · fragmentation and mergers ·
+retirement transformation · legends · joint operations · subcontracting · **ambient contractor
+visits** (see below) · DLC-aware transport presentation of contractor mobility · Intel quality intent
+(optional broad preference) and strict quality-qualified Procurement (master § 79) · a full global
+cast editor and importing new templates into existing worlds · communications other than the
+Comms Console · Odyssey and orbital content ·
+smuggling · NPC world-map caravans (possibly never) · a vanilla-quest mirror · custom map
+generation · Harmony (possibly never).
+
+**Ambient contractor visits (deferred direction, not designed).** Eventually a contractor may
+appear at the player's colony for its own reasons: passing through, returning from a contract,
+rest and recovery, resupply, trading salvage, a stopover, waiting for another job, an emergency,
+visiting a client, or hauling treasure. The player might meet an unknown group (ContactBook
+`MetInField`), trade, see its equipment and condition, hear rumors, or discover Fixers through it.
+**Not every appearance exists to give the player a quest**; some actors are just living their own
+lives. Visits will reuse the abstract → physical → abstract deployment machinery with new
+deployment purposes (for example `PassingThrough`, `Stopover`, `TradeVisit`); there is no separate
+physical lifecycle. Direction only: Phase 3 makes visits technically possible, Phases 4–5 could
+add contact discovery, trading, social interactions, rumors and spontaneous contracts, and the
+DLC-aware transport presentation belongs to Phase 7+. Out of scope throughout: ship and Gravship
+implementation, shuttles as persistent objects, interiors, fuel, contractor-owned maps or mobile
+bases, world-map fleets, transport inventories, visiting AI, visitor trading or quest code,
+DLC-specific transport code, and any orbital economy or market hub.

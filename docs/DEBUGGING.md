@@ -1,0 +1,130 @@
+# Debugging Architecture
+
+> Developer tooling is planned from the start. It ships in phases alongside the systems it
+> inspects. Related: [PERFORMANCE § 7](PERFORMANCE.md#7-verification), [SAVE_AND_MIGRATION § 7](SAVE_AND_MIGRATION.md#7-failed-migration-and-quarantine).
+
+## Contents
+
+1. [Goals](#1-goals)
+2. [Logging policy](#2-logging-policy)
+3. [Dev actions](#3-dev-actions)
+4. [Validators](#4-validators)
+5. [Timing instrumentation](#5-timing-instrumentation)
+6. [Headless tests](#6-headless-tests)
+7. [Inspector windows](#7-inspector-windows)
+
+---
+
+## 1. Goals
+
+- **Silent in release play.** Normal play logs nothing except real problems, and each problem
+  class is logged once.
+- **Everything explainable.** Every decision that matters (verdicts, refusals, bands, fates,
+  invalidations) records reason codes that a tool can show.
+- **Everything forceable in dev mode.** Any state a player could reach can be forced by a dev
+  action, to reproduce bugs and to test content.
+- **Validation is a tool, not a hope.** Invariants are checked by code on load and on demand.
+
+## 2. Logging policy
+
+| Level | When | Default |
+|---|---|---|
+| `Error` | invariant broken; exception in a job or consumer; failed migration | always on, **once per (category, key)** per session |
+| `Warning` | external interference (a pawn discarded by another mod); downgraded save; one-time compatibility notices | always on, once per key per save (`diagnostics.oneTimeWarnings`) |
+| `Info` | bootstrap summary; load summary (counts, migrations run, invalidations aggregated) | one line per load |
+| `Verbose` | per-event, per-job and per-decision traces | **off**; toggled in Mod Settings ("Detailed Network logging") and per category |
+
+- The prefix is always **`[TheNetwork]`**, followed by the category: `[TheNetwork][Intel] …`.
+- Categories: `Kernel`, `Scheduler`, `Events`, `History`, `Actors`, `Custody`, `Intel`,
+  `Opportunities`, `Contracts`, `Resolver`, `Catalog`, `Compat`, `Save`.
+- **Aggregation**: missing-reference notices are grouped per def or faction and logged once, for
+  example "3 references to missing ThingDef 'BOR_Tenebrite' invalidated (2 intel, 1 opportunity)".
+- **Zero-cost when off**: `NetLog.Verbose(category)` is a bool field check. Message formatting
+  happens only inside the guard.
+- **Build stamp**: the assembly logs its version and a build stamp once at startup, the same
+  approach as Grandmaster21's `Gm21BuildStamp`. Stale DLLs are then easy to spot in Player.log.
+
+## 3. Dev actions
+
+These are `[DebugAction("The Network", …, allowedGameStates = Playing)]` entries in the vanilla
+debug menu. No Harmony. Each action logs what it did and bumps `StateVersion`.
+
+| Group | Action | Phase |
+|---|---|---|
+| Catalog | Rebuild item catalog · Explain item… · Catalog report (CSV) | 1 |
+| Cast | Global cast report (settings: templates, provenance, quarantine) · World cast snapshot report · Regenerate generated cast (dev; keeps custom entries) · Inspect Fixer… | 1 |
+| Inspect | Inspect actor… · Inspect character… · Inspect contract/operation… · Inspect opportunity… · Print knowledge of actor… · Print relations of actor… · Print summaries of actor… · Event journal (window) · History ledger (window) | 1–2 |
+| Intel | Run the next search round now… · Force archetype for the next round… · Force divergence class… · Force no-lead… · Explain source resolution for item… (candidates, evidence, filters, scores) · Reroll the current round (nonce++) · Toggle comms-gate override (dev only) | 1 |
+| Opportunities | Materialize opportunity… · Expire now… · Force claim… · Spawn test opportunity at the selected tile | 1 |
+| Contractors | Create contractor (template…) · Set morale… · Set relationship A→B… · Kill leader… · Force retirement… · Force fragmentation… (Ph.6) · Force merger… (Ph.6) | 2 / 5 / 6 |
+| Contracts | Post a test procurement… · Force outcome band… · Force capture… · Force delay… · Force failed expedition site… (Ph.3) · Complete now… | 2–3 |
+| Custody | Materialize character… · Begin test deployment… · Reconcile deployment now… · Registry audit | 3 |
+| Simulate | Fast-forward N abstract days (runs scheduler handlers with no map ticking; dev only) · Simulate N thousand abstract contracts (headless resolver stats: band distribution, casualty rates, prices) | 2 |
+| Validate | Validate all (IDs, orphans, custody, scheduler, caps) · Quarantine report · Failed consumers report · Clear quarantine entry… | 1 |
+| Performance | Print timing report · Reset timing counters · Print counts vs caps | 1 |
+| Save | Prepare save for removal (also exposed in Mod Settings) | 1 |
+
+`Fast-forward` and `Simulate` never touch maps or pawns. They drive only the abstract layer, so
+they are safe to run in a test save to observe long-run dynamics (population, legends, save size).
+
+## 4. Validators
+
+`NetValidator.RunAll(mode)`. The mode is `OnLoad` (automatic, budgeted) or `Full` (dev action).
+Each check reports findings with the entity reference and a reason code, and may auto-repair when
+the repair is safe.
+
+| Check | Validates | Auto-repair |
+|---|---|---|
+| **ID uniqueness** | every entity ID is unique and `< nextId`; typed ID kinds match their stores | raise `nextId` above the maximum; quarantine duplicates |
+| **Orphan references** | each `ActorId`, `ContractId`, … field resolves to an entity or a tombstone; `EntityRef` kinds are consistent | clear optional refs; quarantine entities with required orphans |
+| **External references** | DefRefs, FactionRefs, WorldObjectRefs and TileRefs resolve | raise `Reference.Invalidated` (subsystem policy) |
+| **Custody invariants** | I-1…I-10 ([ABSTRACT_PHYSICAL_LIFECYCLE § 3](ABSTRACT_PHYSICAL_LIFECYCLE.md#3-invariants)); reserved set = custody records; tags present | re-reserve; re-tag; mark Lost when the pawn is gone |
+| **Scheduler agreement** | every entity-side due tick has a job and every job has a live target | recreate or delete jobs |
+| **State-machine sanity** | each state is valid for its entity type; terminal entities have outcomes; timers exist for waiting states | quarantine |
+| **Lineage** | contract, opportunity and actor lineage graphs are acyclic; depth is within the cap | cut cycles and log |
+| **Roster arithmetic** | `committed ≤ healthy + wounded`; no negative counts | clamp and log |
+| **Money** | ledger sums are consistent with contract states | none (report only) |
+| **Caps** | history, journal, legends and characters are within caps; the bound-pawn **soft** cap is reported when exceeded (protected characters are never released to meet it) | schedule a retention sweep; release only unprotected dormant characters |
+
+## 5. Timing instrumentation
+
+- `NetProfiler` wraps every scheduler job and every event consumer in a `Stopwatch` sample
+  **when profiling is enabled** (a Mod Settings toggle, off by default). It aggregates count,
+  total, max and a p95 estimate per job kind or consumer.
+- **Budget warnings**: if a single job exceeds 5 ms, or a tick's Network work exceeds the budget
+  three ticks in a row, one warning is logged with the job kind (profiling on only).
+- The report prints via dev action as a table sorted by total time.
+- Optional: `DeepProfiler.Start/End("TheNetwork.<kind>")` markers, so RimWorld's own profiler
+  (dev mode) attributes time to Network work.
+- Counts vs caps (history, journal, bound pawns, jobs) are shown in the same report.
+
+## 6. Headless tests
+
+The Domain and Kernel layers are written so their **pure logic** can run without the game:
+
+- Resolver math, willingness, pricing, reputation inference, retention policy, state-machine
+  transition tables, NetRng and migrations are pure functions of plain inputs.
+- **Build approach** (adapted from Grandmaster21's `Tests/` and `tools/verify-real.sh`): compile
+  a small test executable against the real `Assembly-CSharp` and the Network DLL, and run
+  test cases that do not require a running game. `IExposable` round-trips are tested through
+  Scribe in memory where that is feasible, otherwise through fixture XML parsed by the
+  tolerant loader.
+- **Fixtures**: `Tests/Fixtures/vN/*.xml` store `NetworkWorldComponent` node snapshots per save
+  version, for migration tests ([SAVE_AND_MIGRATION § 4.6](SAVE_AND_MIGRATION.md#46-testing)).
+- **Determinism tests**: the same seed and inputs must give the same output; resolving twice
+  must equal resolving once (idempotency).
+- **Reflective target verification** (only once Harmony or reflection is used): verify every
+  reflective target and parameter name against the shipped assembly at build time.
+
+## 7. Inspector windows
+
+These are dev-mode windows, shipped with the phase that introduces each subsystem:
+
+- **Network Inspector**: a tree of stores, then entities, then fields, with jump-to for any ID
+  and live refresh on `StateVersion`.
+- **Event Journal**: a filterable list (type, importance, subject) with payload details and
+  consumer errors.
+- **Deployment Monitor** (Phase 3): each entry's pawn, its current observed state, the pending
+  fate and the reconciliation trace.
+- **Relationship Graph** (Phase 4+): text-based adjacency with standing and trust per edge,
+  filtered by actor.
