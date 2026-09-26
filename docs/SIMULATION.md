@@ -116,7 +116,8 @@ ResolverInputs (persisted on Operation.frozenInputs when the Engaged phase begin
   threatPower:       opportunity threat points (or abstract source difficulty for market procurement)
   preparedness:      Knowledge.Proficiency(contractor, topics[archetype, threat, region, item]) (0..1)
   intelQuality:      lead reliability if the operation targets a known lead (else 0.5)
-  logistics:         f(distance in tiles, layer (orbit needs capability), season/biome hazard tag)
+  logistics:         f(distance in tiles, the contractor's MobilityProfile (orbit needs the Orbital tag),
+                       season/biome hazard tag)
   moraleFactor:      from OrgMorale (Confident 1.1 … Desperate 0.75; Reckless raises variance)
   doctrine:          caution, cruelty, professionalism (affect retreat thresholds and variance)
   sponsorship:       flat bonus from sponsor leases/profile and contract contributions (premium contracts)

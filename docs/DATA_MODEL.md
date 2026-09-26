@@ -204,12 +204,12 @@ and relationships.
 
 | Component | Grants | Key fields |
 |---|---|---|
-| `ContractorProfile` | **capability only**: can post, bid on and accept supported contract kinds | see [§ 6.1](#61-contractorprofile-capability). Attached to an `Organization`, an `Individual` (Solo) or the `PlayerProxy`. |
+| `ContractorProfile` | **provides contractor services**: can bid on, accept and perform supported contract kinds, and exposes its specialties, eligibility and capability. It does **not** by itself grant issuing contracts. | see [§ 6.1](#61-contractorprofile-capability). Attached to an `Organization`, an `Individual` (Solo) or the `PlayerProxy`. |
 | `ContractorSimulation` | abstract off-map state of an **NPC** contractor | see [§ 6.2](#62-contractorsimulation-npc-contractors-only). NPC Organizations and Solos only; **never** the player. |
 | `OrganizationProfile` | group structure of an **NPC organization or crew** | see [§ 6.3](#63-organizationprofile-npc-organizations-and-crews-only). Organizations only; never a Solo or the player. |
 | `FixerProfile` | can broker: mediate Intel, procurement, deposits and insurance | see [§ 4.3](#43-fixers-and-brokers-fixerprofile). Normally an `Individual`. |
 | `IntelSourceProfile` | can provide Intel | `specialties: string[]`, `coverage: RegionKey[]` (geographic reach), `topicStrengths` (reads KnowledgeBook), `speedProfile`, `reliabilityProfile`, `feePolicyKey`, `continuationPolicyKey` (whether and how a search continues after a lead: free, per round, reduced, limited), `discretion`. Profiles are small bands plus replaceable policy keys, never formulas. Held by Fixers, faction proxies (derived lazily in Phase 1 from master § 13 signals: tech level, faction type, goodwill, geography and **source-package overlap with the topic**), known contractors, and the Exchange institution. Not every Intel source is a Fixer. The player sees descriptors learned from how the source's leads turned out. |
-| `IssuerProfile` | can issue contracts | `budgetBand: int`, `preferredKinds: string[]`, `legitimacy: float` (0 = criminal, 1 = lawful), `paysOnTime: float` |
+| `IssuerProfile` | **creates, offers and funds work** for other contractors: drafts and posts contracts, invites contractors, receives and selects bids, acts as the employer or client, pays the terms | `budgetBand: int`, `preferredKinds: string[]`, `legitimacy: float` (0 = criminal, 1 = lawful), `paysOnTime: float`. Held by the `PlayerProxy` from the start, by faction proxies and institutions that post work, and by **contractor actors too**: most established organizations carry both profiles (to buy gear, post a rescue for a captured member, hire recovery work, later subcontract). A poor Solo may have only `ContractorProfile`. |
 | `SponsorProfile` | can sponsor | `sponsored: ActorId[]`, `contributions` per sponsee (silver and items given or loaned, with ticks), `leases: LeaseId[]`. Sponsorship is an investment in capability and the relationship, with no guaranteed return (master § 31). |
 | `SponsoredProfile` | receives sponsorship | `sponsor: ActorId`, `sinceTick`, `obligationsTo: ObligationId[]` |
 | `IntroducerProfile` | can provide introductions | `introducibleActors: ActorId[]` (bounded), `introductionCooldownUntil` |
@@ -227,14 +227,17 @@ or morale. The player's real execution state (colonists, injuries, gear, invento
 is read from RimWorld through the Integration layer when a decision needs it, so there is never
 a second truth about the colony.
 
-**Composition at a glance:**
+**Composition at a glance** (providing work and issuing work are independent capabilities; an
+actor may have either or both):
 
 ```
-Solo contractor   Individual   + ContractorProfile + ContractorSimulation     (embodies one KnownCharacter)
-Dead Red          Organization + ContractorProfile + ContractorSimulation + OrganizationProfile
-The player        PlayerProxy  + ContractorProfile                            (execution state = real colony)
-A Fixer           Individual   + FixerProfile + IntelSourceProfile            (embodies one KnownCharacter)
-A faction         FactionProxy + IntelSourceProfile / IssuerProfile / …       (as it takes part)
+Desperate Solo      Individual   + ContractorProfile + ContractorSimulation        (embodies one KnownCharacter)
+Dead Red            Organization + ContractorProfile + IssuerProfile + ContractorSimulation + OrganizationProfile
+Rich institution    Institution  + IssuerProfile
+Player (start)      PlayerProxy  + IssuerProfile                                   (execution state = real colony)
+Player (Phase 4+)   PlayerProxy  + IssuerProfile + ContractorProfile               (still no roster or simulation)
+A Fixer             Individual   + FixerProfile + IntelSourceProfile               (embodies one KnownCharacter)
+A faction           FactionProxy + IntelSourceProfile / IssuerProfile / …          (as it takes part)
 ```
 
 ### 4.3 Fixers and brokers (FixerProfile)
@@ -315,7 +318,7 @@ roster; the player has neither simulation nor roster.
 ```
 ContractorProfile : ActorComponent   // Organization | Individual (Solo) | PlayerProxy
   publicIdentity: { name, profileText?, emblemKey?, registeredTick }   // player registration; NPCs use the actor name
-  kinds: string[]                    // contract kinds it posts, bids on or accepts
+  kinds: string[]                    // contract kinds it can bid on, accept and perform (issuing needs IssuerProfile)
   specialties: string[]              // "combat acquisition", "salvage", "remote", "medical", …
   eligibility: EligibilityFlags      // registered, suspended, blacklisted-by (Phase 5), …
   capability: CapabilitySource       // where operational capability is read from:
@@ -353,12 +356,33 @@ ContractorSimulation : ActorComponent   // NPC Organization or Individual (Solo)
   funds: int                         // abstract treasury (silver-equivalent)
   careerStage: CareerStage           // Rising | Established | Veteran | Declining
   retirementPressure: float
+  mobility: MobilityProfile          // how far, how fast and what the contractor can move (below)
   nextUpkeepTick: int                // mirrored by a scheduler job; kept for validation
 ```
 
 - A **Solo**'s person is the Known Character the actor embodies: wounds are that character's
   `status` and `woundedUntilTick`, death is that character's death (which ends the Solo actor,
   `endReasonKey = Died`). There is no headcount.
+
+#### Mobility and logistics (MobilityProfile)
+
+```
+MobilityProfile                      // part of ContractorSimulation; capability, not assets
+  modes: MobilityTag[]               // Ground | LongRange | RapidTransport | HeavyLift | Orbital (extendable tags)
+  rangeBand, speedBand, liftBand: Band
+```
+
+- **An independent axis.** Mobility is never derived from fame, experience tier, organization
+  size, combat strength or wealth alone. A Legendary Solo with poor transport, an obscure
+  specialist with excellent long-range mobility, an established logistics outfit with weak combat,
+  and a famous contractor with no orbital capability are all representable.
+- **Capability, not DLC ownership.** The durable data says what the contractor *can do*, never
+  what it *owns* (no `ownsShuttle` or `ownsGravship` flags). The resolver reads it (distance,
+  logistics, orbit), and later Integration and Compat code decides how to *present* it with the
+  DLC and content that are loaded (walk-in, caravan or drop pods with none; a shuttle with
+  Royalty; passenger transport with Odyssey). None of that presentation is designed in Phase 0.
+- **Abstract only.** No simulated world caravans, persistent vehicles, off-map ships, per-tick
+  movement or vehicle inventories. It becomes physical only when a contractor does.
 
 ### 6.3 OrganizationProfile (NPC organizations and crews only)
 
@@ -561,7 +585,8 @@ Contract
     target: EntityRef?                     // victim / subject of hostile work
     interested: ActorId[]                  // watchers (competitors, patrons)
     invited: ActorId[]                     // Direct contract: the known group(s) asked (empty = Open)
-    broker: ActorId?                       // the Fixer mediating the deal (procurement default from Phase 2)
+    broker: ActorId?                       // the Fixer mediating the deal (procurement default from Phase 2);
+                                           // brokers never replace the issuer, who owns the demand
   terms: Terms                             // see § 16 Money; copied from the accepted offer's quote
     price: int, deposit: int, insurance: Insurance?, penalties: PenaltyRule[]
     contributions: Contribution[]          // Premium / sponsored: silver, or items as leases (master § 22)
@@ -636,6 +661,15 @@ ProcurementQuote                           // what the CLIENT sees: one coherent
 
 Design consequences:
 
+- **Issuer, broker, contractor.** The issuer owns the demand and the objective; the Fixer
+  (`broker`) mediates market reach, contractor access, bids, negotiation, brokerage, deposits,
+  insurance, replacement and refund policy, and anonymity where applicable; the contractor does
+  the work. Direct contracts without a broker remain possible. Any actor with an `IssuerProfile`
+  can issue, contractors included, so later content can express, for example, *issuer = Dead
+  Red, beneficiary = its captured member, broker = Dead Red's Fixer, kind = Rescue*, or, when the
+  organization can no longer act, *issuer = the Fixer, principal = Dead Red, beneficiary = the
+  survivor*. No such behaviour is implemented here; the parties model simply represents it.
+
 - **Bidding is structural from day one.** Phase 2 may produce a single offer per contract, but
   it still flows through `offers[]` and `acceptedOffer`. No contract assumes a pre-assigned
   owner.
@@ -697,6 +731,7 @@ Deployment                                   // one physical appearance of an or
   org: ActorId
   operation: OperationId?
   purposeKey: string                         // "Delivery", "RescueTarget", "SiteCompetitor", "JointOp" …
+                                             // (future content may add "PassingThrough", "Stopover", "TradeVisit")
   encounterFaction: FactionRef?              // temporary faction used (Phase 3)
   anchor: WorldObjectRef? / map: MapRef?
   entries: DeploymentEntry[]
@@ -933,6 +968,7 @@ ContractorTemplate
   startingFame: FameBand                 // public reputation: Unknown … Legendary (a separate axis)
   specialties: string[]
   doctrineStyle: string?                 // broad style (Aggressive, Cautious, …) where applicable
+  mobility: MobilityTag[]?               // starting mobility, independent of experience and fame
   originHints: { factionDefName?, packageId?, regionHint? }   // strings; missing content is ignored at import
   generation: { generatorVersion, seed, nameParts: string[] }  // enough to recreate or audit a generated entry
 

@@ -132,7 +132,7 @@ unless S19 shows that partial recovery needs one minimal Network SitePartDef (AD
 | # | Criterion |
 |---|---|
 | A1 | All 15 flow steps work in a vanilla + DLC game **and** with Beyond Our Reach (Tenebrite) loaded. |
-| A2 | Save and load at each Intel state (Submitted, Searching, Resolved, Closed) and each Opportunity state (Materialized, Engaged, Claimed/Abandoned/Expired) gives identical outcomes (S8). |
+| A2 | Save and load at each persisted Intel state (Submitted, Searching, **between search rounds**, AwaitingDecision, Concluded, Cancelled, Invalidated, Closed) and each Opportunity state (Materialized, Engaged, Claimed/Abandoned/Expired) gives identical outcomes: a continued search resumes deterministically with the same next round, and nothing is rerolled (S8). |
 | A3 | Removing BOR mid-search and mid-site gives Invalidated with a refund and letters; zero Network-originated errors (S7). |
 | A4 | Removing The Network, prepared or not, gives exactly 1 error in Phase 1 (the missing WorldComponent class; the site comp contributes none), and the game stays playable (S6). |
 | A5 | Adding The Network to an existing save bootstraps cleanly. |
@@ -236,8 +236,9 @@ S12 (catch-up), S14 (walk-in Lord), S17 (tag hygiene).
   and the player keeps their faction (master § 35). **No abstract roster or simulation**: the
   player's execution state is read from the real colony (`ColonyReader`).
 - Faction sponsorship of the player: loaned gear with return expected (master § 41).
-- NPC issuers (faction proxies, orgs, institutions) post contracts to a **board**. The player
-  bids or accepts. Completion is physical (deliver items, reach a site, escort).
+- NPC issuers (faction proxies, institutions, and contractor organizations that hold an
+  `IssuerProfile`) post contracts to a **board**, usually through a Fixer. The player bids or
+  accepts. Completion is physical (deliver items, reach a site, escort).
 - **Full bidding** among NPC contractors on player contracts. Competitors can race the player to
   opportunities (`Opportunity.LostToCompetitor`).
 - **Public reputation epithets and fame tiers** v1 (hysteresis, persisted; master § 39, § 66).
@@ -275,8 +276,10 @@ S12 (catch-up), S14 (walk-in Lord), S17 (tag hygiene).
 - **Joint operations** (player + NPC crews, NPC + NPC).
 - **Subcontracting** (master § 50): the player hires a known group to help with a contract they
   accepted, as a linked child contract.
-- **Odyssey** module: orbital salvage, asteroid sites, gravship logistics, space contractor
-  operations (S15).
+- **Odyssey** module: orbital salvage, asteroid sites, space contractor operations (S15).
+- **Optional DLC-aware transport presentation** of contractor mobility: Royalty shuttles,
+  Odyssey passenger transport, possibly a Gravship-style presence for exceptional actors. These
+  are directions, not commitments.
 - **Smuggling** and trader integration.
 - **Royalty shuttle delivery** (S16).
 - Optional presentation adapters: a Quests-tab mirror, vanilla Tales for art, Ideology
@@ -290,9 +293,25 @@ before their phase:
 
 rumors and beliefs · gossip · favors and debts · introductions · perceived reputation ·
 sanctions and blacklists · black contracts · evidence and witnesses · fragmentation and mergers ·
-retirement transformation · legends · joint operations · subcontracting · Intel quality intent
+retirement transformation · legends · joint operations · subcontracting · **ambient contractor
+visits** (see below) · DLC-aware transport presentation of contractor mobility · Intel quality intent
 (optional broad preference) and strict quality-qualified Procurement (master § 79) · a full global
 cast editor and importing new templates into existing worlds · communications other than the
 Comms Console · Odyssey and orbital content ·
 smuggling · NPC world-map caravans (possibly never) · a vanilla-quest mirror · custom map
 generation · Harmony (possibly never).
+
+**Ambient contractor visits (deferred direction, not designed).** Eventually a contractor may
+appear at the player's colony for its own reasons: passing through, returning from a contract,
+rest and recovery, resupply, trading salvage, a stopover, waiting for another job, an emergency,
+visiting a client, or hauling treasure. The player might meet an unknown group (ContactBook
+`MetInField`), trade, see its equipment and condition, hear rumors, or discover Fixers through it.
+**Not every appearance exists to give the player a quest**; some actors are just living their own
+lives. Visits will reuse the abstract → physical → abstract deployment machinery with new
+deployment purposes (for example `PassingThrough`, `Stopover`, `TradeVisit`); there is no separate
+physical lifecycle. Direction only: Phase 3 makes visits technically possible, Phases 4–5 could
+add contact discovery, trading, social interactions, rumors and spontaneous contracts, and the
+DLC-aware transport presentation belongs to Phase 7+. Out of scope throughout: ship and Gravship
+implementation, shuttles as persistent objects, interiors, fuel, contractor-owned maps or mobile
+bases, world-map fleets, transport inventories, visiting AI, visitor trading or quest code,
+DLC-specific transport code, and any orbital economy or market hub.

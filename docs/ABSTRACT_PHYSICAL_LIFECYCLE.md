@@ -36,6 +36,7 @@ The Network is abstract by default. Pawns exist only when the player can see or 
 | Competitor crew at the same site as the player | 4+ | opportunity site | map generation plus a Lord |
 | Player contractor handing over to an NPC client, or a joint operation | 4 / 6 | varies | walk-in or site |
 | Meeting a broker or leader in person | 5+ | player map or site | walk-in |
+| Ambient visit (passing through, stopover, resupply, trade; deferred direction) | 3+ technically, content later | player home map | the same deployment machinery with a new purpose; presentation from the contractor's mobility |
 
 Everything else (bidding, travel, off-map combat, recovery, recruitment, succession) stays
 abstract.

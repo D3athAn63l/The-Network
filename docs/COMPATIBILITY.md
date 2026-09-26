@@ -233,7 +233,7 @@ Rules:
 | **Ideology** | `ModsConfig.IdeologyActive` | optional `HistoryEvent` adapter (precepts react to Network deeds); ideo-aware doctrine flavour | none |
 | **Biotech** | `ModsConfig.BiotechActive` | xenotype snapshot on characters; mech-related threat topics | fields left null |
 | **Anomaly** | `ModsConfig.AnomalyActive` | tag-hygiene checks for duplication; entity threats as topics | none |
-| **Odyssey** | `ModsConfig.OdysseyActive` | orbit layer tiles for opportunities; archetypes such as orbital salvage, asteroid sites and mech platforms (reusing Odyssey SitePartDefs); a gravship logistics capability for contractors; gravship landing on Network sites | none. The Network works fully on the surface. |
+| **Odyssey** | `ModsConfig.OdysseyActive` | orbit layer tiles for opportunities; archetypes such as orbital salvage, asteroid sites and mech platforms (reusing Odyssey SitePartDefs); the `Orbital` mobility tag becomes usable; gravship landing on Network sites | none. The Network works fully on the surface. |
 
 **Mechanics:**
 
@@ -241,9 +241,13 @@ Rules:
   called only after the gate check. Static `DefOf` fields for DLC defs use `[MayRequire<Dlc>]`,
   or are looked up with `GetNamedSilentFail`.
 - **Odyssey specifics**: `TileRef` stores `layerDef`. Layer checks happen before any tile use.
-  `TileFinder` is called with `canBeSpace` / `layer` only by the Odyssey module. Contractors
-  have a `logistics.space` capability, added only when Odyssey is active and gained through
-  sponsorship or content.
+  `TileFinder` is called with `canBeSpace` / `layer` only by the Odyssey module. A contractor's
+  `Orbital` mobility tag is ordinary persisted capability data; it is only *used* when Odyssey is
+  active, and ignored (never deleted) when it is not.
+- **Transport presentation is not a DLC flag.** Contractor mobility is stored as capability
+  (`MobilityProfile`), never as ownership of a DLC vehicle. How it is presented physically (a
+  shuttle with Royalty, passenger transport with Odyssey, walk-in or drop pods otherwise) is a
+  later, optional Compat concern and is not designed yet.
 - **Removing a DLC mid-save** is handled like a removed mod (§ 3).
 
 ---

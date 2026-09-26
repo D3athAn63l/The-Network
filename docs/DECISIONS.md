@@ -339,7 +339,11 @@
   organization simulation: it would give the player a fake roster, wounds, equipment tier and
   morale (two truths about the colony) and force a headcount model on Solos.
 - **Consequences.** Made now, while no runtime persistence exists, so the persisted actor model
-  never needs restructuring. Operational capability and public fame are separate axes.
+  never needs restructuring. Operational capability and public fame are separate axes, and
+  mobility (`MobilityProfile`, capability tags, never DLC ownership flags) is a third.
+  **Providing work and issuing work are independent**: `ContractorProfile` never grants issuing,
+  `IssuerProfile` does, and contractor organizations may hold both. A Fixer brokers between an
+  issuer and contractors and never replaces the issuer.
 
 ### ADR-029 · Fixers are first-class actors; quotes are assembled from actor contributions
 - **Decision.** Fixers and brokers are persistent actors (normally `Individual`s) with a

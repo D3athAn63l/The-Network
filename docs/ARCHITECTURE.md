@@ -277,21 +277,30 @@ Three separate responsibilities ([DATA_MODEL § 6](DATA_MODEL.md#6-contractor-ac
 
 | Component | Meaning | On |
 |---|---|---|
-| `ContractorProfile` | **can act as a contractor**: supported contract kinds, public identity and registration, specialties, eligibility, where its capability is read from | Organization, Individual (Solo), PlayerProxy |
-| `ContractorSimulation` | **is simulated off-map as an NPC contractor**: equipment tier and condition, doctrine, morale, funds, career, retirement pressure, upkeep | NPC Organization, NPC Solo |
+| `ContractorProfile` | **provides contractor services**: bids on, accepts and performs supported contract kinds; public identity and registration, specialties, eligibility, where its capability is read from. It does not grant issuing contracts. | Organization, Individual (Solo), PlayerProxy |
+| `ContractorSimulation` | **is simulated off-map as an NPC contractor**: equipment tier and condition, doctrine, morale, funds, career, retirement pressure, **mobility**, upkeep | NPC Organization, NPC Solo |
 | `OrganizationProfile` | **has an organization's structure**: roster headcount, leader and lieutenants, wounded recovery buckets, recruitment, succession | NPC Organization only |
 
+Issuing work is a separate capability, `IssuerProfile` (draft and post contracts, invite
+contractors, select bids, act as client, pay), and **contractors may hold it too**: most
+established organizations carry both, while a poor Solo may only take work.
+
 ```
-Solo contractor   Individual   + ContractorProfile + ContractorSimulation
-Dead Red          Organization + ContractorProfile + ContractorSimulation + OrganizationProfile
-The player        PlayerProxy  + ContractorProfile
+Desperate Solo      Individual   + ContractorProfile + ContractorSimulation
+Dead Red            Organization + ContractorProfile + IssuerProfile + ContractorSimulation + OrganizationProfile
+Rich institution    Institution  + IssuerProfile
+Player (start)      PlayerProxy  + IssuerProfile
+Player (Phase 4+)   PlayerProxy  + IssuerProfile + ContractorProfile
 ```
 
 The player never gets an abstract roster, wounds, equipment tier or morale. When a decision needs
 the player's execution state (who is available, injured or equipped; what is carried), it is
 read from the real colony through `ColonyReader` in the Integration layer. There is one truth
 about the colony, and it is RimWorld's. **Operational capability** (experience tier, strength)
-and **public fame** (`PublicReputation`) are separate axes for every contractor.
+and **public fame** (`PublicReputation`) are separate axes for every contractor, and **mobility**
+(`MobilityProfile`: ground, long range, rapid transport, heavy lift, orbital) is a third,
+independent axis that the resolver and later presentation adapters read
+([DATA_MODEL § 6.2](DATA_MODEL.md#62-contractorsimulation-npc-contractors-only)).
 
 #### 6.6.2 Fixers and brokers
 
@@ -458,7 +467,9 @@ hold **who may exist in new worlds**; each world holds **what happened to them i
   § 12). The opportunity is generated as world truth and the lead reports it through that
   divergence ([DATA_MODEL § 8](DATA_MODEL.md#8-intel-leads-and-opportunities)).
 - **Persistent.** `IntelStore`: `IntelRequest` and `Lead`.
-- **Public surface.** Commands `SubmitIntel(topic, source)` and `CancelIntel(id)`; read models.
+- **Public surface.** Commands `SubmitIntel(topic, source)`, `ContinueIntel(request)`,
+  `EndIntel(request)` and `CancelIntel(request)` (names indicative; they are exactly the player
+  transitions of [STATE_MACHINES § 1](STATE_MACHINES.md#1-intel-request)); read models.
 - **Dependencies.** ItemCatalog (topic validation), PaymentAdapter (fee), OpportunityService
   (generation), Actors (the source), Knowledge (source proficiency).
 - **Emits.** `IntelRequested`, `IntelSearchProgressed` (optional flavour), `IntelLeadDelivered`,
@@ -534,7 +545,11 @@ binding). It picks plausible world context for an opportunity. It is not a subsy
 
 ### 6.15 Contracts (including offers and procurement)
 
-- **Responsibility.** Agreements between an issuer and a contractor. One shared lifecycle is
+- **Responsibility.** Agreements between an issuer and a contractor, optionally brokered by a
+  Fixer: **issuer → Fixer → reachable contractors**. The issuer (any actor with `IssuerProfile`,
+  contractors included) owns the demand and the objective; the Fixer mediates reach, access,
+  bids, negotiation, brokerage, deposits, insurance, replacement and anonymity, and never replaces
+  the issuer. One shared lifecycle is
   composed from parts: Parties, Terms, Confidentiality, Objectives, Offers, Assignment,
   Progress, Outcome and Lineage. Procurement, recovery, rescue, hunt, investigation, escort,
   salvage, transport, acquisition and black work differ in **objectives and kind rules**, not in
