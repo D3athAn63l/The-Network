@@ -29,6 +29,7 @@
 | R-20 | Economic exploits (refund loops, cancel abuse, market-value and arbitrage exploits) | Medium | Medium | Phases 1–2, Phase 4 |
 | R-21 | Vanilla site composition forces extermination before loot can leave | High | Medium | Phase 1 (S19) |
 | R-22 | Source-context misattribution (source-mod evidence overweighted, or stance forced) | Medium | Medium | Phase 1 (A11), playtests |
+| R-23 | Global cast settings lost, corrupted or leaking into saves | Medium | Medium | Phase 1 (A15) |
 
 ---
 
@@ -147,8 +148,8 @@
 - **Mitigation.** Abstract orgs (headcounts). Suspended reserved pawns with a cap. Daily
   staggered upkeep. O(1) summaries. Budgeted scheduler. The banned-pattern list
   ([PERFORMANCE § 4](PERFORMANCE.md#4-banned-patterns-and-what-replaces-them)).
-- **Proven by.** Phase 2 soak (60 orgs × 20 years). Phase 3 soak (150 stored pawns + 5
-  deployments), with an A/B TPS comparison.
+- **Proven by.** Phase 2 soak (the default ~100 contractor identities and a 300-identity stress
+  run × 20 years). Phase 3 soak (150 stored pawns + 5 deployments), with an A/B TPS comparison.
 
 ## R-15 · Registry-quest custody unworkable at runtime
 - **Failure modes.** Suspension causes oddities: pawns frozen in bad states, or vanilla code
@@ -232,3 +233,15 @@
   "no credible source" is valid; no per-item or per-mod code (ADR-026; [ARCHITECTURE § 6.14.1](ARCHITECTURE.md#6141-opportunity-source-and-context-resolution)).
 - **Proven by.** Phase 1 A11 and headless resolver tests; playtests with and without Beyond Our
   Reach.
+
+## R-23 · Global cast settings lost, corrupted or leaking into saves
+- **Failure modes.** A settings migration wipes the player's custom contractors or their custom
+  Legendary Fixer. One malformed template breaks the whole cast. A global edit renames or
+  resurrects an actor in an ongoing colony. Runtime outcomes leak into `ModSettings`, so one
+  colony's history appears in another.
+- **Mitigation.** Stable template IDs; `NetworkSettingsVersion` with ordered migrations that
+  preserve custom entries; per-template quarantine instead of wiping; regeneration replaces only
+  generated entries; each world snapshots the cast and is authoritative afterwards; runtime code
+  never writes settings (ADR-030; [SAVE_AND_MIGRATION § 11](SAVE_AND_MIGRATION.md#11-global-cast-settings-networksettingsversion)).
+- **Proven by.** Phase 1 A15 and settings-migration fixture tests (a malformed template and
+  custom entries that must survive).

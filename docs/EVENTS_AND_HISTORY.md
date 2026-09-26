@@ -73,7 +73,7 @@ on state that earlier ones have already updated.
 |---|---|---|
 | **Ephemeral** | Not published as NetworkEvents at all | cache invalidation, UI refresh, "upkeep ran" |
 | **Minor** | In the bounded journal only; feeds summary counters | `IntelRequested`, `OperationCheckpoint`, `OfferReceived`, `ActorLearnedTopic` |
-| **Notable** | Journal **and** a history record (tiered retention) | `IntelResolved`, `OpportunityClaimed`, `ContractCompleted`, `ContractFailed`, `KnownCharacterPromoted` |
+| **Notable** | Journal **and** a history record (tiered retention) | `IntelLeadDelivered`, `OpportunityClaimed`, `ContractCompleted`, `ContractFailed`, `KnownCharacterPromoted` |
 | **Major** | Journal and a history record kept for the life of the participants | `ContractorRescued`, `LeaderKilled`, `PlayerBetrayedContractor`, `CargoStolen`, `OrganizationFragmented` |
 | **Legendary** | History record plus immediate Legend evaluation | `ImpossibleRecovery`, `Massacre`, `OrganizationWipedOut` |
 
@@ -155,9 +155,12 @@ N = Notable, Ma = Major, L = Legendary.
 | Event | Ph. | Imp. | Key subjects | Main consumers |
 |---|---|---|---|---|
 | `Network.Bootstrapped` / `Network.Loaded` | 1 | Mi | — | diagnostics |
+| `Cast.Imported` | 1 | Mi | — (counts, settings version) | diagnostics |
 | `Intel.Requested` | 1 | Mi | requester, source | summaries |
-| `Intel.Resolved` | 1 | N | request, lead, opportunity | history, knowledge(source), letters |
-| `Intel.NoLead` | 1 | Mi | request | summaries, letters |
+| `Intel.LeadDelivered` | 1 | N | request, lead, opportunity, source, round | history, knowledge(source), relations (source), letters |
+| `Intel.NoLead` | 1 | Mi | request, round | summaries |
+| `Intel.SearchContinued` | 1 | Mi | request, round | summaries |
+| `Intel.Concluded` | 1 | Mi (N if the search ended with no lead at all) | request, lead count | history, knowledge(source), summaries, letters |
 | `Intel.Cancelled` / `Intel.Invalidated` | 1 | Mi | request | letters |
 | `Opportunity.Generated` / `.Materialized` | 1 | Mi | opportunity | — |
 | `Opportunity.Engaged` | 1 | Mi | opportunity, player | summaries |
@@ -166,7 +169,8 @@ N = Notable, Ma = Major, L = Legendary.
 | `Opportunity.LostToCompetitor` | 4 | N | opportunity, competitor | relations (rivalry), consequences |
 | `Reference.Invalidated` | 1 | Mi | owning entity | owning subsystem |
 | `Contract.Posted` | 2 | Mi | contract, issuer | bidding |
-| `Contract.OfferReceived` / `Contract.Refused` | 2 | Mi | contract, bidder | summaries (refusal counters), UI |
+| `Contract.OfferReceived` / `Contract.Refused` | 2 | Mi | contract, bidder, broker | summaries (refusal counters), UI |
+| `Contract.Quoted` | 2 | Mi | contract, bidder, broker | UI (the client-facing quote) |
 | `Contract.Awarded` | 2 | Mi | contract, contractor | relations (familiarity) |
 | `Contract.Delayed` / `.RenegotiationRequested` | 2 | Mi | contract | relations (trust −), letters |
 | `Contract.Completed` / `.PartiallyCompleted` | 2 | N | contract, contractor, issuer | history, relations, morale, knowledge, reputation |
@@ -304,6 +308,10 @@ Reputation is **derived from what actually happened**. It is not a stat chosen a
    (master § 66), and Unknown, Local, Established, Respected, Renowned, Legendary for the player's
    registered group (master § 39). The master's reputation dimensions (reliability, prestige,
    speed, combat, integrity, discretion) are internal inputs. Raw numbers stay internal.
+   **Fame is not capability**: an actor's fame tier and epithets are separate from its
+   operational experience tier (which comes from its simulation or, for the player, the real
+   colony). A global-cast actor starts with the template's fame, then its own record takes over.
+   Fixers have fame and epithets too ("absurd contacts", "cheap but unreliable").
 5. **Consumers**: willingness and refusal, pricing and risk premium, bidding priority,
    sanctions and blacklists (Phase 5), the likelihood of introductions, and legend scoring.
 
@@ -419,18 +427,20 @@ during dispatch. That keeps dispatch cheap, and it makes chains feel like the wo
 
 ## 11. Save-size budget
 
-Targets for a 10-year save with 40 active organizations:
+Targets for a 10-year save with the default cast of about 100 contractor identities (Solos to
+companies) and a small set of Fixers:
 
 | Item | Count (cap) | Approx. bytes each (XML) | Total |
 |---|---|---|---|
-| Actors (active + tombstones) | 40 + 300 | 1,500 / 60 | ~80 KB |
-| Known Characters (records) | 250 | 400 | ~100 KB |
+| Cast snapshot (template copies until instantiated, then links) | ~120 | 300 / 40 | ~10–40 KB |
+| Actors (active + tombstones) | ~120 + 400 | 1,200 / 60 | ~170 KB |
+| Known Characters (records; every Solo and Fixer embodies one) | 400 | 400 | ~160 KB |
 | History records | ≤ 4,900 (3,000 + 1,500 + 400) | 350 | ≤ 1.7 MB (typical 300–600 KB) |
 | Legends | ≤ 400 | 1,200 | ≤ 480 KB (typical 50 KB) |
 | Relation edges | ~1,500 | 250 | ~375 KB |
 | Contracts, operations (terminal ones compacted after 1 year into history) | ~200 live | 1,000 | ~200 KB |
 | Journal | ≤ 1,024 | 200 | ≤ 200 KB |
-| **Typical total** | | | **~1–1.5 MB** (hard ceiling ~3 MB) |
+| **Typical total** | | | **~1.2–1.8 MB** (hard ceiling ~3.5 MB) |
 
 **Terminal contracts, operations, intel requests and deployments are compacted after 1 in-game
 year.** Their history record (if any) keeps the story, and the entity itself is deleted.

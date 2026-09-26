@@ -44,20 +44,24 @@
 ## 1. Intel request
 
 The player's **interest**: an item topic and the contact asked, never a quantity. It knows
-nothing about what exists in the world.
+nothing about what exists in the world. **One request can produce zero, one or many leads**: a
+search runs in rounds, and the same request can keep searching after a lead (master § 11).
 
 ```mermaid
 stateDiagram-v2
   [*] --> Draft : UI only (not persisted)
-  Draft --> Submitted : SubmitIntel (fee charged)
-  Submitted --> Searching : same tick (source assigned, due tick scheduled)
-  Searching --> ResolvedLead : resolve job, lead found
-  Searching --> ResolvedNoLead : resolve job, nothing credible
-  Searching --> Cancelled : player cancels
+  Draft --> Submitted : SubmitIntel (comms available, fee per source policy)
+  Submitted --> Searching : same tick (round 1 scheduled)
+  Searching --> Searching : round ends; policy keeps searching (with or without a lead)
+  Searching --> AwaitingDecision : round delivered a lead; policy asks the player
+  AwaitingDecision --> Searching : ContinueIntel (continuation terms per source policy)
+  AwaitingDecision --> Concluded : EndIntel (player stops the search)
+  Searching --> Concluded : policy ends the search (round limit, or nothing credible found)
+  Searching --> Cancelled : CancelIntel (player stops a running round)
   Submitted --> Invalidated
   Searching --> Invalidated : topic def missing / source gone
-  ResolvedLead --> Closed : all leads Closed
-  ResolvedNoLead --> Closed : after archive delay
+  AwaitingDecision --> Invalidated
+  Concluded --> Closed : all leads Closed, after archive delay
   Cancelled --> Closed
   Invalidated --> Closed
   Closed --> [*] : compacted after 1 year
@@ -65,31 +69,43 @@ stateDiagram-v2
 
 | From | Trigger | Guard | To | Side effects | Event |
 |---|---|---|---|---|---|
-| Draft | `SubmitIntel` | topic eligible; source active and contactable (the Exchange, or a non-hostile faction contact); `Payment.CanCharge(fee)` | Submitted | charge fee (ledger); seed = Hash(networkSeed, id). Nothing about quantity is taken or stored. | `Intel.Requested` |
-| Submitted | same tick | — | Searching | `dueTick = now + Duration(seed, rarity, sourceQuality)`; schedule `intel.resolve` | — |
-| Searching | `intel.resolve` job | topic resolves; source not dissolved | ResolvedLead / ResolvedNoLead | commit `outcome`; on a lead: commit the hidden divergence class, then `Opportunities.Generate` (the source resolver may still find no credible source → ResolvedNoLead) → `Lead` → optionally `Materialize`. The fee is kept either way. | `Intel.Resolved` / `Intel.NoLead` |
-| Searching | `CancelIntel` | — | Cancelled | refund per policy (default 50% if under half the search time has elapsed, else 0) | `Intel.Cancelled` |
-| Submitted, Searching | validator / resolve-time check | `DefRef` missing, or source actor ended | Invalidated | full refund (the player did nothing wrong); explanatory letter | `Intel.Invalidated` |
-| ResolvedLead | all leads Closed | — | Closed | — | — |
-| ResolvedNoLead, Cancelled, Invalidated | 1-day archive job | — | Closed | — | — |
+| Draft | `SubmitIntel` | a usable Comms Console (ARCHITECTURE § 9); topic eligible; source active and contactable (a Fixer, a non-hostile faction contact, the Exchange); `Payment.CanCharge(fee)` | Submitted | freeze the source's `SearchTerms`; charge the fee its policy sets (ledger); seed = Hash(networkSeed, id). Nothing about quantity is taken or stored. | `Intel.Requested` |
+| Submitted | same tick | — | Searching | `round = 1`; `nextRoundDueTick = now + RoundDuration(...)`; schedule `intel.round` | — |
+| Searching | `intel.round` job | topic resolves; source not ended | Searching, AwaitingDecision or Concluded | draw from `NetRng(seed, "intel.round", round)`. **Lead:** commit the hidden divergence class, `Opportunities.Generate` (the source resolver may still find no credible source), append the `Lead`, optionally `Materialize`. **Then the continuation policy decides:** keep searching (schedule the next round, charging whatever the policy charges), ask the player (AwaitingDecision), or end (Concluded: round limit, or nothing credible found). Fees already paid are kept for rounds that ran. | `Intel.LeadDelivered` / `Intel.NoLead` (a round with nothing) / `Intel.Concluded` |
+| AwaitingDecision | `ContinueIntel` | a usable Comms Console; `Payment.CanCharge(continuation terms)` | Searching | `round++`; charge per policy (which may be nothing); schedule the next round | `Intel.SearchContinued` |
+| AwaitingDecision | `EndIntel` | a usable Comms Console | Concluded | — | `Intel.Concluded` |
+| Searching | `CancelIntel` | a usable Comms Console | Cancelled | cancel the running round's job; refund per the source's fee policy (for example part of that round's fee early in the round) | `Intel.Cancelled` |
+| Submitted, Searching, AwaitingDecision | validator / round-time check | `DefRef` missing, or source actor ended | Invalidated | refund the running round's fee in full (the player did nothing wrong); explanatory letter | `Intel.Invalidated` |
+| Concluded, Cancelled, Invalidated | every lead Closed, then a 1-day archive job | — | Closed | — | — |
+
+**Round duration** is not a global constant. It comes from the source's `speedBand`,
+specialties and topic knowledge, geography, the target's difficulty and rarity, the player's
+relationship with the source, the source's reputation, and seeded variance. The formula is
+replaceable and not fixed here. Duration and every draw are committed per round, so reloading
+never rerolls.
+
+**Continuation policy** belongs to the source (the Fixer's `continuationPolicyKey`, frozen into
+the request's terms): searching on under the original fee, a fee per round, a reduced
+continuation fee, a round limit, or a service package. The machine supports all of them; none is
+hardcoded.
 
 **Notes**
 
-- `ResolvedNoLead` is a real, meaningful outcome ("the Exchange found nothing credible about
-  Tenebrite"). It is recorded in the source's knowledge (`thing:X` experience +small) and in the
-  player's summary. The design says failure should be meaningful, and this is the smallest
-  example of it.
-- Optional flavour: `Intel.SearchProgressed` updates at 1–2 seeded midpoints ("a contact in the
-  south has heard something"). They are cosmetic and committed at submit time from the seed, so
+- Leads are independent entities. Pursuing, ignoring or abandoning Lead A **does not stop the
+  search**: the player can be at the site from Lead A while the Fixer keeps looking and later
+  delivers Lead B, if the policy continues. Abandoning a lead closes that lead only; ending the
+  search is `EndIntel`.
+- A search that ends with **no leads at all** is a real, meaningful outcome ("your contact found
+  nothing credible about Tenebrite"). It is recorded in the source's knowledge (`thing:X`
+  experience +small) and in the player's summary, and the fee is kept.
+- `AwaitingDecision` has no timer and needs no console to persist: the search simply waits. Only
+  the player's replies need communications.
+- Optional flavour: `Intel.SearchProgressed` updates at seeded midpoints of a round ("a contact
+  in the south has heard something"). They are cosmetic and committed when the round starts, so
   they never change the outcome.
-- A request never holds "the loot". It holds `LeadId`s. What the lead points at, and how much
-  of the item exists there, is decided by the opportunity generator using world state at
-  resolution. A lead is never guaranteed to be accurate (master § 12).
-- After a lead the player may pursue it, ignore it (it expires with its opportunity), abandon it
-  (it closes) or keep waiting for another lead (master § 11). Keeping the same request searching
-  without a new fee is an open design question
-  ([ARCHITECTURE § 14.3](ARCHITECTURE.md#143-still-open)); until it is decided, "keep waiting"
-  is a new request.
+- A request never holds "the loot". It holds `LeadId`s. What each lead points at, and how much
+  of the item exists there, is decided by the opportunity generator using world state at that
+  round. A lead is never guaranteed to be accurate (master § 12).
 
 ---
 
@@ -248,7 +264,9 @@ exists. Failures route to `Renegotiating`, `Voided` (the issuer faction vanished
 
 Procurement is a Contract whose kind is `Procurement` and whose objectives are
 `Acquire(def, count)` plus `Deliver(destination)`. It is independent of Intel. The contractor's
-own knowledge stands in for leads.
+own knowledge stands in for leads. From Phase 2 it is normally **brokered by a Fixer**
+(`parties.broker`): the client asks the Fixer, contractors bid, and the Fixer turns each bid into
+one client-facing quote ([DATA_MODEL § 9](DATA_MODEL.md#9-contracts)).
 
 ### 4.1 Lifecycle mapping
 
@@ -258,6 +276,7 @@ own knowledge stands in for leads.
 | open contract (any eligible contractor) | `parties.invited` empty; bidding among eligible contractors, and the population manager may introduce a new group as a bidder (master § 64) |
 | direct contract (hire a known group) | `parties.invited = [group]`; only invited actors are evaluated |
 | premium / sponsored contract | open or direct, plus `terms.contributions` (silver, or items as leases) feeding the resolver's sponsorship input |
+| quote | each `Offer` carries a `ProcurementQuote` assembled by the broker (contractor components + Fixer components, one final price, payment terms, optional insurance, validity); accepting the quote accepts the offer and copies its terms into the contract |
 | assigned | `Awarded` |
 | preparing · active | `Active` with `Operation.phase = Preparing / Transit / Engaged` |
 | delayed | `Delayed` |
@@ -275,8 +294,8 @@ own knowledge stands in for leads.
 
 The deposit is **committed cost**, not escrow: preparation, logistics, transport, scouting,
 equipment, supplies, labour and accepted risk. Failure must hurt (master § 21, § 23, § 61).
-The default split is half on award and half on delivery; terms may vary it. Exact percentages
-are tuning.
+Its share and schedule come from the brokering **Fixer's deposit policy** (master § 21 suggests
+half on award, half on delivery); terms may vary it. Exact percentages are tuning.
 
 | Moment | Rule |
 |---|---|
@@ -285,10 +304,10 @@ are tuning.
 | **Partial delivery** | By the client's choice (§ 3): the balance is pro-rated by delivered/required, minus penalties from the terms. Insurance can recover part of the deposit for the undelivered portion. |
 | **Mission failure, including catastrophic loss** (contractor wiped out, dead, retreated with nothing) | `Failed(cause)`. **The deposit is normally lost.** Insurance recovers part of it per coverage. Failure also feeds consequences (a last known location, a rescue, a battle site), not a refund. |
 | **Fraud / betrayal** | `Failed(Fraud / Betrayal)`. **Deposit lost**, unless later gameplay recovers it (a hunt or recovery follow-up can return money or cargo). Relation and sanction consequences. Insurance applies only as its terms say. |
-| **Contractor ends before any work begins** (dissolved or absorbed while `Awarded`) | Treated as an in-world failure: a successor or the absorbing org may honour the contract (successor inheritance, § 3); otherwise the deposit is lost. Open for owner review ([ARCHITECTURE § 14.3](ARCHITECTURE.md#143-still-open)). |
+| **Contractor disappears before work starts** (dies, dissolves, is absorbed or vanishes while `Awarded`, before its operation reaches Engaged) | **No global rule.** The brokering Fixer mediates it through its `replacementPolicyKey` and the terms. Possible results: a successor honours the contract (successor inheritance, § 3), the Fixer provides a replacement contractor, a full or partial refund, account credit (`credit.account`), an insurance claim, a renegotiated contract, or the deposit forfeited. The choice may depend on Fixer policy, contract terms, the relationship, insurance, whether preparation costs were actually committed, and whether the failure was genuine, fraudulent or technical. Technical invalidation (below) still protects the player in full. |
 | **Cancellation by issuer** | Before award: free. After award (commitment), the deposit is **partly or fully forfeited according to the terms** (`refundPolicyKey`); after Engaged, a kind-defined penalty may be added (it can become a debt obligation). |
 | **Technical invalidation** (item Def removed, the requested mod gone, the Network can no longer legally execute the contract, the save is prepared for removal) | `Voided`. **Full deposit refund**, because this is not an in-world failure (by drop pod to a player home map, or held as a credit obligation if no home map exists). The history record keeps the snapshot label. |
-| **Insurance** (optional, master § 62) | A premium buys partial recovery of the deposit on covered failures. `coverage < 1`: it never makes a contract risk-free. |
+| **Insurance** (optional, master § 62) | Offered by the brokering Fixer (premium and coverage from its insurance policy). A premium buys partial recovery of the deposit on covered failures. `coverage < 1`: it never makes a contract risk-free. |
 
 ### 4.3 Player bankruptcy (cannot pay the balance)
 
@@ -338,11 +357,11 @@ aborted and its forces are returned to the roster with no casualties. History ke
 
 | From | Trigger | To |
 |---|---|---|
-| — | `Bidding.CollectOffers` (willingness says yes) | Proposed |
+| — | `Bidding.CollectOffers` (willingness says yes; the broker attaches its quote) | Proposed |
 | Proposed | issuer accepts | Accepted (other offers become Superseded) |
 | Proposed | issuer declines | Declined |
 | Proposed | bidder's state changes (overcommitted, morale collapse, relation break) | Withdrawn |
-| Proposed | `expiresTick` passes | Expired |
+| Proposed | `expiresTick` passes, or the quote's `validUntilTick` (the Fixer's quote validity) | Expired (the client may ask for a new quote) |
 
 A refusal is **not** an offer. It is recorded in `Contract.refusals` with reason keys
 ([SIMULATION § 5](SIMULATION.md#5-willingness-refusal-and-bidding)). The UI shows it as flavour
@@ -455,6 +474,9 @@ stateDiagram-v2
   the org becomes `Retired`. Selected characters may *embody* new `Individual` actors with
   `IntelSourceProfile`, `IntroducerProfile` or `TraderProfile`, and inherit knowledge.
 - A **Tombstone** keeps the ID, name, kind, dates, fate and legend link forever.
+- A **Solo** (an `Individual` with `ContractorProfile`) ends when its embodied character dies
+  (`Dissolved`, `endReasonKey = Died`), retires or leaves the trade. Fame never prevents it:
+  Legendary actors end like anyone else.
 
 ---
 

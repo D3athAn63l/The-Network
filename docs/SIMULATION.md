@@ -64,7 +64,7 @@ across the day, never all at once.
 
 - **One job per (kind, target) for periodic kinds.** `Schedule` replaces any existing one, so
   duplicates cannot pile up.
-- **The entity stores its own next due tick** (for example `ContractorProfile.nextUpkeepTick`
+- **The entity stores its own next due tick** (for example `ContractorSimulation.nextUpkeepTick`
   or `Operation.checkpoints[].dueTick`). The load validator rebuilds any missing job from the
   entity and deletes jobs whose target is gone. The job list is therefore an index; the source
   of truth lives on the entities.
@@ -76,14 +76,14 @@ across the day, never all at once.
 
 | Work | Trigger | Frequency | Phase |
 |---|---|---|---|
-| Intel resolution | job at `dueTick` | once per request | 1 |
+| Intel search round | job at `nextRoundDueTick` | once per round; a request may run several rounds | 1 |
 | Site claim fallback sample | job, only while the Network site map exists | every 2,500 ticks | 1 |
 | Opportunity/lead closing and archiving | job | once each | 1 |
 | History retention sweep | job | every 15 days, budgeted | 1 |
 | Terminal entity compaction | job | every 15 days, budgeted | 1 |
 | Journal prune | on append | — | 1 |
 | Reference validation | load pipeline and checkpoints | on load, and per checkpoint | 1 |
-| Organization upkeep (recovery, morale drift, funds, recruitment, retirement pressure) | job per org, staggered | every 60,000 ticks (1 day) | 2 |
+| NPC contractor upkeep (recovery, morale drift, funds, recruitment for organizations, retirement pressure) | job per NPC contractor (Solo or organization; never the player), staggered | every 60,000 ticks (1 day) | 2 |
 | Operation checkpoints | job at each checkpoint | per operation, 3–6 per contract | 2 |
 | Bidding window collection | jobs | at open, one mid-window pass, at close | 2 |
 | Population manager (spawn or retire orgs toward target counts) | job | every 7 days | 2 |
@@ -112,6 +112,7 @@ bounded detail, which avoids false precision.
 ```
 ResolverInputs (persisted on Operation.frozenInputs when the Engaged phase begins)
   forcePower:        from committed tiers × equipment tier × condition × leases bonus
+                     (a Solo: the embodied character's state × equipment)
   threatPower:       opportunity threat points (or abstract source difficulty for market procurement)
   preparedness:      Knowledge.Proficiency(contractor, topics[archetype, threat, region, item]) (0..1)
   intelQuality:      lead reliability if the operation targets a known lead (else 0.5)
@@ -183,6 +184,11 @@ mean being robbed, cheated or ambushed.
 
 ## 4. Organizations: upkeep, morale, doctrine
 
+This section runs only for **NPC contractors** (`ContractorSimulation`). Roster, recruitment and
+succession steps apply to organizations (`OrganizationProfile`) only; a Solo's "roster" is its
+one embodied character. **None of it ever runs for the player**, whose execution state is the
+real colony ([ARCHITECTURE § 6.6.1](ARCHITECTURE.md#661-contractor-actors-capability-is-not-simulation)).
+
 ### 4.1 Upkeep job (daily, staggered)
 
 1. Heal wounded: recovery buckets whose `dueTick` has passed move from wounded to healthy.
@@ -194,7 +200,7 @@ mean being robbed, cheated or ambushed.
 5. Update retirement pressure (from career age, leader age, losses, prosperity).
 6. Invalidate cached strength.
 
-The job is O(1) per org and small. It never touches pawns.
+The job is O(1) per NPC contractor and small. It never touches pawns.
 
 ### 4.2 Organizational morale and trauma
 
@@ -248,6 +254,8 @@ operations touching those topics.
   org's identity does not change. It publishes `Leader.Succeeded`, gives a morale shock, and
   may shift doctrine a little toward the successor's traits.
 - **No successor possible** (roster empty) → `Dissolved`.
+- **A Solo has no succession.** When its character dies or retires, the Solo actor ends; rarely,
+  a protégé may start a successor with lineage (Phase 6).
 - Phase 6 adds contested succession, which can cause fragmentation.
 
 ### 4.6 Retirement transformation, fragmentation, mergers
@@ -308,27 +316,48 @@ coin is needed, it comes from `NetRng(contract.seed, contractor.id, "bid")`.
   conditions. Each refusal becomes a `Refusal` with reason keys.
 - The issuer (the player through the UI, or NPC logic) accepts one offer. The rest become
   Superseded.
+- **Brokered contracts.** When a Fixer brokers the contract, the candidate pool is limited by the
+  Fixer's `contractorReach` and client list, and each accepted evaluation becomes an offer the
+  Fixer wraps into a quote (§ 5.3).
+- **The player as contractor** (Phase 4) is never evaluated by the willingness model: the player
+  decides for themselves.
 - **Phase 2 scope:** Open and Direct contracts; one to three bidders. The data path is identical
   to full bidding, so enabling competition in Phase 4 is a content and UI change.
 
 ### 5.3 Pricing
 
+**Contractor pricing and Fixer pricing are separate actor-driven contributions assembled into
+one client-facing quote.** No arithmetic below is canonical; each line is replaceable policy
+code, shown only to name the inputs.
+
 ```
-price = marketValue(def, count) × rarityPremium × riskPremium(estimatedRisk, doctrine)
-        × relationshipFactor(edge) × reputationPremium(contractor fame) × moraleFactor
-        × (1 − favorDiscount if an obligation is cashed)
-price = max(price, marketPurchaseFloor(def, count))       // never cheaper than buying it (master § 20, § 77)
-deposit = price × depositShare                            // default 0.5 (master § 21); varied by greed,
-                                                          // trust in the issuer, risk and negotiation
-eta     = baseTravel(distance, logistics) × (1 + workload) × etaFactor
+// contractor side: the Offer (willingness decides whether and at what level it bids)
+contractorQuote = f(goods basis, rarity, estimated risk and danger, capability premium,
+                    distance and logistics, urgency, relationship, fame, morale, own profit,
+                    favor discount if an obligation is cashed)
+eta             = g(distance, logistics, workload)
+
+// Fixer side: its policies wrap the offer into the quote the client sees
+fixerComponents = fee policy (brokerage/service) + market and contractor access
+                  + coordination markup + contingency            // from FixerProfile policy keys
+paymentTerms    = deposit policy (master § 21 suggests half on award)
+insuranceOffer  = insurance policy (optional; premium and coverage bands; never risk-free)
+validity        = quote policy
+
+finalPrice = assemble(goods basis, contractorQuote, fixerComponents, adjustments)
+finalPrice ≥ marketPurchaseFloor(def, count)                     // never cheaper than buying it (master § 20, § 77)
 ```
 
-Pricing is purely derived. The final numbers are persisted on the Offer. They are never
-recomputed after the offer is made. **Market value is one input, not the balance mechanism**
-(master § 77): `marketValue` goes through sanity caps and fallback valuation (category medians,
-recipe input value) for modded items with broken or absurd values, quality is priced
-explicitly, and unique or artifact-like items get severe premiums and low success odds (master
-§ 78, § 80). The exploit list is tracked in [RISKS R-20](RISKS.md#r-20--economic-exploits).
+The assembled quote keeps each component with the actor that contributed it, so history and the
+economy know who charged what, while the player sees one coherent price, deposit, ETA and an
+optional insurance offer ([DATA_MODEL § 9](DATA_MODEL.md#9-contracts)). Everything is persisted
+on the Offer when it is made and never recomputed. **Market value is one input, not the balance
+mechanism** (master § 77): the goods basis goes through sanity caps and fallback valuation
+(category medians, recipe input value) for modded items with broken or absurd values, quality is
+priced explicitly (a strict quality minimum, when supported later, raises price, time and refusal
+odds and permits partial outcomes), and unique or artifact-like items get severe premiums and low
+success odds (master § 78–80). The exploit list is tracked in
+[RISKS R-20](RISKS.md#r-20--economic-exploits).
 
 ---
 
@@ -386,12 +415,12 @@ and it is committed at once.
 | Does loading before completion reroll? | No. Same seed and same (frozen) inputs give the same result. |
 | When is opportunity cargo fixed? | At `Opportunity.Generate` (def, count, stuff). The Things are created at `Materialize`. |
 | When are contractor casualties fixed? | At the Engaged → resolve checkpoint, as `Operation.outcome`. Physical encounters: at reconciliation, from actual pawn state. |
-| When is Intel truth fixed? | At `intel.resolve`: lead/no-lead, divergence class, source context, archetype, payload (target quantity and extra cargo), location, threat, reliability. |
-| Intel search duration? | At submit. |
-| Offer terms? | When each offer is created (persisted on the Offer). |
+| When is Intel truth fixed? | Per search round, at its `intel.round` job: lead/no-lead, divergence class, source context, archetype, payload (target quantity and extra cargo), location, threat, reliability. Each round draws from its own stream (`round` index), so continuing never rerolls an earlier round. |
+| Intel search duration? | When each round starts (from the source's frozen terms and the seed). |
+| Offer terms and quote? | When each offer is created and the broker wraps it (persisted on the Offer, with every quote component). |
 | Organization creation (name, doctrine, roster)? | At creation. |
 | Consequence rule firing? | When the triggering event is dispatched (seed from `event.seq`). The follow-up content is generated when its job runs, from its own seed. |
-| Can developers reroll deliberately? | Yes. The dev action "Reroll entity" increments `rerollNonce` and returns the entity to its pre-commit state where that is safe (Intel: Searching; Operation: before Engaged; Opportunity: only while Latent). It is never exposed to players. |
+| Can developers reroll deliberately? | Yes. The dev action "Reroll entity" increments `rerollNonce` and returns the entity to its pre-commit state where that is safe (Intel: the running round, while Searching; Operation: before Engaged; Opportunity: only while Latent). It is never exposed to players. |
 
 ### 6.5 Save-scumming stance
 
@@ -404,15 +433,29 @@ player's choices are not.
 
 ## 7. Population management
 
-- **Targets**: the active NPC contractor org count, from the "contractor population scale"
-  setting (master § 75; default 12–40, scaled by world size and faction count, a tuning value),
-  and a broker/intel-source count (Phase 5).
-- **The weekly job** creates organizations from templates when below target (tied to origin
-  factions when they exist, independent otherwise). It lets the natural lifecycle (retirement,
-  dissolution, wipe-outs, mergers) bring the count down, and never deletes an actor
+- **Target**: about **100 contractor identities** by default, from the "contractor population
+  scale" setting (master § 75; `NetworkSettings.targetContractorCount`, a tuning value). This is
+  a count of lightweight actor records, **not** 100 pawns, 100 companies or 100 per-tick
+  simulations. The mix includes Solos, duos, tiny crews, teams, companies and specialists; many
+  stay obscure, many will die.
+- **Where they come from.** The initial cast is **instantiated from the world's cast snapshot**
+  of the global roster in `ModSettings` ([DATA_MODEL § 18](DATA_MODEL.md#18-global-network-cast-modsettings-cross-save)):
+  Fixers in Phase 1, contractors when Phase 2 activates them. Each gets world-local ids; nothing
+  flows back to the settings.
+- **An ecosystem that predates the colony.** Generated templates carry a starting experience and a
+  separate starting fame: obscure newcomers, working contractors, established names and a small
+  famous or Legendary upper tier (roughly ten of a hundred as a starting direction; ratios are
+  tuning). A famous contractor can be past its prime; an obscure one can be excellent.
+  **Legendary provides fame and expectations, and zero plot armor**: legendary actors fail, lose
+  members, get captured, retire, dissolve and die.
+- **The weekly job** tops the population up toward the target with **world-generated**
+  newcomers (same name generator, `provenance.source = WorldGenerated`; tied to origin factions
+  when they exist, independent otherwise). It lets the natural lifecycle (retirement,
+  dissolution, deaths, wipe-outs, mergers) bring the count down, and never deletes an actor
   artificially. It also answers Open contracts that ask for a new bidder (§ 5.2).
-- **Templates** (a Def, later) give the name grammar, a doctrine range, a size range, specialties,
-  an equipment tier range, preferred pawn kinds (with fallback chains), and an origin faction
-  def filter.
-- Bootstrap creates an initial population on the first tick of a new game, or when the mod is
-  added to an existing save (Phase 2+).
+- **Templates for newcomers** (content, later a Def) give the forms, doctrine ranges, size ranges,
+  specialties, equipment tier ranges, preferred pawn kinds (with fallback chains), and an origin
+  faction def filter. Names follow the lightweight compositional model of
+  [DATA_MODEL § 18.4](DATA_MODEL.md#184-name-generation).
+- **Cost.** Upkeep is one small staggered job per NPC contractor per day (about 100 per day by
+  default). Only Known Characters who matter ever get pawns, and only when physically needed.

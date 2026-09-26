@@ -16,6 +16,7 @@
 8. [External Def repair](#8-external-def-repair)
 9. [Adding The Network to an existing save](#9-adding-the-network-to-an-existing-save)
 10. [Removing The Network from a save](#10-removing-the-network-from-a-save)
+11. [Global cast settings: NetworkSettingsVersion](#11-global-cast-settings-networksettingsversion)
 
 ---
 
@@ -44,6 +45,7 @@
   <networkSeed>-1873344123</networkSeed>
   <bootstrapped>True</bootstrapped>
   <ids><nextId>1204</nextId><nextEventSeq>5531</nextEventSeq><nextJobSeq>9002</nextJobSeq></ids>
+  <cast>…</cast>
   <actors>…</actors>
   <characters>…</characters>
   <knowledge>…</knowledge>
@@ -86,12 +88,13 @@ once shipped:
 | Category | Types (planned) |
 |---|---|
 | Root | `TheNetwork.NetworkWorldComponent` |
-| Actor components | `TheNetwork.Persist.ContractorProfile`, `IntelSourceProfile`, `IssuerProfile`, `SponsorProfile`, `SponsoredProfile`, `IntroducerProfile`, `TraderProfile`, `RivalryProfile` |
+| Actor components | `TheNetwork.Persist.ContractorProfile`, `ContractorSimulation`, `OrganizationProfile`, `FixerProfile`, `IntelSourceProfile`, `IssuerProfile`, `SponsorProfile`, `SponsoredProfile`, `IntroducerProfile`, `TraderProfile`, `RivalryProfile` |
 | Objectives | `TheNetwork.Persist.AcquireObjective`, `DeliverObjective`, `ReachOpportunityObjective`, `RescueObjective`, … |
 | Payloads | `TheNetwork.Persist.ItemPayload`, `CharacterPayload`, `ActorPayload` |
 | Events (journal) | `TheNetwork.Persist.Events.*` (unknown classes are dropped quietly) |
 | Site comp (vanilla-owned node) | `TheNetwork.WorldObjectComp_NetworkSite`, `WorldObjectCompProperties_NetworkSite` |
 | Registry quest part (Phase 3) | `TheNetwork.QuestPart_NetworkRegistry` |
+| Settings (the `ModSettings` file, not the save) | `TheNetwork.NetworkSettings` and `TheNetwork.Settings.*` (templates); frozen like the others, versioned by `NetworkSettingsVersion` (§ 11) |
 
 Rules:
 
@@ -225,7 +228,9 @@ External defs are stored as defName strings, so repair is a **string remap**:
    `bootstrapped = false`.
 2. `FinalizeInit(true)` detects a fresh state and skips migrations.
 3. The first tick bootstraps: `networkSeed`, the pseudo-actors (PlayerProxy, the Exchange),
-   faction proxies (lazy), and from Phase 2 the initial contractor population.
+   faction proxies (lazy), the **world cast snapshot** of the current global roster (Fixers
+   instantiated; contractors instantiated from the same snapshot once Phase 2 is present), and
+   nothing else. The snapshot is taken once; later settings changes do not reach this save.
 4. The XML patch has already added the site comp to the vanilla `Site` def. Existing vanilla
    sites get an inert comp with no data. Harmless.
 
@@ -251,4 +256,33 @@ Phase 3+). In both cases the game remains consistent. This is verified by Spike 
 
 **What stays in the world:** vanilla sites (time out normally), pawns (ordinary world pawns,
 subject to vanilla GC), delivered items (ordinary items), letters and archive entries (vanilla
-classes only, so no errors). The `MainButtonDef` disappears.
+classes only, so no errors). The `MainButtonDef` disappears. The `ModSettings` file with the
+global cast stays on disk and is ignored while the mod is disabled; it holds no world data.
+
+## 11. Global cast settings: NetworkSettingsVersion
+
+The global cast lives in `ModSettings`, outside every save, and outlives saves and mod versions.
+It therefore has **its own version**, `NetworkSettingsVersion`, separate from
+`NetworkSaveVersion` ([DATA_MODEL § 18](DATA_MODEL.md#18-global-network-cast-modsettings-cross-save)).
+
+- **Read first.** `settingsVersion` is read before anything else in `NetworkSettings.ExposeData`.
+- **Ordered, forward-only migrations**, run when the settings load, the same way as save
+  migrations (§ 4): structural reads for renamed or moved fields, semantic transforms for
+  changed meaning. They cover the generated-template schema, custom templates, renamed fields and
+  new actor-template capabilities (a new field gets a safe default; an old style key is mapped).
+- **Custom entries are preserved whenever possible.** A migration may regenerate or drop only
+  `Generated` data, and only when it cannot be migrated; it never discards a `Custom` entry that
+  can still be read.
+- **Per-template tolerance.** Templates load one by one (the tolerant list helper). A template
+  that is malformed or cannot migrate is **quarantined**: kept in the file, marked
+  `quarantined { reasonKey, message }`, disabled, excluded from generation and world import, and
+  reported once with a diagnostic line and in the settings UI. The rest of the cast loads. The
+  global cast is **never wiped** because one entry failed.
+- **Newer settings file than the mod** (a downgrade): load best-effort, keep unknown fields as
+  far as Scribe allows, show one warning, and do not rewrite the file until the player changes a
+  setting.
+- **No world depends on the settings.** Worlds hold their own snapshots (§ 9), so a lost, reset
+  or corrupted settings file never damages an existing save; at worst a new world is generated
+  from a freshly generated cast.
+- **Testing.** Settings migrations ship with fixture settings files (`Tests/Fixtures/settings/vN/`),
+  including a malformed template and custom entries that must survive.

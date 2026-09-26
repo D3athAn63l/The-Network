@@ -45,7 +45,7 @@ abstract.
 | Tier | Representation | Persistence cost | Examples |
 |---|---|---|---|
 | **T0: Anonymous member** | a count in `Roster.tiers` | about 0 | the thirty rank-and-file of an org |
-| **T1: Known Character (record)** | `KnownCharacter` with no pawn (`custody = Unmaterialized`) | about 400 B | the leader nobody has met, a lieutenant named in a letter, a veteran who became notable off-map |
+| **T1: Known Character (record)** | `KnownCharacter` with no pawn (`custody = Unmaterialized`) | about 400 B | the leader nobody has met, a lieutenant named in a letter, a veteran who became notable off-map, the person behind every Solo contractor and every Fixer |
 | **T2: Known Character (bound pawn)** | `KnownCharacter` + `PawnRef` to a real `Pawn` | a full pawn in the save (about 10–40 KB) | anyone the player has physically met who still matters |
 
 **Promotion from T0 to T1** happens when any of these is true:

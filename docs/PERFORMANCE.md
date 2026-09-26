@@ -22,7 +22,7 @@
 |---|---|
 | Per-tick cost when nothing is due | one `int` comparison (`Clock.Now < nextDue`), plus the `EnsureStarted` bool check |
 | Per-tick cost when jobs are due | ≤ 1.5 ms hard budget, ≤ 16 jobs. Typical job < 0.05 ms. |
-| Average added cost over an in-game day (40 orgs, 10 active contracts) | < 0.01 ms per tick amortized |
+| Average added cost over an in-game day (about 100 contractor identities, 10 active contracts) | < 0.01 ms per tick amortized |
 | Off-map Known Character pawns | suspended (quest-reserved) **and** mothball-eligible after store-time normalization, so vanilla ticks them once per 15,000 ticks ([ABSTRACT_PHYSICAL_LIFECYCLE § 4.3](ABSTRACT_PHYSICAL_LIFECYCLE.md#43-consequences-of-suspension-frozen-pawns)) |
 | UI | no allocation-heavy work per frame. Read models are rebuilt only when `StateVersion` changes. |
 | Load | Network load plus validation < 50 ms for a 10-year save |
@@ -32,7 +32,8 @@
 
 | Class | What | When | Cost control |
 |---|---|---|---|
-| **Initialization-only** | catalog build; compat module registration; recipe and trader indexes | first need in a session | once; timed; can be split across frames if needed |
+| **Initialization-only** | catalog build; compat module registration; recipe and trader indexes; reading the global cast from `ModSettings` | first need in a session | once; timed; can be split across frames if needed |
+| **World-import** | copying the enabled cast templates into the world snapshot; instantiating Fixer (and, from Phase 2, contractor) **records** | once per world, on the first tick | a few hundred small records; no pawn generation |
 | **Load-time** | tolerant load; migrations; cache rebuild; validation; custody audit | once per load (validation on the first tick) | linear in entity counts (bounded by caps) |
 | **Event-driven** | event dispatch and consumers (summary counters, edges, morale, knowledge) | when something happens | O(consumers) per event, each O(1); cascades capped at 64 |
 | **World-level scheduled** | Intel resolution, operation checkpoints, org upkeep, bidding passes, retention sweeps, population manager, gossip | due ticks, staggered | per-tick job and time budget; periodic jobs phase-offset by seed |
@@ -46,8 +47,9 @@
 
 | Quantity | Typical | Upper bound designed for |
 |---|---|---|
-| Active NPC contractor orgs | 20 | 60 |
-| Known Characters (records) | 120 | 400 |
+| Contractor identities (actor records, Solos to companies) | ~100 (the default setting) | 300 |
+| Fixers | a small set | 40 |
+| Known Characters (records; every Solo and Fixer embodies one) | 200 | 600 |
 | Bound (real) pawns in Network custody | 40 | 150 (a soft cap, § 2 of the lifecycle doc: only dormant, low-notability characters are released, and the cap is exceeded rather than break an active story) |
 | Active contracts | 5–10 | 40 |
 | Scheduled jobs at any time | 60–150 | 1,000 |
@@ -55,10 +57,17 @@
 | History records | 1,000 | 4,900 (caps) |
 | Events per in-game day | 5–30 | 200 |
 
-**Estimated steady-state work per in-game day (60,000 ticks), typical case:** 20 org upkeeps,
-about 10 operation checkpoints, about 5 bidding passes, about 20 events with about 8 consumers
-each. That is roughly 250 small operations per day, or **≈ 0.004 operations per tick**. Even at
-0.1 ms each, the amortized cost is ~0.0004 ms per tick.
+**Estimated steady-state work per in-game day (60,000 ticks), typical case:** about 100 NPC
+contractor upkeeps (Solo upkeep is smaller than organization upkeep), about 10 operation
+checkpoints, a few Intel rounds, about 5 bidding passes, about 20 events with about 8 consumers
+each. That is roughly 330 small operations per day, or **≈ 0.006 operations per tick**. Even at
+0.1 ms each, the amortized cost is ~0.0006 ms per tick.
+
+**The ~100-identity cast is not 100 simulations.** It is about 100 lightweight records with one
+staggered daily job each. No cast member is a pawn until it is physically needed (and then only
+Known Characters that matter), nothing iterates the cast per tick, prices are computed once per
+offer and persisted, and no contractor travels as a live world caravan. The global roster in
+`ModSettings` is small static data read once per session and copied once per world.
 
 **Search costs that must never scale with history size**: every behavioural query reads
 summaries or edges in O(1), or knowledge books in O(64) at most.

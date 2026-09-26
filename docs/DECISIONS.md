@@ -36,9 +36,14 @@
 | 022 | Persisted due-tick scheduler with budget and stagger | Accepted |
 | 023 | Temporary per-organization encounter factions | Conditional (S10) |
 | 024 | Terminal entities are compacted; actors become tombstones | Accepted |
-| 025 | Network lifecycles are not vanilla quests | Deviation (owner review) |
+| 025 | Network lifecycles are not vanilla quests | Accepted (owner review complete) |
 | 026 | Source mod is contextual evidence, not ownership | Accepted |
 | 027 | The deposit is committed cost, normally lost on failure | Accepted |
+| 028 | Contractor capability is separate from NPC contractor simulation | Accepted |
+| 029 | Fixers are first-class actors; quotes are assembled from actor contributions | Accepted |
+| 030 | Global cast in ModSettings, snapshotted per world, with its own settings version | Accepted |
+| 031 | One Intel request, many leads (search rounds) | Accepted |
+| 032 | Network access requires a usable Comms Console (Phase 1) | Accepted |
 
 ---
 
@@ -265,7 +270,7 @@
 - **Consequences.** Every reference to a compacted entity resolves to "archived" or a
   tombstone, and the UI handles both.
 
-### ADR-025 · Network lifecycles are not vanilla quests (Deviation: owner review)
+### ADR-025 · Network lifecycles are not vanilla quests
 - **Design.** Master § 87: "Where practical, use Quest, QuestPart, QuestScriptDef, WorldObject,
   Site, SitePart, Faction, Incident, Letter, Caravan/transport systems … Mission generator should
   provide appropriate Slate/context values and let vanilla systems handle downstream gameplay
@@ -274,6 +279,8 @@
   Network lifecycles. Opportunities are vanilla Sites with vanilla parts; letters, factions,
   caravans and transport are vanilla. Quests are used only as the hidden registry that anchors
   pawn custody (ADR-014). Incidents are deferred (the Network is not a storyteller, master § 55).
+- **Status.** **Accepted.** Recorded first as a deviation for review; the owner's review is
+  complete (see Owner review below).
 - **Why this is technically necessary.** A quest would *own* the lifecycle: vanilla quest state,
   expiry, accept/decline and cleanup would decide when a site or its pawns disappear; the Network
   lifecycles (bidding, Troubled, inheritance, lineage, partial claims) have no vanilla quest
@@ -283,8 +290,14 @@
 - **What is kept from the design's intent.** Vanilla map generation, combat, AI, factions and
   transport handle all downstream gameplay. An optional, read-only "Quests tab mirror" can
   present an opportunity as an informational quest later without owning it.
-- **Consequences.** Binding once the owner accepts it. If rejected, a spike would test
-  Network-owned `QuestScriptDef`s for opportunities against the concerns above before Phase 1.
+- **Owner review (concluded).** Master § 87 says "where practical", and quest ownership is not a
+  practical lifecycle match for bidding, partial recovery, inheritance, Troubled states,
+  continuation, contractor history or mod-removal robustness. Vanilla downstream gameplay is
+  still reused extensively: Site, SitePart, Faction, WorldObject, map generation, pawn combat and
+  AI, caravans, transport and letters. This is therefore **not** a violation of the master
+  design, and no further quest-ownership investigation is required before Phase 1.
+- **Consequences.** Binding. The registry quest for custody (ADR-014) is unaffected and stays
+  conditional on S9.
 
 ### ADR-026 · Source mod is contextual evidence, not ownership
 - **Decision.** Opportunity generation resolves plausible world context through a source
@@ -300,13 +313,76 @@
   forced enemy.
 
 ### ADR-027 · The deposit is committed cost, normally lost on failure
-- **Decision.** A procurement deposit (default half the price) pays for preparation, logistics,
-  transport, scouting, equipment, supplies, labour and accepted risk. It is normally lost on
-  in-world failure, catastrophic loss included, and on fraud unless later gameplay recovers it.
-  Cancellation after commitment forfeits part or all of it by the terms. Only technical
-  invalidation refunds it in full. Insurance recovers part of it and is never risk-free
+- **Decision.** A procurement deposit (share and schedule from the brokering Fixer's deposit
+  policy; master § 21 suggests half) pays for preparation, logistics, transport, scouting,
+  equipment, supplies, labour and accepted risk. It is normally lost on in-world failure,
+  catastrophic loss included, and on fraud unless later gameplay recovers it. Cancellation after
+  commitment forfeits part or all of it by the terms. Technical invalidation refunds it in full.
+  Insurance, when offered by the Fixer, recovers part of it and is never risk-free. **A
+  contractor that disappears before work starts has no global rule:** the Fixer's replacement
+  policy and the terms decide among a successor, a replacement, a full or partial refund,
+  credit, an insurance claim, renegotiation or forfeit
   ([STATE_MACHINES § 4.2](STATE_MACHINES.md#42-money-rules)).
 - **Rejected.** Refunding the deposit when the contractor is wiped out or dissolved ("nobody is
   left to keep it"): that made catastrophic failure free and contradicted master § 21 and § 23.
 - **Consequences.** Failure hurts financially and still creates content through consequences
   (last known location, rescue).
+
+### ADR-028 · Contractor capability is separate from NPC contractor simulation
+- **Decision.** Three components: `ContractorProfile` (can act as a contractor; on an
+  Organization, an Individual Solo or the PlayerProxy), `ContractorSimulation` (abstract off-map
+  state of an NPC contractor, Solo or organization) and `OrganizationProfile` (roster,
+  leadership, wounded buckets, recruitment, succession; NPC organizations only)
+  ([DATA_MODEL § 6](DATA_MODEL.md#6-contractor-actors-capability-npc-simulation-organization)).
+  The player's execution state is read from the real colony through the Integration layer.
+- **Rejected.** One overloaded `ContractorProfile` holding both the capability and the
+  organization simulation: it would give the player a fake roster, wounds, equipment tier and
+  morale (two truths about the colony) and force a headcount model on Solos.
+- **Consequences.** Made now, while no runtime persistence exists, so the persisted actor model
+  never needs restructuring. Operational capability and public fame are separate axes.
+
+### ADR-029 · Fixers are first-class actors; quotes are assembled from actor contributions
+- **Decision.** Fixers and brokers are persistent actors (normally `Individual`s) with a
+  `FixerProfile` of bands and replaceable policy keys (fee, brokerage, deposit, insurance, quote,
+  replacement, reach), usually alongside an `IntelSourceProfile`. Not every Intel source is a
+  Fixer. Procurement quotes keep each component with the actor that contributed it (contractor
+  bid, Fixer fee and terms) and show the client one price
+  ([DATA_MODEL § 4.3, § 9](DATA_MODEL.md#43-fixers-and-brokers-fixerprofile)).
+- **Rejected.** Fixers as flavour text; a single `marketValue × multiplier` price; frozen
+  formulas; raw stat sheets shown to the player.
+- **Consequences.** Intel fees, speed and reliability, procurement terms, deposits and insurance
+  vary by Fixer. Fixers have history, relationships, reputation and knowledge like any actor.
+
+### ADR-030 · Global cast in ModSettings, snapshotted per world, with its own settings version
+- **Decision.** The recurring cast (contractor and Fixer templates with stable GUID template
+  IDs and `Generated` / `Custom` provenance) lives in `ModSettings`. Each world snapshots it at
+  bootstrap and instantiates actors from its own snapshot with world-local ids. Runtime outcomes
+  are never written back. Regeneration replaces only generated entries. The settings data has its
+  own `NetworkSettingsVersion` and migrations
+  ([DATA_MODEL § 18](DATA_MODEL.md#18-global-network-cast-modsettings-cross-save),
+  [SAVE_AND_MIGRATION § 11](SAVE_AND_MIGRATION.md#11-global-cast-settings-networksettingsversion)).
+- **Rejected.** Cross-save runtime history (one colony's events leaking into another); a cast
+  generated per world only (no recurring characters); names as identity; reusing
+  `NetworkSaveVersion` for settings.
+- **Consequences.** The same Dead Red can live different lives in different saves. Global edits
+  never rename, replace or resurrect actors in an existing save.
+
+### ADR-031 · One Intel request, many leads (search rounds)
+- **Decision.** An `IntelRequest` runs in rounds and can deliver zero, one or many leads over its
+  lifetime. After a lead the search may continue, wait for the player, or end, as the source's
+  continuation policy says; pursuing a lead never stops the search
+  ([STATE_MACHINES § 1](STATE_MACHINES.md#1-intel-request)).
+- **Rejected.** One lead per request, with "keep waiting" meaning a new request (it contradicts
+  master § 11); a global continuation fee.
+- **Consequences.** Each round has its own seed stream and commit point; fees are recorded per
+  round.
+
+### ADR-032 · Network access requires a usable Comms Console (Phase 1)
+- **Decision.** Every outgoing Network command requires a spawned, usable vanilla
+  `Building_CommsConsole` (`CanUseCommsNow`) on a player home map, checked in `Commands.CanX`
+  through `CommsAccessAdapter`. Reading the Network needs none. Nothing in progress is suspended,
+  cancelled or destroyed when the console is lost.
+- **Rejected (for now).** Designing alternative communications (portable radios, broker visits,
+  orbital links, other mods). They may come later as additional access providers.
+- **Consequences.** A colony without a powered console cannot start or answer Network business
+  until it has one again.

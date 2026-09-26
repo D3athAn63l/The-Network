@@ -79,6 +79,9 @@ same change.
 9. **Interest, not need.** The player says what they are interested in. The Network never
    infers what the colony needs and never reads research, stockpiles or demand. Intel is about an
    item, never an amount; only Procurement names a quantity.
+10. **A recurring cast, a local history.** The cast of contractors and Fixers is shared across
+    saves through `ModSettings`; what happens to them belongs to each world alone and is never
+    written back.
 
 ## Conventions (for implementation phases)
 
@@ -92,6 +95,8 @@ same change.
 | Signal / quest-tag prefix | `TheNetwork.` |
 | Harmony | Not required for Phases 1–3 (see [RIMWORLD_INTEGRATION.md § Harmony](docs/RIMWORLD_INTEGRATION.md#3-harmony-policy)) |
 | Dependencies | None. Grandmaster21 and RegenNanites were read as references only. The Network does not depend on them or assume they are installed. |
+| Settings | `ModSettings`: preferences, catalog overrides and the global cast (with its own `NetworkSettingsVersion`). Never runtime history. |
+| Access | A usable vanilla Comms Console is required for Network actions (Phase 1). |
 
 Planned repository layout, created when Phase 1 begins and not before:
 

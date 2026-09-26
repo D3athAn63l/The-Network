@@ -82,11 +82,14 @@ The architecture has to:
 │   NetRng (seed derivation) · Migrations (NetworkSaveVersion) · Diagnostics (log/timing/valid.) │
 │                                                                                                │
 │  DOMAIN STATE (stores, persisted)            DOMAIN SERVICES (stateless logic over stores)     │
-│   ActorStore ──── capabilities:              IntelService ─────────► OpportunityService        │
-│     ContractorProfile · IntelSourceProfile   ContractService ◄─────► BiddingService            │
-│     IssuerProfile · SponsorProfile ·         WillingnessModel (refusal / pricing inputs)       │
-│     IntroducerProfile                        OperationService ─────► AbstractResolver          │
-│   CharacterStore (Known Characters)          OrganizationService (upkeep, morale, succession) │
+│   CastSnapshot (world copy of global cast)   IntelService ─────────► OpportunityService        │
+│   ActorStore ──── capabilities:              ContractService ◄─────► BiddingService            │
+│     ContractorProfile · FixerProfile ·       QuoteAssembly (contractor + Fixer terms)          │
+│     ContractorSimulation ·                   WillingnessModel (refusal / pricing inputs)       │
+│     OrganizationProfile · IssuerProfile ·    OperationService ─────► AbstractResolver          │
+│     IntelSourceProfile · SponsorProfile ·    ContractorSimService (NPC upkeep, succession)     │
+│     IntroducerProfile                                                                          │
+│   CharacterStore (Known Characters)          CastImport (settings → world, once)               │
 │   RelationStore · ObligationLedger ·         ReputationModel (derived, cached)                 │
 │     ContactBook                              ConsequenceEngine (chain reactions, inheritance)  │
 │   KnowledgeStore                             GossipService (Phase 5)                           │
@@ -100,11 +103,13 @@ The architecture has to:
 │   CustodyService (pawn binding/reservation)  EncounterFactionAdapter (temporary factions)      │
 │   DeliveryAdapter (drop pods; shuttle opt.)  PaymentAdapter (silver in/out)                    │
 │   SignalBridge (SignalManager receiver)      CompatRegistry (DLC / mod adapters, gating)       │
+│   CommsAccessAdapter (usable Comms Console)  ColonyReader (player execution state, read-only)  │
 └────────────────────────────────────────────────────────────────────────────────────────────────┘
           │ vanilla APIs only (no Harmony in Phases 1–3)
           ▼
    RimWorld: WorldPawns · FactionManager · WorldObjects/Site · QuestManager (registry quest, Ph.3)
              SignalManager · LetterStack · TradeUtility · DropPodUtility · DefDatabase · Scribe
+             Building_CommsConsole · ModSettings (NetworkSettings: global cast, read-only at runtime)
 ```
 
 Arrows point in the direction of calls. Services never call Presentation. Domain never calls
@@ -249,9 +254,9 @@ Method names are illustrative. The responsibilities and boundaries are binding.
 ### 6.6 Actors (registry and capabilities)
 
 - **Responsibility.** Give every participant in the Network a stable identity: NPC contractor
-  organizations, brokers, individuals, RimWorld factions (as proxies), the player, and the
-  Network's own institutions. Model what each actor can do through **capability components**,
-  not inheritance.
+  organizations, Solo contractors, Fixers and brokers, other individuals, RimWorld factions (as
+  proxies), the player, and the Network's own institutions. Model what each actor can do through
+  **capability components**, not inheritance.
 - **Persistent.** `ActorStore`: `NetworkActor { id, kind, status, name, lineage, bindings,
   components[] }` ([DATA_MODEL § 4](DATA_MODEL.md#4-actors)).
 - **Runtime cache.** Lists by capability (for example "active contractors") and a map from
@@ -265,6 +270,65 @@ Method names are illustrative. The responsibilities and boundaries are binding.
   ([STATE_MACHINES § 9](STATE_MACHINES.md#9-actor-lifecycle)).
 - **Future.** New capabilities (Trader, Recruiter, Settlement founder) are added as new
   component types, with no change to the actor core.
+
+#### 6.6.1 Contractor actors: capability is not simulation
+
+Three separate responsibilities ([DATA_MODEL § 6](DATA_MODEL.md#6-contractor-actors-capability-npc-simulation-organization)):
+
+| Component | Meaning | On |
+|---|---|---|
+| `ContractorProfile` | **can act as a contractor**: supported contract kinds, public identity and registration, specialties, eligibility, where its capability is read from | Organization, Individual (Solo), PlayerProxy |
+| `ContractorSimulation` | **is simulated off-map as an NPC contractor**: equipment tier and condition, doctrine, morale, funds, career, retirement pressure, upkeep | NPC Organization, NPC Solo |
+| `OrganizationProfile` | **has an organization's structure**: roster headcount, leader and lieutenants, wounded recovery buckets, recruitment, succession | NPC Organization only |
+
+```
+Solo contractor   Individual   + ContractorProfile + ContractorSimulation
+Dead Red          Organization + ContractorProfile + ContractorSimulation + OrganizationProfile
+The player        PlayerProxy  + ContractorProfile
+```
+
+The player never gets an abstract roster, wounds, equipment tier or morale. When a decision needs
+the player's execution state (who is available, injured or equipped; what is carried), it is
+read from the real colony through `ColonyReader` in the Integration layer. There is one truth
+about the colony, and it is RimWorld's. **Operational capability** (experience tier, strength)
+and **public fame** (`PublicReputation`) are separate axes for every contractor.
+
+#### 6.6.2 Fixers and brokers
+
+Fixers are persistent, first-class actors, normally `Individual`s embodying a Known Character,
+with a `FixerProfile` (brokering) and usually an `IntelSourceProfile` (Intel service)
+([DATA_MODEL § 4.3](DATA_MODEL.md#43-fixers-and-brokers-fixerprofile)). Not every Intel source is
+a Fixer: faction contacts, known contractors and the Exchange institution provide Intel through
+`IntelSourceProfile` alone.
+
+A Fixer shapes, through replaceable policies and never fixed formulas: Intel fees, search speed
+and reliability, specialties and geographic reach, access to contractors and markets, brokerage
+markup, procurement payment and deposit terms, the insurance offered and its premium and
+coverage, quote validity and urgency handling, and what happens when a contractor fails before
+work starts. Fixers take part in history, relationships, reputation, knowledge and contacts like
+any actor. The player perceives them through descriptors ("cheap but unreliable", "expensive,
+but gets results quickly", "a legendary fixer with absurd contacts"), not percentages.
+Phase 1 uses Fixers as Intel sources; Phase 2 makes them the procurement broker.
+
+#### 6.6.3 Global Network cast (ModSettings) and world snapshots
+
+The recurring cast lives in `ModSettings` (`NetworkSettings.roster`: contractor and Fixer
+templates with stable template IDs), so the same Dead Red can appear in many saves. The settings
+hold **who may exist in new worlds**; each world holds **what happened to them in that colony**
+([DATA_MODEL § 18](DATA_MODEL.md#18-global-network-cast-modsettings-cross-save)).
+
+- On bootstrap a world **snapshots** the enabled templates into its own `WorldCastSnapshot` and
+  instantiates actors from that snapshot with world-local `ActorId`s; the template ID is kept as
+  provenance only.
+- Runtime outcomes are **never** written back to `ModSettings`. Global edits, renames and
+  regeneration affect future worlds only, and never silently rename, replace or resurrect an
+  actor in an existing save.
+- Regenerating the generated cast preserves custom entries. The settings data has its own
+  version and migrations ([SAVE_AND_MIGRATION § 11](SAVE_AND_MIGRATION.md#11-global-cast-settings-networksettingsversion)).
+- The default cast is **about 100 contractor identities** (a setting): Solos, duos, tiny crews,
+  teams, companies and specialists, mostly obscure, with a small famous upper tier. They are
+  lightweight records, not pawns and not per-tick simulations. **Legendary means famous, never
+  protected**: legendary actors fail, get captured, retire and die.
 
 ### 6.7 Characters and custody
 
@@ -287,10 +351,12 @@ Method names are illustrative. The responsibilities and boundaries are binding.
 
 ### 6.8 Organizations (contractor behaviour)
 
-- **Responsibility.** Run the group-level state of contractor organizations: roster headcounts
-  by tier, wounded recovery, equipment profile, doctrine drift, organizational morale,
-  recruitment, succession, career age and retirement pressure.
-- **Persistent.** Stored in `ContractorProfile` on the actor.
+- **Responsibility.** Run the abstract off-map state of **NPC contractors**: for every NPC
+  contractor (Solo or organization) the equipment profile, doctrine drift, morale, funds, career
+  age and retirement pressure; for organizations also roster headcounts by tier, wounded
+  recovery, recruitment and succession. It never runs for the player (§ 6.6.1).
+- **Persistent.** `ContractorSimulation` and, for organizations, `OrganizationProfile` on the
+  actor.
 - **Runtime cache.** Derived strength rating and morale descriptor, both flagged dirty.
 - **Public surface.** `Orgs.EffectiveStrength(actor)`, `Orgs.MoraleState(actor)`,
   `Orgs.Checkout(actor, request)` / `Orgs.Return(...)`, and `Orgs.RunUpkeep(actor)`
@@ -299,7 +365,7 @@ Method names are illustrative. The responsibilities and boundaries are binding.
   `OrganizationFragmented` / `OrganizationMerged` (Phase 6).
 - **Consumes.** `OperationResolved`, `ContractorCasualties`, `ContractCompleted`,
   `ContractFailed`, `KnownCharacterKilled`, `LeaderKilled`, `PaymentDefaulted`, `SponsorshipChanged`.
-- **Lifecycle.** Per-organization upkeep runs about once per in-game day, staggered by seed.
+- **Lifecycle.** Per-contractor upkeep runs about once per in-game day, staggered by seed.
 - **Detail.** [SIMULATION § 4–5](SIMULATION.md#4-organizations-upkeep-morale-doctrine).
 
 ### 6.9 Knowledge (learning and geographic knowledge)
@@ -312,7 +378,7 @@ Method names are illustrative. The responsibilities and boundaries are binding.
 - **Runtime cache.** None needed. Books are small.
 - **Public surface.** `Knowledge.Proficiency(actor, topic)` returns a value in 0..1 with lazy
   decay. `Knowledge.Transfer(from, to, fraction)` supports retirement, succession and mergers.
-- **Consumes.** `OperationResolved`, `OpportunityClaimed` and `IntelResolved` (the topics touched).
+- **Consumes.** `OperationResolved`, `OpportunityClaimed` and `IntelLeadDelivered` (the topics touched).
 - **Emits.** `ActorLearnedTopic` when a threshold is crossed (Minor).
 - **Detail.** Topic keys and region quantization are in [DATA_MODEL § 7](DATA_MODEL.md#7-knowledge).
 
@@ -366,16 +432,27 @@ Method names are illustrative. The responsibilities and boundaries are binding.
   request carries no quantity, target amount, minimum or stack count, and no price or duration
   rule reads one. How much exists (17, 600, none, an already-looted cache) is decided by the
   opportunity generator (§ 6.14). Quantity is a Procurement concept (`AcquireObjective.count`).
-- **Contact / source.** The player chooses who to ask (master § 8–9): the generic information
-  network (the institution actor "the Exchange") or a faction contact from Phase 1; known
-  contractors (Phase 2) and named brokers (Phase 5) as they arrive. Any actor with an
-  `IntelSourceProfile` can be a source. Source quality follows master § 13 (tech level, faction
-  type, goodwill, specialization, geography, source-mod relationship, previous reliability) and
-  is shown only as narrative descriptors that the player learns from how that source's leads
-  turned out.
-- **Money.** A modest silver fee is paid at submission. It is kept when nothing credible is found
-  (the search happened), refunded in full on technical invalidation, and partly refunded on early
-  cancellation ([STATE_MACHINES § 1](STATE_MACHINES.md#1-intel-request)).
+- **Contact / source.** The player chooses who to ask (master § 8–9): a **Fixer** (§ 6.6.2),
+  a faction contact, or the generic information network (the institution "the Exchange") from
+  Phase 1; known contractors from Phase 2. Any actor with an `IntelSourceProfile` can be a source.
+  Source quality follows master § 13 (tech level, faction type, goodwill, specialization,
+  geography, source-mod relationship, previous reliability) and is shown only as narrative
+  descriptors that the player learns from how that source's leads turned out.
+- **Access.** Every outgoing Network action requires a usable vanilla Comms Console (§ 9).
+- **Money and time depend on the source.** There is no global Intel fee or duration. The fee, the
+  round duration (source speed, specialties, knowledge, geography, target difficulty and rarity,
+  relationship, reputation, seeded variance) and the reliability all come from the chosen source's
+  profile and policies. Fees are kept for rounds that ran, even when nothing credible is found,
+  refunded in full for the running round on technical invalidation, and partly refunded on
+  cancellation as the source's policy says ([STATE_MACHINES § 1](STATE_MACHINES.md#1-intel-request)).
+- **One request, many leads.** A search runs in rounds and can deliver several leads over time.
+  After a lead the player may pursue it, ignore it, abandon it, keep the search going or end it;
+  pursuing Lead A does not stop the search, so Lead B can arrive while the player is at A's site.
+  Whether and at what cost a search continues is the source's continuation policy, not a global
+  rule.
+- **Quality intent** (optional, not Phase 1). For quality-bearing items the request may carry a
+  broad preference (any, approximate, minimum; master § 79). The lead's reported quality is
+  perception and may be wrong.
 - **Truth vs report.** At resolution the source's reliability commits a hidden *divergence*
   class (accurate, partial, outdated, bad, misinformation, trap, jackpot, complication; master
   § 12). The opportunity is generated as world truth and the lead reports it through that
@@ -384,8 +461,9 @@ Method names are illustrative. The responsibilities and boundaries are binding.
 - **Public surface.** Commands `SubmitIntel(topic, source)` and `CancelIntel(id)`; read models.
 - **Dependencies.** ItemCatalog (topic validation), PaymentAdapter (fee), OpportunityService
   (generation), Actors (the source), Knowledge (source proficiency).
-- **Emits.** `IntelRequested`, `IntelSearchProgressed` (optional flavour), `IntelResolved`,
-  `IntelNoLead`, `IntelCancelled`, `IntelInvalidated`.
+- **Emits.** `IntelRequested`, `IntelSearchProgressed` (optional flavour), `IntelLeadDelivered`,
+  `IntelNoLead` (a round with nothing), `IntelSearchContinued`, `IntelConcluded`,
+  `IntelCancelled`, `IntelInvalidated`.
 - **Consumes.** `ReferenceInvalidated` (the topic def is gone).
 - **Detail.** [STATE_MACHINES § 1–2](STATE_MACHINES.md#1-intel-request).
 
@@ -464,10 +542,20 @@ binding). It picks plausible world context for an opportunity. It is not a subsy
 - **Procurement** names the exact item and the exact quantity (master § 19). It is hired as an
   **Open** contract (any eligible contractor may bid), a **Direct** contract (one invited known
   group), or a **Premium / sponsored** contract (either, plus the player's contributions of
-  silver, equipment, medicine or logistics, master § 22). The deposit (default half the price,
-  master § 21) is committed cost and is **normally lost** when the contractor fails in the world;
-  only technical invalidation refunds it in full, and insurance recovers part of it
-  ([STATE_MACHINES § 4.2](STATE_MACHINES.md#42-money-rules)).
+  silver, equipment, medicine or logistics, master § 22).
+- **Fixer-mediated quotes.** Procurement is normally brokered by a Fixer. **Contractor pricing and
+  Fixer pricing are separate actor-driven contributions assembled into one client-facing quote**:
+  the contractor's bid (acquisition, risk, capability and danger premiums, logistics, urgency,
+  profit) plus the Fixer's terms (brokerage fee, market and contractor access, coordination
+  markup, contingency, deposit policy, insurance offer, quote validity, replacement policy). The
+  player sees one price; the quote keeps which actor contributed which component
+  ([DATA_MODEL § 9](DATA_MODEL.md#9-contracts)). No arithmetic is fixed in Phase 0.
+- **Deposits.** The deposit (share and schedule from the Fixer's deposit policy; master § 21
+  suggests half) is committed cost and is **normally lost** when the contractor fails in the
+  world. A contractor that disappears **before work starts** is mediated by the Fixer's policy
+  and the terms (replacement, successor, refund, credit, forfeit, insurance, renegotiation), not
+  by a global rule. Technical invalidation still refunds in full, and insurance, when the Fixer
+  offers it, recovers part ([STATE_MACHINES § 4.2](STATE_MACHINES.md#42-money-rules)).
 - **Persistent.** `ContractStore`.
 - **Public surface.** Commands `DraftContract`, `PostContract`, `AcceptOffer`, `CancelContract`,
   `RespondToRenegotiation`. Services `Bidding.CollectOffers`, `Contracts.Transition(...)`.
@@ -530,6 +618,8 @@ binding). It picks plausible world context for an opportunity. It is not a subsy
 | `DeliveryAdapter` | Hand goods to the player: drop pods (Core), walk-in (Phase 3), shuttle (Royalty, optional) | `DropPodUtility.DropThingsNear`, `TransportShipMaker` (optional) |
 | `PaymentAdapter` | Take silver from and pay silver to the player; represent debt when the player cannot pay | `TradeUtility.ColonyHasEnoughSilver`, `TradeUtility.LaunchSilver`, drop pods |
 | `SignalBridge` | Receive the `TheNetwork.*` quest-tag signals (pawn, thing and world-object lifecycle) and route them to services | `SignalManager.RegisterReceiver`, `QuestUtility.AddQuestTag` |
+| `CommsAccessAdapter` | Answer "can the player communicate now?": a spawned `Building_CommsConsole` (any subclass, so modded consoles count) on a player home map whose `CanUseCommsNow` is true (powered, no electricity-disabling condition) | `Map.IsPlayerHome`, `ListerBuildings.AllBuildingsColonistOfClass<Building_CommsConsole>()`, `Building_CommsConsole.CanUseCommsNow` |
+| `ColonyReader` | Read-only view of the player's real execution state when the player acts as a contractor or a decision needs it (colonists, injuries, gear, inventories, transport); never stored as abstract state | vanilla pawn, map and caravan APIs |
 
 The API facts behind each adapter are in [RIMWORLD_INTEGRATION](RIMWORLD_INTEGRATION.md).
 
@@ -560,15 +650,18 @@ The API facts behind each adapter are in [RIMWORLD_INTEGRATION](RIMWORLD_INTEGRA
 ### 7.1 Phase 1: Intel to site to history
 
 ```
-UI: player picks a contact (the Exchange or a faction) and a ThingDef from the ItemCatalog
+UI: CommsAccessAdapter says a usable Comms Console exists (else the command is refused with a reason)
+    player picks a contact (a Fixer, a faction or the Exchange) and a ThingDef from the ItemCatalog
     (no quantity) → Commands.SubmitIntel(topic, source)
-  └─ IntelService: validate topic (catalog verdict, DefRef resolves) and source → PaymentAdapter.Charge(fee)
-       └─ create IntelRequest{Submitted, seed} → Events.Publish(IntelRequested)
-       └─ Scheduler.Schedule("intel.resolve", dueTick = now + seededDuration)   // UI shows "several days"
+  └─ IntelService: validate topic (catalog verdict, DefRef resolves) and source
+       → freeze the source's SearchTerms → PaymentAdapter.Charge(fee per the source's policy)
+       └─ create IntelRequest{Submitted → Searching, round 1, seed} → Events.Publish(IntelRequested)
+       └─ Scheduler.Schedule("intel.round", due = now + RoundDuration(source, topic, seed))  // UI: "several days"
 …time passes (no per-tick work)…
-Scheduler fires "intel.resolve"
-  └─ IntelService.Resolve: re-validate topic → seeded lead roll (source quality) → divergence class
-       ├─ no lead → IntelRequest{ResolvedNoLead} → Publish(IntelNoLead) → letter (fee kept)
+Scheduler fires "intel.round"
+  └─ IntelService.RunRound: re-validate topic → seeded lead roll (source quality) → divergence class
+       ├─ nothing this round → Publish(IntelNoLead); continuation policy: next round, or Concluded
+       │    (a search that ends with no leads at all: letter, fee kept)
        └─ lead → OpportunityService.Generate(topic, divergence)
              → SourceResolver: candidates from item + source package + live factions + world
                 (may still end in "no credible source" → no lead)
@@ -576,7 +669,9 @@ Scheduler fires "intel.resolve"
                target quantity + extra cargo decided here (never from the request)
              → Opportunity{Revealed, sourceContext} + Lead{report through the divergence, confidence}
              → SiteAdapter.Materialize → vanilla Site (ItemStash things + threat part) + TimeoutComp + comp
-             → Publish(IntelResolved, OpportunityMaterialized) → letter with look target
+             → Publish(IntelLeadDelivered, OpportunityMaterialized) → letter with look target
+             → continuation policy: keep searching (next round) | AwaitingDecision (player may
+               ContinueIntel or EndIntel) | Concluded; pursuing this lead never stops the search
 Player caravan / pods reach site → vanilla map generation places the stash
   └─ comp.PostMapGenerate → Opportunity{Engaged} → Publish(OpportunityEngaged)
 Player leaves with some or all of the goods, defenders dead or not (caravan)
@@ -590,14 +685,19 @@ Timeout without a visit → comp.PostDestroy → Opportunity{Expired} → Publis
 
 ```
 Commands.PostContract(kind=Procurement, objective=Acquire(DefRef, exact qty), deliverTo=home map,
-                      hiring=Open | Direct(actor) | Premium(contributions))
+                      broker=Fixer, hiring=Open | Direct(actor) | Premium(contributions))   // comms required
   └─ ContractService: Posted → Bidding (window jobs) → WillingnessModel per eligible contractor
-       → Offers (or recorded refusals with reasons) → player AcceptOffer → Awarded
+       → Offers (contractor quote; or recorded refusals with reasons)
+       → QuoteAssembly: the Fixer wraps each offer into one client-facing quote
+         (contractor components + Fixer fee, markup, deposit terms, insurance offer, validity)
+       → player accepts a quote → Awarded (terms copied from the quote)
        → PaymentAdapter.Charge(deposit) → OperationService.Start → checkpoints scheduled
 Checkpoint "engage" → AbstractResolver (frozen inputs + seed) → committed outcome
   └─ Publish(OperationResolved, ContractorCasualties?) → Orgs / History / Relations / Morale
 Checkpoint "deliver" → DeliveryAdapter (drop pods) → Publish(DeliveryCompleted)
   └─ ContractService: Completed | PartiallyCompleted → PaymentAdapter.Charge(balance)
+Contractor disappears before work starts → the Fixer's replacement policy and the terms decide
+  (replacement, successor, refund, credit, forfeit, insurance, renegotiation)
 Failure → ContractFailed(cause), deposit normally lost (insurance may recover part)
   └─ ConsequenceEngine: "last known location" recovery Opportunity (Phase 2: cargo and threat;
      Phase 3 adds survivors, captives and bodies) or a rescue Opportunity
@@ -669,7 +769,18 @@ reaction; later decisions read summaries and edges, never the raw ledger.**
 - **Settings** (master § 75) live in `ModSettings`. Tuning settings are read-only inputs to
   formulas. Turning a service off (Intel, Procurement, player registration) hides its commands
   and stops new requests; entities already in progress run to their normal end, so no save data
-  is stranded.
+  is stranded. The same `ModSettings` holds the **global cast** (§ 6.6.3), which runtime code
+  only reads at world import.
+- **Comms Console gate** (Phase 1; owner decision). Every command that *contacts* the Network
+  (submitting or continuing a search, ending or cancelling it, posting, accepting or answering a
+  contract) checks `CommsAccessAdapter` in `Commands.CanX`. Without a usable console the command
+  is refused with `reasonKey = "NoUsableCommsConsole"`: the button is disabled with a tooltip
+  ("needs a powered comms console") and nothing is charged or changed. The Network tab can still
+  be opened to read requests, leads, contracts and history, and local actions (abandoning a lead)
+  still work. **Nothing in progress depends on the console**: searches, operations and deliveries
+  continue, incoming results are recorded and shown normally, a search waiting for the player's
+  decision simply waits, and communications resume as soon as a console is usable again. Other
+  ways to communicate (portable radios, orbital links, other mods) are not designed yet.
 
 ## 10. What is stable now and what stays replaceable
 
@@ -687,6 +798,10 @@ reaction; later decisions read summaries and edges, never the raw ledger.**
 | Scheduler job shape `(seq, dueTick, kind, target, arg)` | Job frequencies, budgets |
 | Relation edge key (directed actor pair) | Relation dimensions beyond standing and trust |
 | Persisted polymorphic type names (see [SAVE_AND_MIGRATION § 3](SAVE_AND_MIGRATION.md#3-persisted-type-names)) | UI, letters, epithet definitions, gossip rules |
+| The contractor split (`ContractorProfile` / `ContractorSimulation` / `OrganizationProfile`) and `FixerProfile` | Fixer and contractor policies: fees, speed, markups, deposits, insurance, replacement |
+| Global cast template IDs, template schema and `NetworkSettingsVersion`; the snapshot-at-import rule | Cast generation, name pools, fame and experience distribution |
+| One Intel request, many leads (rounds) | Continuation policies, round durations |
+| Quote structure (components tagged with the contributing actor) | Quote arithmetic |
 
 ## 11. Where abstraction pays and where it does not
 
@@ -756,7 +871,7 @@ reaction; later decisions read summaries and edges, never the raw ledger.**
 | 8 | Can external mods be removed safely? | **Yes, with defined degradation.** DefRefs are strings, and a miss invalidates the affected activity with a refund or an explanation. Vanilla-level errors for missing Things inside sites cannot be avoided, but they do not cascade. | [COMPATIBILITY § 3](COMPATIBILITY.md#3-external-def-safety) |
 | 9 | Can new modded ThingDefs appear automatically? | **Yes.** The catalog is rebuilt every session from DefDatabase with conservative heuristics. | [COMPATIBILITY § 2](COMPATIBILITY.md#2-item-catalog) |
 | 10 | Can a contractor move abstract → physical → abstract without duplication? | **Yes, by invariants.** One pawn per character, a deployment ledger, reconciliation driven by pawn state, and the Network never discards pawns. This is verified by Phase 3 spikes. | [ABSTRACT_PHYSICAL_LIFECYCLE](ABSTRACT_PHYSICAL_LIFECYCLE.md) |
-| 11 | Can the player become a contractor later without replacing their faction? | **Yes.** The player is a `PlayerProxy` actor bound to `Faction.OfPlayer`. Registration adds a `ContractorProfile` component. | [DATA_MODEL § 4](DATA_MODEL.md#4-actors) |
+| 11 | Can the player become a contractor later without replacing their faction? | **Yes.** The player is a `PlayerProxy` actor bound to `Faction.OfPlayer`. Registration adds a `ContractorProfile` component only: no abstract roster or simulation; execution state is the real colony. | [DATA_MODEL § 4](DATA_MODEL.md#4-actors) |
 | 12 | Can competing contractors exist? | **Yes.** Contracts have offers, not a single owner, and are non-exclusive where the kind allows. Opportunities have a `competitors` list, and actors race through Operations. | [DATA_MODEL § 8–9](DATA_MODEL.md#8-intel-leads-and-opportunities) |
 | 13 | Can contracts branch after failure? | **Yes.** Terminal contracts are immutable, and continuations are new contracts linked by lineage. Failures feed the Consequence Engine. | [STATE_MACHINES § 3](STATE_MACHINES.md#3-contract-generic) |
 | 14 | Can retirement preserve meaningful knowledge? | **Yes.** `Knowledge.Transfer` goes to the successor or the transformed individual actor, and a Legend snapshot preserves the story. | [SIMULATION § 4.6](SIMULATION.md#46-retirement-transformation-fragmentation-mergers) |
@@ -777,24 +892,25 @@ The first Phase 0 pass was written before the [master design](../The%20Network%2
 twelve assumptions to check against it. The master design has since been added, and this
 revision reconciles the whole architecture against it. The design controls gameplay intent;
 numbers it deliberately leaves unspecified stay tuning values. Nothing below was invented to
-fill a gap: anything the design does not answer is marked open.
+fill a gap: anything the design does not answer is marked open. A final owner review then
+settled the remaining open questions (§ 14.3); those decisions are reflected in the rows below.
 
 ### 14.1 The former assumptions
 
 | # | Former assumption | Master design | Status | Decision now, and where it lives |
 |---|---|---|---|---|
-| 1 | Intel fee and payment medium | § 9 (a modest fee, paid on submitting), § 71 (650 silver), § 83 (500 silver) | **Resolved**; tuning open | Silver, a modest fee paid at submission and kept when no lead is found (§ 6.13). Beacon payment mechanics are technical (Spike S4). **Open:** the fee formula (tuning), and whether a comms console is required (§ 9 names "Comms Console / Network interface"; Phase 1 uses the Network tab). |
-| 2 | Who performs Intel in Phase 1 | § 8, § 9 step 3, § 13, § 71 (the contact is a faction) | **Resolved — architecture corrected** | The player chooses a contact. Phase 1: the Exchange (the generic information network) and faction contacts. Known contractors from Phase 2, named brokers from Phase 5 (§ 6.13). |
-| 3 | Search duration | § 9, § 71 ("Unknown / several days"), § 83 (five days) | **Resolved**; numbers are tuning | Several days, seeded at submission. The UI shows the elapsed time and a vague estimate, never the due tick (§ 9). |
+| 1 | Intel fee and payment medium | § 9 (a modest fee, paid on submitting), § 71 (650 silver), § 83 (500 silver) | **Resolved** (owner) | Silver, paid at submission and kept for rounds that ran. **No global fee:** it depends on the chosen Fixer or contact (§ 6.13). A usable Comms Console is **required** (§ 9). Beacon payment mechanics are technical (Spike S4). |
+| 2 | Who performs Intel in Phase 1 | § 8, § 9 step 3, § 13, § 71 (the contact is a faction) | **Resolved — architecture corrected** (owner) | The player chooses a contact: **Fixers** (persistent first-class actors, § 6.6.2), faction contacts and the Exchange from Phase 1; known contractors from Phase 2. |
+| 3 | Search duration | § 9, § 71 ("Unknown / several days"), § 83 (five days) | **Resolved** (owner) | Several days per round, **by source**: speed, specialties, knowledge, geography, target difficulty, relationship, reputation and seeded variance. No frozen formula. The UI shows the elapsed time and a vague estimate, never the due tick (§ 9). |
 | 4 | Opportunity archetypes for Phase 1 | § 16 ("not every archetype must exist initially"), § 15, § 12 | **Resolved** | `GuardedCache` (guarded or unguarded) and "no credible lead", both chosen through the source resolver, plus the subset of § 12 divergence classes a cache can express ([IMPLEMENTATION_PHASES § 4.2](IMPLEMENTATION_PHASES.md#42-smallest-slice-that-proves-the-chain)). |
 | 5 | Tenebrite specifics | § 14, § 56–57, § 85 | **Resolved — architecture corrected** | No Tenebrite- or Beyond Our Reach-specific code, and no BOR requirement. A "Tenebral" association emerges from generic source-mod evidence (§ 6.14.1). Compatibility adapters may add hints only. |
-| 6 | Materialize leads immediately or on "pursue" | § 11 (distance, operational window; pursue / ignore / abandon / keep waiting) | **Partly resolved** | Phase 1 materializes at once, and the vanilla timeout is the operational window. Ignore leaves the lead to expire; abandon closes it. **Open:** whether "continue waiting for another lead" keeps the same request searching without a new fee. Until decided, Phase 1 treats it as a new request. |
+| 6 | Materialize leads immediately or on "pursue" | § 11 (distance, operational window; pursue / ignore / abandon / keep waiting) | **Resolved** (owner) | Phase 1 materializes at once, and the vanilla timeout is the operational window. Ignore leaves the lead to expire; abandon closes it. **One request can deliver many leads**, and the same search continues after a lead; its cost is the source's continuation policy ([STATE_MACHINES § 1](STATE_MACHINES.md#1-intel-request)). |
 | 7 | UI tab set | § 70 | **Resolved** | Intel, Procurement, Contracts, Contractors, History. |
-| 8 | Contractor population scale | § 75 (a "contractor population scale" setting) | **Partly resolved** | A player setting. The default (12–40 orgs of 5–40 members) remains tuning. |
+| 8 | Contractor population scale | § 75 (a "contractor population scale" setting) | **Resolved** (owner) | About **100 contractor identities** by default (a setting), from Solos to companies, mostly obscure, with a small famous upper tier; a recurring global cast in `ModSettings`, snapshotted per world (§ 6.6.3). Exact ratios are tuning. |
 | 9 | Player contractor registration | § 35, § 39, § 40, § 75 | **Resolved**; UI placement open | Registration makes the colony an organization **without replacing its faction**. The player picks a name, a basic public profile and later an emblem; reputation starts at Unknown; a setting enables it ([DATA_MODEL § 4.2](DATA_MODEL.md#42-capability-components)). **Open:** where it sits in the UI (Contracts tab by default). |
 | 10 | Sponsorship semantics | § 22, § 30, § 31, § 41 | **Resolved — architecture corrected** | Sponsorship is an investment (silver, weapons, armor, medicine, transport, technology, supplies) that raises capability and the relationship and never guarantees success. The assumed revenue share and priority terms are not in the design and were removed. Given gear is tracked and can reappear physically. Factions may lend the player gear and expect it back. |
-| 11 | Economy constants | § 20–21, § 23, § 62, § 77–78 | **Partly resolved** | Default 50 % deposit and 50 % on delivery (varying with reputation, relationship, risk, faction, negotiation); the deposit is normally lost on failure; insurance recovers part of it, never all; procurement costs more than a market purchase and scales steeply with rarity; sanity caps guard against broken values. Exact percentages, premiums and penalties remain tuning. |
-| 12 | Naming and tone | § 1, § 25, § 28–29, § 43, § 63, § 66, § 81–82 | **Partly resolved** | The design sets the tone and the vocabularies: example names (Dead Red, Golden Compass, Lucky Rats, Horizon Company), experience tiers Green … Legendary, doctrine labels, relationship states, reputation and fame labels, letters that read as RimWorld events, story over statistics. **Open:** the name-generation grammar (content). |
+| 11 | Economy constants | § 20–21, § 23, § 62, § 77–78 | **Resolved** (owner); numbers are tuning | Procurement quotes are **Fixer-mediated**: contractor and Fixer contribute separate components to one client-facing quote; the Fixer's policies set the deposit (master § 21 suggests half), insurance and replacement terms; the deposit is normally lost on failure; insurance recovers part of it, never all; procurement costs more than a market purchase and scales steeply with rarity; sanity caps guard against broken values. Exact arithmetic, percentages, premiums and penalties remain tuning. |
+| 12 | Naming and tone | § 1, § 25, § 28–29, § 43, § 63, § 66, § 81–82 | **Resolved** (owner) | The design's tone and vocabularies, plus a lightweight compositional name model: word pool A + word pool B + optional suffix (*Dead* + *Red*); Solos use pawn-style names; names are editable and never identity ([DATA_MODEL § 18.4](DATA_MODEL.md#184-name-generation)). Pool contents are Phase 1 content. |
 
 ### 14.2 Contradictions found and corrected
 
@@ -836,8 +952,10 @@ Found in the full comparison:
 13. **Open-market contracts could not bring new groups into the story** (master § 64). The
     population manager may now introduce a new organization as a bidder.
 14. **Vanilla quests are used only as a custody anchor**, while master § 87 says to use
-    Quest/QuestPart/Slate "where practical". This is now recorded as a deviation for review
-    ([ADR-025](DECISIONS.md#adr-025--network-lifecycles-are-not-vanilla-quests-deviation-owner-review)).
+    Quest/QuestPart/Slate "where practical". Recorded as
+    [ADR-025](DECISIONS.md#adr-025--network-lifecycles-are-not-vanilla-quests), which the owner
+    has since **accepted**: quest ownership is not a practical lifecycle match, so this is not a
+    violation of § 87.
 15. **Examples named "Dead Red" as a character in an organization "Red Hand".** In the design,
     Dead Red is the organization. Fixed.
 16. **The exploit list of master § 78 was only partly covered.** [RISKS R-20](RISKS.md#r-20--economic-exploits) is expanded.
@@ -851,22 +969,45 @@ bounded history and summaries, facts vs awareness, determinism, abstract contrac
 adapter boundary, the phase split, zero Harmony, and the conditional status of ADR-014, ADR-015
 and ADR-023.
 
-### 14.3 Still open
+### 14.3 Final owner decisions (foundation pass)
 
-- **Owner review:** [ADR-025](DECISIONS.md#adr-025--network-lifecycles-are-not-vanilla-quests-deviation-owner-review)
-  (the § 87 deviation).
-- **Deposit when a contractor ends before any work starts** (dissolved or absorbed while the
-  contract is Awarded). The architecture treats it as an in-world failure: a successor may honour
-  the contract, otherwise the deposit is lost. The design does not address it directly.
-- **Continuing a search after a lead**: with or without a new fee (§ 14.1 row 6).
-- **Comms console** as a requirement for contacting sources (§ 14.1 row 1).
-- **Quality-bearing items** (master § 79): whether Intel's "minimum / approximate / no quality"
-  is a qualifier on the request or a detail of the report. Never a quantity either way. Not in
-  Phase 1.
-- **Tuning**: fees, durations, quantities, deposit shares, premiums, penalties, population
-  defaults, and all resolver and pricing tables.
+The owner's final review settled every remaining design question and moved several foundations
+before Phase 0 is frozen:
 
-### 14.4 Reconciliation check
+1. **Comms Console.** Network access requires a usable vanilla Comms Console, enforced from
+   Phase 1 (§ 9). Alternatives are not designed.
+2. **Fixers / brokers** are persistent, first-class actors with their own capability (§ 6.6.2).
+3. **Intel fees and durations** depend on the chosen Fixer or contact; no global value, no
+   frozen formula (§ 6.13).
+4. **Contractor population:** about 100 identities by default, configurable; a small famous
+   upper tier; operational experience separate from fame; Legendary is never protection
+   (§ 6.6.3).
+5. **Fixer-mediated procurement:** contractor and Fixer contribute separate components to one
+   quote; the Fixer mediates deposits, insurance and a contractor who disappears before work
+   starts (§ 6.15).
+6. **Quality intent:** an optional broad preference for Intel (not Phase 1); strict quality
+   minimums for Procurement are deferred and will be expensive, slow and refusal-prone.
+7. **Name generation:** lightweight and compositional; names are never identity.
+8. **ADR-025 accepted.**
+
+And from the same review, structural fixes:
+
+- **One Intel request, many leads**; the same search continues after a lead
+  ([STATE_MACHINES § 1](STATE_MACHINES.md#1-intel-request)). The earlier rule "keep waiting means
+  a new request" is gone.
+- **Contractor capability is separate from NPC simulation** (§ 6.6.1): the player gets no
+  abstract roster, and a Solo has no headcount model.
+- **A global cast in `ModSettings`**, snapshotted into each world, never written back, with its
+  own settings version (§ 6.6.3).
+
+### 14.4 Still open
+
+Nothing architectural. What remains is **tuning and content**: Fixer and contractor policies
+(fees, speeds, markups, deposits, insurance, continuation, replacement), durations, quantities,
+premiums, penalties, the fame and experience distribution of the generated cast, name pools,
+and all resolver and pricing tables.
+
+### 14.5 Reconciliation check (master design)
 
 | # | Question | Answer | Where |
 |---|---|---|---|
@@ -883,3 +1024,38 @@ and ADR-023.
 | 11 | Can a failed event consumer replay the whole event and double-apply earlier effects? | **No.** | § 12, [EVENTS_AND_HISTORY § 1.4](EVENTS_AND_HISTORY.md#14-no-double-application-after-save-and-load) |
 | 12 | Is registry-quest custody still conditional on S9? | **Yes.** | [DECISIONS ADR-014](DECISIONS.md#adr-014--off-map-pawn-custody-via-a-hidden-registry-quest-conditional-s9) |
 | 13 | Is Phase 0 still documentation-only? | **Yes.** | [README](../README.md#repository-status) |
+
+### 14.6 Foundation check (final owner decisions)
+
+| # | Question | Answer | Where |
+|---|---|---|---|
+| 1 | Can one IntelRequest deliver more than one Lead? | **Yes.** | [STATE_MACHINES § 1](STATE_MACHINES.md#1-intel-request), [DATA_MODEL § 8](DATA_MODEL.md#8-intel-leads-and-opportunities) |
+| 2 | Can the player continue the same search after receiving a lead? | **Yes.** | [STATE_MACHINES § 1](STATE_MACHINES.md#1-intel-request) |
+| 3 | Is the continuation fee hardcoded globally? | **No.** The source's continuation policy decides. | [STATE_MACHINES § 1](STATE_MACHINES.md#1-intel-request) |
+| 4 | Does registering the player as a contractor give the colony an abstract roster? | **No.** | § 6.6.1 |
+| 5 | Can an Individual Solo be a contractor without an organization roster? | **Yes.** | § 6.6.1, [DATA_MODEL § 6](DATA_MODEL.md#6-contractor-actors-capability-npc-simulation-organization) |
+| 6 | Are Fixers / brokers persistent actors with their own capability? | **Yes.** | § 6.6.2, [DATA_MODEL § 4.3](DATA_MODEL.md#43-fixers-and-brokers-fixerprofile) |
+| 7 | Can Fixers affect Intel fee, speed, reliability, procurement terms and insurance? | **Yes, structurally.** Formulas stay replaceable. | § 6.6.2 |
+| 8 | Is the default contractor cast about 100 identities and configurable? | **Yes.** | § 6.6.3 |
+| 9 | Do 100 contractor identities mean 100 full pawns or per-tick simulations? | **No.** | § 6.6.3, [PERFORMANCE § 3](PERFORMANCE.md#3-scale-assumptions-and-cost-estimates) |
+| 10 | Can Legendary contractors die? | **Yes, absolutely.** | § 6.6.3, [SIMULATION § 3.4](SIMULATION.md#34-known-characters-in-operations) |
+| 11 | Are operational experience and fame separate concepts? | **Yes.** | § 6.6.1 |
+| 12 | Is the reusable cross-save cast stored in ModSettings? | **Yes.** | [DATA_MODEL § 18](DATA_MODEL.md#18-global-network-cast-modsettings-cross-save) |
+| 13 | Is cross-save runtime history stored in ModSettings? | **No.** | [DATA_MODEL § 18.2](DATA_MODEL.md#182-world-snapshot-import-rule) |
+| 14 | Does every world get its own runtime actor and history state? | **Yes.** | [DATA_MODEL § 18.2](DATA_MODEL.md#182-world-snapshot-import-rule) |
+| 15 | Can changing the global roster silently rename an actor in an existing colony? | **No.** | [DATA_MODEL § 18.2](DATA_MODEL.md#182-world-snapshot-import-rule) |
+| 16 | Does "Regenerate generated cast" preserve custom templates? | **Yes.** | [DATA_MODEL § 18.3](DATA_MODEL.md#183-editing-and-regenerating-the-global-roster) |
+| 17 | Are global templates identified by stable IDs, not display names? | **Yes.** | [DATA_MODEL § 18.1](DATA_MODEL.md#181-settings-shape) |
+| 18 | Does the ModSettings cast data have its own schema version? | **Yes.** | [SAVE_AND_MIGRATION § 11](SAVE_AND_MIGRATION.md#11-global-cast-settings-networksettingsversion) |
+| 19 | Can Procurement separate the contractor quote from the Fixer's fee and terms? | **Yes.** | [DATA_MODEL § 9](DATA_MODEL.md#9-contracts) |
+| 20 | Is the deposit outcome when a contractor disappears before work globally hardcoded? | **No.** Fixer policy, terms, insurance and circumstances decide. | [STATE_MACHINES § 4.2](STATE_MACHINES.md#42-money-rules) |
+| 21 | Is a usable Comms Console required initially? | **Yes.** | § 9 |
+| 22 | Does temporary loss of the Comms Console destroy active requests? | **No.** | § 9 |
+| 23 | Can quality-bearing Intel eventually express a broad quality preference? | **Yes.** | [DATA_MODEL § 8](DATA_MODEL.md#8-intel-leads-and-opportunities) |
+| 24 | Is strict quality-qualified Procurement deferred? | **Yes.** | [IMPLEMENTATION_PHASES § 11](IMPLEMENTATION_PHASES.md#11-deliberately-deferred) |
+| 25 | Is organization name generation lightweight and compositional? | **Yes.** | [DATA_MODEL § 18.4](DATA_MODEL.md#184-name-generation) |
+| 26 | Can users create and edit their own global contractors and Fixers, including a custom Legendary? | **Yes** (architecture). | [DATA_MODEL § 18.3](DATA_MODEL.md#183-editing-and-regenerating-the-global-roster) |
+| 27 | Is ADR-025 accepted and no longer awaiting owner review? | **Yes.** | [DECISIONS ADR-025](DECISIONS.md#adr-025--network-lifecycles-are-not-vanilla-quests) |
+| 28 | Is registry-quest custody still conditional on S9? | **Yes.** | [DECISIONS ADR-014](DECISIONS.md#adr-014--off-map-pawn-custody-via-a-hidden-registry-quest-conditional-s9) |
+| 29 | Is the partial-loot Spike S19 still required? | **Yes.** | [RIMWORLD_INTEGRATION § 5](RIMWORLD_INTEGRATION.md#5-runtime-spikes) |
+| 30 | Is Phase 0 still documentation-only? | **Yes.** | [README](../README.md#repository-status) |

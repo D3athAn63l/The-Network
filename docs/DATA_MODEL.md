@@ -12,7 +12,7 @@
 3. [Root state](#3-root-state)
 4. [Actors](#4-actors)
 5. [Known Characters](#5-known-characters)
-6. [Contractor organizations (ContractorProfile)](#6-contractor-organizations-contractorprofile)
+6. [Contractor actors: capability, NPC simulation, organization](#6-contractor-actors-capability-npc-simulation-organization)
 7. [Knowledge](#7-knowledge)
 8. [Intel, Leads and Opportunities](#8-intel-leads-and-opportunities)
 9. [Contracts](#9-contracts)
@@ -24,6 +24,7 @@
 15. [Scheduler jobs and event journal](#15-scheduler-jobs-and-event-journal)
 16. [Money](#16-money)
 17. [Persistence conventions](#17-persistence-conventions)
+18. [Global Network cast (ModSettings, cross-save)](#18-global-network-cast-modsettings-cross-save)
 
 ---
 
@@ -127,6 +128,7 @@ NetworkWorldComponent : WorldComponent
   bootstrapped: bool
   ids: IdAllocator { nextId: int, nextEventSeq: long, nextJobSeq: long }
   // stores, saved in this fixed order (each under its own XML node):
+  cast: WorldCastSnapshot               // this world's copy of the global cast (§ 18); authoritative for this save
   actors: ActorStore
   characters: CharacterStore
   knowledge: KnowledgeStore
@@ -172,8 +174,12 @@ NetworkActor
     absorbedInto: ActorId?
     splitFrom: ActorId?
   bindings: ActorBindings
-    faction: FactionRef?       // FactionProxy / PlayerProxy; origin faction for orgs lives in ContractorProfile
-    embodies: CharacterId?     // Individual actors (for example a retired leader turned broker)
+    faction: FactionRef?       // FactionProxy / PlayerProxy; origin faction for NPC contractors lives in ContractorSimulation
+    embodies: CharacterId?     // Individual actors: a Solo contractor, a Fixer, a retired leader turned broker
+  provenance: Provenance       // where this identity came from; never used as identity
+    source: GlobalCast | WorldGenerated | Bootstrap | Transformation | Content
+    templateId: string?        // the global-cast template it was snapshotted from (§ 18)
+    importedTick: int
   homeRegion: RegionKey?
   components: ActorComponent[] // capabilities (polymorphic, persisted type names frozen)
   reputation: PublicReputation // see EVENTS_AND_HISTORY § 6
@@ -184,8 +190,8 @@ NetworkActor
 
 | Kind | Examples | Created when |
 |---|---|---|
-| `Organization` | NPC contractor crews, mercenary companies, salvage outfits | Bootstrap population. Recruitment of new orgs by the population manager. Successors from splits and mergers. |
-| `Individual` | Retired contractor turned broker or Intel contact, a notable freelancer | Retirement transformation. Special content. |
+| `Organization` | NPC contractor duos, tiny crews, teams, companies and salvage outfits | Instantiated from the world's cast snapshot. World-generated newcomers from the population manager. Successors from splits and mergers. |
+| `Individual` | **Solo** contractors, **Fixers / brokers**, a retired contractor turned broker or Intel contact | Instantiated from the world's cast snapshot. Retirement transformation. World-generated newcomers. |
 | `FactionProxy` | A vanilla or modded RimWorld faction taking part in the Network (as an issuer, a target or a relationship holder) | **Lazily**, the first time a faction needs an identity in Network data |
 | `PlayerProxy` | The player's colony | Bootstrap (exactly one; rebinds if `Faction.OfPlayer` changes) |
 | `Institution` | "The Exchange" (the generic information network of master § 8; Phase 1 Intel source), later market boards | Bootstrap |
@@ -198,8 +204,11 @@ and relationships.
 
 | Component | Grants | Key fields |
 |---|---|---|
-| `ContractorProfile` | can accept contracts, can procure, can deploy | see [§ 6](#6-contractor-organizations-contractorprofile) |
-| `IntelSourceProfile` | can provide Intel | `quality: float`, `coverage: RegionKey[]`, `topicStrengths` (reads KnowledgeBook), `feeScale: float`, `reliability: float`, `discretion: float`. Faction proxies get one lazily in Phase 1, derived from master § 13 signals: tech level, faction type, goodwill, geography and **source-package overlap with the topic**. Internal numbers only; the player sees descriptors learned from how the source's leads turned out. |
+| `ContractorProfile` | **capability only**: can post, bid on and accept supported contract kinds | see [§ 6.1](#61-contractorprofile-capability). Attached to an `Organization`, an `Individual` (Solo) or the `PlayerProxy`. |
+| `ContractorSimulation` | abstract off-map state of an **NPC** contractor | see [§ 6.2](#62-contractorsimulation-npc-contractors-only). NPC Organizations and Solos only; **never** the player. |
+| `OrganizationProfile` | group structure of an **NPC organization or crew** | see [§ 6.3](#63-organizationprofile-npc-organizations-and-crews-only). Organizations only; never a Solo or the player. |
+| `FixerProfile` | can broker: mediate Intel, procurement, deposits and insurance | see [§ 4.3](#43-fixers-and-brokers-fixerprofile). Normally an `Individual`. |
+| `IntelSourceProfile` | can provide Intel | `specialties: string[]`, `coverage: RegionKey[]` (geographic reach), `topicStrengths` (reads KnowledgeBook), `speedProfile`, `reliabilityProfile`, `feePolicyKey`, `continuationPolicyKey` (whether and how a search continues after a lead: free, per round, reduced, limited), `discretion`. Profiles are small bands plus replaceable policy keys, never formulas. Held by Fixers, faction proxies (derived lazily in Phase 1 from master § 13 signals: tech level, faction type, goodwill, geography and **source-package overlap with the topic**), known contractors, and the Exchange institution. Not every Intel source is a Fixer. The player sees descriptors learned from how the source's leads turned out. |
 | `IssuerProfile` | can issue contracts | `budgetBand: int`, `preferredKinds: string[]`, `legitimacy: float` (0 = criminal, 1 = lawful), `paysOnTime: float` |
 | `SponsorProfile` | can sponsor | `sponsored: ActorId[]`, `contributions` per sponsee (silver and items given or loaned, with ticks), `leases: LeaseId[]`. Sponsorship is an investment in capability and the relationship, with no guaranteed return (master § 31). |
 | `SponsoredProfile` | receives sponsorship | `sponsor: ActorId`, `sinceTick`, `obligationsTo: ObligationId[]` |
@@ -211,9 +220,50 @@ A capability that has been **lost** (for example a broker stops brokering) is re
 change is recorded in history. The component is not left in a dead state.
 
 **The player** is a `PlayerProxy` actor. When the player registers as a contractor (Phase 4),
-a `ContractorProfile` is added to the same actor. There is no new faction and no replacement.
-Registration records what the player chooses (master § 35): `publicIdentity { name, profileText,
-emblemKey? , registeredTick }` on that profile. Reputation starts at Unknown.
+a `ContractorProfile` is added to the same actor, with the name and profile the player chooses
+(master § 35); reputation starts at Unknown. There is no new faction, and the player gets **no
+`ContractorSimulation` and no `OrganizationProfile`**: no abstract roster, wounds, equipment tier
+or morale. The player's real execution state (colonists, injuries, gear, inventories, logistics)
+is read from RimWorld through the Integration layer when a decision needs it, so there is never
+a second truth about the colony.
+
+**Composition at a glance:**
+
+```
+Solo contractor   Individual   + ContractorProfile + ContractorSimulation     (embodies one KnownCharacter)
+Dead Red          Organization + ContractorProfile + ContractorSimulation + OrganizationProfile
+The player        PlayerProxy  + ContractorProfile                            (execution state = real colony)
+A Fixer           Individual   + FixerProfile + IntelSourceProfile            (embodies one KnownCharacter)
+A faction         FactionProxy + IntelSourceProfile / IssuerProfile / …       (as it takes part)
+```
+
+### 4.3 Fixers and brokers (FixerProfile)
+
+Fixers are persistent, first-class Network actors: the human, social and economic middlemen
+through which much of the Network operates. A Fixer is normally an `Individual` embodying a Known
+Character, and takes part in history, relationships, reputation, knowledge and contacts like any
+other actor. Intel is provided through the separate `IntelSourceProfile` (a Fixer usually has
+both); brokering is `FixerProfile`:
+
+```
+FixerProfile : ActorComponent
+  specialties: string[]              // topics, regions, contract kinds the fixer is known for
+  contractorReach: ReachBand         // how many and which contractors the fixer can put a job to
+  marketAccess: ReachBand            // goods and trader networks
+  feePolicyKey + feeBand             // brokerage/service fee (replaceable policy, not a formula)
+  brokeragePolicyKey                 // coordination / administrative markup and contingency
+  depositPolicyKey                   // deposit share and schedule the fixer requires
+  insurancePolicyKey?                // insurance the fixer offers (premium and coverage bands); none if absent
+  quotePolicyKey                     // quote validity, urgency handling
+  replacementPolicyKey               // what happens when a contractor fails before work starts (§ 16)
+  clients: ActorId[]                 // bounded: contractors the fixer regularly places work with
+```
+
+Profile values are **bands and policy keys**, interpreted by replaceable policy code; nothing
+here is a formula, and nothing is shown raw. The player perceives descriptors ("cheap but
+unreliable", "expensive, but gets results quickly", "a legendary fixer with absurd contacts")
+built from these values and from the fixer's own record. Fame is the actor's
+`PublicReputation`, separate from how good the fixer actually is.
 
 ---
 
@@ -254,20 +304,40 @@ When a generic member becomes a Known Character, and how custody works, is defin
 
 ---
 
-## 6. Contractor organizations (ContractorProfile)
+## 6. Contractor actors: capability, NPC simulation, organization
+
+Being **able to act as a contractor** is separate from **being simulated off-map as an NPC
+contractor**, which is separate again from **having an organization's headcount**. A Solo has no
+roster; the player has neither simulation nor roster.
+
+### 6.1 ContractorProfile (capability)
 
 ```
-ContractorProfile : ActorComponent
-  templateKey: string                // content template (Def) the org was generated from; soft reference
-  origin: FactionRef?                // may vanish; the org survives
+ContractorProfile : ActorComponent   // Organization | Individual (Solo) | PlayerProxy
+  publicIdentity: { name, profileText?, emblemKey?, registeredTick }   // player registration; NPCs use the actor name
+  kinds: string[]                    // contract kinds it posts, bids on or accepts
+  specialties: string[]              // "combat acquisition", "salvage", "remote", "medical", …
+  eligibility: EligibilityFlags      // registered, suspended, blacklisted-by (Phase 5), …
+  capability: CapabilitySource       // where operational capability is read from:
+                                     //   NpcSimulation (ContractorSimulation + OrganizationProfile)
+                                     //   RealColony    (the player: read through the Integration layer)
+```
+
+- **Operational capability and public fame are different things.** Capability (the Green …
+  Legendary experience tier, strength, readiness) is derived from the simulation or from the real
+  colony. Fame is the actor's `PublicReputation` (EVENTS_AND_HISTORY § 6). An obscure contractor
+  can be extremely capable; a famous one can be declining and living on an old name.
+- **Availability** (available, committed, resting, unavailable) is derived, never stored.
+
+### 6.2 ContractorSimulation (NPC contractors only)
+
+The abstract off-map state of an NPC contractor, Solo or organization. It never exists on the
+`PlayerProxy`.
+
+```
+ContractorSimulation : ActorComponent   // NPC Organization or Individual (Solo)
+  origin: FactionRef?                // may vanish; the contractor survives
   originSnapshot: string             // "a pirate band", "an outlander union splinter", …
-  roster: Roster
-    leader: CharacterId?
-    knownMembers: CharacterId[]      // capped (default 6)
-    tiers: TierCount[]               // { tier: Veteran|Regular|Recruit, healthy: int, wounded: int }
-    woundedRecovery: RecoveryBucket[]// { tier, count, dueTick } — aggregated, ≤ 8 buckets
-    committed: TierCount[]           // headcount checked out to operations and deployments
-    capacity: int                    // soft max headcount
   equipment: EquipmentProfile
     tier: int (1..5)                 // abstract kit quality
     specialties: string[]            // "breaching", "medical", "vacuum" …
@@ -275,7 +345,7 @@ ContractorProfile : ActorComponent
     condition: float (0..1)          // abstract wear, restored by upkeep and money
   doctrine: Doctrine                 // stable personality, drifts slowly from history
     caution, greed, loyalty, discretion, professionalism, ambition, cruelty: float (0..1)
-  morale: OrgMorale                  // group state, NOT pawn mood
+  morale: OrgMorale                  // abstract state, NOT pawn mood (a Solo has no cohesion term)
     cohesion, confidence, fatigue: float (0..1)
     lastShockTick: int
     descriptor: MoraleDescriptor     // persisted with hysteresis: Confident | Steady | Cautious | Shaken | Reckless | Exhausted | Desperate
@@ -286,18 +356,45 @@ ContractorProfile : ActorComponent
   nextUpkeepTick: int                // mirrored by a scheduler job; kept for validation
 ```
 
-- **Strength** is derived and not persisted. It is computed from tiers, healthy counts,
-  equipment tier and condition, and morale, and cached until the org is marked dirty.
-- **Player-facing descriptors are derived, never stored as stats** (master § 28–29, § 63, § 82):
-  the experience tier (Green, Experienced, Seasoned, Veteran, Elite, Legendary) from the roster
-  and the org's record; the doctrine label (Aggressive, Cautious, Professional, Opportunistic,
-  Scavenger, Explorer) from the doctrine values and specialties; the price band and
-  reliability label from terms and history.
+- A **Solo**'s person is the Known Character the actor embodies: wounds are that character's
+  `status` and `woundedUntilTick`, death is that character's death (which ends the Solo actor,
+  `endReasonKey = Died`). There is no headcount.
+
+### 6.3 OrganizationProfile (NPC organizations and crews only)
+
+```
+OrganizationProfile : ActorComponent   // NPC Organization only
+  roster: Roster
+    leader: CharacterId?
+    lieutenants: CharacterId[]       // ≤ 2
+    knownMembers: CharacterId[]      // capped (default 6, leader and lieutenants included)
+    tiers: TierCount[]               // { tier: Veteran|Regular|Recruit, healthy: int, wounded: int }
+    woundedRecovery: RecoveryBucket[]// { tier, count, dueTick } — aggregated, ≤ 8 buckets
+    committed: TierCount[]           // headcount checked out to operations and deployments
+    capacity: int                    // soft max headcount
+  recruitment: RecruitmentState      // pace, last recruit tick
+  succession: SuccessionState        // designated successor, contested flag (Phase 6)
+```
+
+- A duo or tiny crew is simply a small roster, often with every member a Known Character.
+- **Strength** is derived and not persisted. It is computed from tiers, healthy counts, equipment
+  tier and condition, and morale (for a Solo: from the character and equipment), and cached until
+  the actor is marked dirty.
 - **Wounded** are tracked as aggregated recovery buckets, not as per-person injuries.
+
+### 6.4 Shared notes
+
+- **Player-facing descriptors are derived, never stored as stats** (master § 28–29, § 63, § 82):
+  the experience tier (Green, Experienced, Seasoned, Veteran, Elite, Legendary) from the
+  simulation and the record; the doctrine label (Aggressive, Cautious, Professional,
+  Opportunistic, Scavenger, Explorer) from the doctrine values and specialties; the price band and
+  reliability label from terms and history.
+- **Legendary is never protection.** Legendary contractors can fail, lose members, be captured,
+  retire, dissolve and die like anyone else.
 - **Sponsored equipment** is abstract (`tier`, `specialties`) *plus* explicit leases for items
   that matter (see § 11).
-- **Source faction disappears.** `origin` resolves to missing. The org continues independently
-  and history records `OriginFactionLost`.
+- **Source faction disappears.** `origin` resolves to missing. The contractor continues
+  independently and history records `OriginFactionLost`.
 
 ---
 
@@ -343,22 +440,38 @@ amount, target, minimum or stack count is persisted, and no fee, duration or gen
 one as input. What exists, and how much, is decided when the opportunity is generated (master
 § 8, § 10). Quantity belongs to Procurement (`AcquireObjective.count`, § 9).
 
+**One request, many leads.** A search runs in rounds. Each round can deliver a lead or nothing,
+and the same request can keep searching after a lead (master § 11), so a player can be pursuing
+the opportunity from Lead A while the Fixer keeps looking and later reports Lead B. Whether
+continuing costs anything, and how many rounds a source allows, is the **source's policy**
+(`continuationPolicyKey`), frozen into `terms` at submission; the data model does not assume one.
+
+**Quality intent** (optional, never required, not in Phase 1). For quality-bearing items the
+topic may carry a broad preference (`Any`, an approximate band, or a minimum band; master § 79).
+It is a preference, not a guarantee: the lead reports a quality that may be wrong, and the truth
+is the opportunity's `ItemPayload.qualityBand`.
+
 ```
-IntelRequest                                  // the player's interest
+IntelRequest                                  // the player's interest; ONE request, ZERO..MANY leads
   id: IntelRequestId
   requester: ActorId                          // player proxy (later: NPC requesters too)
-  source: ActorId                             // broker or Intel source actor
+  source: ActorId                             // the Fixer, faction contact or other Intel source asked
   topic: IntelTopic                           // WHAT the player asks about; never HOW MUCH
     kind: Item | Actor | Region | Character   // Phase 1: Item only
     thing: DefRef<ThingDef>?
-  fee: MoneyRecord                            // paid at submission; kept on NoCredibleLead
+    qualityIntent: QualityIntent?             // optional, broad, not Phase 1: Any | Approximate(band) | Minimum(band)
+  terms: SearchTerms                          // snapshot of the source's policies at submission (not re-read later)
+    feePolicyKey, continuationPolicyKey: string
+    speedBand, reliabilityBand: byte
+    maxRounds: int?                           // if the source limits the search
+  fees: MoneyRecord[]                         // initial fee plus any continuation fees the policy charges
   state: IntelState                           // see STATE_MACHINES § 1
-  submittedTick, dueTick, resolvedTick: int
-  seed: int, rerollNonce: int
-  outcome: IntelOutcome?                      // committed at resolution
-    kind: Lead | NoCredibleLead
-    leads: LeadId[]
-    reasonKey: string?                        // for no-lead / invalidated
+  submittedTick, endedTick: int
+  round: int                                  // search rounds started so far
+  nextRoundDueTick: int                       // the running round's due tick (mirrored by a scheduler job)
+  seed: int, rerollNonce: int                 // each round draws from NetRng(seed, "intel.round", round)
+  leads: LeadId[]                             // every lead this request has produced, in order
+  endReasonKey: string?                       // concluded by player / policy limit / no credible lead / cancelled / invalidated
   confidentiality: Confidentiality            // Phase 1: Private (player and source only)
 
 Lead                                          // perception (what the source reports)
@@ -371,9 +484,11 @@ Lead                                          // perception (what the source rep
   divergence: LeadDivergence                  // HIDDEN, committed at resolution (master § 12):
                                               // Accurate | Partial | Outdated | Bad | Misinformation |
                                               // Trap | Jackpot | Complication (| Contested, Phase 4)
+  round: int                                  // which search round of its request produced it
   reported: LeadReport                        // what the player sees
     archetypeKey: string?                     // may be withheld or wrong
     amountRange: IntRange?                    // the SOURCE's estimate of the target item
+    reportedQuality: QualityBand?             // "supposedly Masterwork": perception, may be wrong
     otherCargo: ReportedCargo[]               // { thing: DefRef, amountRange? } + unknownExtra: bool
     threatBand: ThreatBand?                   // Negligible | Light | Moderate | Heavy | Extreme | Unknown
     location: TileRef?                        // may be approximate before materialization
@@ -446,7 +561,8 @@ Contract
     target: EntityRef?                     // victim / subject of hostile work
     interested: ActorId[]                  // watchers (competitors, patrons)
     invited: ActorId[]                     // Direct contract: the known group(s) asked (empty = Open)
-  terms: Terms                             // see § 16 Money
+    broker: ActorId?                       // the Fixer mediating the deal (procurement default from Phase 2)
+  terms: Terms                             // see § 16 Money; copied from the accepted offer's quote
     price: int, deposit: int, insurance: Insurance?, penalties: PenaltyRule[]
     contributions: Contribution[]          // Premium / sponsored: silver, or items as leases (master § 22)
     paymentSchedule: PaymentStep[]         // OnAward(deposit), OnDelivery(balance), …
@@ -483,19 +599,40 @@ Contract
     depth: int
   flags: ContractFlags                     // Quarantined, PlayerIssued, PlayerContractor, …
 
-Offer
+Offer                                      // the CONTRACTOR's bid: its own contribution to a quote
   id: OfferId
   contract: ContractId
   bidder: ActorId
-  price: int, deposit: int
+  contractorQuote: int                     // acquisition, risk, capability, danger, logistics, urgency, own profit
   etaTicks: int
-  insurance: Insurance?
   riskTolerance: float                     // what the bidder is willing to face
   conditions: string[]                     // "no mechanoid targets", "cash up front", "favor cashed"
   basis: OfferBasis                        // why: relationship, knowledge, doctrine snapshot (for UI and debug)
   state: OfferState                        // Proposed | Accepted | Declined | Withdrawn | Expired | Superseded
   expiresTick: int
+  quote: ProcurementQuote?                 // embedded: the client-facing quote built around this bid
+
+ProcurementQuote                           // what the CLIENT sees: one coherent price, assembled by the broker
+  broker: ActorId?                         // the Fixer who assembled it (null only if a contractor deals directly)
+  components: QuoteComponent[]             // how it was assembled; kept for history and the economy, not shown raw
+      { kind: GoodsBasis | ContractorQuote | FixerFee | MarketAccess | Coordination | Logistics |
+              Risk | Urgency | Contingency | InsurancePremium | QualityPremium,
+        amount: int, contributedBy: ActorId, reasonKeys: string[] }
+  finalPrice: int
+  paymentTerms: { depositShare or deposit amount, schedule: PaymentStep[], policyKey }   // from the Fixer's deposit policy
+  insuranceOffer: Insurance?               // from the Fixer's insurance policy, optional for the client
+  replacementPolicyKey: string             // what happens if the contractor fails before work starts
+  validUntilTick: int                      // the Fixer's quote validity
 ```
+
+- **Contractor pricing and Fixer pricing are separate actor-driven contributions assembled into one
+  client-facing quote.** The contractor contributes its acquisition price, risk, capability and
+  danger premiums, logistics, urgency and profit (through willingness). The Fixer contributes the
+  brokerage fee, market and contractor access, coordination markup and contingency, the deposit
+  policy, the insurance offer, the quote validity and the replacement or refund policy. The player
+  sees one price; history and the economy can still see who added what. No arithmetic is fixed
+  here: every component is produced by replaceable policy code
+  ([SIMULATION § 5.3](SIMULATION.md#53-pricing)).
 
 Design consequences:
 
@@ -613,7 +750,7 @@ RelationEdge
 Obligation                              // favors and debts; non-silver unless kind says so
   id: ObligationId
   debtor, creditor: ActorId
-  kindKey: string                       // "favor.rescue", "favor.general", "debt.silver", "favor.introduction" …
+  kindKey: string                       // "favor.rescue", "favor.general", "debt.silver", "credit.account", "favor.introduction" …
   magnitude: int                        // 1..5 abstract size (or silver amount for debt.silver)
   createdTick, expiresTick: int (-1 = never)
   origin: HistoryRecordId?
@@ -718,7 +855,7 @@ See [SIMULATION § 1](SIMULATION.md#1-scheduler) and [EVENTS_AND_HISTORY § 1](E
 
 ```
 MoneyRecord { tick: int, amount: int, direction: PlayerPaid | PlayerRefunded | PlayerOwes | ContractorOwes,
-              medium: Silver | Favor(ObligationId) | Debt(ObligationId), noteKey: string }
+              medium: Silver | Favor(ObligationId) | Debt(ObligationId) | Credit(ObligationId), noteKey: string }
 Insurance { coverage: float (0..1), premium: int, coversKeys: string[] }   // e.g. "cargo", "casualty"
 PaymentStep { when: OnAward | OnMilestone(key) | OnDelivery | OnClose, amount: int, state: Due|Paid|Defaulted|Waived }
 ```
@@ -729,12 +866,16 @@ PaymentStep { when: OnAward | OnMilestone(key) | OnDelivery | OnClose, amount: i
 - Deposits are **not** held as real silver. They are recorded as paid, and refunds create
   silver through drop pods.
 - **A deposit is committed cost** (preparation, logistics, transport, scouting, equipment,
-  supplies, labour, accepted risk). The default split is half on award and half on delivery
-  (master § 21), varying with reputation, relationship, risk, faction and negotiation. The
-  deposit is **normally lost** when the contractor fails in the world, including catastrophic
-  loss; it is refunded in full only on technical invalidation. Insurance recovers part of it
-  (`coverage < 1`, never risk-free, master § 62). The rules per case are in
-  [STATE_MACHINES § 4.2](STATE_MACHINES.md#42-money-rules).
+  supplies, labour, accepted risk). Its share and schedule come from the **Fixer's deposit
+  policy** (master § 21 suggests half on award and half on delivery), varying with reputation,
+  relationship, risk, faction and negotiation. The deposit is **normally lost** when the
+  contractor fails in the world, including catastrophic loss; it is refunded in full on technical
+  invalidation. A contractor that disappears **before work starts** is mediated by the Fixer's
+  replacement policy, not a global rule. Insurance, when the Fixer offers it and the client buys
+  it, recovers part of the deposit (`coverage < 1`, never risk-free, master § 62). The rules per
+  case are in [STATE_MACHINES § 4.2](STATE_MACHINES.md#42-money-rules).
+- **Account credit** (a Fixer holding value for the client instead of paying it out) is an
+  `Obligation(credit.account)` owed by the Fixer, spent on later fees or quotes.
 
 ---
 
@@ -758,3 +899,110 @@ PaymentStep { when: OnAward | OnMilestone(key) | OnDelivery | OnClose, amount: i
    morale descriptor). Anything persisted that way is documented as such.
 7. **Snapshot strings** (names, labels) are stored raw, not translated keys. Translation is
    applied only to *narrative templates*.
+
+---
+
+## 18. Global Network cast (ModSettings, cross-save)
+
+The owner wants a recurring cast across saves, but **a cross-save cast is not cross-save
+history**. The global roster says **who may exist in new Network worlds**. Each world save says
+**what happened to them in this colony**.
+
+### 18.1 Settings shape
+
+Stored in ordinary RimWorld `ModSettings`, next to the player's other Network preferences:
+
+```
+NetworkSettings : ModSettings
+  settingsVersion: int                   // NetworkSettingsVersion (its own; see SAVE_AND_MIGRATION § 11)
+  roster: GlobalNetworkRoster
+    contractorTemplates: ContractorTemplate[]
+    fixerTemplates: FixerTemplate[]
+    generation: { generatorVersion: int, lastGeneratedAt: string, castSeed: int }
+  targetContractorCount: int = 100       // "contractor population scale" (master § 75); tuning
+  … catalog overrides, service toggles, logging, UI preferences (existing)
+
+ContractorTemplate
+  templateId: string                     // stable GUID string, created once, never derived from the name
+  provenance: Generated | Custom
+  enabled: bool
+  quarantined: { reasonKey, message }?   // set by settings migration or validation; entry is then inactive
+  name: { display: string, nickname?: string }   // editable; identity does not change
+  form: Solo | Duo | Crew | Team | Company | Specialist
+  startingExperience: ExperienceBand     // operational capability: Green … Legendary
+  startingFame: FameBand                 // public reputation: Unknown … Legendary (a separate axis)
+  specialties: string[]
+  doctrineStyle: string?                 // broad style (Aggressive, Cautious, …) where applicable
+  originHints: { factionDefName?, packageId?, regionHint? }   // strings; missing content is ignored at import
+  generation: { generatorVersion, seed, nameParts: string[] }  // enough to recreate or audit a generated entry
+
+FixerTemplate
+  templateId, provenance, enabled, quarantined?, name       // as above
+  startingFame: FameBand
+  specialties: string[]
+  feeBand, speedBand, reliabilityBand: Band
+  brokerageStyle, insuranceStyle: string   // map to policy keys at import
+  reach: { contractorReach: ReachBand, geographicReach: ReachBand }
+  generation: { … }
+```
+
+Bands and style keys only; no formulas, no giant stat sheets. The generated default is roughly
+**100 contractor identities** (Solos, duos, tiny crews, teams, companies, specialists; many
+obscure; a small famous upper tier of roughly ten; exact ratios are tuning) and a small set of
+Fixers.
+
+### 18.2 World snapshot (import) rule
+
+When a world initializes The Network (a new game, or the mod added to an existing save), the
+first-tick bootstrap **copies the enabled, non-quarantined templates** into the world's
+`WorldCastSnapshot`:
+
+```
+WorldCastSnapshot                          // world-local, saved with the world
+  importedTick: int
+  settingsVersionAtImport: int
+  entries: CastEntry[]
+      { templateId: string, kind: Contractor | Fixer,
+        data: TemplateCopy?,                // a full copy until the actor is instantiated
+        actor: ActorId? }                   // set when instantiated; then `data` may be dropped
+```
+
+- Actors are instantiated **from the snapshot**, never from live settings: Fixers in Phase 1,
+  contractors when Phase 2 activates them (so a save started under Phase 1 later gets its
+  contractors from its own snapshot, not from whatever the global roster says by then).
+- Every instantiated actor gets **world-local ActorIds**; `provenance.templateId` is retained
+  for display and diagnostics only. Identity inside the world is the `ActorId`.
+- All runtime state stays world-local: relationships, history, deaths, injuries, contracts,
+  reputation, retirement. **Nothing is ever written back to `ModSettings`.** Dead Red can be a
+  retired Legendary ally in save A, wiped out in year 2 in save B, and never met in save C, while
+  the global template is unchanged.
+- **The world copy is authoritative for that save.** Editing, renaming, disabling or
+  regenerating global templates changes future worlds only. It never renames, replaces or
+  resurrects an actor in an existing save. (A future explicit "import new templates into this
+  world" action may exist; it is not designed here.)
+- New identities that appear later in a world (population top-ups) are **world-generated**
+  (`provenance.source = WorldGenerated`) with the same name generator; they never alter the
+  global roster.
+
+### 18.3 Editing and regenerating the global roster
+
+A future settings UI lets the player regenerate the generated cast, add custom contractors and
+Fixers (a custom Legendary included), edit names and profiles, and enable or disable entries.
+
+- **Regenerate replaces `Generated` entries only.** `Custom` entries are always preserved by
+  default. 100 generated + 4 custom contractors + 1 custom Legendary Fixer becomes 100 new
+  generated + the same 4 + the same Fixer. Deleting custom entries is a separate, explicit action.
+- New generated entries get **new** template IDs. Existing worlds are unaffected because they
+  hold their own snapshots.
+- Renaming keeps the `templateId`. Duplicate active names are avoided where practical (the
+  generator re-rolls; custom names are always allowed, with a warning).
+- Runtime code only **reads** the roster, at world import and in the settings UI.
+
+### 18.4 Name generation
+
+Lightweight and compositional, RimWorld-style, not a language engine. Organization and Fixer
+names come from word pool A + word pool B + an optional suffix or pattern (*Golden* + *Compass*,
+*Dead* + *Red*, *Lucky* + *Rats*, *Horizon* + *Company*), with optional style or theme pools later.
+Pools are content (vanilla `RulePackDef` grammar or a small Network def) added in Phase 1; Phase 0
+defines none. Solos use vanilla-style pawn names and nicknames. Names are display data: editable,
+never identity.

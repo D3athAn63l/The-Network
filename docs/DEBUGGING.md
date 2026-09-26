@@ -52,8 +52,9 @@ debug menu. No Harmony. Each action logs what it did and bumps `StateVersion`.
 | Group | Action | Phase |
 |---|---|---|
 | Catalog | Rebuild item catalog · Explain item… · Catalog report (CSV) | 1 |
+| Cast | Global cast report (settings: templates, provenance, quarantine) · World cast snapshot report · Regenerate generated cast (dev; keeps custom entries) · Inspect Fixer… | 1 |
 | Inspect | Inspect actor… · Inspect character… · Inspect contract/operation… · Inspect opportunity… · Print knowledge of actor… · Print relations of actor… · Print summaries of actor… · Event journal (window) · History ledger (window) | 1–2 |
-| Intel | Resolve intel now… · Force archetype for the next resolution… · Force divergence class… · Force no-lead… · Explain source resolution for item… (candidates, evidence, filters, scores) · Reroll intel (nonce++) | 1 |
+| Intel | Run the next search round now… · Force archetype for the next round… · Force divergence class… · Force no-lead… · Explain source resolution for item… (candidates, evidence, filters, scores) · Reroll the current round (nonce++) · Toggle comms-gate override (dev only) | 1 |
 | Opportunities | Materialize opportunity… · Expire now… · Force claim… · Spawn test opportunity at the selected tile | 1 |
 | Contractors | Create contractor (template…) · Set morale… · Set relationship A→B… · Kill leader… · Force retirement… · Force fragmentation… (Ph.6) · Force merger… (Ph.6) | 2 / 5 / 6 |
 | Contracts | Post a test procurement… · Force outcome band… · Force capture… · Force delay… · Force failed expedition site… (Ph.3) · Complete now… | 2–3 |

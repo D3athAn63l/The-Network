@@ -80,10 +80,10 @@ Verdict:
   expiry, accept/decline flow, QuestGen slate and grammar would *own* our lifecycle. Cleanup
   semantics could destroy our sites or pawns. Other mods iterate and modify quests. Our
   lifecycles (bidding, inheritance, Troubled) do not fit the vanilla quest states. Master § 87
-  asks for Quest/QuestPart/Slate "where practical"; this is a recorded technical deviation,
-  [ADR-025](DECISIONS.md#adr-025--network-lifecycles-are-not-vanilla-quests-deviation-owner-review),
-  pending owner review. Everything else § 87 lists (Site, SitePart, WorldObject, Faction,
-  Letter, caravans and transport) is used.
+  asks for Quest/QuestPart/Slate "where practical"; quest ownership is not a practical match,
+  as [ADR-025](DECISIONS.md#adr-025--network-lifecycles-are-not-vanilla-quests) records
+  (accepted after owner review). Everything else § 87 lists (Site, SitePart, WorldObject,
+  Faction, Letter, caravans and transport) is used.
 - **Use one hidden registry quest** purely as a vanilla-native custody anchor (Phase 3, Spike S9).
 - **Optional later:** a "Quests tab mirror" presentation adapter that creates a hidden or
   visible *informational* quest for an opportunity. It would never own state. Deferred and
@@ -328,6 +328,15 @@ disappears and nothing is left in the save. Dev tools use `[DebugAction]` (names
 `Faction.kidnapped` (`KidnappedPawnsTracker`) sends the `Kidnapped` signal. Reconciliation
 checks every faction's kidnapped list when resolving `CapturedByOther`.
 
+### 2.25 Comms Console — **REUSE (access gate)**
+
+`Building_CommsConsole.CanUseCommsNow` (`Building_CommsConsole.cs:12`) is false while the map's
+electricity is disabled by a game condition (solar flare) and otherwise follows
+`CompPowerTrader.PowerOn`. Vanilla's own comms jobs gate on it (`JobDriver_UseCommsConsole.cs:17`).
+The Network uses the same property for its access gate, found through
+`ListerBuildings.AllBuildingsColonistOfClass<Building_CommsConsole>()` on maps where
+`Map.IsPlayerHome`, so modded console subclasses count too ([DECISIONS ADR-032](DECISIONS.md)).
+
 ---
 
 ## 3. Harmony policy
@@ -426,6 +435,8 @@ bidding are domain logic plus vanilla observation.
 | WorldPawns / GC | ✔ with reservation | relying on our references to keep pawns | ✔ | — | CustodyService | ✘ |
 | SignalManager | ✔ | trusting signals alone | re-register on load | tags are quest-style | SignalBridge | ✘ |
 | Rand | under PushState only | using it for Network decisions | not persisted | — | NetRng | ✘ |
+| Comms Console | ✔ access gate (`CanUseCommsNow`) | requiring a specific def (modded consoles are subclasses) | — | no | CommsAccessAdapter | ✘ |
+| ModSettings | ✔ global cast and preferences | writing runtime history into settings | own `NetworkSettingsVersion` | no | NetworkSettings | ✘ |
 
 ---
 
@@ -440,7 +451,7 @@ result in `docs/spikes/Sx-<name>.md` (created when run).
 | **S1** | 1 | Programmatic vanilla `Site` (ItemStash with Network-made Things + threat part) created outside QuestGen: map generation places the stash; timeout destroys it when unvisited; leaving removes the map | stash items present on the map; no errors; timeout and removal behave like vanilla item-stash quests |
 | **S2** | 1 | `WorldObjectComp_NetworkSite` injected into the vanilla `Site` def by XML patch: all callbacks fire; data persists; **removing the mod leaves the site working with no errors** | callbacks logged; save/load ok; mod removed: 0 errors from the comp |
 | **S3** | 1 | `SignalBridge` registration from a WorldComponent across new game, load and reload-in-session; signals from tagged world objects arrive | signals received after each path; no duplicate registration errors |
-| **S4** | 1 | Fee payment through `ColonyHasEnoughSilver` / `LaunchSilver` (beacons); behaviour without beacons; UX message | fee taken correctly; clear refusal reason; refund by drop pod works |
+| **S4** | 1 | Fee payment through `ColonyHasEnoughSilver` / `LaunchSilver` (beacons); behaviour without beacons; UX message; the Comms Console gate (`Building_CommsConsole.CanUseCommsNow` on player home maps) with power loss and solar-flare conditions | fee taken correctly; clear refusal reason; refund by drop pod works; commands refused without a usable console and accepted again when it returns, with nothing in progress lost |
 | **S5** | 1 | Tolerant per-element list loading (`NetScribe.LookList`) by iterating child XML nodes under Scribe | a corrupted element is quarantined; siblings load; no Scribe state corruption |
 | **S6** | 1 | Remove The Network from a save with an active site, pending Intel and history, then re-add it | Phase 1: exactly 1 error (component class; nothing from the comp). Phase 3+: 1 prepared, ≤ 3 unprepared. Re-adding the mod bootstraps cleanly. |
 | **S7** | 1 | Remove an item mod (for example BOR) while Intel is Searching and a stash with its items exists | Intel is Invalidated with a refund; vanilla errors limited to the missing-def Things in the stash; the Network does not add errors |
