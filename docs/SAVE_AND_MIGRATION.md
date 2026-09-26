@@ -195,8 +195,11 @@ game's tick, after the game is fully loaded. It runs once per load and is budget
   subsystems continue. The next mod version can ship a repair migration keyed on
   `diagnostics.failedMigrations`.
 - **Diagnostics recorded** in `DiagnosticsState`: `failedMigrations[] { name, from, to, tick,
-  message }`, `quarantine[] { entityRef, reason, tick }`, and `oneTimeWarnings` (a set of keys,
-  so each warning is logged once per save rather than every load).
+  message }`, `quarantine[] { entityRef, reason, tick }`, `failedConsumers[] { eventSeq,
+  typeKey, consumer, tick, message }` (bounded; events are never re-dispatched, see
+  [EVENTS_AND_HISTORY § 1.4](EVENTS_AND_HISTORY.md#14-no-double-application-after-save-and-load)),
+  and `oneTimeWarnings` (a set of keys, so each warning is logged once per save rather than
+  every load).
 - **Logging**: one `[TheNetwork]` error per failed migration with its name and entity count.
   Details are logged only with verbose logging enabled ([DEBUGGING § 2](DEBUGGING.md#2-logging-policy)).
 
@@ -237,7 +240,9 @@ Grandmaster21 uninstall pattern):
 3. Strip `TheNetwork.*` quest tags from pawns, things and world objects.
 4. Convert active Network sites into plain vanilla sites: unbind the comp, which is then inert
    and ignored after removal. Timeouts stay.
-5. Refund any escrowed deposits for active contracts through drop pods.
+5. Refund the deposits of active contracts through drop pods. This is technical invalidation
+   (the Network can no longer carry the contracts out), the one case with a full refund
+   ([STATE_MACHINES § 4.2](STATE_MACHINES.md#42-money-rules)).
 6. Show a summary. The player then saves, disables the mod and reloads.
 
 **Expected errors after the prepared removal:** 1 (the missing WorldComponent class). Without

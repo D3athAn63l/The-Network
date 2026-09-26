@@ -22,11 +22,13 @@
 | R-13 | Cross-mod quest interactions | Medium | Medium | Phase 3 (S9) |
 | R-14 | Performance of large, long-running contractor populations | High | Low | Phase 2 soak, Phase 3 soak |
 | R-15 | Registry-quest custody unworkable at runtime | High | Medium | Phase 3 (S9) |
-| R-16 | Master design brief unavailable during Phase 0 | Medium | High | before Phase 1 |
+| R-16 | Master design brief unavailable during Phase 0 | — | — | **Resolved** in the Phase 0 review |
 | R-17 | Stories feel like transactions (narrative under-investment) | High | Medium | Phases 1–4 playtests |
 | R-18 | Claim accounting inaccurate (non-caravan departures) | Low | Medium | Phase 1 |
 | R-19 | RimWorld 1.6.x updates changing internals we rely on | Medium | Medium | every release |
-| R-20 | Economic exploits (refund loops, cancel abuse) | Medium | Medium | Phases 1–2 |
+| R-20 | Economic exploits (refund loops, cancel abuse, market-value and arbitrage exploits) | Medium | Medium | Phases 1–2, Phase 4 |
+| R-21 | Vanilla site composition forces extermination before loot can leave | High | Medium | Phase 1 (S19) |
+| R-22 | Source-context misattribution (source-mod evidence overweighted, or stance forced) | Medium | Medium | Phase 1 (A11), playtests |
 
 ---
 
@@ -156,13 +158,17 @@
   ([RIMWORLD_INTEGRATION § 3.3](RIMWORLD_INTEGRATION.md#33-contingency-patches-analysed-not-adopted)).
 - **Proven by.** S9.
 
-## R-16 · Master design brief unavailable during Phase 0
-- **Failure modes.** An architectural assumption conflicts with the canonical design.
-- **Mitigation.** Assumptions are listed explicitly
-  ([ARCHITECTURE § 14](ARCHITECTURE.md#14-assumptions-pending-master-brief-review)). The
-  architecture keeps content and tuning replaceable. Review against the brief is required
-  before Phase 1.
-- **Proven by.** The pre-Phase-1 review.
+## R-16 · Master design brief unavailable during Phase 0 (resolved)
+- **Status.** **Resolved and closed.** Kept here as history, not deleted.
+- **Original risk.** The first Phase 0 pass was written without the master design, so an
+  architectural assumption could conflict with the canonical design. Twelve assumptions were
+  listed for review.
+- **Resolution.** The master design (*The Network — Full Mod Design - Master Implementation
+  Brief.md*) was added to `main` during the Phase 0 review. The architecture was reconciled
+  against the whole document: the twelve assumptions were resolved or narrowed to genuinely open
+  questions, and every contradiction found was corrected
+  ([ARCHITECTURE § 14](ARCHITECTURE.md#14-master-design-reconciliation)). Remaining open points
+  are ordinary design and tuning questions, tracked there, not a missing-source risk.
 
 ## R-17 · Stories feel like transactions
 - **Failure modes.** Correct systems produce dry logs. Players never say "Remember Dead Red?".
@@ -190,9 +196,39 @@
 
 ## R-20 · Economic exploits
 - **Failure modes.** Cancel-and-refund loops to fish for good leads. Reload before paying.
-  Invalidation abuse by toggling mods.
+  Invalidation abuse by toggling mods. And the master § 78 list: procuring an item for less than
+  it sells for; accepting an NPC procurement contract and buying the goods from the issuer's own
+  settlement; transport-pod loops; stack-value and quality exploits; modded items with broken
+  market values; zero-cost recipe products with enormous value; quest-only artifacts; faction
+  goods duplication. An infinite wealth generator (master § 77).
 - **Mitigation.** Cancellation refunds decay with elapsed time. The seed is per request, so a new
   request is a new roll, but it costs a new fee. Invalidation refunds only for defs missing at
   load or resolution, and a re-added mod's references resolve again. Determinism prevents
-  reload fishing on existing requests.
-- **Proven by.** Phase 1–2 balance passes.
+  reload fishing on existing requests. **Deposits are not refunded on in-world failure**, so
+  failure is never a free reroll (ADR-027). Procurement prices have a floor above a market
+  purchase and scale steeply with rarity; market value is one input, passed through sanity caps
+  and fallback valuation (category medians, recipe input value) for broken or absurd values;
+  quality is priced explicitly; unique items get severe premiums ([SIMULATION § 5.3](SIMULATION.md#53-pricing)).
+  NPC procurement rewards (Phase 4) account for the issuer's own stock and the player's buy/sell
+  spread. Intel sites need danger, travel, cost and uncertainty (master § 77).
+- **Proven by.** Phase 1–2 balance passes; the Phase 2 "simulate N contracts" harness reports
+  price-to-market ratios; Phase 4 arbitrage tests against issuer settlements.
+
+## R-21 · Vanilla site composition forces extermination
+- **Failure modes.** The vanilla `ItemStash` + threat-part site, or one of its comps, keeps the
+  player from leaving with part of the loot while defenders live; recovered items are lost or
+  duplicated on departure or re-entry; history records a defeat instead of a partial recovery.
+  The design's objective is acquisition, not extermination (master § 17).
+- **Mitigation.** No Network state waits for defenders to die; `Claimed` covers partial recovery
+  ([STATE_MACHINES § 2.2](STATE_MACHINES.md#22-opportunity-truth)). If the vanilla composition
+  fails, switch to another vanilla composition or a minimal Network site part (ADR-015).
+- **Proven by.** S19 and acceptance criterion A10 in Phase 1.
+
+## R-22 · Source-context misattribution
+- **Failure modes.** Every modded item is "guarded" by a faction from its own mod; a friendly
+  faction is turned into an enemy to fit an archetype; the Network appears to require a content
+  mod; hardcoded per-mod rules creep in.
+- **Mitigation.** Source package is one weighted signal; seeded draws; stance is never forced;
+  "no credible source" is valid; no per-item or per-mod code (ADR-026; [ARCHITECTURE § 6.14.1](ARCHITECTURE.md#6141-opportunity-source-and-context-resolution)).
+- **Proven by.** Phase 1 A11 and headless resolver tests; playtests with and without Beyond Our
+  Reach.

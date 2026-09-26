@@ -1,6 +1,12 @@
 # The Network — Technical Architecture
 
 > Canonical technical reference. Phase 0 output.
+> Canonical product and gameplay specification: the
+> [master design](../The%20Network%20%E2%80%94%20Full%20Mod%20Design%20-%20Master%20Implementation%20Brief.md).
+> The master design document defines product and gameplay intent. The architecture documents define technical
+> implementation. Where they conflict, the design takes precedence unless a reviewed ADR
+> explicitly records a necessary deviation ([DECISIONS](DECISIONS.md)). References such as
+> "master § 15" point at sections of that document.
 > Companion documents: [DATA_MODEL](DATA_MODEL.md) · [EVENTS_AND_HISTORY](EVENTS_AND_HISTORY.md) ·
 > [STATE_MACHINES](STATE_MACHINES.md) · [SIMULATION](SIMULATION.md) ·
 > [ABSTRACT_PHYSICAL_LIFECYCLE](ABSTRACT_PHYSICAL_LIFECYCLE.md) ·
@@ -23,18 +29,18 @@
 11. [Where abstraction pays and where it does not](#11-where-abstraction-pays-and-where-it-does-not)
 12. [Threading, exceptions and failure containment](#12-threading-exceptions-and-failure-containment)
 13. [Self-review against the full design](#13-self-review-against-the-full-design)
-14. [Assumptions pending master-brief review](#14-assumptions-pending-master-brief-review)
+14. [Master-design reconciliation](#14-master-design-reconciliation)
 
 ---
 
 ## 1. Purpose and scope
 
 This document describes the long-term technical structure of The Network. The architecture is
-designed for the complete mod, including the approved long-term directions (reputation through
-history, rumors, bidding, refusal, organizational morale, gossip, contract inheritance,
-favors/debts, introductions, black contracts, evidence and witnesses, sanctions, geographic
-knowledge, learning, retirement transformation, fragmentation and mergers, legends, and chain
-reactions). Implementation is still delivered in small vertical phases.
+designed for the complete mod described by the master design, including the approved long-term
+directions (reputation through history, rumors, bidding, refusal, organizational morale, gossip,
+contract inheritance, favors/debts, introductions, black contracts, evidence and witnesses,
+sanctions, geographic knowledge, learning, retirement transformation, fragmentation and
+mergers, legends, and chain reactions). Implementation is still delivered in small vertical phases.
 
 The architecture has to:
 
@@ -355,7 +361,25 @@ Method names are illustrative. The responsibilities and boundaries are binding.
 - **Responsibility.** Model the player's **interest** ("find information about X"), the search
   process, and its result. The result is one or more `Lead`s, which are the *reported* view of
   an `Opportunity`, or an explicit "no credible lead". Intel never assumes that the result is
-  loot.
+  loot, and it is never guaranteed to be accurate (master § 3.2, § 12).
+- **Topic only, never a quantity.** The player picks an item (a `ThingDef` from the catalog). The
+  request carries no quantity, target amount, minimum or stack count, and no price or duration
+  rule reads one. How much exists (17, 600, none, an already-looted cache) is decided by the
+  opportunity generator (§ 6.14). Quantity is a Procurement concept (`AcquireObjective.count`).
+- **Contact / source.** The player chooses who to ask (master § 8–9): the generic information
+  network (the institution actor "the Exchange") or a faction contact from Phase 1; known
+  contractors (Phase 2) and named brokers (Phase 5) as they arrive. Any actor with an
+  `IntelSourceProfile` can be a source. Source quality follows master § 13 (tech level, faction
+  type, goodwill, specialization, geography, source-mod relationship, previous reliability) and
+  is shown only as narrative descriptors that the player learns from how that source's leads
+  turned out.
+- **Money.** A modest silver fee is paid at submission. It is kept when nothing credible is found
+  (the search happened), refunded in full on technical invalidation, and partly refunded on early
+  cancellation ([STATE_MACHINES § 1](STATE_MACHINES.md#1-intel-request)).
+- **Truth vs report.** At resolution the source's reliability commits a hidden *divergence*
+  class (accurate, partial, outdated, bad, misinformation, trap, jackpot, complication; master
+  § 12). The opportunity is generated as world truth and the lead reports it through that
+  divergence ([DATA_MODEL § 8](DATA_MODEL.md#8-intel-leads-and-opportunities)).
 - **Persistent.** `IntelStore`: `IntelRequest` and `Lead`.
 - **Public surface.** Commands `SubmitIntel(topic, source)` and `CancelIntel(id)`; read models.
 - **Dependencies.** ItemCatalog (topic validation), PaymentAdapter (fee), OpportunityService
@@ -370,22 +394,80 @@ Method names are illustrative. The responsibilities and boundaries are binding.
 - **Responsibility.** Generate and own world truth: what actually exists, where it is, how much
   of it, who guards it, who else is after it, and when it expires. Opportunities are created by
   Intel, by failures (rescue and recovery), by world events and by consequences.
-- **Persistent.** `OpportunityStore`: `Opportunity { archetype, payload, location, threat,
-  competitors, expiry, lifecycle, materialization, lineage }`.
+- **Persistent.** `OpportunityStore`: `Opportunity { archetype, sourceContext, payload (target and
+  extra cargo), location, threat, competitors, expiry, lifecycle, materialization, lineage }`.
 - **Public surface.** `Opportunities.Generate(request)`, `Opportunities.Materialize(id)`,
   and site callbacks through the SiteAdapter.
 - **Emits.** `OpportunityGenerated`, `OpportunityMaterialized`, `OpportunityEngaged`,
   `OpportunityClaimed`, `OpportunityExpired`, `OpportunityLostToCompetitor`,
   `OpportunityDestroyed`, `OpportunityInvalidated`.
+- **Generation answers the master § 52 questions in order:** what the item is (catalog entry),
+  where it could plausibly exist and who might hold it (**source/context resolution**, § 6.14.1),
+  what scale was found (quantity), how reliable the report is (Intel divergence), who else might
+  know (competitors), what danger makes sense (threat), and what else is there (extra cargo,
+  master § 18). **Quantity** is decided here from market value, stack limit, category, world
+  wealth, threat level, archetype, holder strength and balance caps (master § 10). It never
+  comes from the request.
+- **Acquisition, not extermination.** An opportunity's objective is getting the goods. Nothing
+  in its lifecycle requires the defenders to be dead: taking part of the payload and leaving is
+  a Claimed outcome (master § 17; Spike S19).
 - **Future.** Archetype catalog growth (trader holds it, owner holds it, salvage, orbital wreck,
   mineable deposit, rumor-only), competitors racing the player, and black-market leads.
+
+#### 6.14.1 Opportunity source and context resolution
+
+A responsibility **inside `OpportunityService`** (called `SourceResolver` here; the name is not
+binding). It picks plausible world context for an opportunity. It is not a subsystem of its own.
+
+- **Rule: source mod is contextual evidence, not ownership** (master § 14, § 57). Same mod is
+  not automatically an enemy, not automatically the owner, and never a dependency. Nothing is
+  hardcoded per item ("if `BOR_Tenebrite` then the Tenebral faction" does not exist anywhere);
+  the reasoning is generic: *this item comes from package X, an active faction from package X
+  exists and fits this opportunity, so it is more plausible*.
+- **Signals** (all cheap reads at generation time): the target ThingDef and its catalog entry
+  (category, value, rarity signals, tech level); source package; the live faction list with each
+  faction's def, **def source package**, tech level, hostility to the player, defeated and hidden
+  state, humanlike / mechanoid / other, and trade capability where inferable; distance and
+  nearby settlements or world objects; the archetype; the requesting source's knowledge; and
+  optional hints registered by compatibility adapters ([COMPATIBILITY § 6](COMPATIBILITY.md#6-compatibility-adapter-architecture)).
+- **Candidates** it can produce: same-source-mod faction · faction using similar technology ·
+  suitable hostile faction by tech level · neutral trader or owner · pirate or raider possession ·
+  mechanoid possession · ancient site or ruin · salvage site · abandoned or unguarded cache ·
+  **no credible source**.
+- **Selection.** Candidates are filtered (world presence, not defeated, hidden factions only
+  where fitting, combat capability, faction generation rules, player relationship) and scored.
+  The master § 15 hierarchy is the default prior: same-mod faction with a plausible relationship
+  to the item, then similar technology, hostile by tech level, neutral trader, ancient ruin or
+  cache, mechanoid site, pirates, generic abandoned location, and finally no credible lead. The
+  choice is a seeded weighted draw, not always the top entry, and "no credible source" is a real
+  result: **the generator does not have to succeed.** When no suitable same-source actor exists,
+  it falls back down the hierarchy.
+- **Stance is kept, never forced.** A same-mod faction that is friendly or neutral is a
+  candidate *owner or trader*, not a guard of a raidable site: its stance toward the player is
+  never changed to fit an archetype. If the phase has no archetype that can express the chosen
+  context (Phase 1 has only guarded or unguarded caches), the resolver moves to the next
+  candidate.
+- **Output.** A committed `Opportunity.sourceContext` (candidate kind, holder, the evidence
+  reason keys) that the threat, the lead text and history all read ([DATA_MODEL § 8](DATA_MODEL.md#8-intel-leads-and-opportunities)).
+- **Cost.** A session index `packageId → FactionDefs` plus one pass over live factions (tens)
+  when an opportunity is generated, which is rare. Nothing is cached across faction changes.
+- **Phase 1** implements a simplified resolver that keeps this hierarchy and these rules
+  ([IMPLEMENTATION_PHASES § 4.2](IMPLEMENTATION_PHASES.md#42-smallest-slice-that-proves-the-chain)).
 
 ### 6.15 Contracts (including offers and procurement)
 
 - **Responsibility.** Agreements between an issuer and a contractor. One shared lifecycle is
   composed from parts: Parties, Terms, Confidentiality, Objectives, Offers, Assignment,
-  Progress, Outcome and Lineage. Procurement, recovery, rescue, hunt, escort, transport and
-  black work differ in **objectives and kind rules**, not in class hierarchy.
+  Progress, Outcome and Lineage. Procurement, recovery, rescue, hunt, investigation, escort,
+  salvage, transport, acquisition and black work differ in **objectives and kind rules**, not in
+  class hierarchy.
+- **Procurement** names the exact item and the exact quantity (master § 19). It is hired as an
+  **Open** contract (any eligible contractor may bid), a **Direct** contract (one invited known
+  group), or a **Premium / sponsored** contract (either, plus the player's contributions of
+  silver, equipment, medicine or logistics, master § 22). The deposit (default half the price,
+  master § 21) is committed cost and is **normally lost** when the contractor fails in the world;
+  only technical invalidation refunds it in full, and insurance recovers part of it
+  ([STATE_MACHINES § 4.2](STATE_MACHINES.md#42-money-rules)).
 - **Persistent.** `ContractStore`.
 - **Public surface.** Commands `DraftContract`, `PostContract`, `AcceptOffer`, `CancelContract`,
   `RespondToRenegotiation`. Services `Bidding.CollectOffers`, `Contracts.Transition(...)`.
@@ -427,7 +509,13 @@ Method names are illustrative. The responsibilities and boundaries are binding.
 
 - **Responsibility.** A cached, classified view of every item ThingDef, built once per session:
   eligibility verdict with reason codes, source mod, market data, categories, craftability,
-  tradeability, equipment traits and rarity signals. It never infers what the player needs.
+  tradeability, equipment traits and rarity signals. It never infers what the player needs and
+  never reads research, stockpiles or demand (master § 53).
+- **Overrides actually override.** Only true technical impossibilities (things that cannot exist
+  as a standalone possessed item) are non-overridable. Everything that is merely unusual is a
+  heuristic, and the player's `Allowed` override rescues it. The final safety net is at runtime:
+  if creating a def's Things ever fails, the def is unusable for the session and the affected
+  activity is invalidated with a refund and a diagnostic reason.
 - **Persistent.** None in the save. Per-item overrides (Auto / Allowed / Blocked) are kept in
   `ModSettings` by defName.
 - **Detail.** [COMPATIBILITY § 2](COMPATIBILITY.md#2-item-catalog).
@@ -472,30 +560,37 @@ The API facts behind each adapter are in [RIMWORLD_INTEGRATION](RIMWORLD_INTEGRA
 ### 7.1 Phase 1: Intel to site to history
 
 ```
-UI: player picks ThingDef from ItemCatalog → Commands.SubmitIntel(topic)
-  └─ IntelService: validate topic (catalog verdict, DefRef resolves) → PaymentAdapter.Charge(fee)
+UI: player picks a contact (the Exchange or a faction) and a ThingDef from the ItemCatalog
+    (no quantity) → Commands.SubmitIntel(topic, source)
+  └─ IntelService: validate topic (catalog verdict, DefRef resolves) and source → PaymentAdapter.Charge(fee)
        └─ create IntelRequest{Submitted, seed} → Events.Publish(IntelRequested)
-       └─ Scheduler.Schedule("intel.resolve", dueTick = now + seededDuration)
+       └─ Scheduler.Schedule("intel.resolve", dueTick = now + seededDuration)   // UI shows "several days"
 …time passes (no per-tick work)…
 Scheduler fires "intel.resolve"
-  └─ IntelService.Resolve: re-validate topic → seeded lead roll
-       ├─ no lead → IntelRequest{ResolvedNoLead} → Publish(IntelNoLead) → letter
-       └─ lead → OpportunityService.Generate(archetype=GuardedCache, payload=DefRef×amount)
-             → Opportunity{Revealed} + Lead{reported ranges} → SiteAdapter.Materialize
-                → vanilla Site (ItemStash things + threat part) + TimeoutComp + comp binding
+  └─ IntelService.Resolve: re-validate topic → seeded lead roll (source quality) → divergence class
+       ├─ no lead → IntelRequest{ResolvedNoLead} → Publish(IntelNoLead) → letter (fee kept)
+       └─ lead → OpportunityService.Generate(topic, divergence)
+             → SourceResolver: candidates from item + source package + live factions + world
+                (may still end in "no credible source" → no lead)
+             → archetype (Phase 1: GuardedCache), holder/threat from the chosen context,
+               target quantity + extra cargo decided here (never from the request)
+             → Opportunity{Revealed, sourceContext} + Lead{report through the divergence, confidence}
+             → SiteAdapter.Materialize → vanilla Site (ItemStash things + threat part) + TimeoutComp + comp
              → Publish(IntelResolved, OpportunityMaterialized) → letter with look target
 Player caravan / pods reach site → vanilla map generation places the stash
   └─ comp.PostMapGenerate → Opportunity{Engaged} → Publish(OpportunityEngaged)
-Player leaves with the goods (caravan) → comp.PostCaravanFormed → tally the target def in the caravan
-Map removed → comp.PostMyMapRemoved → Opportunity{Claimed | Abandoned} → Publish(...)
-  └─ History consumer writes a Notable record, and the player's summary is updated
+Player leaves with some or all of the goods, defenders dead or not (caravan)
+  → comp.PostCaravanFormed → tally the target def in the caravan
+Map removed → comp.PostMyMapRemoved → Opportunity{Claimed (share recovered) | Abandoned} → Publish(...)
+  └─ History consumer writes a Notable record ("recovered part of the cache"), player summary updated
 Timeout without a visit → comp.PostDestroy → Opportunity{Expired} → Publish(OpportunityExpired)
 ```
 
 ### 7.2 Phase 2: procurement (abstract)
 
 ```
-Commands.PostContract(kind=Procurement, objective=Acquire(DefRef, qty), deliverTo=home map)
+Commands.PostContract(kind=Procurement, objective=Acquire(DefRef, exact qty), deliverTo=home map,
+                      hiring=Open | Direct(actor) | Premium(contributions))
   └─ ContractService: Posted → Bidding (window jobs) → WillingnessModel per eligible contractor
        → Offers (or recorded refusals with reasons) → player AcceptOffer → Awarded
        → PaymentAdapter.Charge(deposit) → OperationService.Start → checkpoints scheduled
@@ -503,7 +598,9 @@ Checkpoint "engage" → AbstractResolver (frozen inputs + seed) → committed ou
   └─ Publish(OperationResolved, ContractorCasualties?) → Orgs / History / Relations / Morale
 Checkpoint "deliver" → DeliveryAdapter (drop pods) → Publish(DeliveryCompleted)
   └─ ContractService: Completed | PartiallyCompleted → PaymentAdapter.Charge(balance)
-Failure → ContractFailed(cause) → ConsequenceEngine may create a recovery or rescue Opportunity
+Failure → ContractFailed(cause), deposit normally lost (insurance may recover part)
+  └─ ConsequenceEngine: "last known location" recovery Opportunity (Phase 2: cargo and threat;
+     Phase 3 adds survivors, captives and bodies) or a rescue Opportunity
 ```
 
 ### 7.3 Save and load
@@ -522,8 +619,8 @@ A single fact, "the player rescued Dead Red's crew", flows through the system on
 several future behaviours.
 
 ```
-Event ContractorRescued { rescuer: Player(A1), rescued: Org "Red Hand"(A17),
-                          characters: [K42 "Dead Red"], opportunity: O311, place: T(2341) }
+Event ContractorRescued { rescuer: Player(A1), rescued: Org "Dead Red"(A17),
+                          characters: [K42 "Mara Red"], opportunity: O311, place: T(2341) }
  ├─ History ........ Major record H901 (participants A1:rescuer, A17:rescued, K42:rescued)
  │                   Summary(A1).rescuesPerformed++   Summary(A17).timesRescued++
  ├─ Relations ...... edge A17→A1: standing +25, trust +0.2, salient += H901
@@ -565,6 +662,14 @@ reaction; later decisions read summaries and edges, never the raw ledger.**
   backend does not know about tabs.
 - **No randomness in UI paths.** Read models are pure, so looking at something never rerolls it
   ([SIMULATION § 6](SIMULATION.md#6-determinism-and-rng)).
+- **Narrative, not numbers** (master § 70, § 82). Read models never expose hidden truth, committed
+  due ticks or raw percentages: a search shows "elapsed 4.8 days · estimate: several days", a
+  lead shows a confidence descriptor (Very Low … Very High), sources and contractors show
+  descriptors (experience tier, doctrine, relationship, fame) built from internal numbers.
+- **Settings** (master § 75) live in `ModSettings`. Tuning settings are read-only inputs to
+  formulas. Turning a service off (Intel, Procurement, player registration) hides its commands
+  and stops new requests; entities already in progress run to their normal end, so no save data
+  is stranded.
 
 ## 10. What is stable now and what stays replaceable
 
@@ -614,9 +719,20 @@ reaction; later decisions read summaries and edges, never the raw ledger.**
 - **Single-threaded.** All Network code runs on the main thread inside RimWorld's tick or GUI
   call. It makes no `Task` or thread-pool use. Def reads during catalog building happen on the
   main thread.
-- **Every scheduler job and event consumer runs inside try/catch.** A failing job is logged
-  once per `(kind, target)`, then removed or rescheduled with backoff. Up to three attempts are
-  made before the target entity is quarantined.
+- **Every scheduler job and event consumer runs inside try/catch**, but the two are recovered
+  differently:
+  - **Scheduler jobs.** A failing job is logged once per `(kind, target)`. It is retried with
+    backoff (up to three attempts) **only if its kind is declared idempotent or state-guarded**
+    (it re-checks the entity state before applying anything). Otherwise it is removed and the
+    target entity is marked for repair or quarantined.
+  - **Event consumers.** The bus is synchronous, so earlier consumers may already have applied
+    effects. An event is **never re-dispatched**, not after a consumer throws and not on load:
+    that would duplicate relation changes, favors, history, money or follow-ups. The failure is
+    recorded (event seq, type, consumer, message) in diagnostics, the affected entity is marked
+    dirty, degraded or quarantined as appropriate, and the owning subsystem's reconciliation
+    repairs its own state. A single consumer may be retried only if it has an explicit
+    idempotency guard, for example a persisted "applied event seq" on the state it changes
+    ([EVENTS_AND_HISTORY § 1.4](EVENTS_AND_HISTORY.md#14-no-double-application-after-save-and-load)).
 - **Quarantine, never nuke.** An entity that fails validation or repeatedly throws is marked
   `Quarantined` with a reason. It is excluded from simulation and kept for diagnostics
   ([SAVE_AND_MIGRATION § 7](SAVE_AND_MIGRATION.md#7-failed-migration-and-quarantine)).
@@ -630,7 +746,7 @@ reaction; later decisions read summaries and edges, never the raw ledger.**
 
 | # | Question | Answer | Where |
 |---|---|---|---|
-| 1 | Can Intel work without knowing what the player needs? | **Yes.** Intel takes a *topic* from a neutral catalog. The world decides what exists (or that nothing does). The catalog never ranks by need. | [STATE_MACHINES § 1](STATE_MACHINES.md#1-intel-request), [COMPATIBILITY § 2](COMPATIBILITY.md#2-item-catalog) |
+| 1 | Can Intel work without knowing what the player needs? | **Yes.** Intel takes a *topic* from a neutral catalog, with no quantity. The world decides what exists and how much (or that nothing does). The catalog never ranks by need. | [STATE_MACHINES § 1](STATE_MACHINES.md#1-intel-request), [COMPATIBILITY § 2](COMPATIBILITY.md#2-item-catalog) |
 | 2 | Can procurement exist independently of Intel? | **Yes.** Procurement is a Contract with an `Acquire` objective. It needs no Lead. The contractor's own knowledge stands in for Intel. | [STATE_MACHINES § 4](STATE_MACHINES.md#4-procurement-contract-specialization) |
 | 3 | Can contractor groups persist for decades cheaply? | **Yes.** Organizations are records with headcounts. At most a few Known Characters per org hold real pawns. Those pawns are quest-reserved and therefore suspended, and normalized at storage so that vanilla mothballs them. Upkeep runs daily and is staggered. History is tiered and capped. | [PERFORMANCE](PERFORMANCE.md) |
 | 4 | Can contractors die permanently? | **Yes.** Deaths are committed once, whether by the resolver or by physical reconciliation. A dead Known Character is never re-materialized. | [ABSTRACT_PHYSICAL_LIFECYCLE § 3](ABSTRACT_PHYSICAL_LIFECYCLE.md#3-invariants) |
@@ -641,7 +757,7 @@ reaction; later decisions read summaries and edges, never the raw ledger.**
 | 9 | Can new modded ThingDefs appear automatically? | **Yes.** The catalog is rebuilt every session from DefDatabase with conservative heuristics. | [COMPATIBILITY § 2](COMPATIBILITY.md#2-item-catalog) |
 | 10 | Can a contractor move abstract → physical → abstract without duplication? | **Yes, by invariants.** One pawn per character, a deployment ledger, reconciliation driven by pawn state, and the Network never discards pawns. This is verified by Phase 3 spikes. | [ABSTRACT_PHYSICAL_LIFECYCLE](ABSTRACT_PHYSICAL_LIFECYCLE.md) |
 | 11 | Can the player become a contractor later without replacing their faction? | **Yes.** The player is a `PlayerProxy` actor bound to `Faction.OfPlayer`. Registration adds a `ContractorProfile` component. | [DATA_MODEL § 4](DATA_MODEL.md#4-actors) |
-| 12 | Can competing contractors exist? | **Yes.** Contracts have offers, not a single owner. Opportunities have a `competitors` list, and actors race through Operations. | [DATA_MODEL § 8–9](DATA_MODEL.md#8-intel-leads-and-opportunities) |
+| 12 | Can competing contractors exist? | **Yes.** Contracts have offers, not a single owner, and are non-exclusive where the kind allows. Opportunities have a `competitors` list, and actors race through Operations. | [DATA_MODEL § 8–9](DATA_MODEL.md#8-intel-leads-and-opportunities) |
 | 13 | Can contracts branch after failure? | **Yes.** Terminal contracts are immutable, and continuations are new contracts linked by lineage. Failures feed the Consequence Engine. | [STATE_MACHINES § 3](STATE_MACHINES.md#3-contract-generic) |
 | 14 | Can retirement preserve meaningful knowledge? | **Yes.** `Knowledge.Transfer` goes to the successor or the transformed individual actor, and a Legend snapshot preserves the story. | [SIMULATION § 4.6](SIMULATION.md#46-retirement-transformation-fragmentation-mergers) |
 | 15 | Can rumors, bidding, favors, secrecy, witnesses, sanctions, mergers and legends be added without rewriting the core save model? | **Yes.** Awareness is on every record from Phase 1. Obligations, contacts and lineage exist in the model. Confidentiality is part of the contract core. BeliefStore is a new store that plugs into the root in a fixed slot. | [DATA_MODEL](DATA_MODEL.md) |
@@ -655,30 +771,115 @@ No answer was "not really". Two answers depend on runtime spikes (Q10 on pawn cu
 Q8 on the error volume when a mod is removed). Both are scheduled as early experiments before
 the dependent phase is built.
 
-## 14. Assumptions pending master-brief review
+## 14. Master-design reconciliation
 
-The master brief was not available. These points were inferred from the Phase 0 brief and
-should be confirmed or corrected **before Phase 1 implementation starts**:
+The first Phase 0 pass was written before the [master design](../The%20Network%20%E2%80%94%20Full%20Mod%20Design%20-%20Master%20Implementation%20Brief.md) was on `main`, and listed
+twelve assumptions to check against it. The master design has since been added, and this
+revision reconciles the whole architecture against it. The design controls gameplay intent;
+numbers it deliberately leaves unspecified stay tuning values. Nothing below was invented to
+fill a gap: anything the design does not answer is marked open.
 
-1. **Intel fee and payment medium.** Silver taken through the vanilla comms/beacon path
-   (`TradeUtility.LaunchSilver`) is assumed. Fee scale and whether a comms console is required
-   are open.
-2. **Who performs Intel in Phase 1.** A single Network institution actor, provisionally "the
-   Exchange", acts as broker. Named brokers arrive in a later phase.
-3. **Search duration.** Assumed to be days (seeded, for example 2–6 days) and scaled by rarity.
-4. **Opportunity archetypes for Phase 1.** Assumed: guarded cache (vanilla `ItemStash` plus a
-   threat part) and "no credible lead". The brief may prescribe others.
-5. **Tenebrite specifics.** `BOR_Tenebrite` from Beyond Our Reach is treated as an ordinary
-   modded ThingDef with no special code. Any Tenebrite-specific content (for example
-   "Tenebral forces") would be a compat adapter.
-6. **Whether leads are materialized immediately or on "pursue".** The state machine supports
-   both. Phase 1 materializes immediately.
-7. **UI tab set.** Intel, Procurement, Contracts, Contractors, History, taken from the Phase 0 brief.
-8. **Contractor population scale.** Assumed 12–40 active NPC organizations, each with 5–40
-   members in headcount.
-9. **Player contractor registration mechanics.** Where the player registers and what they are
-   eligible for.
-10. **Sponsorship semantics.** Assumed: a sponsor provides equipment or funding in exchange for
-    priority or a revenue share. Equipment is leased, as tracked equipment leases.
-11. **Economy constants.** Deposit percentages, insurance premiums, penalty rules.
-12. **Naming and tone.** Organization and character name generation, epithet vocabulary.
+### 14.1 The former assumptions
+
+| # | Former assumption | Master design | Status | Decision now, and where it lives |
+|---|---|---|---|---|
+| 1 | Intel fee and payment medium | § 9 (a modest fee, paid on submitting), § 71 (650 silver), § 83 (500 silver) | **Resolved**; tuning open | Silver, a modest fee paid at submission and kept when no lead is found (§ 6.13). Beacon payment mechanics are technical (Spike S4). **Open:** the fee formula (tuning), and whether a comms console is required (§ 9 names "Comms Console / Network interface"; Phase 1 uses the Network tab). |
+| 2 | Who performs Intel in Phase 1 | § 8, § 9 step 3, § 13, § 71 (the contact is a faction) | **Resolved — architecture corrected** | The player chooses a contact. Phase 1: the Exchange (the generic information network) and faction contacts. Known contractors from Phase 2, named brokers from Phase 5 (§ 6.13). |
+| 3 | Search duration | § 9, § 71 ("Unknown / several days"), § 83 (five days) | **Resolved**; numbers are tuning | Several days, seeded at submission. The UI shows the elapsed time and a vague estimate, never the due tick (§ 9). |
+| 4 | Opportunity archetypes for Phase 1 | § 16 ("not every archetype must exist initially"), § 15, § 12 | **Resolved** | `GuardedCache` (guarded or unguarded) and "no credible lead", both chosen through the source resolver, plus the subset of § 12 divergence classes a cache can express ([IMPLEMENTATION_PHASES § 4.2](IMPLEMENTATION_PHASES.md#42-smallest-slice-that-proves-the-chain)). |
+| 5 | Tenebrite specifics | § 14, § 56–57, § 85 | **Resolved — architecture corrected** | No Tenebrite- or Beyond Our Reach-specific code, and no BOR requirement. A "Tenebral" association emerges from generic source-mod evidence (§ 6.14.1). Compatibility adapters may add hints only. |
+| 6 | Materialize leads immediately or on "pursue" | § 11 (distance, operational window; pursue / ignore / abandon / keep waiting) | **Partly resolved** | Phase 1 materializes at once, and the vanilla timeout is the operational window. Ignore leaves the lead to expire; abandon closes it. **Open:** whether "continue waiting for another lead" keeps the same request searching without a new fee. Until decided, Phase 1 treats it as a new request. |
+| 7 | UI tab set | § 70 | **Resolved** | Intel, Procurement, Contracts, Contractors, History. |
+| 8 | Contractor population scale | § 75 (a "contractor population scale" setting) | **Partly resolved** | A player setting. The default (12–40 orgs of 5–40 members) remains tuning. |
+| 9 | Player contractor registration | § 35, § 39, § 40, § 75 | **Resolved**; UI placement open | Registration makes the colony an organization **without replacing its faction**. The player picks a name, a basic public profile and later an emblem; reputation starts at Unknown; a setting enables it ([DATA_MODEL § 4.2](DATA_MODEL.md#42-capability-components)). **Open:** where it sits in the UI (Contracts tab by default). |
+| 10 | Sponsorship semantics | § 22, § 30, § 31, § 41 | **Resolved — architecture corrected** | Sponsorship is an investment (silver, weapons, armor, medicine, transport, technology, supplies) that raises capability and the relationship and never guarantees success. The assumed revenue share and priority terms are not in the design and were removed. Given gear is tracked and can reappear physically. Factions may lend the player gear and expect it back. |
+| 11 | Economy constants | § 20–21, § 23, § 62, § 77–78 | **Partly resolved** | Default 50 % deposit and 50 % on delivery (varying with reputation, relationship, risk, faction, negotiation); the deposit is normally lost on failure; insurance recovers part of it, never all; procurement costs more than a market purchase and scales steeply with rarity; sanity caps guard against broken values. Exact percentages, premiums and penalties remain tuning. |
+| 12 | Naming and tone | § 1, § 25, § 28–29, § 43, § 63, § 66, § 81–82 | **Partly resolved** | The design sets the tone and the vocabularies: example names (Dead Red, Golden Compass, Lucky Rats, Horizon Company), experience tiers Green … Legendary, doctrine labels, relationship states, reputation and fame labels, letters that read as RimWorld events, story over statistics. **Open:** the name-generation grammar (content). |
+
+### 14.2 Contradictions found and corrected
+
+Required by the review:
+
+1. **Intel accepted a quantity** (`IntelTopic.quantityHint`). Removed. Intel is topic-only, and the
+   generator decides what exists (master § 8, § 10). Procurement keeps the exact quantity.
+2. **No source/context resolution; "Tenebral forces" needed a compatibility adapter.** Added
+   § 6.14.1: source mod is contextual evidence, not ownership, with the master § 15 fallback
+   hierarchy (master § 14–15, § 57).
+3. **A wiped-out or dissolved contractor refunded the deposit.** Now the deposit is normally lost
+   on in-world failure; fraud, cancellation, technical invalidation and insurance are separate
+   cases ([STATE_MACHINES § 4.2](STATE_MACHINES.md#42-money-rules); master § 21, § 23, § 62).
+4. **Catalog "hard" exclusions included heuristics** (`NotHaulable`, `NoLabel`, missing graphic).
+   Moved to the overridable tier; each remaining hard exclusion states why it cannot be
+   materialized ([COMPATIBILITY § 2.3](COMPATIBILITY.md#23-eligibility-heuristics-conservative); master § 6).
+5. **Phase 1 did not prove loot without extermination.** Added Spike S19 and acceptance criterion
+   A10 (master § 17).
+
+Found in the full comparison:
+
+6. **Intel had one fixed source in Phase 1.** The design has the player choose a contact,
+   including factions (master § 8–9, § 13, § 71). Faction contacts are now in Phase 1.
+7. **Leads were the truth plus a small amount error**, close to a guaranteed loot quest. The
+   master § 12 quality classes are now a committed, hidden divergence class; leads carry a
+   confidence descriptor and report other cargo (master § 3.2, § 11–12, § 18, § 85).
+8. **Leaders had a lower death weight in abstract resolution**, which is plot armor (master § 45).
+   Removed ([SIMULATION § 3.4](SIMULATION.md#34-known-characters-in-operations)).
+9. **Successors inherited reputation "only as legacy text".** The design lets a successor inherit
+   some reputation (master § 46). It now inherits a reduced, decaying reputation prior.
+10. **Sponsorship assumed revenue share and priority.** Replaced by the design's investment model
+    (master § 31).
+11. **In Phase 2 a failed procurement had no world consequence** until Phase 3 (master § 3.4, § 24).
+    Phase 2 now has one consequence rule: a "last known location" recovery opportunity built with
+    the Phase 1 site machinery.
+12. **Partial success and renegotiation lacked the client's choices** (master § 23). The client
+    now chooses: accept partial, request continuation or renegotiate; a renegotiation can be
+    paid, refused, cancelled or reduced in scope.
+13. **Open-market contracts could not bring new groups into the story** (master § 64). The
+    population manager may now introduce a new organization as a bidder.
+14. **Vanilla quests are used only as a custody anchor**, while master § 87 says to use
+    Quest/QuestPart/Slate "where practical". This is now recorded as a deviation for review
+    ([ADR-025](DECISIONS.md#adr-025--network-lifecycles-are-not-vanilla-quests-deviation-owner-review)).
+15. **Examples named "Dead Red" as a character in an organization "Red Hand".** In the design,
+    Dead Red is the organization. Fixed.
+16. **The exploit list of master § 78 was only partly covered.** [RISKS R-20](RISKS.md#r-20--economic-exploits) is expanded.
+17. **Player-facing descriptors** for experience (§ 28), doctrine (§ 29), relationships (§ 43),
+    reputation (§ 39) and fame (§ 66) were missing. They are now derived labels over internal
+    numbers.
+
+Consistent already, and kept: persistence root, typed IDs, external references, actors by
+composition, the Intel/Lead/Opportunity and Contract/Operation separations, the event bus,
+bounded history and summaries, facts vs awareness, determinism, abstract contractors, the
+adapter boundary, the phase split, zero Harmony, and the conditional status of ADR-014, ADR-015
+and ADR-023.
+
+### 14.3 Still open
+
+- **Owner review:** [ADR-025](DECISIONS.md#adr-025--network-lifecycles-are-not-vanilla-quests-deviation-owner-review)
+  (the § 87 deviation).
+- **Deposit when a contractor ends before any work starts** (dissolved or absorbed while the
+  contract is Awarded). The architecture treats it as an in-world failure: a successor may honour
+  the contract, otherwise the deposit is lost. The design does not address it directly.
+- **Continuing a search after a lead**: with or without a new fee (§ 14.1 row 6).
+- **Comms console** as a requirement for contacting sources (§ 14.1 row 1).
+- **Quality-bearing items** (master § 79): whether Intel's "minimum / approximate / no quality"
+  is a qualifier on the request or a detail of the report. Never a quantity either way. Not in
+  Phase 1.
+- **Tuning**: fees, durations, quantities, deposit shares, premiums, penalties, population
+  defaults, and all resolver and pricing tables.
+
+### 14.4 Reconciliation check
+
+| # | Question | Answer | Where |
+|---|---|---|---|
+| 1 | Can Intel specify a quantity? | **No.** | § 6.13, [DATA_MODEL § 8](DATA_MODEL.md#8-intel-leads-and-opportunities) |
+| 2 | Can Procurement specify a quantity? | **Yes**, exactly. | § 6.15, [DATA_MODEL § 9](DATA_MODEL.md#9-contracts) |
+| 3 | Does source-mod metadata force ownership or hostility? | **No.** It is contextual evidence only. | § 6.14.1 |
+| 4 | Can a same-source-mod faction influence opportunity generation? | **Yes**, when it is contextually appropriate. | § 6.14.1 |
+| 5 | Is the deposit refunded automatically when a contractor dies catastrophically? | **No.** It is normally lost; insurance and technical invalidation are separate cases. | [STATE_MACHINES § 4.2](STATE_MACHINES.md#42-money-rules) |
+| 6 | Can `Allowed` recover a weird but valid modded ThingDef that the heuristics dislike? | **Yes**, unless it is truly technically impossible or unsafe. | [COMPATIBILITY § 2.3](COMPATIBILITY.md#23-eligibility-heuristics-conservative) |
+| 7 | Can the player take part of an Intel site's loot and retreat without killing everyone? | **Yes** by architecture; Phase 1 must prove the vanilla site allows it (S19, A10). | § 6.14, [IMPLEMENTATION_PHASES § 4.3](IMPLEMENTATION_PHASES.md#43-phase-1-acceptance-criteria) |
+| 8 | Is the master design linked from the README and docs? | **Yes.** | [README](../README.md), this document's header |
+| 9 | Is the "master design unavailable" risk resolved? | **Yes.** | [RISKS R-16](RISKS.md#r-16--master-design-brief-unavailable-during-phase-0-resolved) |
+| 10 | Can an active major character be discarded because the bound-pawn soft cap was reached? | **No.** | [ABSTRACT_PHYSICAL_LIFECYCLE § 2](ABSTRACT_PHYSICAL_LIFECYCLE.md#2-identity-tiers) |
+| 11 | Can a failed event consumer replay the whole event and double-apply earlier effects? | **No.** | § 12, [EVENTS_AND_HISTORY § 1.4](EVENTS_AND_HISTORY.md#14-no-double-application-after-save-and-load) |
+| 12 | Is registry-quest custody still conditional on S9? | **Yes.** | [DECISIONS ADR-014](DECISIONS.md#adr-014--off-map-pawn-custody-via-a-hidden-registry-quest-conditional-s9) |
+| 13 | Is Phase 0 still documentation-only? | **Yes.** | [README](../README.md#repository-status) |

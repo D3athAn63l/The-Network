@@ -73,10 +73,26 @@ any of these is true:
 character is bound to one pawn for life, and never rebound to a different pawn.
 
 Caps: at most 6 Known Characters per org (leader + 2 lieutenants + 3 notable). There is also a
-global soft cap of about 150 bound pawns. Beyond the caps, the least notable T2 characters that
-are not deployed are **retired to T1-with-release**: the record stays and the pawn is released
-to vanilla. Such a character is marked `neverRematerialize`, and if needed later they are
-written out of the story ("left the trade").
+global **soft** cap of about 150 bound pawns. The cap is a **performance policy, not an identity
+invariant**. Under capacity pressure, only **safe, dormant, low-notability** T2 characters are
+**retired to T1-with-release**: the record stays and the pawn is released to vanilla. Such a
+character is marked `neverRematerialize`, and if needed later they are written out of the story
+("left the trade").
+
+A character is **protected from release** while any of these holds:
+
+- current organization leader (or a lieutenant in line to succeed);
+- part of an active contract, operation or opportunity, or deployed;
+- captured, missing or stranded with an unresolved story state;
+- an active rival, or the subject of an active relationship thread (open obligation, salient
+  grudge, an ongoing player relationship);
+- a major character encountered recently;
+- referenced by a pending follow-up (a consequence job, a lead, a rescue);
+- depended on by another vanilla system right now (quest reservation by another quest, a Lord,
+  a caravan, a relation to a colonist).
+
+If no unprotected candidate exists, the Network **temporarily exceeds the soft cap** rather than
+break story continuity, and the validator reports the overshoot (it is not an error).
 
 ## 3. Invariants
 

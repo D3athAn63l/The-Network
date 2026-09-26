@@ -35,7 +35,8 @@ WorldComponentTick():
   budgetJobs = 16; budgetMs = 1.5
   while heap.PeekDue <= Clock.Now and budgetJobs-- > 0 and elapsed < budgetMs:
       job = heap.Pop()
-      try handler[job.kind](job)  catch → retry/backoff/quarantine (ARCHITECTURE § 12)
+      try handler[job.kind](job)  catch → retry with backoff only if the kind is idempotent or
+                                          state-guarded, else repair/quarantine (ARCHITECTURE § 12)
 ```
 
 - Jobs still due when the budget runs out are simply left in the heap and run next tick. Even
@@ -117,7 +118,9 @@ ResolverInputs (persisted on Operation.frozenInputs when the Engaged phase begin
   logistics:         f(distance in tiles, layer (orbit needs capability), season/biome hazard tag)
   moraleFactor:      from OrgMorale (Confident 1.1 … Desperate 0.75; Reckless raises variance)
   doctrine:          caution, cruelty, professionalism (affect retreat thresholds and variance)
-  sponsorship:       flat bonus from sponsor leases/profile
+  sponsorship:       flat bonus from sponsor leases/profile and contract contributions (premium contracts)
+  leadership:        whether the leader (or a lieutenant) is committed, and their notability/role
+  specialization:    match between the org's specialties and the archetype/threat (e.g. salvage, remote)
   opposition:        opposing faction tech level tag, "mechanoid"/"insectoid"/"human"
 ```
 
@@ -155,10 +158,12 @@ fractional people.
 
 ### 3.4 Known characters in operations
 
-Each participating Known Character gets a **fate draw** weighted by role and band. Leaders are
-protected by the crew (a lower death weight) unless the band is Disaster. Specialists face
-normal odds. Fates are `Unharmed | Wounded | Killed | Captured | Missing`. A captured or missing
-character becomes a candidate for a rescue follow-up through consequence rules.
+Each participating Known Character gets a **fate draw** weighted by band and by the exposure of
+their role in the operation (for example point roles in a breach). Importance to the story is
+**never** a protection: leaders and famous characters face the same odds as anyone in the same
+role, and a death is final. There is no plot armor (master § 45). Fates are
+`Unharmed | Wounded | Killed | Captured | Missing`. A captured or missing character becomes a
+candidate for a rescue follow-up through consequence rules.
 
 ### 3.5 Outputs and consequences
 
@@ -254,8 +259,11 @@ operations touching those topics.
 | Merger / absorption | two weak orgs with a strong positive edge, or a dominant org absorbing a failing one | the survivor takes the roster, leases, knowledge (max-merge) and relations (weighted). The absorbed actor becomes `Absorbed`, with `absorbedInto`. |
 | Settlement founding (later) | long-retired prosperous org | optional content through a world-object adapter; out of scope for core |
 
-Reputation is inherited only as **legacy text** ("successors of the Red Hand"). It is never
-copied as counters. Successors earn their own summaries.
+A successor may inherit **some reputation** (master § 46), but never the counters: it starts
+with a reduced, decaying copy of its predecessor's public epithets and fame (a reputation
+*prior* that fades unless its own record confirms it), plus legacy text ("successors of Dead
+Red"). Its summaries are its own. Successor organizations should stay rare enough to be
+meaningful.
 
 ---
 
@@ -290,15 +298,18 @@ coin is needed, it comes from `NetRng(contract.seed, contractor.id, "bid")`.
 - When a contract is posted, `Bidding.OpenWindow` selects **eligible contractors**: active,
   with the capability, not quarantined, and (Phase 4) visible to the issuer through contacts
   or listing. The candidates are capped at 12, chosen by a relevance score (knowledge of the
-  topics, region, relationship).
+  topics, region, relationship). A **Direct** contract evaluates only its invited groups. An
+  **Open** contract may also ask the population manager for a **new organization** as a bidder
+  when the pool is thin or by seeded chance; this is how new persistent groups enter the
+  player's story (master § 64).
 - Evaluations are spread over the window: some at open, some mid-window, the rest at close.
   This makes offers trickle in. It also spreads cost.
 - Each accept becomes an `Offer` with price, deposit, ETA, insurance, risk tolerance and
   conditions. Each refusal becomes a `Refusal` with reason keys.
 - The issuer (the player through the UI, or NPC logic) accepts one offer. The rest become
   Superseded.
-- **Phase 2 scope:** a single eligible contractor, or the best-scored one, bids. The data path
-  is identical to full bidding, so enabling competition in Phase 4 is a content and UI change.
+- **Phase 2 scope:** Open and Direct contracts; one to three bidders. The data path is identical
+  to full bidding, so enabling competition in Phase 4 is a content and UI change.
 
 ### 5.3 Pricing
 
@@ -306,12 +317,18 @@ coin is needed, it comes from `NetRng(contract.seed, contractor.id, "bid")`.
 price = marketValue(def, count) × rarityPremium × riskPremium(estimatedRisk, doctrine)
         × relationshipFactor(edge) × reputationPremium(contractor fame) × moraleFactor
         × (1 − favorDiscount if an obligation is cashed)
-deposit = price × depositShare(doctrine.greed, trust in issuer)
+price = max(price, marketPurchaseFloor(def, count))       // never cheaper than buying it (master § 20, § 77)
+deposit = price × depositShare                            // default 0.5 (master § 21); varied by greed,
+                                                          // trust in the issuer, risk and negotiation
 eta     = baseTravel(distance, logistics) × (1 + workload) × etaFactor
 ```
 
 Pricing is purely derived. The final numbers are persisted on the Offer. They are never
-recomputed after the offer is made.
+recomputed after the offer is made. **Market value is one input, not the balance mechanism**
+(master § 77): `marketValue` goes through sanity caps and fallback valuation (category medians,
+recipe input value) for modded items with broken or absurd values, quality is priced
+explicitly, and unique or artifact-like items get severe premiums and low success odds (master
+§ 78, § 80). The exploit list is tracked in [RISKS R-20](RISKS.md#r-20--economic-exploits).
 
 ---
 
@@ -362,14 +379,14 @@ and it is committed at once.
 
 ### 6.4 Commit points
 
-| Question from the brief | Answer |
+| Question from the Phase 0 brief | Answer |
 |---|---|
 | When is a random outcome committed? | At the decision point listed below. Up to then it is reproducible from the persisted seed. |
 | Is a seed stored? | Yes, on every stateful entity (`seed`, `rerollNonce`). |
 | Does loading before completion reroll? | No. Same seed and same (frozen) inputs give the same result. |
 | When is opportunity cargo fixed? | At `Opportunity.Generate` (def, count, stuff). The Things are created at `Materialize`. |
 | When are contractor casualties fixed? | At the Engaged → resolve checkpoint, as `Operation.outcome`. Physical encounters: at reconciliation, from actual pawn state. |
-| When is Intel truth fixed? | At `intel.resolve`: lead/no-lead, archetype, payload, location, threat, reliability. |
+| When is Intel truth fixed? | At `intel.resolve`: lead/no-lead, divergence class, source context, archetype, payload (target quantity and extra cargo), location, threat, reliability. |
 | Intel search duration? | At submit. |
 | Offer terms? | When each offer is created (persisted on the Offer). |
 | Organization creation (name, doctrine, roster)? | At creation. |
@@ -387,12 +404,13 @@ player's choices are not.
 
 ## 7. Population management
 
-- **Targets**: the active NPC contractor org count, from settings (default 12–40, scaled by world
-  size and faction count), and a broker/intel-source count (Phase 5).
+- **Targets**: the active NPC contractor org count, from the "contractor population scale"
+  setting (master § 75; default 12–40, scaled by world size and faction count, a tuning value),
+  and a broker/intel-source count (Phase 5).
 - **The weekly job** creates organizations from templates when below target (tied to origin
   factions when they exist, independent otherwise). It lets the natural lifecycle (retirement,
   dissolution, wipe-outs, mergers) bring the count down, and never deletes an actor
-  artificially.
+  artificially. It also answers Open contracts that ask for a new bidder (§ 5.2).
 - **Templates** (a Def, later) give the name grammar, a doctrine range, a size range, specialties,
   an equipment tier range, preferred pawn kinds (with fallback chains), and an origin faction
   def filter.

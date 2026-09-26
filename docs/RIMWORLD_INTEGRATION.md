@@ -79,7 +79,11 @@ Verdict:
 - **Do not model Network contracts or opportunities as vanilla quests.** Vanilla quest state,
   expiry, accept/decline flow, QuestGen slate and grammar would *own* our lifecycle. Cleanup
   semantics could destroy our sites or pawns. Other mods iterate and modify quests. Our
-  lifecycles (bidding, inheritance, Troubled) do not fit the vanilla quest states.
+  lifecycles (bidding, inheritance, Troubled) do not fit the vanilla quest states. Master § 87
+  asks for Quest/QuestPart/Slate "where practical"; this is a recorded technical deviation,
+  [ADR-025](DECISIONS.md#adr-025--network-lifecycles-are-not-vanilla-quests-deviation-owner-review),
+  pending owner review. Everything else § 87 lists (Site, SitePart, WorldObject, Faction,
+  Letter, caravans and transport) is used.
 - **Use one hidden registry quest** purely as a vanilla-native custody anchor (Phase 3, Spike S9).
 - **Optional later:** a "Quests tab mirror" presentation adapter that creates a hidden or
   visible *informational* quest for an opportunity. It would never own state. Deferred and
@@ -451,3 +455,4 @@ result in `docs/spikes/Sx-<name>.md` (created when run).
 | **S16** | 2+ | Royalty shuttle delivery adapter | shuttle arrives and leaves; no quest-reservation conflicts |
 | **S17** | 3 | Tag hygiene with duplication or copy paths | copies ignored; tags stripped |
 | **S18** | 1 | Performance smoke: the dev harness simulates 10,000 scheduler jobs and 5,000 history records; save-size growth | per-tick idle cost unmeasurable; job cost within budget; save size within the [EVENTS_AND_HISTORY § 11](EVENTS_AND_HISTORY.md#11-save-size-budget) targets |
+| **S19** | 1 | **Loot without extermination.** Generate a guarded Network opportunity; enter; recover only part of the target payload; leave by caravan (and separately by pods) while some defenders are alive. Does the vanilla `ItemStash` + threat-part composition (and its site comps: `TimedDetectionRaids`, `EnterCooldownComp`, timeout, `Site.ShouldRemoveMapNow`) let the player leave, and does anything require all enemies dead? | the caravan or pods can leave; recovered items stay recovered; the opportunity resolves Claimed with a partial `recoveredBand`; history says "partial recovery"; no duplicated loot on re-entry or a second departure; the site cleans up as vanilla does. **If it fails**, record the result and switch Phase 1 to another vanilla composition or a minimal Network site part (ADR-015's upgrade path); Phase 0 is not redesigned. |

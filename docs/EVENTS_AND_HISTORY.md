@@ -48,7 +48,8 @@ Events.Publish(evt):
   Dispatch(evt); while fifo.TryDequeue(out e): Dispatch(e)   // cascade cap: 64 events per root publish
   dispatching = false
 
-Dispatch(e): for handler in table[e.typeKey] (fixed order): try handler(e) catch → log once, flag e.hadErrors
+Dispatch(e): for handler in table[e.typeKey] (fixed order):
+               try handler(e) catch → record failed consumer, flag e.hadErrors, CONTINUE (never re-dispatch)
 ```
 
 **Consumer order is fixed and global.** It is defined once at startup. Later consumers can rely
@@ -98,10 +99,24 @@ This follows from how dispatch works, not from bookkeeping:
    is already `Killed` is never killed again, so a signal plus a reconciliation pass cannot
    double-count.
 
-Exceptions inside a consumer do not roll back earlier consumers. The event is flagged
-`hadErrors`, the validator reports it, and invariants are re-established by that subsystem's
-reconciliation pass. This is simpler and safer than attempting transactional rollback over
-RimWorld state.
+**When a consumer throws.** Exceptions inside a consumer do not roll back earlier consumers, and
+the event is **never re-dispatched**: earlier consumers may already have changed relations,
+favors, history, money or scheduled follow-ups, and running them again would apply those effects
+twice. Instead:
+
+1. The failure is recorded once in `diagnostics.failedConsumers` (event seq, type key, consumer,
+   message, tick), the event is flagged `hadErrors`, and one error is logged.
+2. The entity the consumer was updating is marked dirty, `Degraded` or `Quarantined`, as the
+   subsystem's policy says.
+3. The owning subsystem's **reconciliation pass** repairs its own state from persisted facts
+   (summaries from records, roster arithmetic, custody from pawn state) at the next validation.
+4. An individual consumer may be retried **only if it has an explicit idempotency guard**, such
+   as a persisted "last applied event seq" on the state it changes. Consumers without a guard
+   are never retried.
+
+This is deliberately different from scheduler jobs, which may be retried with backoff when their
+kind is idempotent or state-guarded ([ARCHITECTURE § 12](ARCHITECTURE.md#12-threading-exceptions-and-failure-containment)).
+It is simpler and safer than attempting transactional rollback over RimWorld state.
 
 ### 1.5 Deterministic handling
 
@@ -146,7 +161,7 @@ N = Notable, Ma = Major, L = Legendary.
 | `Intel.Cancelled` / `Intel.Invalidated` | 1 | Mi | request | letters |
 | `Opportunity.Generated` / `.Materialized` | 1 | Mi | opportunity | — |
 | `Opportunity.Engaged` | 1 | Mi | opportunity, player | summaries |
-| `Opportunity.Claimed` | 1 | N (Ma if high value) | opportunity, claimer | history, knowledge, summaries, letters |
+| `Opportunity.Claimed` | 1 | N (Ma if high value) | opportunity, claimer, `recoveredBand` (partial recovery is a claim) | history, knowledge, summaries, letters |
 | `Opportunity.Expired` / `.Abandoned` / `.Destroyed` / `.Invalidated` | 1 | Mi | opportunity | summaries |
 | `Opportunity.LostToCompetitor` | 4 | N | opportunity, competitor | relations (rivalry), consequences |
 | `Reference.Invalidated` | 1 | Mi | owning entity | owning subsystem |
@@ -284,7 +299,11 @@ Reputation is **derived from what actually happened**. It is not a stat chosen a
    **Personal experience outranks hearsay** by construction: direct experience has weight 1.0,
    a witnessed belief 0.6, and a rumor at most 0.3 × confidence.
 4. **Player-facing identity** is the epithets and the salient deeds ("known for finishing jobs
-   unusually quickly: 11 early deliveries"). Raw numbers stay internal.
+   unusually quickly: 11 early deliveries"), plus a **fame tier** kept in `PublicReputation`
+   with the same hysteresis: Unknown, Local, Established, Famous, Legendary for contractor groups
+   (master § 66), and Unknown, Local, Established, Respected, Renowned, Legendary for the player's
+   registered group (master § 39). The master's reputation dimensions (reliability, prestige,
+   speed, combat, integrity, discretion) are internal inputs. Raw numbers stay internal.
 5. **Consumers**: willingness and refusal, pricing and risk premium, bidding priority,
    sanctions and blacklists (Phase 5), the likelihood of introductions, and legend scoring.
 
@@ -362,7 +381,7 @@ their operational existence ends. They **do not retain Pawns**.
 - The legend subject's Known Character pawn (if any) is **released** to vanilla. Vanilla GC
   decides its fate, and the Legend no longer needs it.
 - Legends feed: the History tab ("Remember Dead Red?"), name reuse avoidance, the reputation of
-  successors ("the Red Hand's successors still trade on the name"), and occasional rumor and
+  successors ("Dead Red's successors still trade on the name"), and occasional rumor and
   gossip seeds.
 - Budget: at most 400 Legends. Beyond that, the lowest-scored non-player-involved legend is
   demoted to a one-line tombstone.

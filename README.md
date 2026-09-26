@@ -21,27 +21,29 @@ developer wrote.
 
 ## Repository status
 
-This branch contains **only the Phase 0 technical architecture**. It deliberately contains no C#,
-no XML Defs, no Harmony patches, no UI and no gameplay. Each implementation phase adds one
-vertical slice on top of the foundations described here. See
-[docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md).
+This branch contains **only the Phase 0 technical architecture**, alongside the master design
+from `main`. It deliberately contains no C#, no XML Defs, no Harmony patches, no UI and no
+gameplay. Each implementation phase adds one vertical slice on top of the foundations described
+here. See [docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md).
 
-> **Design-source note.** The Phase 0 brief refers to a master design document, *"The Network —
-> Full Mod Design - Master Implementation Brief.md"*. That document was not available when this
-> architecture was written. The architecture was derived from the Phase 0 brief (which lists the
-> approved design directions) and from direct inspection of the RimWorld 1.6 assemblies. Every
-> assumption that should be checked against the master brief is listed in
-> [ARCHITECTURE.md § Assumptions pending master-brief review](docs/ARCHITECTURE.md#14-assumptions-pending-master-brief-review).
+> **Design authority.** The [master design document](The%20Network%20%E2%80%94%20Full%20Mod%20Design%20-%20Master%20Implementation%20Brief.md) defines product and gameplay intent. The
+> architecture documents define technical implementation. Where they conflict, the design takes
+> precedence unless a reviewed ADR explicitly records a necessary deviation
+> ([DECISIONS](docs/DECISIONS.md)). The first Phase 0 pass was written before the master design
+> was on `main`; the architecture has since been reconciled against it
+> ([ARCHITECTURE § 14](docs/ARCHITECTURE.md#14-master-design-reconciliation)).
 
 ## Documentation map
 
-These documents are the canonical technical reference for anyone, human or coding agent,
+The master design is the canonical **product and gameplay specification**. The documents in
+`docs/` are the canonical **technical specification** for anyone, human or coding agent,
 implementing The Network. When the code and the docs disagree, fix whichever one is wrong in the
 same change.
 
 | Document | Read it for |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System diagram, subsystem contracts, stable-vs-replaceable map, self-review |
+| [The Network — Full Mod Design - Master Implementation Brief](The%20Network%20%E2%80%94%20Full%20Mod%20Design%20-%20Master%20Implementation%20Brief.md) | **Canonical product/gameplay specification**: what the mod is, how it should play, and what it must never do |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System diagram, subsystem contracts, stable-vs-replaceable map, self-review, master-design reconciliation |
 | [docs/DATA_MODEL.md](docs/DATA_MODEL.md) | Identifiers, external references, every persistent entity and its fields |
 | [docs/EVENTS_AND_HISTORY.md](docs/EVENTS_AND_HISTORY.md) | Network events, history ledger, summaries, reputation, awareness, gossip, legends |
 | [docs/STATE_MACHINES.md](docs/STATE_MACHINES.md) | Intel, opportunity, contract, procurement, offer, operation, custody, actor lifecycles |
@@ -74,6 +76,9 @@ same change.
    rescans. Work is scheduled, staggered and budgeted.
 8. **Safe across long saves.** Persistent data is versioned from the first release and migrated
    forward. History stays bounded.
+9. **Interest, not need.** The player says what they are interested in. The Network never
+   infers what the colony needs and never reads research, stockpiles or demand. Intel is about an
+   item, never an amount; only Procurement names a quantity.
 
 ## Conventions (for implementation phases)
 

@@ -28,6 +28,11 @@
    one contract, one lease) with an explanation, and never the subsystem or the save.
 5. **Optional features register themselves.** DLC and mod integrations add capabilities through
    adapters when they are present. The core never branches on them in scattered places.
+6. **Source mod is contextual evidence, not ownership** (master § 14, § 57). An item's source
+   package can make an active faction from the same package a more plausible holder, trader or
+   guard. It never makes that faction an enemy, never makes it the owner automatically, and is
+   never a dependency: the Network runs, and searches for "Weirdium", without knowing what any
+   mod is (master § 56). See [ARCHITECTURE § 6.14.1](ARCHITECTURE.md#6141-opportunity-source-and-context-resolution).
 
 ---
 
@@ -60,52 +65,73 @@ CatalogEntry (runtime)
   techLevel
   tradeability: Tradeability        tradeTags: string[]
   craftable: bool                   recipes: RecipeDef[] (index, capped)
+  usedByRecipes: bool               (appears as an ingredient; metadata only, never "need")
   equipment: { isWeapon, isApparel, hasQuality, madeFromStuff, isBiocodable? }
   flags: { isStuff, isDrug, isMedicine, isFood, isBodyPart/implant, isMineable/deep, isRawResource }
   rarity: RaritySignals             (see 2.4)
   verdict: Eligible | Unusual | Ineligible
   reasons: CatalogReason[]          (codes explaining the verdict)
   override: Auto | Allowed | Blocked   (from settings)
-  effective: bool                   (verdict + override → can be requested)
+  effective: bool                   (verdict + override + runtime failures → can be requested)
 ```
 
 ### 2.3 Eligibility heuristics (conservative)
 
-**Ineligible (hard technical exclusions; an override cannot lift them):** the Network could not
-produce a sensible standalone Thing. Blueprints and frames are already excluded by `NotAnItem`.
+The Network runs in heavily modded games, where many valid items break vanilla conventions. So
+the catalog separates two very different things, and the player's `Allowed` override is what
+rescues valid modded content that the heuristics get wrong (master § 6):
+
+- **A. Technical impossibility (Ineligible, not overridable).** The def cannot exist as a
+  standalone Thing in someone's possession, so no opportunity, stash or delivery could ever
+  contain it. Overriding would only produce a broken activity.
+- **B. Suspicious, unusual or heuristic (Unusual, overridable).** The def looks odd by vanilla
+  conventions but may be perfectly valid. Hidden by default; the "Show unusual items" toggle
+  reveals it and `Allowed` makes it an ordinary eligible item.
+
+**A. Ineligible: technically non-materializable** (every rule states why):
+
+| Reason code | Rule | Why it cannot be a possessed item |
+|---|---|---|
+| `NotAThingCategory` | `category` is `Pawn`, `Plant`, `Projectile`, `Filth`, `Gas`, `Attachment`, `Mote`, `Ethereal`, `PsychicEmitter` or `None` | pawns are generated from PawnKinds, not ThingDefs; plants, filth, gas, motes, attachments (fire), projectiles and ethereal controllers are map effects or internal objects that exist only in place or in flight. Blueprints (`Ethereal`) are covered here. |
+| `NonMinifiableBuilding` | `category == Building` and not `Minifiable` | an installed structure cannot be carried, stashed or delivered. Frames (`thingClass Frame`) are covered here. Minifiable buildings are **B** (`Building`). |
+| `NoThingClass` | `thingClass == null`, abstract, or not a `Thing` subclass | `ThingMaker` cannot instantiate it |
+| `Corpse` | `IsCorpse` | a corpse is made from a dead pawn and cannot be generated on its own (master § 6: "corpses unless intentionally supported later") |
+| `Unfinished` | `isUnfinishedThing` | a work-in-progress object bound to a bill and a worker; not a standalone item |
+| `MinifiedWrapper` | `thingClass` is `MinifiedThing` (the placeholder) | the wrapper needs an inner building; the building's own def is what gets requested |
+| `DestroyOnDrop` | `destroyOnDrop` | destroyed when placed or dropped, so it cannot sit in a stash or arrive by pod (vanilla's `PlayerAcquirable` is false for it) |
+| `EngineInternal` | a small, documented list of engine placeholders that pass the rules above, matched by `thingClass` type, not by mod (for example the active drop pod: `category Item`, `thingClass ActiveTransporter`; skyfallers are already `Ethereal`) | internal carriers of other things, never items in their own right |
+
+**B. Unusual: heuristics, overridable by `Allowed`:**
 
 | Reason code | Rule |
 |---|---|
-| `NotAnItem` | `category != ThingCategory.Item` |
-| `Corpse` | `IsCorpse` |
-| `Unfinished` | `isUnfinishedThing` |
-| `MinifiedWrapper` | `thingClass` is `MinifiedThing` (the placeholder, not the building) |
-| `DestroyOnDrop` | `destroyOnDrop` |
-| `NotHaulable` | `!EverHaulable && !alwaysHaulable` |
-| `NoLabel` | empty label |
-| `Unrenderable` | `thingClass == null` or no `graphicData` (static checks only; the catalog **never** instantiates Things, because `ThingMaker.MakeThing` allocates thing IDs and runs `PostMake` side effects) |
-| `FailedToGenerate` | runtime list: if creating the item for an opportunity or delivery ever throws, the def is marked Ineligible for the rest of the session, and the affected entity is Invalidated with a refund |
-
-**Unusual (hidden by default; the player can reveal them and request them; override Allowed
-makes them normal):** technically possible, but likely not meant to be procured.
-
-| Reason code | Rule |
-|---|---|
+| `NotHaulable` | neither `alwaysHaulable` nor `designateHaulable` (a convention many mods skip) |
+| `NoLabel` | empty label (the UI falls back to the defName) |
+| `NoGraphic` | no `graphicData` (static check only; the catalog **never** instantiates Things, because `ThingMaker.MakeThing` allocates thing IDs and runs `PostMake` side effects) |
+| `UnusualThingClass` | a `thingClass` outside the usual item classes |
 | `NotTradeable` | `tradeability == None` **and** no `tradeTags` |
 | `NoMarketValue` | `BaseMarketValue <= 0` |
-| `QuestOrStoryItem` | tagged only in quest-reward ThingSetMakers, or other signals of "special" (no recipes, not tradeable, unique comps) |
-| `Building` | a minifiable building's def. Allowed but unusual in Phase 1. Procuring furniture may come later. |
+| `QuestOrStoryItem` | tagged only in quest-reward ThingSetMakers, or other signals of "special" (no recipes, not tradeable, unique comps). Artifacts and progression keys stay requestable if valid, at severe prices and low odds (master § 80). |
+| `Building` | a minifiable building's def |
 | `Chunk` | stone chunks and slag (valid items, silly to request) |
 | `Implausible` | extreme value or mass outliers relative to the category |
 
 **Eligible**: everything else.
 
+**Runtime safety net** (`FailedToGenerate`). A heuristic can be wrong in both directions, so the
+final authority is what actually happens. If creating a def's Things for an opportunity or a
+delivery ever throws or yields an invalid Thing, the def is marked **unusable for the rest of the
+session** (whatever its override), the affected activity is **invalidated safely** (Intel
+invalidated, contract voided, opportunity invalidated) with a **full refund** because this is a
+technical failure, and a diagnostic reason is logged once and shown in the catalog and the letter
+("could not be produced in this game: <reason>"). The def is evaluated again next session.
+
 Heuristics are **reason codes, not a single boolean**. That makes classification explainable in
 the UI ("hidden because it is not tradeable and has no recipe") and debuggable (§ 2.8).
 
 **The catalog never infers what the player needs.** It does not rank by colony demand, does not
-suggest items and does not read the player's stockpiles. Sorting is by name, category, source
-mod or value, at the player's choice.
+suggest items, and does not read the player's stockpiles or research (master § 53). Sorting is
+by name, category, source mod or value, at the player's choice.
 
 ### 2.4 Rarity signals
 
@@ -121,11 +147,13 @@ shown as a single "rarity" number**, which would be false precision.
 | `generatorPresence` | appears in `ThingSetMakerDef` filters (loot or reward) |
 | `techLevel` | vs. the world's faction tech levels (higher means rarer) |
 | `modded` | not Core or official DLC. A tiny weight only, so modded items are not treated as rare merely for being modded. |
+| `unique` | artifact-like or single-use progression signals (quest-reward-only, no recipe, no trade). Raises procurement price and difficulty and lowers lead probability (master § 80). |
 
 ### 2.5 Per-item overrides
 
-- Values are `Auto` (use the verdict), `Allowed` (Unusual becomes Eligible) and `Blocked`
-  (never requestable, hidden).
+- Values are `Auto` (use the verdict), `Allowed` (Unusual becomes Eligible; an Ineligible
+  technical exclusion stays Ineligible, and the UI says why) and `Blocked` (never requestable,
+  hidden).
 - Stored in **`ModSettings`**, as a `Dictionary<string defName, OverrideValue>`. They apply to
   all saves: the player's taste in what the Network should offer is a user preference.
 - **Unknown defNames are retained** (a mod may be removed temporarily).
@@ -141,6 +169,14 @@ follow [§ 3](#3-external-def-safety). Settings overrides for removed defs stay 
 `def.modContentPack` gives `PackageId`, `Name`, `IsCoreMod` and `IsOfficialMod`. The UI can
 filter by source mod. History snapshots store `packageId` so that removed content stays
 attributable ("Tenebrite (Beyond Our Reach, not loaded)").
+
+The same metadata is **contextual evidence for opportunity generation**. The catalog keeps a
+session index `packageId → FactionDef[]` (from each `FactionDef.modContentPack`), which the
+source resolver joins against the live faction list when an opportunity is generated. A faction
+from the item's own package that is present, undefeated and fitting gains relevance; one that is
+absent, defeated or unfitting is simply not a candidate, and generation falls back through the
+hierarchy ([ARCHITECTURE § 6.14.1](ARCHITECTURE.md#6141-opportunity-source-and-context-resolution)).
+Source-package overlap also counts toward an Intel source's quality for that topic (master § 13).
 
 ### 2.8 Debugging classification
 
@@ -161,7 +197,7 @@ removed.
 
 | Missing thing | Detected at | Behaviour | Player sees |
 |---|---|---|---|
-| **ThingDef** in an Intel topic | load validation / resolve | Intel → `Invalidated`, full refund | letter: "The Exchange closed your inquiry: the item no longer exists in this world." |
+| **ThingDef** in an Intel topic | load validation / resolve | Intel → `Invalidated`, full refund | letter: "Your contact closed the inquiry: the item no longer exists in this world." |
 | **ThingDef** in a procurement objective | load validation / checkpoint | Contract → `Voided(DefMissing)`, deposit refunded, operation aborted with forces returned unharmed | letter |
 | **ThingDef** in an opportunity payload (site not yet visited) | load validation | Opportunity → `Invalidated`. The vanilla site stays and times out normally. Vanilla may log errors for the Things of the missing def inside the stash; the Network adds none. | letter; the site label is unchanged |
 | **ThingDef** in a lease | materialization / validation | lease → `WrittenOff` | contractor narrative only |
@@ -240,10 +276,13 @@ interface ICompatModule {
 - Modules are discovered by reflection over the Network assembly at startup, a small known set.
   Each activates only if its gate passes, and registration happens inside try/catch. A throwing
   module is disabled with one error and the rest continue.
-- **Mod-specific adapters** (for example a Beyond Our Reach flavour pack that makes Tenebrite
-  leads talk about "Tenebral forces") go in the same assembly behind a packageId check, or in a
-  separate optional patch mod. They **only register content** (archetype variants, text, topic
-  aliases). They never change core behaviour.
+- **Mod-specific adapters** go in the same assembly behind a packageId check, or in a separate
+  optional patch mod. They **only register content**: archetype variants, text, topic aliases,
+  and **association hints** for the source resolver (for example "these items are usually traded
+  by that faction"). They never change core behaviour, and the base system works without them
+  (master § 58). No adapter is needed for the ordinary case: a Tenebrite lead that names Tenebral
+  forces comes from the generic same-package evidence when that faction is present and fits, not
+  from a Beyond Our Reach adapter.
 - The **registry keys** (archetype keys, delivery method keys, capability keys) are the strings
   that persisted entities reference. A missing registration at load is exactly the "disabled
   compat adapter" case in § 3.

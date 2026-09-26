@@ -188,7 +188,7 @@ NetworkActor
 | `Individual` | Retired contractor turned broker or Intel contact, a notable freelancer | Retirement transformation. Special content. |
 | `FactionProxy` | A vanilla or modded RimWorld faction taking part in the Network (as an issuer, a target or a relationship holder) | **Lazily**, the first time a faction needs an identity in Network data |
 | `PlayerProxy` | The player's colony | Bootstrap (exactly one; rebinds if `Faction.OfPlayer` changes) |
-| `Institution` | "The Exchange" (Phase 1 broker), later market boards | Bootstrap |
+| `Institution` | "The Exchange" (the generic information network of master § 8; Phase 1 Intel source), later market boards | Bootstrap |
 
 ### 4.2 Capability components
 
@@ -199,9 +199,9 @@ and relationships.
 | Component | Grants | Key fields |
 |---|---|---|
 | `ContractorProfile` | can accept contracts, can procure, can deploy | see [§ 6](#6-contractor-organizations-contractorprofile) |
-| `IntelSourceProfile` | can provide Intel | `quality: float`, `coverage: RegionKey[]`, `topicStrengths` (reads KnowledgeBook), `feeScale: float`, `reliability: float`, `discretion: float` |
+| `IntelSourceProfile` | can provide Intel | `quality: float`, `coverage: RegionKey[]`, `topicStrengths` (reads KnowledgeBook), `feeScale: float`, `reliability: float`, `discretion: float`. Faction proxies get one lazily in Phase 1, derived from master § 13 signals: tech level, faction type, goodwill, geography and **source-package overlap with the topic**. Internal numbers only; the player sees descriptors learned from how the source's leads turned out. |
 | `IssuerProfile` | can issue contracts | `budgetBand: int`, `preferredKinds: string[]`, `legitimacy: float` (0 = criminal, 1 = lawful), `paysOnTime: float` |
-| `SponsorProfile` | can sponsor | `sponsored: ActorId[]`, `terms` per sponsee (revenue share, priority), `leases: LeaseId[]` |
+| `SponsorProfile` | can sponsor | `sponsored: ActorId[]`, `contributions` per sponsee (silver and items given or loaned, with ticks), `leases: LeaseId[]`. Sponsorship is an investment in capability and the relationship, with no guaranteed return (master § 31). |
 | `SponsoredProfile` | receives sponsorship | `sponsor: ActorId`, `sinceTick`, `obligationsTo: ObligationId[]` |
 | `IntroducerProfile` | can provide introductions | `introducibleActors: ActorId[]` (bounded), `introductionCooldownUntil` |
 | `TraderProfile` (later) | can sell or buy goods | stock policy, tags |
@@ -212,6 +212,8 @@ change is recorded in history. The component is not left in a dead state.
 
 **The player** is a `PlayerProxy` actor. When the player registers as a contractor (Phase 4),
 a `ContractorProfile` is added to the same actor. There is no new faction and no replacement.
+Registration records what the player chooses (master § 35): `publicIdentity { name, profileText,
+emblemKey? , registeredTick }` on that profile. Reputation starts at Unknown.
 
 ---
 
@@ -286,6 +288,11 @@ ContractorProfile : ActorComponent
 
 - **Strength** is derived and not persisted. It is computed from tiers, healthy counts,
   equipment tier and condition, and morale, and cached until the org is marked dirty.
+- **Player-facing descriptors are derived, never stored as stats** (master § 28–29, § 63, § 82):
+  the experience tier (Green, Experienced, Seasoned, Veteran, Elite, Legendary) from the roster
+  and the org's record; the doctrine label (Aggressive, Cautious, Professional, Opportunistic,
+  Scavenger, Explorer) from the doctrine values and specialties; the price band and
+  reliability label from terms and history.
 - **Wounded** are tracked as aggregated recovery buckets, not as per-person injuries.
 - **Sponsored equipment** is abstract (`tier`, `specialties`) *plus* explicit leases for items
   that matter (see § 11).
@@ -331,16 +338,20 @@ information map, and nothing is computed per tick.
 These are three separate things: the player's **interest**, the **reported perception** and the
 **world truth**.
 
+**Intel is topic-based only.** The player selects an item (type), never a quantity: no requested
+amount, target, minimum or stack count is persisted, and no fee, duration or generation rule takes
+one as input. What exists, and how much, is decided when the opportunity is generated (master
+§ 8, § 10). Quantity belongs to Procurement (`AcquireObjective.count`, § 9).
+
 ```
 IntelRequest                                  // the player's interest
   id: IntelRequestId
   requester: ActorId                          // player proxy (later: NPC requesters too)
   source: ActorId                             // broker or Intel source actor
-  topic: IntelTopic
+  topic: IntelTopic                           // WHAT the player asks about; never HOW MUCH
     kind: Item | Actor | Region | Character   // Phase 1: Item only
     thing: DefRef<ThingDef>?
-    quantityHint: int?                        // optional; never a guarantee
-  fee: MoneyRecord
+  fee: MoneyRecord                            // paid at submission; kept on NoCredibleLead
   state: IntelState                           // see STATE_MACHINES § 1
   submittedTick, dueTick, resolvedTick: int
   seed: int, rerollNonce: int
@@ -357,13 +368,18 @@ Lead                                          // perception (what the source rep
   reportedBy: ActorId
   reportedTick: int
   reliability: float (0..1)                   // committed; how close reports are to the truth
+  divergence: LeadDivergence                  // HIDDEN, committed at resolution (master § 12):
+                                              // Accurate | Partial | Outdated | Bad | Misinformation |
+                                              // Trap | Jackpot | Complication (| Contested, Phase 4)
   reported: LeadReport                        // what the player sees
-    archetypeKey: string?                     // may be withheld or wrong (Phase 5 distortion)
-    amountRange: IntRange?
+    archetypeKey: string?                     // may be withheld or wrong
+    amountRange: IntRange?                    // the SOURCE's estimate of the target item
+    otherCargo: ReportedCargo[]               // { thing: DefRef, amountRange? } + unknownExtra: bool
     threatBand: ThreatBand?                   // Negligible | Light | Moderate | Heavy | Extreme | Unknown
     location: TileRef?                        // may be approximate before materialization
     competitionHint: string?
-    expiresAroundTick: int?
+    expiresAroundTick: int?                   // the "operational window"
+    confidence: ConfidenceBand                // Very Low | Low | Moderate | High | Very High (no %)
   state: LeadState                            // Active | Pursued | Stale | Closed
 
 Opportunity                                   // world truth
@@ -372,8 +388,15 @@ Opportunity                                   // world truth
   origin: OpportunityOrigin                   // IntelResolution | ConsequenceRule | WorldEvent | Debug
   originRef: EntityRef?                       // IntelRequest / HistoryRecord / Contract …
   lineage: { parentOpportunity?, rootContract?, depth: int }
+  sourceContext: SourceContext                // committed by the source resolver (ARCHITECTURE § 6.14.1)
+    kind: SameSourceFaction | SimilarTechFaction | HostileFaction | NeutralOwner | Trader | Pirates |
+          Mechanoids | AncientSite | Salvage | AbandonedCache | …
+    holder: FactionRef? / holderActor: ActorId?
+    holderStance: Hostile | Neutral | Friendly | None   // the holder's real stance; never forced
+    evidence: string[]                        // reason keys, e.g. "sameSourcePackage", "techMatch", "nearby"
   payload: OpportunityPayload[]               // polymorphic, small
-      ItemPayload { thing: DefRef<ThingDef>, stuff: DefRef<ThingDef>?, count: int, qualityBand?: int }
+      ItemPayload { thing: DefRef<ThingDef>, stuff: DefRef<ThingDef>?, count: int, qualityBand?: int,
+                    role: Target | Extra }    // Extra = believable other cargo (master § 18)
       CharacterPayload { character: CharacterId, condition }        // rescue (Phase 3)
       ActorPayload { actor: ActorId, role }                         // hunt / meet (later)
   location: TileRef
@@ -382,11 +405,16 @@ Opportunity                                   // world truth
   expiresTick: int
   state: OpportunityState                     // see STATE_MACHINES § 2
   site: WorldObjectRef?                       // when materialized
-  engagement: { firstEngagedTick, playerClaimedCounts: ItemTally[], claimedBy: ActorId? }
+  engagement: { firstEngagedTick, playerClaimedCounts: ItemTally[], claimedBy: ActorId?,
+                recoveredBand: None | Little | Some | Most | All }   // of the Target payload
   seed: int
   committedAtTick: int                        // truth fixed here; never recomputed
 ```
 
+- **Quantity comes from the opportunity, not the request.** The target count is chosen from
+  market value, stack limit, category, world wealth, threat, archetype, holder strength and
+  balance caps (master § 10), then shaped by the divergence (an outdated cache holds remnants, a
+  jackpot holds more than reported, bad intel may hold none of the target at all).
 - **When cargo is fixed.** `payload` (def, count and stuff) is committed when the opportunity is
   generated. Real Things are created when the site is materialized, and placed by vanilla map
   generation from `SitePart.things`. See [SIMULATION § 6](SIMULATION.md#6-determinism-and-rng).
@@ -404,7 +432,8 @@ not a sign of the "nullable god object" problem, because parts are cohesive grou
 ```
 Contract
   id: ContractId
-  kindKey: string                          // "Procurement", "Recovery", "Rescue", "Hunt", … (soft ref to NetworkContractKindDef)
+  kindKey: string                          // "Procurement", "Recovery", "Rescue", "Hunt", "Investigation", "Escort",
+                                           // "Salvage", "Transport", "Acquisition", … (soft ref to NetworkContractKindDef)
   status: ContractStatus                   // see STATE_MACHINES § 3
   createdTick, postedTick, awardedTick, closedTick: int
   deadlineTick: int?
@@ -416,8 +445,10 @@ Contract
     contractor: ActorId?                   // assigned (null before award)
     target: EntityRef?                     // victim / subject of hostile work
     interested: ActorId[]                  // watchers (competitors, patrons)
+    invited: ActorId[]                     // Direct contract: the known group(s) asked (empty = Open)
   terms: Terms                             // see § 16 Money
     price: int, deposit: int, insurance: Insurance?, penalties: PenaltyRule[]
+    contributions: Contribution[]          // Premium / sponsored: silver, or items as leases (master § 22)
     paymentSchedule: PaymentStep[]         // OnAward(deposit), OnDelivery(balance), …
     refundPolicyKey: string
   confidentiality: Confidentiality
@@ -427,7 +458,7 @@ Contract
     discretionRequired: float (0..1)
     exposure: ExposureState                // Unexposed | Suspected | Exposed(by, tick)
   objectives: ContractObjective[]          // polymorphic, small
-      AcquireObjective { thing: DefRef<ThingDef>, stuff?, count, minQualityBand? }
+      AcquireObjective { thing: DefRef<ThingDef>, stuff?, count, minQualityBand? }   // exact quantity
       DeliverObjective { destination: DeliveryTarget }
       ReachOpportunityObjective { opportunity: OpportunityId }
       RescueObjective { character: CharacterId }              // Phase 3
@@ -542,7 +573,8 @@ Deployment                                   // one physical appearance of an or
 EquipmentLease                               // a specific tracked item (sponsored or notable)
   id: LeaseId
   owner: ActorId                             // sponsor or org
-  holder: ActorId                            // org using it
+  holder: ActorId                            // org using it (or the player, for gear a faction lends them)
+  terms: Gift | Loan                         // Loan = return expected (master § 41); Gift = given outright
   thing: DefRef<ThingDef>, stuff: DefRef<ThingDef>?, quality: QualityCategory?, count: int
   condition: float (0..1)                    // abstract; updated from real HP% after physical use
   state: Held | Deployed | Returned | Lost | WrittenOff
@@ -570,6 +602,10 @@ RelationEdge
 ```
 
 - Default (unknown) pairs are **not stored**. `Get` returns a neutral, computed default.
+- **The player sees a relationship descriptor**, derived from standing, trust, familiarity,
+  counters and flags, using the master § 43 vocabulary: Unknown, Familiar, Friendly,
+  Professional, Competitive, Trusted, Rival, Bitter Rival, Hostile. The structure can evolve; the
+  numbers stay internal.
 - Decay toward neutral is applied **on read and on write**, using `updatedTick`. There is no
   periodic sweep.
 
@@ -692,6 +728,13 @@ PaymentStep { when: OnAward | OnMilestone(key) | OnDelivery | OnClose, amount: i
   so neither can happen without the other.
 - Deposits are **not** held as real silver. They are recorded as paid, and refunds create
   silver through drop pods.
+- **A deposit is committed cost** (preparation, logistics, transport, scouting, equipment,
+  supplies, labour, accepted risk). The default split is half on award and half on delivery
+  (master § 21), varying with reputation, relationship, risk, faction and negotiation. The
+  deposit is **normally lost** when the contractor fails in the world, including catastrophic
+  loss; it is refunded in full only on technical invalidation. Insurance recovers part of it
+  (`coverage < 1`, never risk-free, master § 62). The rules per case are in
+  [STATE_MACHINES § 4.2](STATE_MACHINES.md#42-money-rules).
 
 ---
 

@@ -38,7 +38,7 @@
 | **World-level scheduled** | Intel resolution, operation checkpoints, org upkeep, bidding passes, retention sweeps, population manager, gossip | due ticks, staggered | per-tick job and time budget; periodic jobs phase-offset by seed |
 | **Physical-only periodic** | site claim sampling; deployment watchdog | every 2,500 ticks, **only while** a Network site map or active deployment exists | O(things of one def on one map) via `listerThings.ThingsOfDef` |
 | **UI-only** | read models, sorting, filtering, narrative formatting | while the window is open | cached per `StateVersion`; lists virtualized (only visible rows drawn) |
-| **Opportunity-generation spikes** | tile finding, Thing creation for stashes, site creation | when Intel resolves (rare) | `TileFinder` is vanilla and bounded; at most one per job; follow-ups are separate jobs |
+| **Opportunity-generation spikes** | source/context resolution, tile finding, Thing creation for stashes, site creation | when Intel resolves (rare) | the resolver reads a session index `packageId → FactionDefs` and one pass over live factions (tens); `TileFinder` is vanilla and bounded; at most one per job; follow-ups are separate jobs |
 | **Map-generation spikes** | vanilla map generation for a Network site | when the player arrives | vanilla cost (the same as any item-stash quest); the Network adds only its comp callbacks |
 | **Materialization spikes** (Phase 3) | pawn generation for deployments | when the player becomes involved | capped deployment size (default ≤ 12 pawns); generation spread over frames with `LongEventHandler` if > 6 |
 
@@ -48,7 +48,7 @@
 |---|---|---|
 | Active NPC contractor orgs | 20 | 60 |
 | Known Characters (records) | 120 | 400 |
-| Bound (real) pawns in Network custody | 40 | 150 (soft cap, § 2 of the lifecycle doc) |
+| Bound (real) pawns in Network custody | 40 | 150 (a soft cap, § 2 of the lifecycle doc: only dormant, low-notability characters are released, and the cap is exceeded rather than break an active story) |
 | Active contracts | 5–10 | 40 |
 | Scheduled jobs at any time | 60–150 | 1,000 |
 | Relation edges | 500 | 3,000 |

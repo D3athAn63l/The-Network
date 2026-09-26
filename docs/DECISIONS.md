@@ -2,7 +2,13 @@
 
 > A lightweight ADR log. Each record gives the decision, the alternatives we rejected, and the
 > consequences. Status values: **Accepted** (binding), **Conditional** (binding unless the named
-> spike fails), **Superseded**. Add new records at the end. Never renumber.
+> spike fails), **Superseded**, and **Deviation** (a technically necessary departure from the
+> master design; binding only once the owner has reviewed it). Add new records at the end. Never
+> renumber.
+>
+> Authority: the master design document defines product and gameplay intent; the architecture
+> documents define technical implementation. Where they conflict, the design takes precedence
+> unless a reviewed ADR explicitly records a necessary deviation.
 
 | ADR | Title | Status |
 |---|---|---|
@@ -20,7 +26,7 @@
 | 012 | Determinism via per-entity seeds, private PRNG and commit points | Accepted |
 | 013 | Character identity tiers and custody invariants | Accepted |
 | 014 | Off-map pawn custody via a hidden registry quest | Conditional (S9) |
-| 015 | Sites = vanilla Site + vanilla parts + injected WorldObjectComp | Conditional (S1, S2) |
+| 015 | Sites = vanilla Site + vanilla parts + injected WorldObjectComp | Conditional (S1, S2, S19) |
 | 016 | Item catalog is a session cache; overrides in ModSettings | Accepted |
 | 017 | Zero Harmony for Phases 1–3 | Accepted |
 | 018 | Optional DLC via runtime gating inside one assembly | Accepted |
@@ -30,6 +36,9 @@
 | 022 | Persisted due-tick scheduler with budget and stagger | Accepted |
 | 023 | Temporary per-organization encounter factions | Conditional (S10) |
 | 024 | Terminal entities are compacted; actors become tombstones | Accepted |
+| 025 | Network lifecycles are not vanilla quests | Deviation (owner review) |
+| 026 | Source mod is contextual evidence, not ownership | Accepted |
+| 027 | The deposit is committed cost, normally lost on failure | Accepted |
 
 ---
 
@@ -171,7 +180,7 @@
 - **Consequences.** Stored pawns are frozen; catch-up happens at materialization (S12). Mod
   removal adds about 2 errors unless the save is prepared for removal.
 
-### ADR-015 · Sites = vanilla Site + vanilla parts + injected WorldObjectComp (Conditional: S1, S2)
+### ADR-015 · Sites = vanilla Site + vanilla parts + injected WorldObjectComp (Conditional: S1, S2, S19)
 - **Decision.** Use `WorldObjectDefOf.Site` and vanilla `SitePartDef`s (`ItemStash` + a threat
   part). Network-made Things go in `SitePart.things`. Callbacks come through
   `WorldObjectComp_NetworkSite`, which an XML patch adds to the vanilla `Site` def.
@@ -183,10 +192,16 @@
   owning the site (lifecycle ownership).
 - **Consequences.** Claim accounting is approximate (PostCaravanFormed + sampling). An exact
   pre-removal hook would need a Network SitePartDef (preferred) or patch C-3.
+- **Also conditional on S19.** The objective of a site is acquisition, not extermination
+  (master § 17). If the vanilla stash-plus-threat composition turns out to force the player to
+  kill every defender before useful loot can leave, Phase 1 switches to another vanilla
+  composition or a minimal Network site part; the rest of this decision stands.
 
 ### ADR-016 · Item catalog is a session cache; overrides in ModSettings
 - **Decision.** Build lazily once per session from DefDatabase. Do not serialize it. Per-item
-  overrides are stored by defName in ModSettings and kept even for unknown defs.
+  overrides are stored by defName in ModSettings and kept even for unknown defs. Only technical
+  impossibility is non-overridable; every heuristic yields to `Allowed`, and runtime generation
+  failure is the final safety net ([COMPATIBILITY § 2.3](COMPATIBILITY.md#23-eligibility-heuristics-conservative)).
 - **Rejected.** Serializing the catalog (stale data, bloat). Rebuilding per query (repeated
   scans). Per-save overrides as the default (the user's taste is global).
 - **Consequences.** A mod-list change needs a restart (as RimWorld already requires). Classification is
@@ -249,3 +264,49 @@
   references).
 - **Consequences.** Every reference to a compacted entity resolves to "archived" or a
   tombstone, and the UI handles both.
+
+### ADR-025 · Network lifecycles are not vanilla quests (Deviation: owner review)
+- **Design.** Master § 87: "Where practical, use Quest, QuestPart, QuestScriptDef, WorldObject,
+  Site, SitePart, Faction, Incident, Letter, Caravan/transport systems … Mission generator should
+  provide appropriate Slate/context values and let vanilla systems handle downstream gameplay
+  where possible."
+- **Decision.** Use every system on that list **except** Quest/QuestGen/Slate as the owner of
+  Network lifecycles. Opportunities are vanilla Sites with vanilla parts; letters, factions,
+  caravans and transport are vanilla. Quests are used only as the hidden registry that anchors
+  pawn custody (ADR-014). Incidents are deferred (the Network is not a storyteller, master § 55).
+- **Why this is technically necessary.** A quest would *own* the lifecycle: vanilla quest state,
+  expiry, accept/decline and cleanup would decide when a site or its pawns disappear; the Network
+  lifecycles (bidding, Troubled, inheritance, lineage, partial claims) have no vanilla quest
+  equivalent; other mods iterate and modify quests; and a Network quest root or part missing
+  after removal is a vanilla load error on every such quest
+  ([RIMWORLD_INTEGRATION § 2.3](RIMWORLD_INTEGRATION.md#23-quest-questpart-questscriptdef-slate-questgen--limited-reuse-registry-quest-phase-3)).
+- **What is kept from the design's intent.** Vanilla map generation, combat, AI, factions and
+  transport handle all downstream gameplay. An optional, read-only "Quests tab mirror" can
+  present an opportunity as an informational quest later without owning it.
+- **Consequences.** Binding once the owner accepts it. If rejected, a spike would test
+  Network-owned `QuestScriptDef`s for opportunities against the concerns above before Phase 1.
+
+### ADR-026 · Source mod is contextual evidence, not ownership
+- **Decision.** Opportunity generation resolves plausible world context through a source
+  resolver inside `OpportunityService`. An item's source package is one signal among several
+  (with faction stance, defeated and hidden state, tech level, type, trade capability,
+  geography, archetype, world state, source knowledge and optional adapter hints). The master
+  § 15 hierarchy is the default prior, the draw is seeded, and "no credible source" is a valid
+  result ([ARCHITECTURE § 6.14.1](ARCHITECTURE.md#6141-opportunity-source-and-context-resolution)).
+- **Rejected.** Per-item or per-mod rules ("if `BOR_Tenebrite` then the Tenebral faction").
+  Treating a same-package faction as an automatic enemy or owner. Requiring any content mod.
+- **Consequences.** Tenebrite and "Weirdium" follow the same code. Compatibility adapters can
+  only add hints. A friendly same-package faction is a candidate owner or trader, never a
+  forced enemy.
+
+### ADR-027 · The deposit is committed cost, normally lost on failure
+- **Decision.** A procurement deposit (default half the price) pays for preparation, logistics,
+  transport, scouting, equipment, supplies, labour and accepted risk. It is normally lost on
+  in-world failure, catastrophic loss included, and on fraud unless later gameplay recovers it.
+  Cancellation after commitment forfeits part or all of it by the terms. Only technical
+  invalidation refunds it in full. Insurance recovers part of it and is never risk-free
+  ([STATE_MACHINES § 4.2](STATE_MACHINES.md#42-money-rules)).
+- **Rejected.** Refunding the deposit when the contractor is wiped out or dissolved ("nobody is
+  left to keep it"): that made catastrophic failure free and contradicted master § 21 and § 23.
+- **Consequences.** Failure hurts financially and still creates content through consequences
+  (last known location, rescue).

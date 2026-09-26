@@ -53,13 +53,13 @@ debug menu. No Harmony. Each action logs what it did and bumps `StateVersion`.
 |---|---|---|
 | Catalog | Rebuild item catalog · Explain item… · Catalog report (CSV) | 1 |
 | Inspect | Inspect actor… · Inspect character… · Inspect contract/operation… · Inspect opportunity… · Print knowledge of actor… · Print relations of actor… · Print summaries of actor… · Event journal (window) · History ledger (window) | 1–2 |
-| Intel | Resolve intel now… · Force archetype for the next resolution… · Force no-lead… · Reroll intel (nonce++) | 1 |
+| Intel | Resolve intel now… · Force archetype for the next resolution… · Force divergence class… · Force no-lead… · Explain source resolution for item… (candidates, evidence, filters, scores) · Reroll intel (nonce++) | 1 |
 | Opportunities | Materialize opportunity… · Expire now… · Force claim… · Spawn test opportunity at the selected tile | 1 |
 | Contractors | Create contractor (template…) · Set morale… · Set relationship A→B… · Kill leader… · Force retirement… · Force fragmentation… (Ph.6) · Force merger… (Ph.6) | 2 / 5 / 6 |
 | Contracts | Post a test procurement… · Force outcome band… · Force capture… · Force delay… · Force failed expedition site… (Ph.3) · Complete now… | 2–3 |
 | Custody | Materialize character… · Begin test deployment… · Reconcile deployment now… · Registry audit | 3 |
 | Simulate | Fast-forward N abstract days (runs scheduler handlers with no map ticking; dev only) · Simulate N thousand abstract contracts (headless resolver stats: band distribution, casualty rates, prices) | 2 |
-| Validate | Validate all (IDs, orphans, custody, scheduler, caps) · Quarantine report · Clear quarantine entry… | 1 |
+| Validate | Validate all (IDs, orphans, custody, scheduler, caps) · Quarantine report · Failed consumers report · Clear quarantine entry… | 1 |
 | Performance | Print timing report · Reset timing counters · Print counts vs caps | 1 |
 | Save | Prepare save for removal (also exposed in Mod Settings) | 1 |
 
@@ -83,7 +83,7 @@ the repair is safe.
 | **Lineage** | contract, opportunity and actor lineage graphs are acyclic; depth is within the cap | cut cycles and log |
 | **Roster arithmetic** | `committed ≤ healthy + wounded`; no negative counts | clamp and log |
 | **Money** | ledger sums are consistent with contract states | none (report only) |
-| **Caps** | history, journal, legends, characters and bound pawns are within caps | schedule a retention sweep |
+| **Caps** | history, journal, legends and characters are within caps; the bound-pawn **soft** cap is reported when exceeded (protected characters are never released to meet it) | schedule a retention sweep; release only unprotected dormant characters |
 
 ## 5. Timing instrumentation
 

@@ -43,7 +43,8 @@
 
 ## 1. Intel request
 
-The player's **interest**. It knows nothing about what exists in the world.
+The player's **interest**: an item topic and the contact asked, never a quantity. It knows
+nothing about what exists in the world.
 
 ```mermaid
 stateDiagram-v2
@@ -64,9 +65,9 @@ stateDiagram-v2
 
 | From | Trigger | Guard | To | Side effects | Event |
 |---|---|---|---|---|---|
-| Draft | `SubmitIntel` | topic eligible; source active; `Payment.CanCharge(fee)` | Submitted | charge fee (ledger); seed = Hash(networkSeed, id) | `Intel.Requested` |
+| Draft | `SubmitIntel` | topic eligible; source active and contactable (the Exchange, or a non-hostile faction contact); `Payment.CanCharge(fee)` | Submitted | charge fee (ledger); seed = Hash(networkSeed, id). Nothing about quantity is taken or stored. | `Intel.Requested` |
 | Submitted | same tick | — | Searching | `dueTick = now + Duration(seed, rarity, sourceQuality)`; schedule `intel.resolve` | — |
-| Searching | `intel.resolve` job | topic resolves; source not dissolved | ResolvedLead / ResolvedNoLead | commit `outcome`; on a lead: `Opportunities.Generate` → `Lead` → optionally `Materialize` | `Intel.Resolved` / `Intel.NoLead` |
+| Searching | `intel.resolve` job | topic resolves; source not dissolved | ResolvedLead / ResolvedNoLead | commit `outcome`; on a lead: commit the hidden divergence class, then `Opportunities.Generate` (the source resolver may still find no credible source → ResolvedNoLead) → `Lead` → optionally `Materialize`. The fee is kept either way. | `Intel.Resolved` / `Intel.NoLead` |
 | Searching | `CancelIntel` | — | Cancelled | refund per policy (default 50% if under half the search time has elapsed, else 0) | `Intel.Cancelled` |
 | Submitted, Searching | validator / resolve-time check | `DefRef` missing, or source actor ended | Invalidated | full refund (the player did nothing wrong); explanatory letter | `Intel.Invalidated` |
 | ResolvedLead | all leads Closed | — | Closed | — | — |
@@ -81,8 +82,14 @@ stateDiagram-v2
 - Optional flavour: `Intel.SearchProgressed` updates at 1–2 seeded midpoints ("a contact in the
   south has heard something"). They are cosmetic and committed at submit time from the seed, so
   they never change the outcome.
-- A request never holds "the loot". It holds `LeadId`s. What the lead points at is decided by
-  the opportunity generator using world state at resolution.
+- A request never holds "the loot". It holds `LeadId`s. What the lead points at, and how much
+  of the item exists there, is decided by the opportunity generator using world state at
+  resolution. A lead is never guaranteed to be accurate (master § 12).
+- After a lead the player may pursue it, ignore it (it expires with its opportunity), abandon it
+  (it closes) or keep waiting for another lead (master § 11). Keeping the same request searching
+  without a new fee is an open design question
+  ([ARCHITECTURE § 14.3](ARCHITECTURE.md#143-still-open)); until it is decided, "keep waiting"
+  is a new request.
 
 ---
 
@@ -106,7 +113,7 @@ stateDiagram-v2
   Revealed --> Materialized : site created (Phase 1: immediately)
   Latent --> Materialized : world-event opportunities (no lead)
   Materialized --> Engaged : player map generated at site
-  Engaged --> Claimed : player left with (some of) the payload
+  Engaged --> Claimed : player left with some or all of the payload (defenders may still be alive)
   Engaged --> Abandoned : map removed, nothing taken
   Materialized --> Expired : timeout, no map
   Materialized --> LostToCompetitor : competitor operation resolved first (Ph.4+)
@@ -131,18 +138,28 @@ stateDiagram-v2
 | Revealed / Latent | `Materialize` | Materialized | `SiteAdapter.Create` (vanilla Site + parts + timeout + comp binding + quest tag); store `WorldObjectRef` | `Opportunity.Materialized` |
 | Materialized | comp `PostMapGenerate` | Engaged | `firstEngagedTick`; Lead becomes Pursued | `Opportunity.Engaged` |
 | Engaged | comp `PostCaravanFormed` | (same) | tally the payload def in the caravan into `playerClaimedCounts` | — |
-| Engaged | comp `PostMyMapRemoved` | Claimed if tally > 0, else Abandoned | finalize; the site world object is usually removed by vanilla | `Opportunity.Claimed` / `.Abandoned` |
+| Engaged | comp `PostMyMapRemoved` | Claimed if tally > 0, else Abandoned | finalize `recoveredBand` for the target payload; the site world object is usually removed by vanilla | `Opportunity.Claimed` / `.Abandoned` |
 | Materialized | comp `PostDestroy` with no map ever | Expired (timeout passed) or Destroyed | — | `.Expired` / `.Destroyed` |
 | Materialized | reconciliation: `WorldObjectRef` unresolvable | Vanished | treated like Destroyed; one info log | `.Destroyed` |
 | any non-terminal | ref check | Invalidated | the site (if any) is left for vanilla to time out; explanatory letter | `.Invalidated` |
 | terminal | 1-day job | Closed | Lead becomes Closed; the request may close | — |
+
+**Acquisition, not extermination.** No transition waits for the defenders to die. Taking only
+part of the target payload and leaving with defenders still alive is `Claimed` with a partial
+`recoveredBand`, and history records a partial recovery, not a defeat. Arriving, judging the site
+too dangerous and leaving empty-handed is `Abandoned`. Whether the chosen vanilla site
+composition really permits this (the caravan or pods can leave, recovered items stay recovered,
+nothing duplicates, cleanup is sane) is Spike S19. If it does not, the fix is a different vanilla
+composition or a minimal Network site part, not a change to this machine.
 
 **Claim accounting (Phase 1).** The count is approximate by design (*avoid false precision*):
 the sum of the payload def carried out in caravans formed from the site map, plus a
 **fallback sample** of how much payload remains on the map. The fallback is taken by a
 low-frequency job, every 2,500 ticks, **only while that site map exists**. It covers departures
 by transport pods, shuttles or gravships, which do not fire `PostCaravanFormed`. The history
-text uses coarse phrases ("recovered most of the cache").
+text uses coarse phrases ("recovered part of the cache", "recovered most of the cache"). Each
+caravan departure is tallied once; items that come back onto the map are not counted again,
+because the fallback measures what is left rather than adding to the tally.
 
 **Player settles the site** (`Notify_MyMapSettled`): the opportunity is treated as Claimed with
 the remaining sampled amount, and the site becomes the player's.
@@ -164,8 +181,10 @@ stateDiagram-v2
   Delayed --> Active
   Active --> Renegotiating : contractor asks new terms
   Delayed --> Renegotiating
-  Renegotiating --> Active : issuer accepts
+  Renegotiating --> Active : issuer pays, or accepts reduced scope
   Renegotiating --> Failed : issuer refuses & contractor walks
+  Renegotiating --> Cancelled : issuer cancels (terms apply)
+  Renegotiating --> PartiallyFulfilled : partial result accepted
   Active --> Troubled : missing / captured / stranded
   Troubled --> Active : recovered in time
   Active --> Fulfilled
@@ -207,6 +226,15 @@ a **new** contract with lineage:
 `Troubled` is **not** terminal. It gives the story room to branch (a rescue can save the
 contract) without forcing failure.
 
+**Renegotiation and partial results are the client's choice** (master § 23). When a contractor
+reports "much worse than expected", the issuer may pay more, refuse, cancel or accept a reduced
+scope. When a contractor brings back only part of the goods, the contract waits in
+`Renegotiating` (reason `PartialResult`) for the issuer to accept the partial delivery at an
+adjusted price (→ `PartiallyFulfilled`), accept it and request continuation (→
+`PartiallyFulfilled` plus a linked continuation contract for the remainder), or renegotiate. NPC
+issuers decide through their own logic. A grace timer applies a kind-defined default if the
+player does not answer.
+
 **Faction relation changes during an active contract** are handled by **checkpoint checks**,
 not event subscriptions. At award, at each operation checkpoint, at delivery and at payment, the
 contract re-checks the political conditions defined by its kind: the issuer is still
@@ -224,17 +252,20 @@ own knowledge stands in for leads.
 
 ### 4.1 Lifecycle mapping
 
-| Brief concept | Machine representation |
+| Concept (Phase 0 brief, master § 22–24) | Machine representation |
 |---|---|
 | draft · posted · accepting bids | `Draft` · `Posted` · `Bidding` |
+| open contract (any eligible contractor) | `parties.invited` empty; bidding among eligible contractors, and the population manager may introduce a new group as a bidder (master § 64) |
+| direct contract (hire a known group) | `parties.invited = [group]`; only invited actors are evaluated |
+| premium / sponsored contract | open or direct, plus `terms.contributions` (silver, or items as leases) feeding the resolver's sponsorship input |
 | assigned | `Awarded` |
 | preparing · active | `Active` with `Operation.phase = Preparing / Transit / Engaged` |
 | delayed | `Delayed` |
 | renegotiation | `Renegotiating` |
 | missing · captured · stranded | `Troubled` + `Operation.status = Troubled(kind)` |
-| catastrophic loss | `Operation.outcome.band = Disaster` → `Failed(cause=CatastrophicLoss)` |
+| catastrophic loss | `Operation.outcome.band = Disaster` → `Failed(cause=CatastrophicLoss)`; a battle site / last known location may follow |
 | fraud / betrayal | `Failed(cause=Fraud)` or `Failed(cause=Betrayal)`; history Major; relations; gossip |
-| partial success | `PartiallyFulfilled` |
+| partial success | `Renegotiating(PartialResult)`, then `PartiallyFulfilled` (± a continuation contract) by the client's choice (§ 3) |
 | success | `Fulfilled` |
 | failed | `Failed(cause)` |
 | recovery opportunity · continuation | new Opportunity or Contract through lineage (§ 3) |
@@ -242,15 +273,22 @@ own knowledge stands in for leads.
 
 ### 4.2 Money rules
 
+The deposit is **committed cost**, not escrow: preparation, logistics, transport, scouting,
+equipment, supplies, labour and accepted risk. Failure must hurt (master § 21, § 23, § 61).
+The default split is half on award and half on delivery; terms may vary it. Exact percentages
+are tuning.
+
 | Moment | Rule |
 |---|---|
 | **Award** | Deposit charged (`Payment.Charge`). If the player cannot pay, the award is refused with reason `CannotAffordDeposit`. |
 | **Delivery (full)** | Balance charged. If the player cannot pay, `Payment.Defaulted`: the contractor applies its doctrine (§ 4.3). |
-| **Partial delivery** | Balance is pro-rated by delivered/required, minus penalties from the terms. Insurance can refund part of the deposit for the undelivered portion. |
-| **Cancellation by issuer** | Before award: free. After award, before Engaged: the deposit is forfeited. After Engaged: deposit forfeited plus a kind-defined penalty (can become a debt obligation). |
-| **Contractor wiped out or dead** | `Failed(ContractorWipedOut)`. Insurance pays out per coverage. The deposit is refunded when the contractor is dissolved (there is nobody to keep it), otherwise it is forfeit. |
-| **Fraud** | Deposit lost. Relation and sanction consequences. Possible hunt follow-up. |
-| **Voided (item Def removed)** | Full deposit refund (by drop pod to a player home map, or held as a credit obligation if no home map exists). The history record keeps the snapshot label. |
+| **Partial delivery** | By the client's choice (§ 3): the balance is pro-rated by delivered/required, minus penalties from the terms. Insurance can recover part of the deposit for the undelivered portion. |
+| **Mission failure, including catastrophic loss** (contractor wiped out, dead, retreated with nothing) | `Failed(cause)`. **The deposit is normally lost.** Insurance recovers part of it per coverage. Failure also feeds consequences (a last known location, a rescue, a battle site), not a refund. |
+| **Fraud / betrayal** | `Failed(Fraud / Betrayal)`. **Deposit lost**, unless later gameplay recovers it (a hunt or recovery follow-up can return money or cargo). Relation and sanction consequences. Insurance applies only as its terms say. |
+| **Contractor ends before any work begins** (dissolved or absorbed while `Awarded`) | Treated as an in-world failure: a successor or the absorbing org may honour the contract (successor inheritance, § 3); otherwise the deposit is lost. Open for owner review ([ARCHITECTURE § 14.3](ARCHITECTURE.md#143-still-open)). |
+| **Cancellation by issuer** | Before award: free. After award (commitment), the deposit is **partly or fully forfeited according to the terms** (`refundPolicyKey`); after Engaged, a kind-defined penalty may be added (it can become a debt obligation). |
+| **Technical invalidation** (item Def removed, the requested mod gone, the Network can no longer legally execute the contract, the save is prepared for removal) | `Voided`. **Full deposit refund**, because this is not an in-world failure (by drop pod to a player home map, or held as a credit obligation if no home map exists). The history record keeps the snapshot label. |
+| **Insurance** (optional, master § 62) | A premium buys partial recovery of the deposit on covered failures. `coverage < 1`: it never makes a contract risk-free. |
 
 ### 4.3 Player bankruptcy (cannot pay the balance)
 
