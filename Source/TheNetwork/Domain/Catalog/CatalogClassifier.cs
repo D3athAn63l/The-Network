@@ -104,6 +104,9 @@ namespace TheNetwork.Domain.Catalog
         public bool mineable;
         public bool questRewardTag;
 
+        /// <summary>Cheapest recipe input value per unit produced; -1 when no recipe was readable (valuation signal).</summary>
+        public float recipeInputValue = -1f;
+
         public bool HasLabel => !string.IsNullOrEmpty(label);
         public bool Tradeable => !tradeabilityNone || tradeTagCount > 0;
         public bool IsLudeon => isCore || isOfficialDlc;

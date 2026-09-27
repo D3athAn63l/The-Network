@@ -516,6 +516,63 @@ namespace TheNetwork.Domain.Opportunities
             return opp;
         }
 
+        /// <summary>
+        /// Consequence Engine v0: a last known location, through the same generation and site machinery
+        /// as an Intel lead. The target payload is what the contractor had secured (the committed stuff and
+        /// quality when known), possibly nothing; extra cargo and the threat come from the generator, with
+        /// the threat profile optionally taken from what stopped them. No lead: the letter reports it.
+        /// </summary>
+        public Opportunity GenerateFollowUp(ItemFacts facts, int lostCount, ItemPayload lostCargo, int seed, EntityRef originRef, int depth, string threatProfile, out string failure)
+        {
+            failure = null;
+            GenerationInput input = new GenerationInput
+            {
+                item = facts,
+                divergence = LeadDivergence.Accurate,
+                baseThreatPoints = ctx.world.BaseThreatPoints(),
+                factions = ctx.world.LiveFactions(),
+                extraCargoPool = ctx.catalog.ExtraCargoPool(Math.Max(facts.techLevel, 4)),
+                seed = seed
+            };
+            OpportunityDraft draft = OpportunityGenerator.Generate(input);
+            if (draft.NoCredibleLead)
+            {
+                failure = "NoCredibleSource";
+                return null;
+            }
+            draft.targetCount = Math.Max(0, lostCount);
+            TileRef tile;
+            if (!ctx.sites.TryFindTile(NetHash.Combine(seed, "tile"), TileMinDist, TileMaxDist, out tile))
+            {
+                failure = "NoSiteTile";
+                return null;
+            }
+            Opportunity opp = Commit(draft, facts, tile, seed, OpportunityOrigin.ConsequenceRule, originRef);
+            opp.lineageDepth = depth;
+            ItemPayload target = opp.Target;
+            if (target != null && lostCargo != null)
+            {
+                if (lostCargo.stuff != null) target.stuff = lostCargo.stuff.Copy();
+                target.qualityBand = lostCargo.qualityBand;
+            }
+            if (!string.IsNullOrEmpty(threatProfile) && opp.threat.factionUsed != null) opp.threat.profileKey = threatProfile;
+            MaterializeResult mat = ctx.sites.Materialize(opp);
+            if (!mat.ok)
+            {
+                failure = mat.failureReason ?? "SiteFailed";
+                if (mat.thingCreationFailed && mat.failedDefName != null) ctx.catalog.MarkUnusable(mat.failedDefName, mat.failureReason);
+                Invalidate(opp, "MaterializeFailed", sendLetter: false);
+                return null;
+            }
+            opp.site = mat.site;
+            if (!string.IsNullOrEmpty(mat.threatProfileUsed)) opp.threat.profileKey = mat.threatProfileUsed;
+            Transition(opp, OpportunityState.Revealed);
+            Transition(opp, OpportunityState.Materialized);
+            PublishOpp(EventKeys.OpportunityMaterialized, Importance.Minor, opp, null);
+            ScheduleTimers(opp);
+            return opp;
+        }
+
         /// <summary>Dev: resolve an engaged or materialized opportunity as if the player left with a share of the target.</summary>
         public void DevForceResolve(Opportunity opp, float share)
         {

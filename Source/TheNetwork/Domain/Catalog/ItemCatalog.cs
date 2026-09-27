@@ -42,14 +42,14 @@ namespace TheNetwork.Domain.Catalog
                 if (f == null || string.IsNullOrEmpty(f.defName) || byDefName.ContainsKey(f.defName)) continue;
                 float median;
                 medians.TryGetValue(f.topCategoryLabel ?? "", out median);
-                CatalogEntry e = new CatalogEntry { facts = f, classification = CatalogClassifier.Classify(f, median), item = ToItemFacts(f) };
+                CatalogEntry e = new CatalogEntry { facts = f, classification = CatalogClassifier.Classify(f, median), item = ToItemFacts(f, median) };
                 entries.Add(e);
                 byDefName[f.defName] = e;
             }
             entries.Sort((a, b) => string.Compare(a.Label, b.Label, StringComparison.OrdinalIgnoreCase));
         }
 
-        public static ItemFacts ToItemFacts(CatalogFacts f)
+        public static ItemFacts ToItemFacts(CatalogFacts f, float categoryMedian = 0f)
         {
             return new ItemFacts
             {
@@ -70,7 +70,9 @@ namespace TheNetwork.Domain.Catalog
                 craftable = f.craftable,
                 tradeable = f.Tradeable,
                 unique = f.questRewardTag && !f.craftable && !f.Tradeable,
-                mineable = f.mineable
+                mineable = f.mineable,
+                categoryMedian = categoryMedian,
+                recipeInputValue = f.recipeInputValue
             };
         }
 

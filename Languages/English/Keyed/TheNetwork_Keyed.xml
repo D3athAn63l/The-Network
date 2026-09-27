@@ -293,6 +293,6 @@
   <TheNetwork_Settings_DuplicateName>Another active entry already has this name. It is allowed, but may be confusing.</TheNetwork_Settings_DuplicateName>
   <TheNetwork_Provenance_Generated>generated</TheNetwork_Provenance_Generated>
   <TheNetwork_Provenance_Custom>custom</TheNetwork_Provenance_Custom>
-  <TheNetwork_RemovalSummary>The Network is prepared for removal: {0} sites turned into ordinary sites, {1} searches called off, {2} silver refunded. Save the game now, then disable the mod and reload.</TheNetwork_RemovalSummary>
+  <TheNetwork_RemovalSummary>The Network is prepared for removal: {0} sites turned into ordinary sites, {1} searches and contracts called off, {2} silver refunded. Save the game now, then disable the mod and reload.</TheNetwork_RemovalSummary>
 
 </LanguageData>

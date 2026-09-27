@@ -96,11 +96,15 @@ namespace TheNetwork.Core
                 ledger = State.history,
                 relations = State.relations,
                 knowledge = State.knowledge,
+                contracts = State.contracts,
+                operations = State.operations,
+                consequences = State.consequences,
                 catalog = new LazyCatalog(),
                 comms = new CommsAccessAdapter(),
                 payment = new PaymentAdapter(),
                 world = WorldFacts,
-                sites = SiteAdapter
+                sites = SiteAdapter,
+                delivery = new DropPodDelivery()
             };
             Ctx.Actors = new ActorService(Ctx);
             Ctx.Intel = new IntelService(Ctx);
@@ -109,12 +113,16 @@ namespace TheNetwork.Core
             Ctx.Upkeep = new Domain.Contractors.UpkeepService(Ctx);
             Ctx.Relations = new Domain.Relations.RelationService(Ctx);
             Ctx.Knowledge = new Domain.Knowledge.KnowledgeService(Ctx);
+            Ctx.Procurement = new Domain.Contracts.ProcurementService(Ctx);
+            Ctx.Operations = new Domain.Operations.OperationService(Ctx);
+            Ctx.Consequences = new Domain.Consequences.ConsequenceEngine(Ctx);
+            RegisterContractKinds();
             Ctx.tuning.targetProvider = () => NetworkMod.Settings?.targetContractorCount ?? 100;
 
             History = new HistoryService(State.history, State.summaries, State.actors, root.ids, clock, root.networkSeed);
             Sites = new SiteCallbacks(Ctx, SiteAdapter);
             Signals = new SignalBridge(Ctx);
-            Compaction = new CompactionService(State, Scheduler, clock);
+            Compaction = new CompactionService(State, Scheduler, clock, Ctx);
             Commands = new NetworkCommands(this);
             Read = new NetworkReadModels(this);
 
@@ -136,13 +144,43 @@ namespace TheNetwork.Core
             Scheduler.RegisterKind(JobKinds.RefundRetry, Ctx.Intel.RetryRefunds, true, false);
             Scheduler.RegisterKind(JobKinds.ContractorUpkeep, Ctx.Upkeep.UpkeepJob, true, true);
             Scheduler.RegisterKind(JobKinds.PopulationWeekly, Ctx.Upkeep.PopulationJobRun, true, true);
+            RegisterPhaseTwoJobs(Scheduler, Ctx);
             Scheduler.OnJobFailed = OnJobFailed;
+        }
+
+        /// <summary>Phase 2 contract and operation jobs (shared with the headless test harness). All state-guarded.</summary>
+        public static void RegisterPhaseTwoJobs(NetScheduler scheduler, DomainContext ctx)
+        {
+            scheduler.RegisterKind(JobKinds.ContractBidding, ctx.Procurement.RunBiddingPass, true, true);
+            scheduler.RegisterKind(JobKinds.ContractOffers, ctx.Procurement.ExpireOffers, true, true);
+            scheduler.RegisterKind(JobKinds.ContractExpire, ctx.Procurement.ExpireJobRun, true, true);
+            scheduler.RegisterKind(JobKinds.ContractDecision, ctx.Procurement.DecisionJobRun, true, true);
+            scheduler.RegisterKind(JobKinds.ContractDelivery, ctx.Procurement.DeliveryJobRun, true, true);
+            scheduler.RegisterKind(JobKinds.ContractRefund, ctx.Procurement.RetryRefunds, true, false);
+            scheduler.RegisterKind(JobKinds.OperationCheckpoint, ctx.Operations.RunCheckpoint, true, true);
+            scheduler.RegisterKind(JobKinds.OperationTroubled, ctx.Operations.TroubledDeadline, true, true);
+            scheduler.RegisterKind(JobKinds.ConsequenceFollowUp, ctx.Consequences.FollowUpJobRun, true, false);
+        }
+
+        /// <summary>Contract kind rules from XML (NetworkContractKindDef); the built-in Procurement rules otherwise.</summary>
+        private static void RegisterContractKinds()
+        {
+            try
+            {
+                List<NetworkContractKindDef> defs = Verse.DefDatabase<NetworkContractKindDef>.AllDefsListForReading;
+                for (int i = 0; i < defs.Count; i++) Domain.Contracts.ContractKindRegistry.Register(Domain.Contracts.ContractKindRules.From(defs[i]));
+            }
+            catch (Exception ex)
+            {
+                NetLog.WarnOnce(LogCategory.Contracts, "kinddefs", "Could not read contract kind defs; using built-in rules: " + ex.Message);
+            }
         }
 
         private void RegisterConsumers()
         {
             Bus.Register(ConsumerOrder.History, History, HistoryService.ConsumedKeys);
             Bus.Register(ConsumerOrder.Relationships, Ctx.Relations, Domain.Relations.RelationService.ConsumedKeys);
+            Bus.Register(ConsumerOrder.Consequences, Ctx.Consequences, Domain.Consequences.ConsequenceEngine.ConsumedKeys);
             Bus.Register(ConsumerOrder.Presentation, new LetterConsumer(Ctx), LetterConsumer.ConsumedKeys);
         }
 
@@ -163,6 +201,24 @@ namespace TheNetwork.Core
             else if (job.kind.StartsWith("opp.", StringComparison.Ordinal))
             {
                 Opportunity o = State.opportunities.Get(new OpportunityId(job.target));
+                if (o != null && o.quarantinedReason == null)
+                {
+                    o.quarantinedReason = reason;
+                    entity = o.id.Ref;
+                }
+            }
+            else if (job.kind.StartsWith("contract.", StringComparison.Ordinal) || job.kind.StartsWith("consequence.", StringComparison.Ordinal))
+            {
+                Domain.Contracts.Contract c = State.contracts.Get(new ContractId(job.target));
+                if (c != null && c.quarantinedReason == null)
+                {
+                    c.quarantinedReason = reason;
+                    entity = c.id.Ref;
+                }
+            }
+            else if (job.kind.StartsWith("operation.", StringComparison.Ordinal))
+            {
+                Domain.Operations.Operation o = State.operations.Get(new OperationId(job.target));
                 if (o != null && o.quarantinedReason == null)
                 {
                     o.quarantinedReason = reason;

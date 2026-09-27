@@ -23,6 +23,15 @@ namespace TheNetwork.Domain
         // Phase 2 (SIMULATION § 2).
         public const string ContractorUpkeep = ContractorService.UpkeepJob;
         public const string PopulationWeekly = UpkeepService.PopulationJob;
+        public const string ContractBidding = Contracts.ProcurementService.BiddingJob;
+        public const string ContractOffers = Contracts.ProcurementService.OffersJob;
+        public const string ContractExpire = Contracts.ProcurementService.ExpireJob;
+        public const string ContractDecision = Contracts.ProcurementService.DecisionJob;
+        public const string ContractDelivery = Contracts.ProcurementService.DeliveryJob;
+        public const string ContractRefund = Contracts.ProcurementService.RefundJob;
+        public const string OperationCheckpoint = Operations.OperationService.CheckpointJob;
+        public const string OperationTroubled = Operations.OperationService.TroubledJob;
+        public const string ConsequenceFollowUp = Consequences.ConsequenceEngine.FollowUpJob;
 
         public const int SamplePeriod = 2500;
         public const int SweepPeriod = Ticks.PerQuadrum;
@@ -70,6 +79,9 @@ namespace TheNetwork.Domain
         public History.HistoryLedger ledger;
         public Relations.RelationStore relations;
         public Knowledge.KnowledgeStore knowledge;
+        public Contracts.ContractStore contracts;
+        public Operations.OperationStore operations;
+        public Consequences.ConsequenceStore consequences;
         public NetworkTuning tuning = new NetworkTuning();
 
         public ICatalog catalog;
@@ -77,6 +89,7 @@ namespace TheNetwork.Domain
         public IPayment payment;
         public IWorldFacts world;
         public ISiteAdapter sites;
+        public IDelivery delivery;
 
         public ActorService Actors;
         public IntelService Intel;
@@ -85,6 +98,9 @@ namespace TheNetwork.Domain
         public UpkeepService Upkeep;
         public Relations.RelationService Relations;
         public Knowledge.KnowledgeService Knowledge;
+        public Contracts.ProcurementService Procurement;
+        public Operations.OperationService Operations;
+        public Consequences.ConsequenceEngine Consequences;
 
         public int Now => clock.Now;
     }
@@ -107,6 +123,31 @@ namespace TheNetwork.Domain
     public static class ServiceToggles
     {
         public static bool IntelEnabled = true;
+        public static bool ProcurementEnabled = true;
+    }
+
+    /// <summary>
+    /// Dev-mode overrides for contracts and operations (DEBUGGING § 3). Runtime only, never saved, consumed
+    /// by the next matching decision. They replace a draw; they never skip a state or its bookkeeping.
+    /// </summary>
+    public static class ProcurementDevOverrides
+    {
+        public static Operations.OutcomeBand? forceBand;
+        public static int? forceSecured;
+        public static string forceTroubled;
+        public static bool forceWorseThanExpected;
+        public static bool forceFollowUp;
+        public static bool forceNewcomer;
+
+        public static void Clear()
+        {
+            forceBand = null;
+            forceSecured = null;
+            forceTroubled = null;
+            forceWorseThanExpected = false;
+            forceFollowUp = false;
+            forceNewcomer = false;
+        }
     }
 
     /// <summary>

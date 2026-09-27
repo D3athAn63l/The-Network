@@ -218,5 +218,25 @@ namespace TheNetwork.Domain.Contractors
             }
             return add;
         }
+
+        public const int NewcomerCooldownTicks = 5 * Ticks.PerDay;
+        public const float NewcomerChance = 0.06f;
+
+        /// <summary>
+        /// An Open contract's thin candidate pool (or a seeded chance) may bring a NEW persistent
+        /// contractor into the world as a bidder (SIMULATION § 5.2, master § 64). Never on every contract:
+        /// a cooldown, a population ceiling and the contract's own seed decide.
+        /// </summary>
+        public NetworkActor TryNewcomerBidder(int contractSeed, int round, bool thinPool)
+        {
+            bool forced = ProcurementDevOverrides.forceNewcomer;
+            ProcurementDevOverrides.forceNewcomer = false;
+            int last = ctx.actors.lastNewcomerBidderTick;
+            if (!forced && last >= 0 && ctx.Now - last < NewcomerCooldownTicks) return null;
+            if (!forced && ActiveContractorCount() >= Math.Max(1, (int)(ctx.tuning.targetContractorCount * 1.25f))) return null;
+            if (!forced && !thinPool && !new NetRng(contractSeed, "newcomer", round).Chance(NewcomerChance)) return null;
+            ctx.actors.lastNewcomerBidderTick = ctx.Now;
+            return ctx.Contractors.CreateWorldGenerated(ctx.actors.worldGeneratedCount++, "NewcomerBidder");
+        }
     }
 }

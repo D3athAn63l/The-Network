@@ -25,15 +25,15 @@ namespace TheNetwork.Core
         public ReservedStore contacts = new ReservedStore();
         public IntelStore intel = new IntelStore();
         public OpportunityStore opportunities = new OpportunityStore();
-        public ReservedStore contracts = new ReservedStore();
-        public ReservedStore operations = new ReservedStore();
+        public Domain.Contracts.ContractStore contracts = new Domain.Contracts.ContractStore();
+        public Domain.Operations.OperationStore operations = new Domain.Operations.OperationStore();
         public ReservedStore deployments = new ReservedStore();
         public ReservedStore leases = new ReservedStore();
         public HistoryLedger history = new HistoryLedger();
         public SummaryStore summaries = new SummaryStore();
         public ReservedStore legends = new ReservedStore();
         public ReservedStore beliefs = new ReservedStore();
-        public ReservedStore consequences = new ReservedStore();
+        public Domain.Consequences.ConsequenceStore consequences = new Domain.Consequences.ConsequenceStore();
         public SchedulerState scheduler = new SchedulerState();
         public EventJournal journal = new EventJournal();
         public DiagnosticsState diagnostics = new DiagnosticsState();
@@ -54,15 +54,15 @@ namespace TheNetwork.Core
             Store(ref contacts, "contacts", null, failures);
             Store(ref intel, "intel", "intel", failures);
             Store(ref opportunities, "opportunities", "opportunities", failures);
-            Store(ref contracts, "contracts", null, failures);
-            Store(ref operations, "operations", null, failures);
+            Store(ref contracts, "contracts", "contracts", failures);
+            Store(ref operations, "operations", "operations", failures);
             Store(ref deployments, "deployments", null, failures);
             Store(ref leases, "leases", null, failures);
             Store(ref history, "history", "history", failures);
             Store(ref summaries, "summaries", "history", failures);
             Store(ref legends, "legends", null, failures);
             Store(ref beliefs, "beliefs", null, failures);
-            Store(ref consequences, "consequences", null, failures);
+            Store(ref consequences, "consequences", "consequences", failures);
             Store(ref scheduler, "scheduler", "scheduler", failures);
             Store(ref journal, "journal", null, failures);
             Store(ref diagnostics, "diagnostics", null, failures);
@@ -90,6 +90,8 @@ namespace TheNetwork.Core
             relations.RebuildIndex();
             intel.RebuildIndex();
             opportunities.RebuildIndex();
+            contracts.RebuildIndex();
+            operations.RebuildIndex();
             summaries.RebuildIndex();
         }
     }

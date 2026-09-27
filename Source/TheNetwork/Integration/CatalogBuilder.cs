@@ -37,12 +37,24 @@ namespace TheNetwork.Integration
         {
             long t0 = Stopwatch.GetTimestamp();
             HashSet<ThingDef> products = new HashSet<ThingDef>();
+            Dictionary<ThingDef, float> inputValues = new Dictionary<ThingDef, float>();
             List<RecipeDef> recipes = DefDatabase<RecipeDef>.AllDefsListForReading;
             for (int i = 0; i < recipes.Count; i++)
             {
                 List<ThingDefCountClass> p = recipes[i].products;
                 if (p == null) continue;
-                for (int k = 0; k < p.Count; k++) if (p[k]?.thingDef != null) products.Add(p[k].thingDef);
+                float input = -1f;
+                for (int k = 0; k < p.Count; k++)
+                {
+                    ThingDefCountClass product = p[k];
+                    if (product?.thingDef == null) continue;
+                    products.Add(product.thingDef);
+                    if (input < 0f) input = RecipeInputValue(recipes[i]);
+                    if (input <= 0f || product.count <= 0) continue;
+                    float perUnit = input / product.count;
+                    float known;
+                    if (!inputValues.TryGetValue(product.thingDef, out known) || perUnit < known) inputValues[product.thingDef] = perUnit;
+                }
             }
             HashSet<ThingDef> mineables = new HashSet<ThingDef>();
             List<ThingDef> defs = DefDatabase<ThingDef>.AllDefsListForReading;
@@ -61,7 +73,10 @@ namespace TheNetwork.Integration
                 // Ineligible cheaply (and kept so "explain item" can say why).
                 try
                 {
-                    facts.Add(FactsOf(d, products, mineables));
+                    CatalogFacts f = FactsOf(d, products, mineables);
+                    float input;
+                    if (inputValues.TryGetValue(d, out input)) f.recipeInputValue = input;
+                    facts.Add(f);
                 }
                 catch (Exception ex)
                 {
@@ -125,6 +140,45 @@ namespace TheNetwork.Integration
                 f.marketValue = MarketValue(d);
             }
             return f;
+        }
+
+        /// <summary>
+        /// The value of a recipe's cheapest allowed ingredients (a sanity signal for valuation, never a
+        /// price). Ingredients with very broad filters are skipped rather than scanned; -1 when unreadable.
+        /// </summary>
+        private static float RecipeInputValue(RecipeDef r)
+        {
+            try
+            {
+                List<IngredientCount> ings = r.ingredients;
+                if (ings == null || ings.Count == 0) return -1f;
+                float total = 0f;
+                for (int i = 0; i < ings.Count; i++)
+                {
+                    IngredientCount ing = ings[i];
+                    if (ing?.filter == null) continue;
+                    float count = ing.GetBaseCount();
+                    if (count <= 0f) continue;
+                    if (ing.IsFixedIngredient)
+                    {
+                        total += ing.FixedIngredient.BaseMarketValue * count;
+                        continue;
+                    }
+                    if (ing.filter.AllowedDefCount > 64) continue;
+                    float cheapest = -1f;
+                    foreach (ThingDef t in ing.filter.AllowedThingDefs)
+                    {
+                        float v = t.BaseMarketValue;
+                        if (v > 0f && (cheapest < 0f || v < cheapest)) cheapest = v;
+                    }
+                    if (cheapest > 0f) total += cheapest * count;
+                }
+                return total > 0f ? total : -1f;
+            }
+            catch (Exception)
+            {
+                return -1f;
+            }
         }
 
         private static bool SafeBool(Func<bool> read)

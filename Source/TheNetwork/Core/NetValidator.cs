@@ -83,6 +83,9 @@ namespace TheNetwork.Core
             for (int i = 0; i < s.intel.requests.Count; i++) Check(s.intel.requests[i].id.Value, "intel", seen, next, report, e => s.intel.requests[e].quarantinedReason = "DuplicateId", i);
             for (int i = 0; i < s.intel.leads.Count; i++) Check(s.intel.leads[i].id.Value, "lead", seen, next, report, e => s.intel.leads[e].quarantinedReason = "DuplicateId", i);
             for (int i = 0; i < s.opportunities.opportunities.Count; i++) Check(s.opportunities.opportunities[i].id.Value, "opportunity", seen, next, report, e => s.opportunities.opportunities[e].quarantinedReason = "DuplicateId", i);
+            for (int i = 0; i < s.contracts.contracts.Count; i++) Check(s.contracts.contracts[i].id.Value, "contract", seen, next, report, e => s.contracts.contracts[e].quarantinedReason = "DuplicateId", i);
+            for (int i = 0; i < s.contracts.offers.Count; i++) Check(s.contracts.offers[i].id.Value, "offer", seen, next, report, e => s.contracts.offers[e].quarantinedReason = "DuplicateId", i);
+            for (int i = 0; i < s.operations.operations.Count; i++) Check(s.operations.operations[i].id.Value, "operation", seen, next, report, e => s.operations.operations[e].quarantinedReason = "DuplicateId", i);
         }
 
         private static void Check(int id, string kind, HashSet<int> seen, int next, ValidationReport report, System.Action<int> quarantine, int index)
@@ -122,6 +125,14 @@ namespace TheNetwork.Core
                     report.Add("Intel " + r.id + ": source " + r.source + " gone; invalidated with refund.", true);
                 }
             }
+            List<string> contractFindings = new List<string>();
+            ctx.Procurement.InvalidateMissing(def =>
+            {
+                bool ok = DefResolver<ThingDef>.Get(def) != null;
+                if (!ok) Count(report, def);
+                return ok;
+            }, contractFindings);
+            for (int i = 0; i < contractFindings.Count; i++) report.Add(contractFindings[i], true);
             List<Opportunity> opps = new List<Opportunity>(s.opportunities.opportunities);
             for (int i = 0; i < opps.Count; i++)
             {
@@ -266,6 +277,9 @@ namespace TheNetwork.Core
                     report.Add("Opportunity " + o.id + ": close job missing; recreated.", true);
                 }
             }
+            List<string> contractJobs = new List<string>();
+            rt.Ctx.Procurement.EnsureJobs(contractJobs);
+            for (int i = 0; i < contractJobs.Count; i++) report.Add(contractJobs[i], true);
             // Jobs whose target is gone.
             List<ScheduledJob> orphans = new List<ScheduledJob>();
             foreach (ScheduledJob j in sch.AllJobs)
@@ -274,6 +288,7 @@ namespace TheNetwork.Core
                 bool live = true;
                 if (j.kind.StartsWith("intel.", System.StringComparison.Ordinal) || j.kind == JobKinds.RefundRetry) live = s.intel.Get(new IntelRequestId(j.target)) != null;
                 else if (j.kind.StartsWith("opp.", System.StringComparison.Ordinal)) live = s.opportunities.Get(new OpportunityId(j.target)) != null;
+                else if (j.kind.StartsWith("contract.", System.StringComparison.Ordinal) || j.kind.StartsWith("operation.", System.StringComparison.Ordinal) || j.kind.StartsWith("consequence.", System.StringComparison.Ordinal)) live = rt.Ctx.Procurement.JobTargetExists(j);
                 if (!live) orphans.Add(j);
             }
             for (int i = 0; i < orphans.Count; i++)
@@ -311,6 +326,8 @@ namespace TheNetwork.Core
             sb.AppendLine("[TheNetwork] Counts vs caps");
             sb.AppendLine("  actors: " + s.actors.actors.Count + ", characters: " + s.characters.characters.Count + ", cast entries: " + s.cast.entries.Count);
             sb.AppendLine("  intel requests: " + s.intel.requests.Count + ", leads: " + s.intel.leads.Count + ", opportunities: " + s.opportunities.opportunities.Count);
+            sb.AppendLine("  contracts: " + s.contracts.contracts.Count + ", offers: " + s.contracts.offers.Count + ", operations: " + s.operations.operations.Count + ", pending consequences: " + s.consequences.pending.Count);
+            sb.AppendLine("  relations: " + s.relations.Count + " / " + Domain.Relations.RelationService.GlobalCap + ", knowledge books: " + s.knowledge.books.Count);
             sb.AppendLine("  history records: " + s.history.records.Count + " (Notable cap " + RetentionPolicy.NotableGlobalCap + ", Major cap " + RetentionPolicy.MajorGlobalCap + "), dropped so far " + s.history.droppedCount);
             sb.AppendLine("  journal: " + s.journal.entries.Count + " / " + EventJournal.HardCap + " (dropped " + s.journal.droppedCount + ")");
             sb.AppendLine("  scheduler jobs: " + rt.Scheduler.Count + ", quarantine: " + s.diagnostics.quarantine.Count + ", failed consumers: " + s.diagnostics.failedConsumers.Count);

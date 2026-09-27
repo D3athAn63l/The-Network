@@ -204,6 +204,47 @@ namespace TheNetwork.Tests
     }
 
     /// <summary>A complete Domain context over fakes, a manual clock and real stores/services.</summary>
+    /// <summary>Drop-pod delivery as plain data: a list of home maps, each with or without a drop spot.</summary>
+    public sealed class FakeDelivery : IDelivery
+    {
+        public List<int> homes = new List<int> { 1 };
+        public HashSet<int> noSpot = new HashSet<int>();
+        public bool failCreation;
+        public int deliveries;
+        public int delivered;
+        public List<TheNetwork.Persist.ItemPayload> lastPayload = new List<TheNetwork.Persist.ItemPayload>();
+
+        public int DefaultHomeMapId(out string label)
+        {
+            label = homes.Count > 0 ? "Home " + homes[0] : null;
+            return homes.Count > 0 ? homes[0] : -1;
+        }
+
+        public DeliveryPlan Plan(int preferredMapId, int seed)
+        {
+            if (homes.Count == 0) return new DeliveryPlan { failureKey = "NoHomeMap" };
+            List<int> order = new List<int>(homes);
+            order.Sort((a, b) => a == preferredMapId ? -1 : (b == preferredMapId ? 1 : a.CompareTo(b)));
+            foreach (int m in order)
+            {
+                if (noSpot.Contains(m)) continue;
+                return new DeliveryPlan { ok = true, mapId = m, mapLabel = "Home " + m, cellX = 10, cellZ = 10, rerouted = m != preferredMapId };
+            }
+            return new DeliveryPlan { failureKey = "NoDropSpot" };
+        }
+
+        public DeliveryResult Deliver(DeliveryPlan plan, List<TheNetwork.Persist.ItemPayload> payload, int seed)
+        {
+            if (failCreation) return new DeliveryResult { failureKey = "FailedToGenerate", thingCreationFailed = true, failedDefName = payload.Count > 0 ? payload[0].thing?.defName : null };
+            int n = 0;
+            lastPayload = payload;
+            foreach (TheNetwork.Persist.ItemPayload p in payload) n += p.count;
+            deliveries++;
+            delivered += n;
+            return new DeliveryResult { ok = true, mapId = plan.mapId, mapLabel = plan.mapLabel, delivered = n };
+        }
+    }
+
     public sealed class TestNet
     {
         public readonly ManualClock clock = new ManualClock { Now = 100000 };
@@ -215,6 +256,7 @@ namespace TheNetwork.Tests
         public readonly FakeCatalog cat = new FakeCatalog();
         public readonly FakeWorld world = new FakeWorld();
         public readonly FakeSites sites = new FakeSites();
+        public readonly FakeDelivery delivery = new FakeDelivery();
         public readonly RecordingConsumer recorder = new RecordingConsumer();
         public readonly HistoryLedger ledger = new HistoryLedger();
         public readonly SummaryStore summaries = new SummaryStore();
@@ -226,6 +268,8 @@ namespace TheNetwork.Tests
         public TestNet(int seed = 424242)
         {
             IntelDevOverrides.Clear();
+            ProcurementDevOverrides.Clear();
+            ServiceToggles.ProcurementEnabled = true;
             IntelDevOverrides.commsGateOverride = false;
             IntelDevOverrides.waiveFees = false;
             scheduler = new NetScheduler(ids, clock);
@@ -236,7 +280,9 @@ namespace TheNetwork.Tests
                 cast = new WorldCastSnapshot(), actors = new ActorStore(), characters = new CharacterStore(),
                 intel = new IntelStore(), opportunities = new OpportunityStore(), summaries = summaries, ledger = ledger,
                 relations = new TheNetwork.Domain.Relations.RelationStore(), knowledge = new TheNetwork.Domain.Knowledge.KnowledgeStore(),
-                catalog = cat, comms = comms, payment = pay, world = world, sites = sites
+                contracts = new TheNetwork.Domain.Contracts.ContractStore(), operations = new TheNetwork.Domain.Operations.OperationStore(),
+                consequences = new TheNetwork.Domain.Consequences.ConsequenceStore(),
+                catalog = cat, comms = comms, payment = pay, world = world, sites = sites, delivery = delivery
             };
             ctx.Actors = new ActorService(ctx);
             ctx.Intel = new IntelService(ctx);
@@ -245,6 +291,9 @@ namespace TheNetwork.Tests
             ctx.Upkeep = new TheNetwork.Domain.Contractors.UpkeepService(ctx);
             ctx.Relations = new TheNetwork.Domain.Relations.RelationService(ctx);
             ctx.Knowledge = new TheNetwork.Domain.Knowledge.KnowledgeService(ctx);
+            ctx.Procurement = new TheNetwork.Domain.Contracts.ProcurementService(ctx);
+            ctx.Operations = new TheNetwork.Domain.Operations.OperationService(ctx);
+            ctx.Consequences = new TheNetwork.Domain.Consequences.ConsequenceEngine(ctx);
             history = new HistoryService(ledger, summaries, ctx.actors, ids, clock, seed);
             scheduler.RegisterKind(JobKinds.IntelRound, ctx.Intel.RunRound, true, true);
             scheduler.RegisterKind(JobKinds.IntelClose, ctx.Intel.CloseJob, true, true);
@@ -254,26 +303,29 @@ namespace TheNetwork.Tests
             scheduler.RegisterKind(JobKinds.RefundRetry, ctx.Intel.RetryRefunds, true, false);
             scheduler.RegisterKind(JobKinds.ContractorUpkeep, ctx.Upkeep.UpkeepJob, true, true);
             scheduler.RegisterKind(JobKinds.PopulationWeekly, ctx.Upkeep.PopulationJobRun, true, true);
+            TheNetwork.Core.NetworkRuntime.RegisterPhaseTwoJobs(scheduler, ctx);
             bus.Register(ConsumerOrder.History, history, HistoryService.ConsumedKeys);
             bus.Register(ConsumerOrder.Relationships, ctx.Relations, TheNetwork.Domain.Relations.RelationService.ConsumedKeys);
+            bus.Register(ConsumerOrder.Consequences, ctx.Consequences, TheNetwork.Domain.Consequences.ConsequenceEngine.ConsumedKeys);
             bus.Register(ConsumerOrder.Presentation, recorder);
             ctx.Actors.EnsurePlayerProxy(world.PlayerFaction());
             ctx.Actors.EnsureExchange();
         }
 
-        public NetworkActor AddFixer(string intelStyle, Band speed = Band.Medium, Band reliability = Band.Medium, Band fee = Band.Medium)
+        public NetworkActor AddFixer(string intelStyle, Band speed = Band.Medium, Band reliability = Band.Medium, Band fee = Band.Medium, string brokerage = "Standard", string insurance = "None", ReachBand reach = ReachBand.Regional)
         {
             GlobalNetworkRoster roster = new GlobalNetworkRoster();
             roster.fixerTemplates.Add(new FixerTemplate
             {
                 templateId = Guid.NewGuid().ToString("N"), provenance = TemplateProvenance.Custom, displayName = "Fixer " + intelStyle + " " + ctx.actors.actors.Count,
-                intelStyle = intelStyle, speedBand = speed, reliabilityBand = reliability, feeBand = fee
+                intelStyle = intelStyle, speedBand = speed, reliabilityBand = reliability, feeBand = fee, brokerageStyle = brokerage, insuranceStyle = insurance,
+                contractorReach = reach, geographicReach = reach
             });
             ctx.cast.imported = false;
             ctx.Actors.ImportCast(roster, 1, null);
             ctx.Actors.InstantiateFixers();
             NetworkActor last = null;
-            foreach (NetworkActor a in ctx.actors.actors) if (a.kind == ActorKind.Individual) last = a;
+            foreach (NetworkActor a in ctx.actors.actors) if (a.Has<TheNetwork.Persist.FixerProfile>()) last = a;
             return last;
         }
 

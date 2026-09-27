@@ -35,7 +35,10 @@ namespace TheNetwork.Domain.Intel
     public enum MoneyDirection : byte
     {
         PlayerPaid = 0,
-        PlayerRefunded = 1
+        PlayerRefunded = 1,
+
+        /// <summary>Silver already paid, carried to a linked contract (a replacement); no silver moved.</summary>
+        Transferred = 2
     }
 
     /// <summary>A silver movement recorded in the same step as the movement (DATA_MODEL § 16).</summary>

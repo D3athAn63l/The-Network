@@ -67,7 +67,7 @@ namespace TheNetwork.Tests
             "operations", "deployments", "leases", "history", "summaries", "legends", "beliefs", "consequences", "scheduler", "journal", "diagnostics"
         };
 
-        private static string SaveState(NetworkState state, int saveVersion)
+        public static string SaveState(NetworkState state, int saveVersion)
         {
             string path = Path.Combine(Path.GetTempPath(), "thenetwork-state-" + Guid.NewGuid().ToString("N") + ".xml");
             Scribe.saver.InitSaving(path, "component");

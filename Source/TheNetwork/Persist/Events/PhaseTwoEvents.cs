@@ -28,6 +28,7 @@ namespace TheNetwork.Persist.Events
 
         public const string ContractPosted = "Contract.Posted";
         public const string ContractOfferReceived = "Contract.OfferReceived";
+        public const string ContractQuoted = "Contract.Quoted";
         public const string ContractRefused = "Contract.Refused";
         public const string ContractUnfilled = "Contract.Unfilled";
         public const string ContractAwarded = "Contract.Awarded";
