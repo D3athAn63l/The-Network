@@ -143,8 +143,8 @@ namespace TheNetwork.Tests
         private int nextSiteId = 1000;
         public readonly HashSet<int> sites = new HashSet<int>();
         public readonly HashSet<int> maps = new HashSet<int>();
+        /// <summary>What a sample would count on the site map (everything of the target def on it).</summary>
         public readonly Dictionary<int, int> remainingByOpp = new Dictionary<int, int>();
-        public readonly Dictionary<int, int> podCargoByOpp = new Dictionary<int, int>();
         public readonly HashSet<string> failDefs = new HashSet<string>();
         public readonly List<int> tileSeeds = new List<int>();
         public bool noTile;
@@ -181,14 +181,6 @@ namespace TheNetwork.Tests
             if (opp.site == null || !maps.Contains(opp.site.id)) return false;
             remainingByOpp.TryGetValue(opp.id.Value, out remaining);
             return true;
-        }
-
-        public int CountUncountedTransporterCargo(Opportunity opp)
-        {
-            int n;
-            if (!podCargoByOpp.TryGetValue(opp.id.Value, out n)) return 0;
-            podCargoByOpp.Remove(opp.id.Value);
-            return n;
         }
 
         public void ReleaseSite(Opportunity opp, bool destroyIfNoMap)

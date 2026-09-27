@@ -544,8 +544,10 @@ Opportunity                                   // world truth
   expiresTick: int
   state: OpportunityState                     // see STATE_MACHINES § 2
   site: WorldObjectRef?                       // when materialized
-  engagement: { firstEngagedTick, playerClaimedCounts: ItemTally[], claimedBy: ActorId?,
-                recoveredBand: None | Little | Some | Most | All }   // of the Target payload
+  engagement: { firstEngagedTick, initialOnMap, lastRemaining, lastSampleTick, recovered,
+                claimedBy: ActorId?, recoveredBand: None | Little | Some | Most | All }
+                // of the Target payload; recovered = site stock at map generation − last sample,
+                // never a sum of what the player carried (their own copies must not count; STATE_MACHINES § 2.2)
   seed: int
   committedAtTick: int                        // truth fixed here; never recomputed
 ```

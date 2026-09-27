@@ -22,8 +22,11 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Resolver.TrapKeepsHolder", TrapKeepsHolder));
             t.Add(new KeyValuePair<string, Action>("Generator.QuantityFromGeneratorAndDivergence", Quantity));
             t.Add(new KeyValuePair<string, Action>("Claim.PartialRecoveryByCaravan", PartialCaravan));
+            t.Add(new KeyValuePair<string, Action>("Claim.BroughtOnlyCargoRecoversNothing", BroughtOnly));
+            t.Add(new KeyValuePair<string, Action>("Claim.MixedProvenanceCountsOnlyCache", MixedProvenance));
             t.Add(new KeyValuePair<string, Action>("Claim.NoDoubleCountOnReentry", Reentry));
             t.Add(new KeyValuePair<string, Action>("Claim.TransportPodsCountedOnce", Pods));
+            t.Add(new KeyValuePair<string, Action>("Claim.NeverInflatedByOwnCargo", NeverInflated));
             t.Add(new KeyValuePair<string, Action>("Claim.EmptyHandedAndBadIntel", EmptyHanded));
             t.Add(new KeyValuePair<string, Action>("Claim.SettledIsClaimedAll", Settled));
             t.Add(new KeyValuePair<string, Action>("Claim.RecoveryBasisIgnoresHolderStock", Basis));
@@ -183,22 +186,143 @@ namespace TheNetwork.Tests
 
         private static void RemoveMap(TestNet n, Opportunity o)
         {
+            n.ctx.Opportunities.OnMapAboutToBeRemoved(o.id);
             n.sites.maps.Remove(o.site.id);
             n.sites.sites.Remove(o.site.id);
             n.ctx.Opportunities.OnMapRemoved(o.id);
         }
 
+        /// <summary>
+        /// A site map driven in vanilla's order (decompiled 1.6): the map is generated and
+        /// <c>PostMapGenerate</c> runs before the arriving caravan or pods put anything on it; a sample
+        /// counts every target-def item on the map, the player's included; caravan pawns exit before
+        /// <c>Notify_CaravanFormed</c>; pods leave the map with no callback; the comp's pre-removal sample
+        /// runs in the tick that removes the map. It tracks true provenance so tests can compare the
+        /// Network's estimate with what really happened. It proves Network accounting, not vanilla.
+        /// </summary>
+        private sealed class MapSim
+        {
+            private readonly TestNet n;
+            private readonly Opportunity o;
+            public int cacheLeft;   // site stock where the site put it
+            public int heldCache;   // cache items carried by player pawns on the map
+            public int heldOwn;     // the player's own copies carried on the map
+            public int groundCache; // cache items the player moved and put down again
+            public int groundOwn;   // the player's own copies left on the map
+            public int awayCache;   // cache items that left the map with the player (the truth)
+            public int awayOwn;
+
+            public MapSim(TestNet n, Opportunity o)
+            {
+                this.n = n;
+                this.o = o;
+            }
+
+            private void Sync()
+            {
+                n.sites.remainingByOpp[o.id.Value] = cacheLeft + heldCache + heldOwn + groundCache + groundOwn;
+            }
+
+            public MapSim Generate(int holderStock = 0)
+            {
+                cacheLeft = o.TargetCount + holderStock;
+                Sync();
+                Engage(n, o);
+                return this;
+            }
+
+            /// <summary>A caravan or pods arrive carrying the player's own copies (vanilla sends no comp callback).</summary>
+            public void Arrive(int own)
+            {
+                heldOwn += own;
+                Sync();
+            }
+
+            public void Take(int k)
+            {
+                k = Math.Min(k, cacheLeft);
+                cacheLeft -= k;
+                heldCache += k;
+                Sync();
+            }
+
+            public void DropOwn(int k)
+            {
+                k = Math.Min(k, heldOwn);
+                heldOwn -= k;
+                groundOwn += k;
+                Sync();
+            }
+
+            public void DropCache(int k)
+            {
+                k = Math.Min(k, heldCache);
+                heldCache -= k;
+                groundCache += k;
+                Sync();
+            }
+
+            private void Depart(int cache, int own)
+            {
+                cache = Math.Min(cache, heldCache);
+                own = Math.Min(own, heldOwn);
+                heldCache -= cache;
+                heldOwn -= own;
+                awayCache += cache;
+                awayOwn += own;
+                Sync();
+            }
+
+            public void LeaveByCaravan(int cache, int own)
+            {
+                Depart(cache, own);
+                n.ctx.Opportunities.OnCaravanFormed(o.id, cache + own);
+            }
+
+            public void LaunchPods(int cache, int own)
+            {
+                Depart(cache, own);
+            }
+
+            /// <summary>A caravan that left comes back onto the still-existing map.</summary>
+            public void Return(int cache, int own)
+            {
+                cache = Math.Min(cache, awayCache);
+                own = Math.Min(own, awayOwn);
+                awayCache -= cache;
+                awayOwn -= own;
+                heldCache += cache;
+                heldOwn += own;
+                Sync();
+            }
+
+            public void Periodic()
+            {
+                n.Advance(JobKinds.SamplePeriod);
+            }
+
+            /// <summary>The last pawns are gone: vanilla removes the map (pre-removal sample first unless another path removed it).</summary>
+            public void Remove(bool preRemovalSample = true)
+            {
+                if (preRemovalSample) n.ctx.Opportunities.OnMapAboutToBeRemoved(o.id);
+                n.sites.maps.Remove(o.site.id);
+                n.sites.sites.Remove(o.site.id);
+                n.ctx.Opportunities.OnMapRemoved(o.id);
+            }
+        }
+
         private static void PartialCaravan()
         {
+            // CASE C: no same-def cargo brought; part of the cache taken; defenders alive.
             TestNet n = new TestNet();
             Opportunity o = MakeCache(n);
-            Engage(n, o);
+            MapSim m = new MapSim(n, o).Generate();
             T.Eq(OpportunityState.Engaged, o.state, "engaged at map generation");
             T.Eq(100, o.engagement.initialOnMap, "initial sample taken at map generation");
             T.Check(n.scheduler.Find(JobKinds.OppSample, o.id.Value) != null, "low-frequency sample scheduled while the map exists");
-            n.sites.remainingByOpp[o.id.Value] = 60; // the caravan carried 40 off; defenders may well be alive
-            n.ctx.Opportunities.OnCaravanFormed(o.id, 40);
-            RemoveMap(n, o);
+            m.Take(40);
+            m.LeaveByCaravan(40, 0);
+            m.Remove();
             T.Eq(OpportunityState.Claimed, o.state, "leaving with part of it is a claim (no extermination needed)");
             T.Eq(40, o.engagement.recovered, "recovered estimate");
             T.Eq(RecoveredBand.Some, o.engagement.recoveredBand, "coarse band");
@@ -208,32 +332,164 @@ namespace TheNetwork.Tests
             T.Eq(1, n.summaries.Get(n.ctx.actors.PlayerProxyId).Lifetime("opp.claimed.partial"), "summary counter");
         }
 
-        private static void Reentry()
+        private static void BroughtOnly()
         {
+            // CASE A: the player brings 100 of the target def, takes none of the cache, leaves with their own 100.
             TestNet n = new TestNet();
             Opportunity o = MakeCache(n);
-            Engage(n, o);
-            n.sites.remainingByOpp[o.id.Value] = 60;
-            n.ctx.Opportunities.OnCaravanFormed(o.id, 40);
-            n.sites.remainingByOpp[o.id.Value] = 100; // they came back and dropped it all again
-            n.Advance(JobKinds.SamplePeriod);
-            n.sites.remainingByOpp[o.id.Value] = 60;
-            n.ctx.Opportunities.OnCaravanFormed(o.id, 40); // and left again with the same 40
-            RemoveMap(n, o);
+            MapSim m = new MapSim(n, o).Generate();
+            m.Arrive(100);
+            m.Periodic();
+            T.Eq(200, o.engagement.lastRemaining, "a sample while the player is on the map counts their cargo too");
+            m.LeaveByCaravan(0, 100);
+            m.Remove();
+            T.Eq(0, o.engagement.recovered, "own cargo is never recovered Network payload");
+            T.Eq(OpportunityState.Abandoned, o.state, "not a claim");
+            T.Eq("LeftEmptyHanded", o.outcomeKey, "left empty-handed");
+            T.Eq(100, o.engagement.caravanTally, "the caravan did carry 100 of the def (diagnostics only)");
+
+            // The same by pods.
+            TestNet n2 = new TestNet();
+            Opportunity o2 = MakeCache(n2);
+            MapSim p = new MapSim(n2, o2).Generate();
+            p.Arrive(100);
+            p.LaunchPods(0, 100);
+            p.Remove();
+            T.Eq(0, o2.engagement.recovered, "own cargo sent home by pods is not recovered either");
+            T.Eq(OpportunityState.Abandoned, o2.state, "not a claim");
+        }
+
+        private static void MixedProvenance()
+        {
+            // CASE B: cache 100; the player brings 50, takes 30, leaves carrying 80.
+            TestNet n = new TestNet();
+            Opportunity o = MakeCache(n);
+            MapSim m = new MapSim(n, o).Generate();
+            m.Arrive(50);
+            m.Take(30);
+            m.Periodic();
+            m.LeaveByCaravan(30, 50);
+            m.Remove();
+            T.Eq(30, o.engagement.recovered, "only the 30 from the cache are recovered, not the 80 carried");
+            T.Eq(80, o.engagement.caravanTally, "the caravan carried 80 of the def (diagnostics only)");
+            T.Eq(OpportunityState.Claimed, o.state, "a claim");
+            T.Eq(RecoveredBand.Some, o.engagement.recoveredBand, "band from 30 of 100");
+
+            // Mixed by pods, with holder stock of the same def on the site as well.
+            TestNet n2 = new TestNet();
+            Opportunity o2 = MakeCache(n2);
+            MapSim p = new MapSim(n2, o2).Generate(holderStock: 40);
+            p.Arrive(50);
+            p.Take(30);
+            p.LaunchPods(30, 50);
+            p.Remove();
+            T.Eq(30, o2.engagement.recovered, "pods: 30 of the site's stock, not the 50 brought");
+        }
+
+        private static void Reentry()
+        {
+            // CASE D: repeated departures and re-entry never double-count cache loot.
+            TestNet n = new TestNet();
+            Opportunity o = MakeCache(n);
+            MapSim m = new MapSim(n, o).Generate();
+            m.Arrive(20);
+            m.Take(40);
+            m.LeaveByCaravan(40, 20);   // some pawns stay behind, so the map remains
+            m.Return(40, 20);           // they come back with the same loot and their own cargo
+            m.DropCache(40);            // and put the loot down again
+            m.Periodic();
+            m.Take(40);
+            m.LeaveByCaravan(40, 20);   // and leave again with the same 40
+            m.Remove();
             T.Eq(40, o.engagement.recovered, "items that came back and left again are not counted twice");
             T.Eq(2, o.engagement.caravanDepartures, "each departure tallied once");
+            T.Eq(120, o.engagement.caravanTally, "the tally saw 120 leave (diagnostics only; never used)");
         }
 
         private static void Pods()
         {
+            // CASE E: pod cargo counts once; own copies in the pods do not inflate it.
             TestNet n = new TestNet();
             Opportunity o = MakeCache(n);
-            Engage(n, o);
-            n.sites.podCargoByOpp[o.id.Value] = 30; // launched after the last sample; the map closed right away
-            RemoveMap(n, o);
+            MapSim m = new MapSim(n, o).Generate();
+            m.Arrive(50);
+            m.Take(30);
+            m.LaunchPods(30, 50);     // the last pawns leave by pods; no callback
+            m.Remove();               // the comp's pre-removal sample, then the removal
             T.Eq(OpportunityState.Claimed, o.state, "pods departure is a claim");
-            T.Eq(30, o.engagement.recovered, "pod cargo counted");
-            T.Eq(0, n.sites.CountUncountedTransporterCargo(o), "and only once");
+            T.Eq(30, o.engagement.recovered, "pod cargo counted once, own copies excluded");
+
+            // Pods launched while others stay; a periodic sample; then the rest leave by caravan.
+            TestNet n2 = new TestNet();
+            Opportunity o2 = MakeCache(n2);
+            MapSim p = new MapSim(n2, o2).Generate();
+            p.Take(50);
+            p.LaunchPods(30, 0);
+            p.Periodic();
+            p.Periodic();
+            p.LeaveByCaravan(20, 0);
+            p.Remove();
+            T.Eq(50, o2.engagement.recovered, "30 by pods + 20 by caravan, each once");
+
+            // If the map is removed by a path without the pre-removal sample, the estimate falls back to
+            // the last sample: it may under-count, never over-count.
+            TestNet n3 = new TestNet();
+            Opportunity o3 = MakeCache(n3);
+            MapSim q = new MapSim(n3, o3).Generate();
+            q.Arrive(50);
+            q.Take(30);
+            q.Periodic();
+            q.LaunchPods(30, 50);
+            q.Remove(preRemovalSample: false);
+            T.Check(o3.engagement.recovered <= 30, "without the final sample the estimate never exceeds the truth (" + o3.engagement.recovered + ")");
+        }
+
+        private static void NeverInflated()
+        {
+            // Randomized sequences of arrive / take / drop / leave (caravan or pods) / return / sample.
+            // Invariant: the estimate never exceeds the cache items that really left with the player,
+            // and equals it (capped at the target) whenever no own copies are left on the map.
+            System.Random rnd = new System.Random(4242);
+            int exact = 0;
+            for (int run = 0; run < 400; run++)
+            {
+                TestNet n = new TestNet();
+                Opportunity o = MakeCache(n, 1 + rnd.Next(150));
+                MapSim m = new MapSim(n, o).Generate(holderStock: rnd.Next(3) == 0 ? rnd.Next(60) : 0);
+                int steps = 3 + rnd.Next(12);
+                for (int s = 0; s < steps; s++)
+                {
+                    switch (rnd.Next(9))
+                    {
+                        case 0: m.Arrive(rnd.Next(120)); break;
+                        case 1:
+                        case 2: m.Take(rnd.Next(60)); break;
+                        case 3: m.DropOwn(rnd.Next(40)); break;
+                        case 4: m.DropCache(rnd.Next(40)); break;
+                        case 5: m.LeaveByCaravan(rnd.Next(80), rnd.Next(80)); break;
+                        case 6: m.LaunchPods(rnd.Next(80), rnd.Next(80)); break;
+                        case 7: m.Return(rnd.Next(40), rnd.Next(40)); break;
+                        case 8: m.Periodic(); break;
+                    }
+                }
+                // Everyone leaves (the map can only go once no player pawn is on it).
+                if (rnd.Next(2) == 0) m.LeaveByCaravan(m.heldCache, m.heldOwn);
+                else m.LaunchPods(m.heldCache, m.heldOwn);
+                m.Remove();
+                int truth = Math.Min(m.awayCache, o.TargetCount);
+                T.Check(o.engagement.recovered <= truth, "run " + run + ": estimate " + o.engagement.recovered + " never exceeds the cache that left (" + truth + ")");
+                if (m.groundOwn == 0)
+                {
+                    // Without holder stock the site stock is exactly the target, so the estimate is exact.
+                    if (o.engagement.initialOnMap == o.TargetCount)
+                    {
+                        T.Eq(truth, o.engagement.recovered, "run " + run + ": exact when no own copies stay behind");
+                        exact++;
+                    }
+                }
+                T.Eq(o.engagement.recovered > 0 ? OpportunityState.Claimed : OpportunityState.Abandoned, o.state, "run " + run + ": claimed only with a recovery");
+            }
+            T.Check(exact > 100, "enough exact cases exercised (" + exact + ")");
         }
 
         private static void EmptyHanded()
@@ -268,11 +524,15 @@ namespace TheNetwork.Tests
         private static void Basis()
         {
             Engagement e = new Engagement { initialOnMap = 150, lastRemaining = 120 };
-            T.Eq(30, OpportunityService.RecoveredEstimate(e, 100, 0), "recovered measured from the map");
+            T.Eq(30, OpportunityService.RecoveredEstimate(e, 100), "recovered measured from the map");
             Engagement all = new Engagement { initialOnMap = 150, lastRemaining = 0 };
-            T.Eq(100, OpportunityService.RecoveredEstimate(all, 100, 0), "capped at the committed target (holder stock is not the cache)");
+            T.Eq(100, OpportunityService.RecoveredEstimate(all, 100), "capped at the committed target (holder stock is not the cache)");
             Engagement none = new Engagement { initialOnMap = 20, lastRemaining = 0 };
-            T.Eq(0, OpportunityService.RecoveredEstimate(none, 0, 0), "a zero target recovers nothing whatever else is there");
+            T.Eq(0, OpportunityService.RecoveredEstimate(none, 0), "a zero target recovers nothing whatever else is there");
+            Engagement tallied = new Engagement { initialOnMap = 100, lastRemaining = 100, caravanTally = 100 };
+            T.Eq(0, OpportunityService.RecoveredEstimate(tallied, 100), "a caravan tally alone (own cargo) never counts as recovery");
+            Engagement unsampled = new Engagement { initialOnMap = -1, lastRemaining = 130 };
+            T.Eq(0, OpportunityService.RecoveredEstimate(unsampled, 100), "no map-generation count: the committed target is the basis, and extra on the map only lowers it");
             T.Eq(RecoveredBand.Little, BandUtility.RecoveredBandFor(10, 100), "little");
             T.Eq(RecoveredBand.Most, BandUtility.RecoveredBandFor(80, 100), "most");
             T.Eq(RecoveredBand.All, BandUtility.RecoveredBandFor(100, 100), "all");

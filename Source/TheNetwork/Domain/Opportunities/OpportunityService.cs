@@ -272,7 +272,11 @@ namespace TheNetwork.Domain.Opportunities
             PublishOpp(EventKeys.OpportunityEngaged, Importance.Minor, opp, null);
         }
 
-        /// <summary>A caravan left the site map. Tallied once per departure; then the remainder is re-sampled.</summary>
+        /// <summary>
+        /// A caravan left the site map (its pawns have already exited): re-sample what is left. The
+        /// caravan's own count is kept for diagnostics only; it includes the player's own cargo and is
+        /// never used for recovery.
+        /// </summary>
         public void OnCaravanFormed(OpportunityId id, int targetInCaravan)
         {
             Opportunity opp = ctx.opportunities.Get(id);
@@ -283,13 +287,23 @@ namespace TheNetwork.Domain.Opportunities
             StateVersion.Bump();
         }
 
+        /// <summary>
+        /// Vanilla is about to remove the site map in this same tick (the last player pawns have gone,
+        /// by caravan, pods or shuttle): the final sample. Whatever left in transporters is simply no
+        /// longer on the map, so pods need no separate count.
+        /// </summary>
+        public void OnMapAboutToBeRemoved(OpportunityId id)
+        {
+            Opportunity opp = ctx.opportunities.Get(id);
+            if (opp == null || opp.state != OpportunityState.Engaged) return;
+            Sample(opp);
+        }
+
         public void OnMapRemoved(OpportunityId id)
         {
             Opportunity opp = ctx.opportunities.Get(id);
             if (opp == null || opp.state != OpportunityState.Engaged) return;
-            int pods = ctx.sites.CountUncountedTransporterCargo(opp);
-            opp.engagement.podTally += pods;
-            ResolveEngagement(opp, pods);
+            ResolveEngagement(opp);
         }
 
         /// <summary>The player settled the site: everything still there is theirs (Claimed, All).</summary>
@@ -314,31 +328,34 @@ namespace TheNetwork.Domain.Opportunities
             if (opp.state == OpportunityState.Engaged)
             {
                 if (ctx.sites.SiteHasMap(opp.site)) return; // settled or converted; the map callbacks decide
-                ResolveEngagement(opp, 0);
+                ResolveEngagement(opp);
                 return;
             }
             if (ctx.Now >= opp.expiresTick - JobKinds.SamplePeriod) Finish(opp, OpportunityState.Expired, "TimedOut", EventKeys.OpportunityExpired, Importance.Minor);
             else Finish(opp, OpportunityState.Destroyed, "SiteDestroyed", EventKeys.OpportunityDestroyed, Importance.Minor);
         }
 
+        /// <summary>
+        /// Re-counts the target def on the site map. Never sets the initial count: a later sample may
+        /// include what the player brought, so only the map-generation sample may define the site's stock.
+        /// </summary>
         private void Sample(Opportunity opp)
         {
             int remaining;
             if (ctx.sites.TrySampleRemaining(opp, out remaining))
             {
-                if (opp.engagement.initialOnMap < 0) opp.engagement.initialOnMap = remaining;
                 opp.engagement.lastRemaining = remaining;
                 opp.engagement.lastSampleTick = ctx.Now;
             }
         }
 
         /// <summary>
-        /// Map gone: recovered ≈ initial − last sampled remainder + transporter cargo that left after
-        /// that sample. Coarse by design; the band is what history reports.
+        /// Map gone: recovered ≈ site stock at map generation − what the last sample still found on the
+        /// map, capped at the committed target. Coarse by design; the band is what history reports.
         /// </summary>
-        private void ResolveEngagement(Opportunity opp, int podsAfterLastSample)
+        private void ResolveEngagement(Opportunity opp)
         {
-            opp.engagement.recovered = RecoveredEstimate(opp.engagement, opp.TargetCount, podsAfterLastSample);
+            opp.engagement.recovered = RecoveredEstimate(opp.engagement, opp.TargetCount);
             int initial = RecoveryBasis(opp.engagement, opp.TargetCount);
             opp.engagement.recoveredBand = BandUtility.RecoveredBandFor(opp.engagement.recovered, initial);
             if (opp.engagement.recovered > 0)
@@ -362,16 +379,21 @@ namespace TheNetwork.Domain.Opportunities
             return Math.Max(0, Math.Min(initial, targetCount));
         }
 
-        public static int RecoveredEstimate(Engagement e, int targetCount, int podsAfterLastSample)
+        /// <summary>
+        /// Provenance rule (S19): recovery is measured only as the depletion of the site's own stock.
+        /// The initial count is taken at map generation, before any player pawn, caravan or pod cargo
+        /// arrives; later samples count everything on the map, so the player's own copies of the target
+        /// def can only raise the remainder (never the recovery), and whatever the player carries away,
+        /// by caravan or pods, is counted by its absence from the map, once. Nothing the player brought
+        /// is ever added.
+        /// </summary>
+        public static int RecoveredEstimate(Engagement e, int targetCount)
         {
             int basis = RecoveryBasis(e, targetCount);
             if (basis <= 0) return 0;
             int initial = e.initialOnMap >= 0 ? e.initialOnMap : targetCount;
             int remaining = e.lastRemaining >= 0 ? e.lastRemaining : initial;
-            int recovered = Math.Max(0, initial - remaining) + Math.Max(0, podsAfterLastSample);
-            // With no sample after a caravan departure, the caravan's own tally is the best evidence.
-            if (recovered == 0 && e.caravanTally > 0) recovered = e.caravanTally;
-            return BandUtility.Clamp(recovered, 0, basis);
+            return BandUtility.Clamp(initial - remaining, 0, basis);
         }
 
         private Importance ClaimImportance(Opportunity opp)
@@ -398,14 +420,10 @@ namespace TheNetwork.Domain.Opportunities
                     Sample(opp);
                     ctx.scheduler.Schedule(JobKinds.OppSample, ctx.Now + JobKinds.SamplePeriod, opp.id.Value);
                 }
-                else if (!ctx.sites.SiteExists(opp.site))
-                {
-                    ResolveEngagement(opp, ctx.sites.CountUncountedTransporterCargo(opp));
-                }
                 else
                 {
-                    // Map gone but the site remains (vanilla keeps some sites): resolve now.
-                    ResolveEngagement(opp, ctx.sites.CountUncountedTransporterCargo(opp));
+                    // Map gone without a callback (the site may or may not remain): resolve from the last sample.
+                    ResolveEngagement(opp);
                 }
                 return;
             }
@@ -510,7 +528,7 @@ namespace TheNetwork.Domain.Opportunities
             int initial = Math.Max(0, opp.TargetCount);
             opp.engagement.initialOnMap = initial;
             opp.engagement.lastRemaining = initial - (int)Math.Round(initial * BandUtility.Clamp01(share));
-            ResolveEngagement(opp, 0);
+            ResolveEngagement(opp);
         }
 
         public void DevExpire(Opportunity opp)

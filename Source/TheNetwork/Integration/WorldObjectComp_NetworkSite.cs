@@ -47,6 +47,22 @@ namespace TheNetwork
             Forward("caravan", r => r.Sites.OnCaravanFormed(this, caravan));
         }
 
+        /// <summary>
+        /// The final claim sample. Vanilla has no comp hook before a site map is removed, but
+        /// <c>MapParent.TickInterval</c> ticks the comps and then calls <c>CheckRemoveMapNow</c> in the same
+        /// call: when <c>ShouldRemoveMapNow</c> is true here, the map is removed right after this returns,
+        /// with anything that left by pods or shuttle already off it. Unbound or map-less: two checks.
+        /// </summary>
+        public override void CompTickInterval(int delta)
+        {
+            if (!IsBound) return;
+            MapParent mp = parent as MapParent;
+            if (mp == null || !mp.HasMap || mp.Map.mapPawns.AnyPawnBlockingMapRemoval) return;
+            bool alsoRemoveWorldObject;
+            if (!mp.ShouldRemoveMapNow(out alsoRemoveWorldObject)) return;
+            Forward("mapAboutToBeRemoved", r => r.Sites.OnMapAboutToBeRemoved(this));
+        }
+
         public override void PostMyMapRemoved()
         {
             if (!IsBound) return;

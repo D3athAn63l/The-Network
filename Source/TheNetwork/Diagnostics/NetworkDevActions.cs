@@ -401,7 +401,7 @@ namespace TheNetwork.Diagnostics
                     if (ip != null) sb.AppendLine("  payload " + ip.role + " " + ip.count + "x " + ip.thing?.defName + (ip.stuff != null ? " (" + ip.stuff.defName + ")" : "") + (ip.qualityBand >= 0 ? " q" + ip.qualityBand : ""));
                 }
                 Engagement e = o.engagement;
-                sb.AppendLine("  engagement: first " + e.firstEngagedTick + ", initial " + e.initialOnMap + ", last remaining " + e.lastRemaining + " @" + e.lastSampleTick + ", caravans " + e.caravanDepartures + " (" + e.caravanTally + "), pods " + e.podTally + ", recovered " + e.recovered + " " + e.recoveredBand + (e.settled ? ", settled" : ""));
+                sb.AppendLine("  engagement: first " + e.firstEngagedTick + ", initial " + e.initialOnMap + ", last remaining " + e.lastRemaining + " @" + e.lastSampleTick + ", caravans " + e.caravanDepartures + " (carried " + e.caravanTally + ", own cargo included), recovered " + e.recovered + " " + e.recoveredBand + (e.settled ? ", settled" : ""));
                 Out(sb.ToString());
             });
         }

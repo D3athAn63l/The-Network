@@ -153,8 +153,9 @@ stateDiagram-v2
 | Latent | lead created for an actor | Revealed | — | — |
 | Revealed / Latent | `Materialize` | Materialized | `SiteAdapter.Create` (vanilla Site + parts + timeout + comp binding + quest tag); store `WorldObjectRef` | `Opportunity.Materialized` |
 | Materialized | comp `PostMapGenerate` | Engaged | `firstEngagedTick`; Lead becomes Pursued | `Opportunity.Engaged` |
-| Engaged | comp `PostCaravanFormed` | (same) | tally the payload def in the caravan into `playerClaimedCounts` | — |
-| Engaged | comp `PostMyMapRemoved` | Claimed if tally > 0, else Abandoned | finalize `recoveredBand` for the target payload; the site world object is usually removed by vanilla | `Opportunity.Claimed` / `.Abandoned` |
+| Engaged | comp `PostCaravanFormed` | (same) | re-sample the site map (the caravan's pawns have already exited); the caravan's own count is a diagnostic only | — |
+| Engaged | comp pre-removal check (`CompTickInterval` when `ShouldRemoveMapNow` is true) | (same) | final sample of the site map | — |
+| Engaged | comp `PostMyMapRemoved` | Claimed if recovered > 0, else Abandoned | recovered = site stock at map generation − last sample, capped at the target; finalize `recoveredBand`; the site world object is usually removed by vanilla | `Opportunity.Claimed` / `.Abandoned` |
 | Materialized | comp `PostDestroy` with no map ever | Expired (timeout passed) or Destroyed | — | `.Expired` / `.Destroyed` |
 | Materialized | reconciliation: `WorldObjectRef` unresolvable | Vanished | treated like Destroyed; one info log | `.Destroyed` |
 | any non-terminal | ref check | Invalidated | the site (if any) is left for vanilla to time out; explanatory letter | `.Invalidated` |
@@ -168,14 +169,19 @@ composition really permits this (the caravan or pods can leave, recovered items 
 nothing duplicates, cleanup is sane) is Spike S19. If it does not, the fix is a different vanilla
 composition or a minimal Network site part, not a change to this machine.
 
-**Claim accounting (Phase 1).** The count is approximate by design (*avoid false precision*):
-the sum of the payload def carried out in caravans formed from the site map, plus a
-**fallback sample** of how much payload remains on the map. The fallback is taken by a
-low-frequency job, every 2,500 ticks, **only while that site map exists**. It covers departures
-by transport pods, shuttles or gravships, which do not fire `PostCaravanFormed`. The history
-text uses coarse phrases ("recovered part of the cache", "recovered most of the cache"). Each
-caravan departure is tallied once; items that come back onto the map are not counted again,
-because the fallback measures what is left rather than adding to the tally.
+**Claim accounting (Phase 1).** The count is approximate by design (*avoid false precision*),
+but its provenance is not: **items the player brought into the site map never count as recovered
+payload.** Recovery is the depletion of the site's own stock: the payload def on the map at
+`PostMapGenerate` (which vanilla runs before the arriving caravan or pods put anything on the map)
+minus what the last sample still finds there, capped at the committed target. Samples count
+everything of the def on the map; they are taken after each caravan departure, by a low-frequency
+job every 2,500 ticks **only while that site map exists**, and once more right before vanilla
+removes the map (the comp's `CompTickInterval` runs just before `CheckRemoveMapNow` in the same
+call), which covers departures by transport pods or shuttles. What the player carries out is never
+added up, so the player's own copies can only lower the estimate, pod cargo cannot be counted
+twice, and items that come back onto the map are not counted again. The history text uses coarse
+phrases ("recovered part of the cache", "recovered most of the cache"). See
+[S19](spikes/S19-loot-without-extermination.md) for the limitations (all under-counts).
 
 **Player settles the site** (`Notify_MyMapSettled`, observed through the site's `MapSettled`
 quest-tag signal because the comp hook is not virtual): the opportunity is treated as Claimed with

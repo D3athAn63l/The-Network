@@ -50,7 +50,16 @@ namespace TheNetwork.Integration
             if (opp == null || caravan == null || !caravan.IsPlayerControlled) return;
             ThingDef def = DefResolver<ThingDef>.Get(opp.Target?.thing?.defName);
             int carried = def == null ? 0 : SiteAdapter.CountInCaravan(caravan, def);
+            // Diagnostics only (the player's own cargo is included); recovery comes from the re-sample.
+            NetLog.Trace(LogCategory.Sites, opp.id + ": caravan left carrying " + carried + " of the target def (own cargo included)");
             ctx.Opportunities.OnCaravanFormed(opp.id, carried);
+        }
+
+        public void OnMapAboutToBeRemoved(WorldObjectComp_NetworkSite comp)
+        {
+            NetLog.Trace(LogCategory.Sites, "Site " + comp.parent?.ID + " (O" + comp.networkOpportunityId + "): map about to be removed (final sample)");
+            Opportunity opp = Bound(comp);
+            if (opp != null) ctx.Opportunities.OnMapAboutToBeRemoved(opp.id);
         }
 
         public void OnMapRemoved(WorldObjectComp_NetworkSite comp)

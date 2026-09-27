@@ -148,13 +148,11 @@ namespace TheNetwork.Domain.Ports
         bool SiteHasMap(WorldObjectRef site);
 
         /// <summary>
-        /// Counts the target def still on the site map (ground, containers, pawns' inventories) and notes
-        /// transporters currently in flight from the site tile. Returns false when there is no map.
+        /// Counts the target def still on the site map: ground, containers, every pawn's inventory,
+        /// corpses, minified things. What the player's pawns carry while on the map is included, which
+        /// can only lower the recovered estimate. Returns false when there is no map.
         /// </summary>
         bool TrySampleRemaining(Opportunities.Opportunity opp, out int remaining);
-
-        /// <summary>Target-def count in transporters launched from the site tile and not yet counted.</summary>
-        int CountUncountedTransporterCargo(Opportunities.Opportunity opp);
 
         /// <summary>Destroys (or leaves for vanilla) a site no longer needed. Never touches a site with a map.</summary>
         void ReleaseSite(Opportunities.Opportunity opp, bool destroyIfNoMap);

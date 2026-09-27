@@ -321,31 +321,8 @@ namespace TheNetwork.Integration
             ThingDef def = DefResolver<ThingDef>.Get(opp.Target?.thing?.defName);
             if (map == null || def == null) return false;
             remaining = CountOnMap(map, def);
-            // Transporters already in flight are reflected in this sample: never add them again later.
-            List<TravellingTransporters> flying = Find.WorldObjects.TravellingTransporters;
-            for (int i = 0; i < flying.Count; i++)
-            {
-                TravellingTransporters t = flying[i];
-                if (t.Tile == mp.Tile && !opp.engagement.countedTransporters.Contains(t.ID)) opp.engagement.countedTransporters.Add(t.ID);
-            }
+            NetLog.Trace(LogCategory.Sites, opp.id + ": " + remaining + " " + def.defName + " on the site map");
             return true;
-        }
-
-        public int CountUncountedTransporterCargo(Opportunity opp)
-        {
-            ThingDef def = DefResolver<ThingDef>.Get(opp.Target?.thing?.defName);
-            if (def == null || opp.location == null) return 0;
-            PlanetTile tile = opp.location.Tile;
-            int total = 0;
-            List<TravellingTransporters> flying = Find.WorldObjects.TravellingTransporters;
-            for (int i = 0; i < flying.Count; i++)
-            {
-                TravellingTransporters t = flying[i];
-                if (t.Tile != tile || !t.IsPlayerControlled || opp.engagement.countedTransporters.Contains(t.ID)) continue;
-                opp.engagement.countedTransporters.Add(t.ID);
-                total += CountInHolder(t, def);
-            }
-            return total;
         }
 
         public static int CountOnMap(Map map, ThingDef def)

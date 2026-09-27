@@ -97,20 +97,25 @@ namespace TheNetwork.Domain.Opportunities
     }
 
     /// <summary>
-    /// Claim accounting (STATE_MACHINES § 2.2). Approximate by design: recovered = what was on the map
-    /// at generation minus what the latest sample still finds, plus cargo of transporters that left
-    /// after that sample. Samples measure what is left, so nothing that returns is counted twice.
+    /// Claim accounting (STATE_MACHINES § 2.2). Approximate by design: recovered = the target def on the
+    /// map at generation (before anything of the player's arrives) minus what the latest sample still
+    /// finds there, capped at the committed target. Samples measure what is left, so nothing that
+    /// returns is counted twice, and the player's own copies of the def can never add to the recovery.
     /// </summary>
     public sealed class Engagement : IExposable
     {
         public int firstEngagedTick = -1;
+
+        /// <summary>The site's own stock: counted once, at map generation. -1 when that count failed.</summary>
         public int initialOnMap = -1;
+
         public int lastRemaining = -1;
         public int lastSampleTick = -1;
         public int caravanDepartures;
+
+        /// <summary>Diagnostics only: the target def seen leaving in caravans, the player's own cargo included.</summary>
         public int caravanTally;
-        public int podTally;
-        public List<int> countedTransporters = new List<int>();
+
         public int recovered;
         public RecoveredBand recoveredBand = RecoveredBand.None;
         public bool settled;
@@ -124,13 +129,10 @@ namespace TheNetwork.Domain.Opportunities
             Scribe_Values.Look(ref lastSampleTick, "lastSampleTick", -1);
             Scribe_Values.Look(ref caravanDepartures, "caravanDepartures", 0);
             Scribe_Values.Look(ref caravanTally, "caravanTally", 0);
-            Scribe_Values.Look(ref podTally, "podTally", 0);
-            Scribe_Collections.Look(ref countedTransporters, "countedTransporters", LookMode.Value);
             Scribe_Values.Look(ref recovered, "recovered", 0);
             NetScribe.LookEnum(ref recoveredBand, "recoveredBand", RecoveredBand.None);
             Scribe_Values.Look(ref settled, "settled", false);
             NetScribe.Look(ref claimedBy, "claimedBy");
-            if (countedTransporters == null) countedTransporters = new List<int>();
         }
     }
 
