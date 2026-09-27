@@ -32,13 +32,34 @@ namespace TheNetwork.Domain.Intel
         Private = 0
     }
 
+    /// <summary>
+    /// The flow of a money record. Only PlayerPaid and PlayerRefunded move real silver. A transfer is
+    /// internal bookkeeping between two linked contracts (a replacement takes over the parent's
+    /// funding): it is never a charge and never a refund, and every TransferIn is matched by a
+    /// TransferOut of the same amount and purpose on the counterpart contract.
+    /// </summary>
     public enum MoneyDirection : byte
     {
         PlayerPaid = 0,
         PlayerRefunded = 1,
+        TransferIn = 2,
+        TransferOut = 3
+    }
 
-        /// <summary>Silver already paid, carried to a linked contract (a replacement); no silver moved.</summary>
-        Transferred = 2
+    /// <summary>
+    /// What a money record is for. Contract accounting reads purposes, never note strings. Intel fees
+    /// leave it Unspecified.
+    /// </summary>
+    public enum MoneyPurpose : byte
+    {
+        Unspecified = 0,
+        Deposit = 1,
+        Premium = 2,
+        InsurancePremium = 3,
+        Balance = 4,
+        Renegotiation = 5,
+        Refund = 6,
+        InsurancePayout = 7
     }
 
     /// <summary>A silver movement recorded in the same step as the movement (DATA_MODEL § 16).</summary>
@@ -47,6 +68,12 @@ namespace TheNetwork.Domain.Intel
         public int tick;
         public int silver;
         public MoneyDirection direction;
+        public MoneyPurpose purpose;
+
+        /// <summary>For a transfer: the id of the linked contract on the other side (0 otherwise).</summary>
+        public int linkedContract;
+
+        /// <summary>Display and history only; no accounting reads it.</summary>
         public string noteKey;
 
         /// <summary>The search round this payment funds (or the round being refunded).</summary>
@@ -55,11 +82,15 @@ namespace TheNetwork.Domain.Intel
         /// <summary>A refund that could not be delivered yet (no home map); retried by a job.</summary>
         public bool pending;
 
+        public bool IsExternal => direction == MoneyDirection.PlayerPaid || direction == MoneyDirection.PlayerRefunded;
+
         public void ExposeData()
         {
             Scribe_Values.Look(ref tick, "tick", 0);
             Scribe_Values.Look(ref silver, "silver", 0);
             NetScribe.LookEnum(ref direction, "direction", MoneyDirection.PlayerPaid);
+            NetScribe.LookEnum(ref purpose, "purpose", MoneyPurpose.Unspecified);
+            Scribe_Values.Look(ref linkedContract, "linked", 0);
             Scribe_Values.Look(ref noteKey, "note");
             Scribe_Values.Look(ref round, "round", 0);
             Scribe_Values.Look(ref pending, "pending", false);

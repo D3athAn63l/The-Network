@@ -39,6 +39,8 @@
   <TheNetwork_ContractMoney>Price {0} silver · paid so far {1}</TheNetwork_ContractMoney>
   <TheNetwork_BalanceOnDelivery>{0} due on delivery</TheNetwork_BalanceOnDelivery>
   <TheNetwork_BalanceOwed>you owe {0}</TheNetwork_BalanceOwed>
+  <TheNetwork_MoneyCarried>{0} of it carried over from the job this one replaced</TheNetwork_MoneyCarried>
+  <TheNetwork_MoneyMovedOn>{0} moved to the job that replaced this one</TheNetwork_MoneyMovedOn>
   <TheNetwork_ContractResult>Delivered {0} of {1}: {2}</TheNetwork_ContractResult>
   <TheNetwork_ContractSecured>They secured {0} of {1}</TheNetwork_ContractSecured>
   <TheNetwork_InsuranceLine>Insured: pays back {0} of the deposit on covered losses (cost {1} silver)</TheNetwork_InsuranceLine>
@@ -75,7 +77,7 @@
   <TheNetwork_OfferState_Superseded>not chosen</TheNetwork_OfferState_Superseded>
   <TheNetwork_Condition_CashUpFront>wants more up front</TheNetwork_Condition_CashUpFront>
   <TheNetwork_Condition_NoQuestionsAsked>no questions asked about where it comes from</TheNetwork_Condition_NoQuestionsAsked>
-  <TheNetwork_Condition_AfterCurrentJob>after their current job</TheNetwork_Condition_AfterCurrentJob>
+  <TheNetwork_Condition_AlongsideOtherWork>they are running other work at the same time</TheNetwork_Condition_AlongsideOtherWork>
   <TheNetwork_Condition_RiskAcknowledged>they know it is dangerous</TheNetwork_Condition_RiskAcknowledged>
   <TheNetwork_Condition_ReplacementHonoursQuote>honours the original quote</TheNetwork_Condition_ReplacementHonoursQuote>
 
@@ -334,6 +336,7 @@
   <TheNetwork_Reason_AlreadyClosed>that job is already closed</TheNetwork_Reason_AlreadyClosed>
   <TheNetwork_Reason_BadPremium>that amount of extra silver is not possible</TheNetwork_Reason_BadPremium>
   <TheNetwork_Reason_BidderWithdrew>they withdrew their offer</TheNetwork_Reason_BidderWithdrew>
+  <TheNetwork_Reason_BidderNowCommitted>they have taken on as much work as they can since they quoted</TheNetwork_Reason_BidderNowCommitted>
   <TheNetwork_Reason_CannotAffordDeposit>you cannot pay what is due now</TheNetwork_Reason_CannotAffordDeposit>
   <TheNetwork_Reason_ChooseContractor>choose who to ask</TheNetwork_Reason_ChooseContractor>
   <TheNetwork_Reason_ContractMissing>that job no longer exists</TheNetwork_Reason_ContractMissing>

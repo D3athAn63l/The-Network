@@ -512,14 +512,27 @@ namespace TheNetwork.Domain.Contractors
             return org == null ? Embodied(a) : ctx.characters.Get(org.leader);
         }
 
-        /// <summary>How many jobs this contractor can run at once.</summary>
+        /// <summary>
+        /// How many jobs this contractor can run at once: a Solo one, an organization one per six able
+        /// people (1..3). The people already out on jobs count, so taking a job never shrinks the limit.
+        /// </summary>
         public static int JobCapacity(NetworkActor a)
         {
             OrganizationProfile org = a?.Get<OrganizationProfile>();
             if (org == null) return 1;
-            int people = org.Healthy + org.knownMembers.Count;
+            int people = org.Healthy + org.Committed + org.knownMembers.Count;
             return Math.Max(1, Math.Min(3, people / 6));
         }
+
+        /// <summary>Already running as many jobs as it can: one more would exceed <see cref="JobCapacity"/>.</summary>
+        public bool AtCapacity(NetworkActor a)
+        {
+            ContractorSimulation sim = a?.Get<ContractorSimulation>();
+            return sim != null && sim.commitments.Count >= JobCapacity(a);
+        }
+
+        /// <summary>Checkouts that took a contractor past its job capacity (runtime diagnostic; always 0).</summary>
+        public int overCapacityCheckouts;
 
         public float WoundedShare(NetworkActor a)
         {
@@ -548,7 +561,12 @@ namespace TheNetwork.Domain.Contractors
             else
             {
                 OrganizationProfile org = a.Get<OrganizationProfile>();
-                if (org != null && org.Healthy + AvailableKnown(org) == 0) return org.Wounded > 0 ? Availability.Recovering : Availability.Unavailable;
+                if (org != null && org.Healthy + AvailableKnown(a, org) == 0)
+                {
+                    // Nobody left at home: everyone is out on a job, hurt, or gone.
+                    if (sim.commitments.Count > 0) return Availability.Committed;
+                    return org.Wounded > 0 ? Availability.Recovering : Availability.Unavailable;
+                }
                 if (WoundedShare(a) > 0.5f) return Availability.Recovering;
             }
             if (sim.morale.descriptor == MoraleDescriptor.Exhausted) return Availability.Exhausted;
@@ -556,13 +574,57 @@ namespace TheNetwork.Domain.Contractors
             return Availability.Available;
         }
 
-        private int AvailableKnown(OrganizationProfile org)
+        /// <summary>Known members at home and fit to go: alive, active, and not out on another live operation.</summary>
+        private int AvailableKnown(NetworkActor a, OrganizationProfile org)
         {
+            List<CharacterId> busy = Occupied(a, OperationId.None);
             int n = 0;
             for (int i = 0; i < org.knownMembers.Count; i++)
             {
                 KnownCharacter c = ctx.characters.Get(org.knownMembers[i]);
-                if (c != null && c.IsAvailable) n++;
+                if (c != null && c.IsAvailable && !busy.Contains(c.id)) n++;
+            }
+            return n;
+        }
+
+        /// <summary>
+        /// The named people of this contractor already out on a live operation (other than
+        /// <paramref name="except"/>). Derived from the contractor's operation commitments, never stored:
+        /// a person is out from checkout until the operation returns them, so one KnownCharacter is in
+        /// at most one live abstract operation at a time.
+        /// </summary>
+        public List<CharacterId> Occupied(NetworkActor a, OperationId except)
+        {
+            List<CharacterId> busy = new List<CharacterId>();
+            ContractorSimulation sim = a?.Get<ContractorSimulation>();
+            if (sim == null || ctx.operations == null) return busy;
+            for (int i = 0; i < sim.commitments.Count; i++)
+            {
+                if (sim.commitments[i] == except) continue;
+                Operations.Operation op = ctx.operations.Get(sim.commitments[i]);
+                if (op == null || op.outcomeApplied) continue;
+                for (int j = 0; j < op.characters.Count; j++) if (!busy.Contains(op.characters[j])) busy.Add(op.characters[j]);
+            }
+            return busy;
+        }
+
+        /// <summary>Named people listed on more than one live operation (an invariant; always 0).</summary>
+        public int DoubleBooked()
+        {
+            if (ctx.operations == null) return 0;
+            Dictionary<CharacterId, int> seen = new Dictionary<CharacterId, int>();
+            int n = 0;
+            for (int i = 0; i < ctx.operations.operations.Count; i++)
+            {
+                Operations.Operation op = ctx.operations.operations[i];
+                if (op.IsFinished || op.outcomeApplied) continue;
+                for (int j = 0; j < op.characters.Count; j++)
+                {
+                    int k;
+                    seen.TryGetValue(op.characters[j], out k);
+                    if (k == 1) n++;
+                    seen[op.characters[j]] = k + 1;
+                }
             }
             return n;
         }
@@ -595,11 +657,20 @@ namespace TheNetwork.Domain.Contractors
         {
             ForceCommitment f = new ForceCommitment();
             ContractorSimulation sim = a.Get<ContractorSimulation>();
-            if (sim != null && !sim.commitments.Contains(op)) sim.commitments.Add(op);
+            if (sim != null && !sim.commitments.Contains(op))
+            {
+                if (sim.commitments.Count >= JobCapacity(a))
+                {
+                    overCapacityCheckouts++;
+                    NetLog.WarnOnce(LogCategory.Contracts, "contractor.overcapacity." + a.id.Value, a.name.Display + " was checked out beyond its job capacity (" + sim.commitments.Count + " of " + JobCapacity(a) + ").");
+                }
+                sim.commitments.Add(op);
+            }
+            List<CharacterId> busy = Occupied(a, op);
             OrganizationProfile org = a.Get<OrganizationProfile>();
             if (org == null)
             {
-                if (a.bindings.embodies.IsValid) f.characters.Add(a.bindings.embodies);
+                if (a.bindings.embodies.IsValid && !busy.Contains(a.bindings.embodies)) f.characters.Add(a.bindings.embodies);
             }
             else
             {
@@ -618,7 +689,7 @@ namespace TheNetwork.Domain.Contractors
                 for (int i = 0; i < org.knownMembers.Count; i++)
                 {
                     KnownCharacter c = ctx.characters.Get(org.knownMembers[i]);
-                    if (c == null || !c.IsAvailable) continue;
+                    if (c == null || !c.IsAvailable || busy.Contains(c.id) || f.characters.Contains(c.id)) continue;
                     bool isLeader = c.id == org.leader;
                     bool goes = isLeader ? (small || danger > 0.55f) : (small || org.lieutenants.Contains(c.id) || danger > 0.4f);
                     if (goes) f.characters.Add(c.id);
@@ -626,7 +697,7 @@ namespace TheNetwork.Domain.Contractors
                 if (f.Headcount == 0)
                 {
                     KnownCharacter l = ctx.characters.Get(org.leader);
-                    if (l != null && l.IsAvailable) f.characters.Add(l.id);
+                    if (l != null && l.IsAvailable && !busy.Contains(l.id)) f.characters.Add(l.id);
                 }
             }
             sim?.MarkDirty();

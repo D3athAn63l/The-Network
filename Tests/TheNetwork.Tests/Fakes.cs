@@ -123,7 +123,10 @@ namespace TheNetwork.Tests
 
         public List<FactionFacts> LiveFactions() { return factions; }
         public float BaseThreatPoints() { return threat; }
-        public string PickStuff(string thingDefName, int seed) { return null; }
+        /// <summary>Optional: a deterministic stuff choice for stuff-made test items (null = none).</summary>
+        public Func<string, int, string> stuffPicker;
+
+        public string PickStuff(string thingDefName, int seed) { return stuffPicker?.Invoke(thingDefName, seed); }
         public int TilesFromPlayerHome(TileRef tile) { return tile == null ? -1 : 6; }
         public int TravelTicksFromPlayerHome(TileRef tile) { return tile == null ? -1 : 108000; }
         public FactionFacts PlayerFaction() { return Player(); }

@@ -3,6 +3,7 @@ using System.Text;
 using RimWorld;
 using TheNetwork.Domain;
 using TheNetwork.Domain.Actors;
+using TheNetwork.Domain.Contractors;
 using TheNetwork.Domain.Intel;
 using TheNetwork.Domain.Opportunities;
 using TheNetwork.History;
@@ -280,6 +281,9 @@ namespace TheNetwork.Core
             List<string> contractJobs = new List<string>();
             rt.Ctx.Procurement.EnsureJobs(contractJobs);
             for (int i = 0; i < contractJobs.Count; i++) report.Add(contractJobs[i], true);
+            List<string> upkeepJobs = new List<string>();
+            rt.Ctx.Upkeep.EnsureUpkeepJobs(upkeepJobs);
+            for (int i = 0; i < upkeepJobs.Count; i++) report.Add(upkeepJobs[i], true);
             // Jobs whose target is gone.
             List<ScheduledJob> orphans = new List<ScheduledJob>();
             foreach (ScheduledJob j in sch.AllJobs)
@@ -289,6 +293,11 @@ namespace TheNetwork.Core
                 if (j.kind.StartsWith("intel.", System.StringComparison.Ordinal) || j.kind == JobKinds.RefundRetry) live = s.intel.Get(new IntelRequestId(j.target)) != null;
                 else if (j.kind.StartsWith("opp.", System.StringComparison.Ordinal)) live = s.opportunities.Get(new OpportunityId(j.target)) != null;
                 else if (j.kind.StartsWith("contract.", System.StringComparison.Ordinal) || j.kind.StartsWith("operation.", System.StringComparison.Ordinal) || j.kind.StartsWith("consequence.", System.StringComparison.Ordinal)) live = rt.Ctx.Procurement.JobTargetExists(j);
+                else if (j.kind == ContractorService.UpkeepJob)
+                {
+                    NetworkActor a = s.actors.Get(new ActorId(j.target));
+                    live = a != null && a.status == ActorStatus.Active;
+                }
                 if (!live) orphans.Add(j);
             }
             for (int i = 0; i < orphans.Count; i++)

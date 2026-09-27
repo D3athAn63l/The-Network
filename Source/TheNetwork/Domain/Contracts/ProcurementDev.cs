@@ -77,7 +77,7 @@ namespace TheNetwork.Domain.Contracts
                     + (o.quote.insuranceOffer != null ? ", insurance " + o.quote.insuranceOffer.premium + " @" + o.quote.insuranceOffer.coverage.ToString("0.00") : "") + ", valid until " + o.quote.validUntilTick);
             }
             foreach (Refusal r in c.refusals) sb.AppendLine("  refusal " + r.actorName + " round " + r.round + ": " + string.Join(", ", r.reasonKeys.ToArray()));
-            foreach (Intel.MoneyRecord m in c.ledger) sb.AppendLine("  money " + m.direction + " " + m.silver + " " + m.noteKey + (m.pending ? " PENDING" : ""));
+            foreach (Intel.MoneyRecord m in c.ledger) sb.AppendLine("  money " + m.direction + " " + m.purpose + " " + m.silver + (m.linkedContract != 0 ? " with #" + m.linkedContract : "") + " (" + m.noteKey + ")" + (m.pending ? " PENDING" : ""));
             Operation op = CurrentOperation(c);
             if (op != null)
             {

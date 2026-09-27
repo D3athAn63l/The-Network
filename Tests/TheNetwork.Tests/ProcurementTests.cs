@@ -143,6 +143,30 @@ namespace TheNetwork.Tests
             return n.ctx.Procurement.CurrentOperation(c);
         }
 
+        /// <summary>The soak invariants: each is checked every simulated day and must stay 0.</summary>
+        public static void SoakInvariants(TheNetwork.Diagnostics.SoakHarness.Result r, string label)
+        {
+            T.Eq(0, r.overCapacity, label + ": no commitments above job capacity");
+            T.Eq(0, r.doubleBooked, label + ": no named person on two live operations");
+            T.Eq(0, r.moneyViolations, label + ": no negative, empty or magical money");
+            T.Eq(0, r.duplicateRefunds, label + ": no duplicate refund or payout");
+            T.Eq(0, r.lklAboveSecured, label + ": no Last Known Location holds more than was secured");
+            T.Eq(0L, r.moneyDrift, label + ": charges − refunds at the port = charges − refunds in the ledgers");
+            T.Eq(0L, r.transferDrift, label + ": transfers sum to zero");
+        }
+
+        /// <summary>Two ledgers hold the same records, in order: direction, purpose, amount, counterpart, pending.</summary>
+        public static bool SameLedger(Contract a, Contract b)
+        {
+            if (a.ledger.Count != b.ledger.Count) return false;
+            for (int i = 0; i < a.ledger.Count; i++)
+            {
+                MoneyRecord x = a.ledger[i], y = b.ledger[i];
+                if (x.direction != y.direction || x.purpose != y.purpose || x.silver != y.silver || x.linkedContract != y.linkedContract || x.pending != y.pending || x.tick != y.tick || x.noteKey != y.noteKey) return false;
+            }
+            return true;
+        }
+
         // ================================================================== posting and bidding
 
         private static void PostOpens()
@@ -534,7 +558,7 @@ namespace TheNetwork.Tests
             T.Eq(200 - secured, child.Quantity, "for the remainder");
             T.Eq(ContractStatus.Bidding, child.status, "the continuation looks for a contractor");
             int proRated = (int)Math.Round(c.terms.price * secured / 200f);
-            T.Check(c.Paid() <= Math.Max(proRated, c.terms.deposit) + 1, "paid a pro-rated price at most");
+            T.Check(c.ExternalCharged() <= Math.Max(proRated, c.terms.deposit) + 1, "paid a pro-rated price at most");
         }
 
         private static void PartialGrace()
@@ -562,7 +586,7 @@ namespace TheNetwork.Tests
             T.Eq(ContractStatus.Failed, c.status, "Failed");
             T.Eq(Causes.OperationFailed, c.outcome.causeKey, "cause recorded");
             int payout = n.pay.refunded - refundedBefore;
-            int deposit = c.PaidFor(ProcurementService.NoteDeposit);
+            int deposit = c.Funding(MoneyPurpose.Deposit);
             T.Check(payout > 0 && payout < deposit, "insurance recovers only part of the deposit (" + payout + " of " + deposit + ")");
             T.Eq((int)Math.Round(deposit * c.terms.insurance.coverage), payout, "exactly the coverage share");
             TestNet m = World(0);
@@ -597,7 +621,8 @@ namespace TheNetwork.Tests
             T.Eq(1, lkl.lineageDepth, "lineage depth");
             T.Eq(OpportunityState.Materialized, lkl.state, "through the Phase 1 site machinery");
             Opportunity again = lkl;
-            T.Check(again.TargetCount >= 0 && again.TargetCount <= c.Quantity, "cargo amount committed (" + again.TargetCount + ")");
+            int secured = Op(n, c).outcome.secured;
+            T.Check(again.TargetCount >= 0 && again.TargetCount <= secured, "cargo bounded by what was secured (" + again.TargetCount + " of " + secured + ")");
             T.Eq(refunded, n.pay.refunded, "the follow-up does not refund the deposit");
             T.Eq(1, n.recorder.Count(EventKeys.OpportunityFollowUpCreated), "Opportunity.FollowUpCreated (letter)");
         }
@@ -630,7 +655,7 @@ namespace TheNetwork.Tests
             OrganizationProfile org = team.Get<OrganizationProfile>();
             int committed = org.Committed;
             T.Check(committed > 0, "people committed");
-            int paid = c.Paid();
+            int paid = c.ExternalCharged();
             int refunded = n.pay.refunded;
             n.ctx.Procurement.Void(c, Causes.DefMissing);
             T.Eq(ContractStatus.Voided, c.status, "Voided");
@@ -657,7 +682,7 @@ namespace TheNetwork.Tests
             T.Eq(charged, n.pay.charged, "free before award");
 
             Contract c = Awarded(n, fixer, Reliable(n));
-            int deposit = c.PaidFor(ProcurementService.NoteDeposit);
+            int deposit = c.Funding(MoneyPurpose.Deposit);
             int refunded = n.pay.refunded;
             T.Check(n.ctx.Procurement.Cancel(c.id).ok, "cancel while Preparing");
             T.Eq((int)Math.Round(deposit * 0.25f), n.pay.refunded - refunded, "the Standard refund policy returns a quarter");
@@ -685,13 +710,14 @@ namespace TheNetwork.Tests
             T.Check(child.lineage.inheritedFrom == c.id && child.lineage.parent == c.id && child.lineage.relationKey == ContractLineage.Replacement, "replacement lineage: inheritedFrom + parent");
             T.Check(child.IsUnderway && child.parties.contractor != team.id, "the replacement is under way with another contractor");
             T.Eq(c.terms.price, child.terms.price, "the Fixer honours the quoted price");
-            T.Eq(0, child.PaidFor(ProcurementService.NoteDeposit), "no second deposit charged");
+            T.Eq(0, child.ExternalCharged(), "no second deposit charged");
+            T.Eq(c.terms.deposit, child.Funding(MoneyPurpose.Deposit), "the paid deposit is carried over as a transfer");
 
             TestNet m = World(0);
             NetworkActor lean = Fixer(m, "Lean");
             NetworkActor solo = Reliable(m);
             Contract c2 = Awarded(m, lean, solo);
-            int deposit = c2.PaidFor(ProcurementService.NoteDeposit);
+            int deposit = c2.Funding(MoneyPurpose.Deposit);
             int r0 = m.pay.refunded;
             m.ctx.Contractors.EndActor(solo, "Test");
             RunUntil(m, () => c2.IsTerminal, 20);
@@ -881,7 +907,7 @@ namespace TheNetwork.Tests
             T.Eq(2, repaired, "both missing jobs recreated (" + string.Join("; ", findings.ToArray()) + ")");
             T.Check(n.scheduler.Has(ProcurementService.OffersJob, bidding.id.Value) && n.scheduler.Has(OperationService.CheckpointJob, op.id.Value), "jobs present again");
             T.Eq(0, n.ctx.Procurement.EnsureJobs(null), "idempotent");
-            int paid = active.Paid();
+            int paid = active.ExternalCharged();
             int refunded = n.pay.refunded;
             int voided = n.ctx.Procurement.InvalidateMissing(def => def != "TestSteel", findings);
             T.Eq(2, voided, "every live contract for a removed def is voided");
@@ -918,6 +944,7 @@ namespace TheNetwork.Tests
             Console.WriteLine(r.text);
             T.Check(r.posted > 300, "a steady stream of contracts (" + r.posted + ")");
             T.Eq(0, r.stuck, "no contract is left stuck");
+            SoakInvariants(r, "180 days");
             T.Eq(0, r.npcIssued, "no NPC-issued contracts");
             T.Check(r.contractorsEnd >= 90, "the population stays near its target (" + r.contractorsEnd + ")");
             T.Check(r.Count(ContractStatus.Fulfilled) > 0 && r.Count(ContractStatus.Failed) + r.Count(ContractStatus.PartiallyFulfilled) > 0, "a mix of outcomes");
@@ -930,6 +957,7 @@ namespace TheNetwork.Tests
             TheNetwork.Diagnostics.SoakHarness.Result r = TheNetwork.Diagnostics.SoakHarness.Run(100, 14, 3 * 360, 1357);
             Console.WriteLine(r.text);
             T.Eq(0, r.stuck, "eighteen in-game years (1,080 days): nothing stuck");
+            SoakInvariants(r, "1,080 days");
             T.Check(r.posted > 1800, "thousands of contracts over the years (" + r.posted + ")");
             T.Check(r.contractsKept < r.posted * 0.6, "contracts closed over a year ago are archived (" + r.contractsKept + " of " + r.posted + " kept)");
             T.Check(r.relations <= RelationService.GlobalCap && r.knowledgeBooks <= r.contractorsEnd + r.contractorsEnded + 20, "relations and knowledge bounded (" + r.relations + ", " + r.knowledgeBooks + ")");
@@ -1066,7 +1094,7 @@ namespace TheNetwork.Tests
                 T.Check(b != null && b.status == a.status && b.subStatus == a.subStatus && b.decisionDueTick == a.decisionDueTick && b.seed == a.seed, kv.Key + ": status " + a.status + "/" + a.subStatus + " survives");
                 if (b == null) continue;
                 T.Check(b.quarantinedReason == null, kv.Key + ": not quarantined");
-                T.Eq(a.Paid(), b.Paid(), kv.Key + ": money");
+                T.Check(SameLedger(a, b), kv.Key + ": money (every record, direction, purpose and counterpart)");
                 T.Eq(a.offers.Count, b.offers.Count, kv.Key + ": offers");
                 Operation oa = n.ctx.Procurement.CurrentOperation(a), ob = b.operations.Count == 0 ? null : loaded.operations.Get(b.operations[b.operations.Count - 1]);
                 if (oa == null) continue;

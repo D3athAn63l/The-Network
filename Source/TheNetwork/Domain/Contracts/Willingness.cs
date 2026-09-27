@@ -135,7 +135,7 @@ namespace TheNetwork.Domain.Contracts
             {
                 if (rel.trust < 0.4f) d.conditions.Add("CashUpFront");
                 if (!f.tradeable) d.conditions.Add("NoQuestionsAsked");
-                if (sim.commitments.Count > 0) d.conditions.Add("AfterCurrentJob");
+                if (sim.commitments.Count > 0) d.conditions.Add("AlongsideOtherWork"); // runs in parallel, never queued
                 if (d.danger > 0.6f) d.conditions.Add("RiskAcknowledged");
             }
             return d;

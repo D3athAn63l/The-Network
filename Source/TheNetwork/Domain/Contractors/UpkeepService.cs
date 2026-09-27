@@ -38,6 +38,52 @@ namespace TheNetwork.Domain.Contractors
             ctx.scheduler.Schedule(ContractorService.UpkeepJob, next, a.id.Value);
         }
 
+        /// <summary>
+        /// Repair (validator): recreates a missing contractor.upkeep job for every live NPC contractor.
+        /// A saved due tick that is still ahead (and plausible) is kept; a past-due one runs soon after a
+        /// short deterministic delay; a missing or impossible one gets the normal stagger. Ended and
+        /// quarantined contractors get none, and a contractor that has its job is left alone (the kind is
+        /// a singleton), so this never duplicates.
+        /// </summary>
+        public int EnsureUpkeepJobs(List<string> findings)
+        {
+            int repaired = 0, now = ctx.Now;
+            List<NetworkActor> all = ctx.actors.actors;
+            for (int i = 0; i < all.Count; i++)
+            {
+                NetworkActor a = all[i];
+                if (!ContractorService.IsNpcContractor(a) || a.status != ActorStatus.Active || a.quarantinedReason != null) continue;
+                if (ctx.scheduler.Has(ContractorService.UpkeepJob, a.id.Value)) continue;
+                ContractorSimulation sim = a.Get<ContractorSimulation>();
+                if (sim == null) continue;
+                int due;
+                string how;
+                if (sim.nextUpkeepTick > now && sim.nextUpkeepTick <= now + MaxUpkeepAhead)
+                {
+                    due = sim.nextUpkeepTick;
+                    how = "kept its due tick";
+                }
+                else if (sim.nextUpkeepTick > 0 && sim.nextUpkeepTick <= now)
+                {
+                    due = now + 1 + (NetHash.Combine(a.seed, "upkeep.repair") & 0x7fffffff) % Ticks.PerHour;
+                    how = "past due; runs shortly";
+                }
+                else
+                {
+                    due = NetScheduler.StaggeredDue(now + 1, a.seed, ContractorService.UpkeepJob, Ticks.PerDay);
+                    how = "no valid due tick; staggered";
+                }
+                sim.nextUpkeepTick = due;
+                ctx.scheduler.Schedule(ContractorService.UpkeepJob, due, a.id.Value);
+                repaired++;
+                if (findings != null) findings.Add("Contractor " + a.id + ": upkeep job missing; recreated (" + how + ").");
+            }
+            return repaired;
+        }
+
+        /// <summary>The furthest ahead a saved upkeep due tick can plausibly be (one period plus jitter, with margin).</summary>
+        public const int MaxUpkeepAhead = Ticks.PerDay * 2;
+
         private int NextDue(NetworkActor a, ContractorSimulation sim)
         {
             NetRng rng = new NetRng(a.seed, "upkeep.jitter", sim.opsCompleted + sim.lastUpkeepTick / Ticks.PerDay);

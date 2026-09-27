@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using RimWorld;
 using TheNetwork.Domain.Intel;
@@ -413,24 +414,43 @@ namespace TheNetwork.Domain.Contracts
         public string ItemLabel => Acquire?.Label ?? "?";
         public int Quantity => Acquire?.count ?? 0;
 
-        public int Paid()
+        // ------------------------------------------------------------------ money (typed; see MoneyDirection)
+
+        /// <summary>Real silver charged from the player on this contract.</summary>
+        public int ExternalCharged() => Sum(MoneyDirection.PlayerPaid, null);
+
+        /// <summary>Real silver returned to the player on this contract (refunds and insurance payouts, pending included).</summary>
+        public int ExternalRefunded() => Sum(MoneyDirection.PlayerRefunded, null);
+
+        public int TransferredIn() => Sum(MoneyDirection.TransferIn, null);
+        public int TransferredOut() => Sum(MoneyDirection.TransferOut, null);
+
+        /// <summary>
+        /// Funding of one purpose attributable to this contract: charged here, plus carried in from a
+        /// linked contract, minus carried out to one. This is what every policy reads ("the deposit").
+        /// </summary>
+        public int Funding(MoneyPurpose purpose)
         {
-            int s = 0;
-            for (int i = 0; i < ledger.Count; i++) if (ledger[i].direction == MoneyDirection.PlayerPaid) s += ledger[i].silver;
-            return s;
+            return Sum(MoneyDirection.PlayerPaid, purpose) + Sum(MoneyDirection.TransferIn, purpose) - Sum(MoneyDirection.TransferOut, purpose);
         }
 
-        public int Refunded()
-        {
-            int s = 0;
-            for (int i = 0; i < ledger.Count; i++) if (ledger[i].direction == MoneyDirection.PlayerRefunded) s += ledger[i].silver;
-            return s;
-        }
+        /// <summary>All funding attributable to this contract.</summary>
+        public int TotalFunding() => ExternalCharged() + TransferredIn() - TransferredOut();
 
-        public int PaidFor(string noteKey)
+        /// <summary>
+        /// The player's position still held by this contract: funding minus what has already been
+        /// returned. A technical invalidation refunds exactly this; a replacement carries exactly this.
+        /// </summary>
+        public int NetFunding() => Math.Max(0, TotalFunding() - ExternalRefunded());
+
+        private int Sum(MoneyDirection direction, MoneyPurpose? purpose)
         {
             int s = 0;
-            for (int i = 0; i < ledger.Count; i++) if (ledger[i].direction == MoneyDirection.PlayerPaid && ledger[i].noteKey == noteKey) s += ledger[i].silver;
+            for (int i = 0; i < ledger.Count; i++)
+            {
+                MoneyRecord m = ledger[i];
+                if (m.direction == direction && (purpose == null || m.purpose == purpose.Value)) s += m.silver;
+            }
             return s;
         }
 

@@ -82,6 +82,41 @@ namespace TheNetwork.Core
             if (store == null) store = new T();
         }
 
+        /// <summary>
+        /// The highest id in use by any entity that draws from the shared allocator (<c>ids.NextId()</c>):
+        /// actors, known characters, intel requests, leads, opportunities, history records, contracts,
+        /// offers and operations. A new entity kind that draws an id must be added here (a test checks
+        /// every kind).
+        /// </summary>
+        public int MaxEntityId()
+        {
+            int max = 0;
+            for (int i = 0; i < actors.actors.Count; i++) max = Math.Max(max, actors.actors[i].id.Value);
+            for (int i = 0; i < characters.characters.Count; i++) max = Math.Max(max, characters.characters[i].id.Value);
+            for (int i = 0; i < intel.requests.Count; i++) max = Math.Max(max, intel.requests[i].id.Value);
+            for (int i = 0; i < intel.leads.Count; i++) max = Math.Max(max, intel.leads[i].id.Value);
+            for (int i = 0; i < opportunities.opportunities.Count; i++) max = Math.Max(max, opportunities.opportunities[i].id.Value);
+            for (int i = 0; i < history.records.Count; i++) max = Math.Max(max, history.records[i].id.Value);
+            for (int i = 0; i < contracts.contracts.Count; i++) max = Math.Max(max, contracts.contracts[i].id.Value);
+            for (int i = 0; i < contracts.offers.Count; i++) max = Math.Max(max, contracts.offers[i].id.Value);
+            for (int i = 0; i < operations.operations.Count; i++) max = Math.Max(max, operations.operations[i].id.Value);
+            return max;
+        }
+
+        /// <summary>
+        /// IDs must stay above every id in use, even after a hand-edited or partial save: raises the entity
+        /// counter above <see cref="MaxEntityId"/> and the event counter above the journal. Returns true
+        /// when the entity counter had to move.
+        /// </summary>
+        public bool RepairIdCounters(IdAllocator ids)
+        {
+            int max = MaxEntityId();
+            bool raised = ids.EnsureAbove(max);
+            if (raised) NetLog.Warn(LogCategory.Kernel, "ID counter was behind the data; raised above " + max + ".");
+            for (int i = 0; i < journal.entries.Count; i++) ids.EnsureEventSeqAbove(journal.entries[i].seq);
+            return raised;
+        }
+
         public void RebuildIndexes()
         {
             actors.RebuildIndex();

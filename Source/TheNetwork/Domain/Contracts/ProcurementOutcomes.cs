@@ -58,15 +58,15 @@ namespace TheNetwork.Domain.Contracts
                 Close(c, ContractStatus.Failed, Causes.PreWorkLoss, EventKeys.ContractFailed, Importance.Notable);
                 return;
             }
-            int deposit = c.PaidFor(NoteDeposit) + c.PaidFor(NoteTransferred);
-            int refund = (int)Math.Round(deposit * refundShare) + c.PaidFor(NotePremium);
+            int deposit = c.Funding(MoneyPurpose.Deposit);
+            int refund = (int)Math.Round(deposit * refundShare) + c.Funding(MoneyPurpose.Premium);
             int payout = 0;
             if (c.terms?.insurance != null && c.terms.insurance.Covers(Causes.PreWorkLoss))
             {
                 payout = (int)Math.Round((deposit - deposit * refundShare) * c.terms.insurance.coverage);
             }
-            if (refund > 0) Refund(c, refund, "refund.replacementPolicy");
-            if (payout > 0) Refund(c, payout, "insurance.payout");
+            if (refund > 0) Refund(c, refund, MoneyPurpose.Refund, "refund.replacementPolicy");
+            if (payout > 0) Refund(c, payout, MoneyPurpose.InsurancePayout, "insurance.payout");
             Close(c, ContractStatus.Failed, Causes.PreWorkLoss, EventKeys.ContractFailed, Importance.Notable, refund, payout);
         }
 
@@ -125,14 +125,45 @@ namespace TheNetwork.Domain.Contracts
             child.status = ContractStatus.Bidding;
             child.biddingRound = 1;
             child.windowOpenTick = child.windowCloseTick = ctx.Now;
-            int carried = c.PaidFor(NoteDeposit) + c.PaidFor(NoteTransferred);
-            int premium = c.PaidFor(NotePremium);
-            c.ledger.Add(Money(carried + premium, MoneyDirection.Transferred, "transferredOut"));
-            child.ledger.Add(Money(carried, MoneyDirection.Transferred, NoteTransferred));
-            if (premium > 0) child.ledger.Add(Money(premium, MoneyDirection.Transferred, NotePremium));
+            TransferFunding(c, child);
             Insurance insurance = c.terms?.insurance?.Copy();
             Award(child, o, a, f, insurance, true);
             return child;
+        }
+
+        private static readonly MoneyPurpose[] FundingPurposes =
+        {
+            MoneyPurpose.Deposit, MoneyPurpose.Premium, MoneyPurpose.InsurancePremium, MoneyPurpose.Renegotiation, MoneyPurpose.Balance
+        };
+
+        /// <summary>
+        /// Moves the parent's whole remaining position to the child, purpose by purpose: a TransferOut on
+        /// the parent and a matching TransferIn on the child (same amount, same purpose, each naming the
+        /// other). No silver moves and none is created: the parent is left with nothing refundable, the
+        /// child holds exactly what the parent held. Anything already returned to the player is taken off
+        /// the deposit first, so it is never carried (and never refunded) twice.
+        /// </summary>
+        private void TransferFunding(Contract parent, Contract child)
+        {
+            int alreadyReturned = parent.ExternalRefunded();
+            for (int i = 0; i < FundingPurposes.Length; i++)
+            {
+                MoneyPurpose p = FundingPurposes[i];
+                int amount = parent.Funding(p);
+                if (alreadyReturned > 0 && amount > 0)
+                {
+                    int take = Math.Min(amount, alreadyReturned);
+                    amount -= take;
+                    alreadyReturned -= take;
+                }
+                if (amount <= 0) continue;
+                MoneyRecord outRec = Money(amount, MoneyDirection.TransferOut, p, "transfer.out");
+                outRec.linkedContract = child.id.Value;
+                parent.ledger.Add(outRec);
+                MoneyRecord inRec = Money(amount, MoneyDirection.TransferIn, p, "transfer.in");
+                inRec.linkedContract = parent.id.Value;
+                child.ledger.Add(inRec);
+            }
         }
 
         private static ProcurementQuote CopyQuote(ProcurementQuote q)
@@ -240,7 +271,7 @@ namespace TheNetwork.Domain.Contracts
                         ApplyWorse(c, WorseChoice.AcceptReduced);
                         return;
                     }
-                    c.ledger.Add(Money(ask.extraSilver, MoneyDirection.PlayerPaid, NoteRenegotiation));
+                    c.ledger.Add(Money(ask.extraSilver, MoneyDirection.PlayerPaid, MoneyPurpose.Renegotiation, "renegotiation.extra"));
                     c.terms.price += ask.extraSilver;
                     PayContractor(c, ctx.actors.Get(c.parties.contractor), ask.extraSilver);
                     break;
@@ -261,8 +292,8 @@ namespace TheNetwork.Domain.Contracts
                         break; // they go ahead on the original terms, grudgingly
                     }
                     if (op != null) ctx.Operations.Abort(op, Causes.ContractorWalked);
-                    int refund = (int)Math.Round(c.PaidFor(NoteDeposit) * 0.5f) + c.PaidFor(NotePremium);
-                    if (refund > 0) Refund(c, refund, "refund.walked");
+                    int refund = (int)Math.Round(c.Funding(MoneyPurpose.Deposit) * 0.5f) + c.Funding(MoneyPurpose.Premium);
+                    if (refund > 0) Refund(c, refund, MoneyPurpose.Refund, "refund.walked");
                     Close(c, ContractStatus.Failed, Causes.ContractorWalked, EventKeys.ContractFailed, Importance.Notable, refund);
                     return;
             }
@@ -401,13 +432,13 @@ namespace TheNetwork.Domain.Contracts
             int remaining = c.Quantity - secured;
             float delivered = secured / (float)Math.Max(1, c.Quantity);
             int prorated = (int)Math.Round(c.terms.price * delivered);
-            int depositPaid = c.PaidFor(NoteDeposit) + c.PaidFor(NoteTransferred);
+            int depositPaid = c.Funding(MoneyPurpose.Deposit);
             int balanceDue = Math.Max(0, prorated - depositPaid);
             int payout = 0;
             if (c.terms.insurance != null && c.terms.insurance.Covers(Causes.PartialShortfall))
             {
                 payout = (int)Math.Round(depositPaid * (1f - delivered) * c.terms.insurance.coverage);
-                if (payout > 0) Refund(c, payout, "insurance.payout");
+                if (payout > 0) Refund(c, payout, MoneyPurpose.InsurancePayout, "insurance.payout");
             }
             c.status = ContractStatus.Active;
             c.subStatus = null;
@@ -510,7 +541,7 @@ namespace TheNetwork.Domain.Contracts
                     return;
                 }
                 d.balancePaid = true;
-                c.ledger.Add(Money(d.balanceDue, MoneyDirection.PlayerPaid, NoteBalance));
+                c.ledger.Add(Money(d.balanceDue, MoneyDirection.PlayerPaid, MoneyPurpose.Balance, "balance"));
                 PayContractor(c, ctx.actors.Get(c.parties.contractor), d.balanceDue);
                 ContractEvent paid = NewEvent(EventKeys.PaymentReceived, Importance.Minor, c);
                 paid.silver = d.balanceDue;
@@ -560,7 +591,7 @@ namespace TheNetwork.Domain.Contracts
             if (hold && ctx.Now - d.holdSinceTick >= (int)(rules.deliveryHoldMaxDays * Ticks.PerDay))
             {
                 int refund = d.balancePaid && d.balanceDue > 0 ? d.balanceDue : 0;
-                if (refund > 0) Refund(c, refund, "refund.undeliverable");
+                if (refund > 0) Refund(c, refund, MoneyPurpose.Refund, "refund.undeliverable");
                 Operation op = CurrentOperation(c);
                 if (op != null) ctx.Operations.Finish(op);
                 Close(c, ContractStatus.Failed, Causes.UndeliverableNoHome, EventKeys.ContractFailed, Importance.Notable, refund);
@@ -622,7 +653,7 @@ namespace TheNetwork.Domain.Contracts
         private void PartialHandover(Contract c)
         {
             DeliverObjective d = c.Deliver;
-            int paid = c.PaidFor(NoteDeposit) + c.PaidFor(NoteTransferred);
+            int paid = c.Funding(MoneyPurpose.Deposit);
             int agreed = paid + d.balanceDue;
             int covered = agreed <= 0 ? d.pendingCount : (int)Math.Floor(d.pendingCount * paid / (float)agreed);
             ctx.scheduler.Cancel(DecisionJob, c.id.Value);
@@ -678,9 +709,9 @@ namespace TheNetwork.Domain.Contracts
             Insurance ins = c.terms?.insurance;
             if (ins != null && ins.Covers(causeKey))
             {
-                int deposit = c.PaidFor(NoteDeposit) + c.PaidFor(NoteTransferred);
+                int deposit = c.Funding(MoneyPurpose.Deposit);
                 payout = (int)Math.Round(deposit * ins.coverage);
-                if (payout > 0) Refund(c, payout, "insurance.payout");
+                if (payout > 0) Refund(c, payout, MoneyPurpose.InsurancePayout, "insurance.payout");
             }
             Close(c, ContractStatus.Failed, causeKey, EventKeys.ContractFailed, importance, 0, payout);
         }

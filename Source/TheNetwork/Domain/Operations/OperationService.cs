@@ -54,7 +54,7 @@ namespace TheNetwork.Domain.Operations
             int count = Math.Max(1, c.Quantity);
             float diff = Valuation.Difficulty(f, count);
             float goods = Math.Max(1f, Valuation.GoodsBasis(f, count));
-            int sponsored = c.request.premiumContribution + c.PaidFor(ProcurementService.NoteRenegotiation);
+            int sponsored = c.request.premiumContribution + c.Funding(Intel.MoneyPurpose.Renegotiation);
             return new ResolverInputs
             {
                 threatPower = Valuation.MarketThreat(f, count),
@@ -285,7 +285,8 @@ namespace TheNetwork.Domain.Operations
             NetRng rng = new NetRng(op.seed, "op.resolve", op.rerollNonce);
             OutcomeBand? forced = ProcurementDevOverrides.forceBand;
             ProcurementDevOverrides.forceBand = null;
-            OperationOutcome o = Resolver.Resolve(op.frozenInputs, op.forces, Participants(a, op), c.Quantity, op.plannedTicks, rng, forced);
+            List<Participant> people = Participants(a, op);
+            OperationOutcome o = Resolver.Resolve(op.frozenInputs, op.forces, people, c.Quantity, op.plannedTicks, rng, forced);
             if (ProcurementDevOverrides.forceSecured.HasValue)
             {
                 o.secured = Math.Max(0, Math.Min(o.requested, ProcurementDevOverrides.forceSecured.Value));
@@ -302,7 +303,8 @@ namespace TheNetwork.Domain.Operations
                 ProcurementDevOverrides.forceTroubled = null;
             }
             o.committedTick = ctx.Now;
-            o.knowledgeGains = Resolver.Gains(o.band, Valuation.Topics(f));
+            // Committed with the outcome (never recomputed on load): empty when nobody came back to tell it.
+            o.knowledgeGains = Resolver.GainsIfReported(o, op.forces, people.Count, Valuation.Topics(f));
             if (o.secured > 0) o.securedPayload.Add(CommitPayload(c, f, o, NetHash.Combine(op.seed, "payload")));
             op.outcome = o;
             op.status = OpStatus.Resolved;

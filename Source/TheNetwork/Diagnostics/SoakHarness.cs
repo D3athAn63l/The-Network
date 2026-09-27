@@ -49,6 +49,27 @@ namespace TheNetwork.Diagnostics
             public int operations;
             public int contractsKept;
             public int offersKept;
+
+            // Invariants (every one must be 0): checked daily over the whole run.
+            /// <summary>Checkouts that took a contractor past its job capacity.</summary>
+            public int overCapacity;
+            /// <summary>Named people found on two live operations at once (summed over days).</summary>
+            public int doubleBooked;
+            /// <summary>Money records that are empty or negative, or contracts that returned more than they held.</summary>
+            public int moneyViolations;
+            /// <summary>Contracts with more than one refund or more than one insurance payout.</summary>
+            public int duplicateRefunds;
+            /// <summary>Last Known Locations holding more of the goods than the operation secured.</summary>
+            public int lklAboveSecured;
+            /// <summary>|charged − refunded at the payment port − (external charges − external refunds in every contract ledger)|.</summary>
+            public long moneyDrift;
+            /// <summary>Σ(transfers in − transfers out) over every contract ever seen.</summary>
+            public long transferDrift;
+
+            /// <summary>Acceptances refused because the bidder had filled its capacity since quoting (not a violation).</summary>
+            public int staleRefused;
+
+            public int Violations => overCapacity + doubleBooked + moneyViolations + duplicateRefunds + lklAboveSecured + (moneyDrift != 0 ? 1 : 0) + (transferDrift != 0 ? 1 : 0);
             public double totalMs;
             public double maxDayMs;
 
@@ -150,6 +171,46 @@ namespace TheNetwork.Diagnostics
 
         // ------------------------------------------------------------------ run
 
+        /// <summary>The daily invariant pass: capacity, exclusivity, money and Last Known Location cargo.</summary>
+        private static void CheckInvariants(DomainContext ctx, Result res, Dictionary<int, long[]> money)
+        {
+            res.doubleBooked += ctx.Contractors.DoubleBooked();
+            foreach (Contract c in ctx.contracts.contracts)
+            {
+                int refunds = 0, payouts = 0;
+                long ch = 0, rf = 0, ti = 0, to = 0;
+                foreach (MoneyRecord m in c.ledger)
+                {
+                    if (m.silver <= 0) res.moneyViolations++;
+                    switch (m.direction)
+                    {
+                        case MoneyDirection.PlayerPaid: ch += m.silver; break;
+                        case MoneyDirection.PlayerRefunded:
+                            rf += m.silver;
+                            if (m.purpose == MoneyPurpose.InsurancePayout) payouts++;
+                            else refunds++;
+                            break;
+                        case MoneyDirection.TransferIn: ti += m.silver; break;
+                        case MoneyDirection.TransferOut: to += m.silver; break;
+                    }
+                }
+                if (c.ExternalRefunded() > c.TotalFunding() || c.TotalFunding() < 0) res.moneyViolations++;
+                if (refunds > 1 || payouts > 1) res.duplicateRefunds++;
+                long[] last;
+                bool seen = money.TryGetValue(c.id.Value, out last);
+                if (seen && last[4] == 1 && (last[0] != ch || last[1] != rf)) res.moneyViolations++; // closed money never moves again
+                money[c.id.Value] = new[] { ch, rf, ti, to, c.IsTerminal ? 1L : 0L };
+            }
+            foreach (Opportunity o in ctx.opportunities.opportunities)
+            {
+                if (o.origin != OpportunityOrigin.ConsequenceRule || o.originRef.Kind != EntityKind.Contract) continue;
+                Contract c = ctx.contracts.Get(new ContractId(o.originRef.Id));
+                Operation op = c == null ? null : ctx.Procurement.CurrentOperation(c);
+                if (op?.outcome == null) continue;
+                if (o.TargetCount > op.outcome.secured) res.lklAboveSecured++;
+            }
+        }
+
         public static Result Run(int contractors, int contractsPerWeek, int days, int seed, IList<ItemFacts> items = null)
         {
             Result res = new Result { days = days };
@@ -224,6 +285,8 @@ namespace TheNetwork.Diagnostics
             foreach (NetworkActor a in ctx.actors.actors) if (ContractorService.IsNpcContractor(a)) startIds.Add(a.id.Value);
 
             NetRng rng = new NetRng(seed, "soak");
+            // Last seen (charged, refunded, transfers in, transfers out) per contract, kept after compaction.
+            Dictionary<int, long[]> money = new Dictionary<int, long[]>();
             List<double> dayMs = new List<double>();
             HashSet<int> reposted = new HashSet<int>();
             long all0 = Stopwatch.GetTimestamp();
@@ -255,14 +318,21 @@ namespace TheNetwork.Diagnostics
                     clock.Now += Ticks.PerHour;
                     scheduler.RunDue();
                 }
-                // The client: accepts the cheapest open quote, reposts an unfilled contract once.
+                // The client: accepts the cheapest quote it can (a bidder busy since quoting is skipped), reposts an unfilled contract once.
                 foreach (Contract c in ctx.Procurement.Live())
                 {
                     if (c.status == ContractStatus.Bidding && clock.Now >= c.windowCloseTick)
                     {
-                        Offer best = null;
-                        foreach (Offer o in ctx.Procurement.OpenOffers(c)) if (best == null || o.quote.finalPrice < best.quote.finalPrice) best = o;
-                        if (best != null) ctx.Procurement.Accept(best.id, best.quote.insuranceOffer != null && rng.Chance(0.3f));
+                        List<Offer> open = ctx.Procurement.OpenOffers(c);
+                        open.Sort((x, y) => x.quote.finalPrice != y.quote.finalPrice ? x.quote.finalPrice.CompareTo(y.quote.finalPrice) : x.id.Value.CompareTo(y.id.Value));
+                        for (int i = 0; i < open.Count; i++)
+                        {
+                            if (!open[i].IsOpen) continue;
+                            CommandResult accepted = ctx.Procurement.Accept(open[i].id, open[i].quote.insuranceOffer != null && rng.Chance(0.3f));
+                            if (accepted.ok) break;
+                            if (accepted.reasonKey == "BidderNowCommitted") res.staleRefused++;
+                            if (c.status != ContractStatus.Bidding) break;
+                        }
                     }
                     else if (c.status == ContractStatus.Unfilled && reposted.Add(c.id.Value))
                     {
@@ -270,8 +340,19 @@ namespace TheNetwork.Diagnostics
                     }
                 }
                 dayMs.Add((Stopwatch.GetTimestamp() - t0) * 1000.0 / Stopwatch.Frequency);
+                CheckInvariants(ctx, res, money);
             }
             res.totalMs = (Stopwatch.GetTimestamp() - all0) * 1000.0 / Stopwatch.Frequency;
+            long charged = 0, refunded = 0, transfers = 0;
+            foreach (long[] m in money.Values)
+            {
+                charged += m[0];
+                refunded += m[1];
+                transfers += m[2] - m[3];
+            }
+            res.moneyDrift = Math.Abs((payment.spent - payment.refunded) - (charged - refunded));
+            res.transferDrift = transfers;
+            res.overCapacity = ctx.Contractors.overCapacityCheckouts;
 
             ActorId player = ctx.actors.PlayerProxyId;
             int stuckAfter = clock.Now - 60 * Ticks.PerDay;
@@ -320,6 +401,10 @@ namespace TheNetwork.Diagnostics
             sb.AppendLine("  contractors: " + res.contractorsEnd + " active at end, " + res.contractorsEnded + " ended (death/no successor), " + res.newcomers + " newcomers, " + missingStart + " starting actors deleted");
             sb.AppendLine("  stores after retention (history sweeps, compaction a year after closing): " + ctx.contracts.Count + " contracts, " + ctx.contracts.offers.Count + " offers, " + res.operations + " operations, " + res.relations + " relation edges, " + res.knowledgeBooks + " knowledge books, " + res.historyRecords + " history records, " + res.journal + " journal entries, " + res.jobs + " scheduled jobs");
             sb.AppendLine("  silver: spent " + payment.spent + ", refunded " + payment.refunded);
+            sb.AppendLine("  invariants (all must be 0): commitments above capacity " + res.overCapacity + ", named people on two live jobs " + res.doubleBooked
+                + ", bad money records " + res.moneyViolations + ", duplicate refunds/payouts " + res.duplicateRefunds + ", LKL cargo above secured " + res.lklAboveSecured
+                + ", money drift " + res.moneyDrift + ", transfer drift " + res.transferDrift);
+            sb.AppendLine("  stale quotes refused at acceptance (bidder at capacity since quoting; another quote was tried): " + res.staleRefused);
             sb.AppendLine("  time per simulated day: avg " + res.avgDayMs.ToString("0.00") + " ms, p95 " + p95.ToString("0.00") + " ms, max " + res.maxDayMs.ToString("0.00") + " ms (total " + res.totalMs.ToString("0") + " ms)");
             res.text = sb.ToString();
             res.state = state;

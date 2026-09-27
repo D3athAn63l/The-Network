@@ -126,8 +126,10 @@ namespace TheNetwork.Domain.Consequences
                 ProcurementDevOverrides.forceFollowUp = false;
             }
             if (!fire) return;
-            int lost = op.outcome.secured;
-            if (lost <= 0 && rng.Chance(0.5f)) lost = Math.Max(1, (int)Math.Round(c.Quantity * rng.Range(0.2f, 0.6f)));
+            // What the site holds of the contract goods is bounded by what the outcome committed as
+            // secured: part or all of it, never more, and nothing at all when nothing was secured.
+            int secured = Math.Max(0, op.outcome.secured);
+            int lost = secured <= 0 ? 0 : rng.RangeInclusive((secured + 1) / 2, secured);
             Store.pending.Add(new PendingFollowUp
             {
                 ruleKey = RuleLastKnownLocation,
@@ -158,6 +160,7 @@ namespace TheNetwork.Domain.Consequences
             Contract c = ctx.contracts.Get(p.contract);
             ItemFacts f = c == null ? null : ctx.catalog.Facts(c.Acquire?.DefName);
             if (f == null) return;
+            // The committed secured payload (def, stuff, quality, count), read back, never rerolled.
             ItemPayload lost = null;
             Operation op = ctx.operations.Get(p.operation);
             if (op?.outcome != null && op.outcome.securedPayload.Count > 0) lost = op.outcome.securedPayload[0];

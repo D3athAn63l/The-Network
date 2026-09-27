@@ -42,12 +42,6 @@ namespace TheNetwork.Domain.Contracts
         public const string DeliveryJob = "contract.delivery";
         public const string RefundJob = "contract.refund";
 
-        public const string NoteDeposit = "deposit";
-        public const string NotePremium = "premium";
-        public const string NoteInsurance = "insurance.premium";
-        public const string NoteBalance = "balance";
-        public const string NoteRenegotiation = "renegotiation.extra";
-        public const string NoteTransferred = "deposit.transferred";
 
         public const int MaxPremium = 100000;
 
@@ -536,6 +530,10 @@ namespace TheNetwork.Domain.Contracts
             if (o.expiresTick <= ctx.Now) return CommandResult.Fail("QuoteExpired");
             string reason;
             if (!CommsOk(out reason)) return CommandResult.Fail(reason);
+            // A quote given while the contractor had room is only good while it still has room: another job
+            // accepted since then may have filled it (no queue; the offer stays open until it expires).
+            NetworkActor bidder = ctx.actors.Get(o.bidder);
+            if (bidder != null && (ctx.Contractors.AtCapacity(bidder) || ctx.Contractors.AvailabilityOf(bidder) == Availability.Committed)) return CommandResult.Fail("BidderNowCommitted");
             if (insure && o.quote.insuranceOffer == null) return CommandResult.Fail("NoInsuranceOffered");
             int due = DueAtAward(c, o, insure);
             if (due > 0 && !ctx.payment.CanCharge(due, out reason)) return CommandResult.Fail("CannotAffordDeposit");
@@ -562,7 +560,7 @@ namespace TheNetwork.Domain.Contracts
             }
             // The bidder's state may have changed since it bid (STATE_MACHINES § 5).
             Availability av = ctx.Contractors.AvailabilityOf(a);
-            if (a == null || (av != Availability.Available && av != Availability.Committed))
+            if (a == null || av != Availability.Available)
             {
                 SetOffer(o, OfferState.Withdrawn);
                 ContractEvent w = NewEvent(EventKeys.ContractRefused, Importance.Minor, c);
@@ -578,10 +576,10 @@ namespace TheNetwork.Domain.Contracts
             string reason;
             if (due > 0 && !ctx.payment.TryCharge(due, out reason)) return CommandResult.Fail("CannotAffordDeposit");
 
-            c.ledger.Add(Money(o.quote.deposit, MoneyDirection.PlayerPaid, NoteDeposit));
-            if (c.request.premiumContribution > 0) c.ledger.Add(Money(c.request.premiumContribution, MoneyDirection.PlayerPaid, NotePremium));
+            c.ledger.Add(Money(o.quote.deposit, MoneyDirection.PlayerPaid, MoneyPurpose.Deposit, "deposit"));
+            if (c.request.premiumContribution > 0) c.ledger.Add(Money(c.request.premiumContribution, MoneyDirection.PlayerPaid, MoneyPurpose.Premium, "premium"));
             Insurance bought = insure ? o.quote.insuranceOffer?.Copy() : null;
-            if (bought != null) c.ledger.Add(Money(bought.premium, MoneyDirection.PlayerPaid, NoteInsurance));
+            if (bought != null) c.ledger.Add(Money(bought.premium, MoneyDirection.PlayerPaid, MoneyPurpose.InsurancePremium, "insurance.premium"));
             Award(c, o, a, f, bought);
             return CommandResult.Ok;
         }
@@ -613,7 +611,8 @@ namespace TheNetwork.Domain.Contracts
             ctx.scheduler.Cancel(OffersJob, c.id.Value);
             c.status = ContractStatus.Awarded;
             c.awardedTick = ctx.Now;
-            PayContractor(c, a, q.deposit + c.request.premiumContribution);
+            // Carried-over funding was paid to the contractor that was lost: no new money exists to pay out.
+            if (!transferred) PayContractor(c, a, q.deposit + c.request.premiumContribution);
 
             ContractEvent e = NewEvent(EventKeys.ContractAwarded, Importance.Minor, c);
             e.offer = o.id;
@@ -649,6 +648,9 @@ namespace TheNetwork.Domain.Contracts
             Offer o = ctx.contracts.Get(offerId);
             if (o == null) return CommandResult.Fail("OfferMissing");
             if (!o.IsOpen) return CommandResult.Fail("OfferClosed");
+            // Declining is an answer sent to the contractor: it needs the Comms Console like any other.
+            string reason;
+            if (!CommsOk(out reason)) return CommandResult.Fail(reason);
             return CommandResult.Ok;
         }
 
@@ -701,10 +703,10 @@ namespace TheNetwork.Domain.Contracts
             {
                 bool preparing = op == null || op.phase == OpPhase.Preparing;
                 float share = FixerPolicies.CancelRefundShare(c.terms?.refundPolicyKey, preparing);
-                refund = (int)Math.Round((c.PaidFor(NoteDeposit) + c.PaidFor(NotePremium)) * share);
+                refund = (int)Math.Round((c.Funding(MoneyPurpose.Deposit) + c.Funding(MoneyPurpose.Premium)) * share);
             }
             if (op != null) ctx.Operations.Abort(op, "IssuerCancelled");
-            if (refund > 0) Refund(c, refund, "refund.cancel");
+            if (refund > 0) Refund(c, refund, MoneyPurpose.Refund, "refund.cancel");
             Close(c, ContractStatus.Cancelled, renegotiating ? Causes.IssuerCancelledDuringRenegotiation : Causes.IssuerCancelledAfterAward, EventKeys.ContractCancelled, Importance.Minor, refund);
             return CommandResult.Ok;
         }
@@ -729,25 +731,28 @@ namespace TheNetwork.Domain.Contracts
             Operation op = CurrentOperation(c);
             if (op != null) ctx.Operations.Abort(op, causeKey);
             DeclineAll(c);
-            int refund = c.Paid() - c.Refunded();
-            if (refund > 0) Refund(c, refund, "refund.void");
+            // Everything the player still has in this contract, whether paid here or carried over from a
+            // contract it replaced (funding carried onward was moved out and is not refunded here).
+            int refund = c.NetFunding();
+            if (refund > 0) Refund(c, refund, MoneyPurpose.Refund, "refund.void");
             Close(c, ContractStatus.Voided, causeKey, EventKeys.ContractVoided, Importance.Minor, refund);
             NetLog.Info(LogCategory.Contracts, "Contract " + c.id + " (" + c.Quantity + "x " + c.ItemLabel + ") voided: " + causeKey + (refund > 0 ? ", refunded " + refund + " silver" : "") + ".");
         }
 
         // ================================================================== money
 
-        private MoneyRecord Money(int silver, MoneyDirection dir, string note)
+        private MoneyRecord Money(int silver, MoneyDirection dir, MoneyPurpose purpose, string note)
         {
-            return new MoneyRecord { tick = ctx.Now, silver = silver, direction = dir, noteKey = note };
+            return new MoneyRecord { tick = ctx.Now, silver = silver, direction = dir, purpose = purpose, noteKey = note };
         }
 
-        private void Refund(Contract c, int silver, string noteKey)
+        /// <summary>Real silver back to the player: a refund or an insurance payout (never a transfer).</summary>
+        private void Refund(Contract c, int silver, MoneyPurpose purpose, string noteKey)
         {
             if (silver <= 0) return;
             string reason;
             bool delivered = ctx.payment.TryRefund(silver, out reason);
-            MoneyRecord m = Money(silver, MoneyDirection.PlayerRefunded, noteKey);
+            MoneyRecord m = Money(silver, MoneyDirection.PlayerRefunded, purpose, noteKey);
             m.pending = !delivered;
             c.ledger.Add(m);
             if (!delivered)

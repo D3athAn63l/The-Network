@@ -118,6 +118,8 @@ namespace TheNetwork.Tests
             ContractorTests.Register(tests);
             RelationsKnowledgeTests.Register(tests);
             ProcurementTests.Register(tests);
+            MoneyLineageTests.Register(tests);
+            CorrectionTests.Register(tests);
             StartupTests.Register(tests);
 
             int ran = 0;

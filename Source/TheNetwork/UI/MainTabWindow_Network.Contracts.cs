@@ -331,7 +331,10 @@ namespace TheNetwork.UI
                 if (!ins.ok) TooltipHandler.TipRegion(b2, ("TheNetwork_Reason_" + ins.reasonKey).Translate());
                 bx += 224f;
             }
-            if (Widgets.ButtonText(new Rect(bx, by, 110f, 26f), Tr("TheNetwork_Offer_Decline"))) Report(rt.Commands.DeclineOffer(id));
+            CommandResult decline = Can("decline|" + id.Value, () => rt.Commands.CanDeclineOffer(id));
+            Rect b3 = new Rect(bx, by, 110f, 26f);
+            if (Widgets.ButtonText(b3, Tr("TheNetwork_Offer_Decline"), true, true, decline.ok)) Report(rt.Commands.DeclineOffer(id));
+            if (!decline.ok) TooltipHandler.TipRegion(b3, ("TheNetwork_Reason_" + decline.reasonKey).Translate());
             return r.y + 96f;
         }
 

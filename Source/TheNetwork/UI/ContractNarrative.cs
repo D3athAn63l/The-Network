@@ -155,8 +155,12 @@ namespace TheNetwork.UI
         public static string Money(Contract c)
         {
             if (c.terms == null) return null;
-            int paid = c.Paid(), refunded = c.Refunded();
+            // Funding carried over from a replaced contract counts as paid here; funding carried onward does not.
+            int paid = c.TotalFunding(), refunded = c.ExternalRefunded(), carried = c.TransferredIn();
             string s = "TheNetwork_ContractMoney".Translate(c.terms.price, paid).Resolve();
+            if (carried > 0) s += " · " + "TheNetwork_MoneyCarried".Translate(carried).Resolve();
+            int movedOn = c.TransferredOut();
+            if (movedOn > 0) s += " · " + "TheNetwork_MoneyMovedOn".Translate(movedOn).Resolve();
             if (refunded > 0) s += " · " + "TheNetwork_MoneyRefunded".Translate(refunded).Resolve();
             if (c.HasPendingRefund()) s += " · " + T("TheNetwork_RefundPending");
             if (c.subStatus == SubStatus.AwaitingPayment && c.Deliver != null) s += " · " + "TheNetwork_BalanceOwed".Translate(c.Deliver.balanceDue).Resolve();

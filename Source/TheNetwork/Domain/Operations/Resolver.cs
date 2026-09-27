@@ -194,6 +194,26 @@ namespace TheNetwork.Domain.Operations
             return n;
         }
 
+        /// <summary>
+        /// The people who come back to report: everyone committed (generic forces and named participants)
+        /// less the killed, captured and missing. The wounded come back.
+        /// </summary>
+        public static int Survivors(OperationOutcome o, List<TierCount> forces, int namedParticipants)
+        {
+            if (o == null) return 0;
+            int sent = CasualtyReport.Sum(forces) + Math.Max(0, namedParticipants);
+            return Math.Max(0, sent - o.Killed - o.Captured - o.Missing);
+        }
+
+        /// <summary>
+        /// What the contractor learns from an outcome. Knowledge travels with the people who come back:
+        /// nobody back (all killed, captured or missing) means nothing learned, whatever the band.
+        /// </summary>
+        public static List<TopicGain> GainsIfReported(OperationOutcome o, List<TierCount> forces, int namedParticipants, IList<string> topics)
+        {
+            return Survivors(o, forces, namedParticipants) > 0 ? Gains(o.band, topics) : new List<TopicGain>();
+        }
+
         /// <summary>Knowledge from what was actually done: even failures teach, Disasters the most (if anyone survived).</summary>
         public static List<TopicGain> Gains(OutcomeBand band, IList<string> topics)
         {

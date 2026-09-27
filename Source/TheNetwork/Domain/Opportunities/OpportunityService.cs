@@ -540,7 +540,8 @@ namespace TheNetwork.Domain.Opportunities
                 failure = "NoCredibleSource";
                 return null;
             }
-            draft.targetCount = Math.Max(0, lostCount);
+            // Never more of the goods than the operation committed as secured; none without a committed payload.
+            draft.targetCount = lostCargo == null ? 0 : Math.Min(Math.Max(0, lostCount), Math.Max(0, lostCargo.count));
             TileRef tile;
             if (!ctx.sites.TryFindTile(NetHash.Combine(seed, "tile"), TileMinDist, TileMaxDist, out tile))
             {
@@ -552,7 +553,9 @@ namespace TheNetwork.Domain.Opportunities
             ItemPayload target = opp.Target;
             if (target != null && lostCargo != null)
             {
-                if (lostCargo.stuff != null) target.stuff = lostCargo.stuff.Copy();
+                // The exact committed goods: same def, stuff and quality (no reroll).
+                if (lostCargo.thing != null) target.thing = lostCargo.thing.Copy();
+                target.stuff = lostCargo.stuff?.Copy();
                 target.qualityBand = lostCargo.qualityBand;
             }
             if (!string.IsNullOrEmpty(threatProfile) && opp.threat.factionUsed != null) opp.threat.profileKey = threatProfile;

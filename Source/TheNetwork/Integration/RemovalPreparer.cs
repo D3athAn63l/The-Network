@@ -41,9 +41,9 @@ namespace TheNetwork.Integration
             for (int i = 0; i < live.Count; i++)
             {
                 Contract c = live[i];
-                int before = c.Refunded();
+                int before = c.ExternalRefunded();
                 rt.Ctx.Procurement.Void(c, Causes.PreparingForRemoval);
-                refunded += c.Refunded() - before;
+                refunded += c.ExternalRefunded() - before;
                 contracts++;
             }
 

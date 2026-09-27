@@ -114,6 +114,7 @@ namespace TheNetwork.UI
         public CommandResult PostProcurement(ProcurementRequest req) => Run(() => P.Post(req));
         public CommandResult CanAcceptOffer(OfferId id, bool insure) => Run(() => P.CanAccept(id, insure));
         public CommandResult AcceptOffer(OfferId id, bool insure) => Run(() => P.Accept(id, insure));
+        public CommandResult CanDeclineOffer(OfferId id) => Run(() => P.CanDecline(id));
         public CommandResult DeclineOffer(OfferId id) => Run(() => P.Decline(id));
         public CommandResult CanCancelContract(ContractId id) => Run(() => P.CanCancel(id));
         public CommandResult CancelContract(ContractId id) => Run(() => P.Cancel(id));
