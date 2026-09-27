@@ -25,6 +25,8 @@ namespace TheNetwork.Diagnostics
             public int ticksToDrain;
             public int maxJobsInOneTick;
             public double maxTickMs;
+            public double medianTickMs;
+            public double p95TickMs;
             public double historyInsertMs;
             public double sweepMs;
             public int recordsAfterSweep;
@@ -62,17 +64,25 @@ namespace TheNetwork.Diagnostics
             // 3. Worst case: everything overdue at once; the budget spreads it across ticks.
             clock.Now = int.MaxValue / 2;
             int ticks = 0;
+            System.Collections.Generic.List<double> tickMs = new System.Collections.Generic.List<double>();
             while (sch.Count > 0 && ticks < 100000)
             {
                 long tt = Stopwatch.GetTimestamp();
                 int n = sch.RunDue();
                 double ms = Ms(Stopwatch.GetTimestamp() - tt);
+                tickMs.Add(ms);
                 if (n > res.maxJobsInOneTick) res.maxJobsInOneTick = n;
                 if (ms > res.maxTickMs) res.maxTickMs = ms;
                 ticks++;
                 clock.Now++;
             }
             res.ticksToDrain = ticks;
+            tickMs.Sort();
+            if (tickMs.Count > 0)
+            {
+                res.medianTickMs = tickMs[tickMs.Count / 2];
+                res.p95TickMs = tickMs[Math.Min(tickMs.Count - 1, (int)(tickMs.Count * 0.95))];
+            }
 
             // 4. History: insert N records through the real consumer, then a full retention sweep.
             ActorStore actors = new ActorStore();
@@ -110,7 +120,8 @@ namespace TheNetwork.Diagnostics
             sb.AppendLine("[TheNetwork] S18 harness (synthetic, in memory; not the live save)");
             sb.AppendLine("  scheduled " + jobCount + " jobs in " + res.scheduleMs.ToString("0.0") + " ms");
             sb.AppendLine("  idle check: " + res.idleCheckNs.ToString("0.00") + " ns per tick (one comparison)");
-            sb.AppendLine("  all overdue: drained in " + res.ticksToDrain + " ticks, at most " + res.maxJobsInOneTick + " jobs and " + res.maxTickMs.ToString("0.000") + " ms in one tick (budget " + NetScheduler.DefaultBudgetJobs + " jobs / " + NetScheduler.DefaultBudgetMs + " ms)");
+            sb.AppendLine("  all overdue: drained in " + res.ticksToDrain + " ticks, at most " + res.maxJobsInOneTick + " jobs per tick (budget " + NetScheduler.DefaultBudgetJobs + " jobs / " + NetScheduler.DefaultBudgetMs + " ms)");
+            sb.AppendLine("  per busy tick: median " + res.medianTickMs.ToString("0.0000") + " ms, p95 " + res.p95TickMs.ToString("0.0000") + " ms, max " + res.maxTickMs.ToString("0.000") + " ms (the time budget is checked between jobs)");
             sb.AppendLine("  history: " + recordCount + " records inserted in " + res.historyInsertMs.ToString("0.0") + " ms; full sweep " + res.sweepMs.ToString("0.0") + " ms; " + res.recordsAfterSweep + " kept");
             res.text = sb.ToString();
             return res;

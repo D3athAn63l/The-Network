@@ -324,6 +324,7 @@ namespace TheNetwork.UI
             for (int i = first; i < last; i++)
             {
                 HistoryEntryView e = rows[i];
+                if (e.date == null) e.date = Narrative.Date(e.tick); // only rows actually drawn
                 Rect rr = new Rect(0f, i * rowH, view.width, rowH);
                 Widgets.DrawHighlightIfMouseover(rr);
                 if (e.fromJournal) GUI.color = new Color(0.8f, 0.8f, 0.8f);

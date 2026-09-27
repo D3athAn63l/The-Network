@@ -330,7 +330,6 @@ namespace TheNetwork.UI
                 if (line != null) list.Add(new HistoryEntryView { tick = journal[i].tick, line = line, importance = journal[i].importance, fromJournal = true });
             }
             list.Sort((a, b) => b.tick.CompareTo(a.tick));
-            for (int i = 0; i < list.Count; i++) list[i].date = Narrative.Date(list[i].tick);
             historyRows = list;
             historyVersion = v;
             return list;
