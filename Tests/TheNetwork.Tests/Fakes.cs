@@ -234,12 +234,14 @@ namespace TheNetwork.Tests
             {
                 networkSeed = seed, ids = ids, clock = clock, scheduler = scheduler, bus = bus, diagnostics = diag,
                 cast = new WorldCastSnapshot(), actors = new ActorStore(), characters = new CharacterStore(),
-                intel = new IntelStore(), opportunities = new OpportunityStore(),
+                intel = new IntelStore(), opportunities = new OpportunityStore(), summaries = summaries,
                 catalog = cat, comms = comms, payment = pay, world = world, sites = sites
             };
             ctx.Actors = new ActorService(ctx);
             ctx.Intel = new IntelService(ctx);
             ctx.Opportunities = new OpportunityService(ctx);
+            ctx.Contractors = new TheNetwork.Domain.Contractors.ContractorService(ctx);
+            ctx.Upkeep = new TheNetwork.Domain.Contractors.UpkeepService(ctx);
             history = new HistoryService(ledger, summaries, ctx.actors, ids, clock, seed);
             scheduler.RegisterKind(JobKinds.IntelRound, ctx.Intel.RunRound, true, true);
             scheduler.RegisterKind(JobKinds.IntelClose, ctx.Intel.CloseJob, true, true);
@@ -247,6 +249,8 @@ namespace TheNetwork.Tests
             scheduler.RegisterKind(JobKinds.OppWarn, ctx.Opportunities.WarnJob, true, true);
             scheduler.RegisterKind(JobKinds.OppClose, ctx.Opportunities.CloseJob, true, true);
             scheduler.RegisterKind(JobKinds.RefundRetry, ctx.Intel.RetryRefunds, true, false);
+            scheduler.RegisterKind(JobKinds.ContractorUpkeep, ctx.Upkeep.UpkeepJob, true, true);
+            scheduler.RegisterKind(JobKinds.PopulationWeekly, ctx.Upkeep.PopulationJobRun, true, true);
             bus.Register(ConsumerOrder.History, history, HistoryService.ConsumedKeys);
             bus.Register(ConsumerOrder.Presentation, recorder);
             ctx.Actors.EnsurePlayerProxy(world.PlayerFaction());

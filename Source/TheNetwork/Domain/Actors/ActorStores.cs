@@ -16,9 +16,17 @@ namespace TheNetwork.Domain.Actors
         public ActorId PlayerProxyId { get; private set; }
         public ActorId ExchangeId { get; private set; }
 
+        /// <summary>How many world-generated contractors this world has created (the newcomer seed index).</summary>
+        public int worldGeneratedCount;
+
+        /// <summary>When an Open contract last brought a new contractor into the world as a bidder.</summary>
+        public int lastNewcomerBidderTick = -1;
+
         public void ExposeData()
         {
             NetScribe.LookListTolerant(ref actors, "actors", "actors");
+            Scribe_Values.Look(ref worldGeneratedCount, "worldGenerated", 0);
+            Scribe_Values.Look(ref lastNewcomerBidderTick, "lastNewcomerBidder", -1);
         }
 
         public void RebuildIndex()

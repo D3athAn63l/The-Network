@@ -92,6 +92,7 @@ namespace TheNetwork.Core
                 characters = State.characters,
                 intel = State.intel,
                 opportunities = State.opportunities,
+                summaries = State.summaries,
                 catalog = new LazyCatalog(),
                 comms = new CommsAccessAdapter(),
                 payment = new PaymentAdapter(),
@@ -101,6 +102,9 @@ namespace TheNetwork.Core
             Ctx.Actors = new ActorService(Ctx);
             Ctx.Intel = new IntelService(Ctx);
             Ctx.Opportunities = new OpportunityService(Ctx);
+            Ctx.Contractors = new Domain.Contractors.ContractorService(Ctx);
+            Ctx.Upkeep = new Domain.Contractors.UpkeepService(Ctx);
+            Ctx.tuning.targetProvider = () => NetworkMod.Settings?.targetContractorCount ?? 100;
 
             History = new HistoryService(State.history, State.summaries, State.actors, root.ids, clock, root.networkSeed);
             Sites = new SiteCallbacks(Ctx, SiteAdapter);
@@ -125,6 +129,8 @@ namespace TheNetwork.Core
             Scheduler.RegisterKind(JobKinds.HistorySweep, job => History.SweepJob(job, Scheduler), true, true);
             Scheduler.RegisterKind(JobKinds.CompactSweep, Compaction.SweepJob, true, true);
             Scheduler.RegisterKind(JobKinds.RefundRetry, Ctx.Intel.RetryRefunds, true, false);
+            Scheduler.RegisterKind(JobKinds.ContractorUpkeep, Ctx.Upkeep.UpkeepJob, true, true);
+            Scheduler.RegisterKind(JobKinds.PopulationWeekly, Ctx.Upkeep.PopulationJobRun, true, true);
             Scheduler.OnJobFailed = OnJobFailed;
         }
 

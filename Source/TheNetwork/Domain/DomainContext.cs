@@ -1,4 +1,6 @@
+using System;
 using TheNetwork.Domain.Actors;
+using TheNetwork.Domain.Contractors;
 using TheNetwork.Domain.Intel;
 using TheNetwork.Domain.Opportunities;
 using TheNetwork.Domain.Ports;
@@ -17,6 +19,10 @@ namespace TheNetwork.Domain
         public const string HistorySweep = "history.sweep";
         public const string CompactSweep = "compact.sweep";
         public const string RefundRetry = "payment.refund";
+
+        // Phase 2 (SIMULATION § 2).
+        public const string ContractorUpkeep = ContractorService.UpkeepJob;
+        public const string PopulationWeekly = UpkeepService.PopulationJob;
 
         public const int SamplePeriod = 2500;
         public const int SweepPeriod = Ticks.PerQuadrum;
@@ -60,6 +66,8 @@ namespace TheNetwork.Domain
         public CharacterStore characters;
         public IntelStore intel;
         public OpportunityStore opportunities;
+        public History.SummaryStore summaries;
+        public NetworkTuning tuning = new NetworkTuning();
 
         public ICatalog catalog;
         public ICommsAccess comms;
@@ -70,8 +78,24 @@ namespace TheNetwork.Domain
         public ActorService Actors;
         public IntelService Intel;
         public OpportunityService Opportunities;
+        public ContractorService Contractors;
+        public UpkeepService Upkeep;
 
         public int Now => clock.Now;
+    }
+
+    /// <summary>Tuning read from Mod Settings (master § 75). Values, never formulas.</summary>
+    public sealed class NetworkTuning
+    {
+        public Func<int> targetProvider;
+        private int target = 100;
+
+        /// <summary>The contractor population scale (default about 100 lightweight actors).</summary>
+        public int targetContractorCount
+        {
+            get { return targetProvider != null ? targetProvider() : target; }
+            set { target = value; }
+        }
     }
 
     /// <summary>Service switches read from Mod Settings (ARCHITECTURE § 9). Runtime only.</summary>

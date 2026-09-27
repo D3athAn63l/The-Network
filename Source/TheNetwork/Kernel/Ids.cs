@@ -4,9 +4,9 @@ namespace TheNetwork.Kernel
 {
     // Typed Network IDs (DATA_MODEL § 1). One persisted counter (IdAllocator.nextId) feeds every kind,
     // so values are unique across kinds inside a save. 0 means "none". IDs are never reused, never
-    // renumbered and never derived from RimWorld objects. Only the kinds Phase 1 actually uses are
-    // declared; later phases add their own structs over the same counter (a pure addition: the save
-    // holds plain ints).
+    // renumbered and never derived from RimWorld objects. Only the kinds the implemented phases use are
+    // declared (Phase 2 adds contracts, offers and operations); later phases add their own structs over
+    // the same counter (a pure addition: the save holds plain ints).
 
     public enum EntityKind : byte
     {
@@ -164,6 +164,51 @@ namespace TheNetwork.Kernel
         public override string ToString() => IsValid ? "H" + Value : "H-";
     }
 
+    public readonly struct ContractId : IEquatable<ContractId>
+    {
+        public readonly int Value;
+        public ContractId(int value) { Value = value; }
+        public static readonly ContractId None = default(ContractId);
+        public bool IsValid => Value > 0;
+        public EntityRef Ref => new EntityRef(EntityKind.Contract, Value);
+        public bool Equals(ContractId other) => Value == other.Value;
+        public override bool Equals(object obj) => obj is ContractId o && o.Value == Value;
+        public override int GetHashCode() => Value;
+        public static bool operator ==(ContractId a, ContractId b) => a.Value == b.Value;
+        public static bool operator !=(ContractId a, ContractId b) => a.Value != b.Value;
+        public override string ToString() => IsValid ? "C" + Value : "C-";
+    }
+
+    public readonly struct OfferId : IEquatable<OfferId>
+    {
+        public readonly int Value;
+        public OfferId(int value) { Value = value; }
+        public static readonly OfferId None = default(OfferId);
+        public bool IsValid => Value > 0;
+        public EntityRef Ref => new EntityRef(EntityKind.Offer, Value);
+        public bool Equals(OfferId other) => Value == other.Value;
+        public override bool Equals(object obj) => obj is OfferId o && o.Value == Value;
+        public override int GetHashCode() => Value;
+        public static bool operator ==(OfferId a, OfferId b) => a.Value == b.Value;
+        public static bool operator !=(OfferId a, OfferId b) => a.Value != b.Value;
+        public override string ToString() => IsValid ? "B" + Value : "B-";
+    }
+
+    public readonly struct OperationId : IEquatable<OperationId>
+    {
+        public readonly int Value;
+        public OperationId(int value) { Value = value; }
+        public static readonly OperationId None = default(OperationId);
+        public bool IsValid => Value > 0;
+        public EntityRef Ref => new EntityRef(EntityKind.Operation, Value);
+        public bool Equals(OperationId other) => Value == other.Value;
+        public override bool Equals(object obj) => obj is OperationId o && o.Value == Value;
+        public override int GetHashCode() => Value;
+        public static bool operator ==(OperationId a, OperationId b) => a.Value == b.Value;
+        public static bool operator !=(OperationId a, OperationId b) => a.Value != b.Value;
+        public override string ToString() => IsValid ? "P" + Value : "P-";
+    }
+
     /// <summary>
     /// A reference to any Network entity (event subjects, history participants). The kind is a
     /// validation and readability aid; IDs are unique across kinds. Persisted as the compact string
@@ -208,5 +253,8 @@ namespace TheNetwork.Kernel
         public IntelRequestId AsIntelRequest => Kind == EntityKind.IntelRequest ? new IntelRequestId(Id) : IntelRequestId.None;
         public LeadId AsLead => Kind == EntityKind.Lead ? new LeadId(Id) : LeadId.None;
         public CharacterId AsCharacter => Kind == EntityKind.Character ? new CharacterId(Id) : CharacterId.None;
+        public ContractId AsContract => Kind == EntityKind.Contract ? new ContractId(Id) : ContractId.None;
+        public OfferId AsOffer => Kind == EntityKind.Offer ? new OfferId(Id) : OfferId.None;
+        public OperationId AsOperation => Kind == EntityKind.Operation ? new OperationId(Id) : OperationId.None;
     }
 }

@@ -163,6 +163,13 @@ namespace TheNetwork.Settings
             return t;
         }
 
+        /// <summary>A person's name from the pools (used for world-generated contractors' Known Characters).</summary>
+        public string GeneratePersonName(NetRng rng, out string nickname)
+        {
+            List<string> parts;
+            return PersonName(rng, out parts, out nickname);
+        }
+
         private string OrgName(NetRng rng, ContractorForm form, out List<string> parts)
         {
             parts = new List<string>();

@@ -82,7 +82,10 @@ namespace TheNetwork.History
             EventKeys.IntelRequested, EventKeys.IntelLeadDelivered, EventKeys.IntelNoLead, EventKeys.IntelSearchContinued,
             EventKeys.IntelConcluded, EventKeys.IntelCancelled, EventKeys.IntelInvalidated,
             EventKeys.OpportunityEngaged, EventKeys.OpportunityClaimed, EventKeys.OpportunityAbandoned,
-            EventKeys.OpportunityExpired, EventKeys.OpportunityDestroyed, EventKeys.OpportunityInvalidated
+            EventKeys.OpportunityExpired, EventKeys.OpportunityDestroyed, EventKeys.OpportunityInvalidated,
+            EventKeys.ContractorCreated, EventKeys.ContractorEnded, EventKeys.ContractorOriginLost, EventKeys.ContractorCasualties,
+            EventKeys.ContractorCaptured, EventKeys.ContractorMissing, EventKeys.ContractorStranded, EventKeys.CharacterKilled,
+            EventKeys.CharacterPromoted, EventKeys.LeaderKilled, EventKeys.LeaderSucceeded, EventKeys.MoraleShifted
         };
 
         public void RebuildIndex()
@@ -132,7 +135,81 @@ namespace TheNetwork.History
                 return;
             }
             OpportunityEvent oe = evt as OpportunityEvent;
-            if (oe != null) HandleOpportunity(oe);
+            if (oe != null)
+            {
+                HandleOpportunity(oe);
+                return;
+            }
+            ContractorEvent ce = evt as ContractorEvent;
+            if (ce != null) HandleContractor(ce);
+        }
+
+        /// <summary>
+        /// Contractor lifecycle events (Phase 2). Status changes (death, capture, succession, the end of an
+        /// actor) are records; routine shifts only update counters (EVENTS_AND_HISTORY § 3).
+        /// </summary>
+        private void HandleContractor(ContractorEvent e)
+        {
+            int now = e.tick;
+            ActorRecordSummary s = summaries.GetOrCreate(e.actor);
+            HistoryRecord r = null;
+            switch (e.typeKey)
+            {
+                case EventKeys.ContractorCreated:
+                    s?.Add("contractor.founded", 1, now);
+                    return;
+                case EventKeys.MoraleShifted:
+                    s?.Add("morale.shift." + e.descriptorKey, 1, now);
+                    return;
+                case EventKeys.ContractorCasualties:
+                    s?.Add("casualties.taken", e.killed + e.captured + e.missing, now);
+                    if (e.wounded > 0) s?.Add("casualties.wounded", e.wounded, now);
+                    if (e.killed == 0) return;
+                    r = NewRecord(e, Importance.Notable);
+                    r.magnitudes.casualties = e.killed;
+                    r.magnitudes.count = e.wounded;
+                    break;
+                case EventKeys.CharacterKilled:
+                    s?.Add("people.killed", 1, now);
+                    // A leader's death is recorded once, as Leader.Killed.
+                    if (e.leader) return;
+                    r = NewRecord(e, Importance.Notable);
+                    break;
+                case EventKeys.LeaderKilled:
+                    s?.Add("leader.lost", 1, now);
+                    r = NewRecord(e, Importance.Major);
+                    break;
+                case EventKeys.LeaderSucceeded:
+                    s?.Add("leader.succeeded", 1, now);
+                    r = NewRecord(e, Importance.Notable);
+                    break;
+                case EventKeys.CharacterPromoted:
+                    r = NewRecord(e, Importance.Notable);
+                    break;
+                case EventKeys.ContractorCaptured:
+                case EventKeys.ContractorMissing:
+                case EventKeys.ContractorStranded:
+                    s?.Add("troubled." + e.typeKey, 1, now);
+                    r = NewRecord(e, Importance.Major);
+                    break;
+                case EventKeys.ContractorEnded:
+                    r = NewRecord(e, Importance.Major);
+                    break;
+                case EventKeys.ContractorOriginLost:
+                    r = NewRecord(e, Importance.Notable);
+                    break;
+            }
+            if (r == null) return;
+            AddActor(r, e.actor, "contractor", true);
+            if (e.character.IsValid) r.participants.Add(new Participation { entity = e.character.Ref, roleKey = e.leader ? "leader" : "member" });
+            if (e.successor.IsValid) r.participants.Add(new Participation { entity = e.successor.Ref, roleKey = "successor" });
+            if (e.contract.IsValid) r.participants.Add(new Participation { entity = e.contract.Ref, roleKey = "contract" });
+            r.awareness.scope = AwarenessScope.Public;
+            r.outcomeKey = e.reasonKey;
+            r.SetNote("actor", e.actorName);
+            if (e.characterName != null) r.SetNote("person", e.characterName);
+            if (e.successorName != null) r.SetNote("successor", e.successorName);
+            Commit(r);
         }
 
         private void HandleIntel(IntelEvent e)
