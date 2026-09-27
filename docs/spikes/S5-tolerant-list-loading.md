@@ -10,7 +10,7 @@ element is quarantined with its raw XML, its siblings load, and Scribe's state i
 
 ## Build
 
-Source commit `4dca3d9`. Code under test: `Kernel/NetScribe.cs` (`LookListTolerant`, `TryLoadElement`).
+Source commit `293e363`. Code under test: `Kernel/NetScribe.cs` (`LookListTolerant`, `TryLoadElement`).
 
 ## Environment of this pass
 

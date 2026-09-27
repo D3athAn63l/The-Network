@@ -18,7 +18,7 @@ departure; the site cleans up as vanilla does. Leaving empty-handed resolves as 
 
 ## Build
 
-Source commit `SOURCE_COMMIT`. Code under test: `OpportunityService` (engagement, samples, `ResolveEngagement`,
+Source commit `293e363`. Code under test: `OpportunityService` (engagement, samples, `ResolveEngagement`,
 `RecoveredEstimate`), `SiteAdapter.TrySampleRemaining`, `SiteCallbacks`, and the comp's pre-removal check
 (`WorldObjectComp_NetworkSite.CompTickInterval`).
 

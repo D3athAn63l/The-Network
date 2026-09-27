@@ -10,8 +10,8 @@ sites; and does removing the mod leave the site working with **no errors from th
 
 ## Build
 
-Source commit `4dca3d9`. Code under test: `Integration/WorldObjectComp_NetworkSite.cs`,
-`Integration/SiteCallbacks.cs`, the patch.
+Source commit `293e363`. Code under test: `Integration/WorldObjectComp_NetworkSite.cs` (including the
+pre-removal check in `CompTickInterval`), `Integration/SiteCallbacks.cs`, the patch.
 
 ## Environment of this pass
 
@@ -26,7 +26,8 @@ unknown child that Scribe ignores. The comp does nothing when `networkOpportunit
 1. Detailed Network logging on. Create a guarded opportunity (S1 step 2). Also let a **vanilla** item-stash quest
    generate (or use a vanilla dev action that spawns a site).
 2. Visit the Network site: log shows `Site <id> (O<n>): PostMapGenerate`. Form a caravan with part of the loot:
-   `PostCaravanFormed`. Leave completely: `PostMyMapRemoved`, then `PostDestroy`.
+   `PostCaravanFormed`. Leave completely: `map about to be removed (final sample)` exactly once, then
+   `PostMyMapRemoved`, then `PostDestroy`. The same order when the last pawns leave by transport pods.
 3. Visit the vanilla site: **no** `[TheNetwork]` line for it (inert comp).
 4. Create another Network site; save; reload. Inspect the site on the world map: the Network inspect line is
    still there; **Dump opportunity…** shows the same site id. Save file: the site node contains

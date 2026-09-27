@@ -22,7 +22,7 @@ compiling, static inspection or headless tests are not runtime passes.
 | Machine | Linux container (`Linux 6.18`), no Unity player, no GPU, no RimWorld install |
 | Build | .NET SDK 8.0.131, target `net472`, `LangVersion 7.3`; `./build.sh <Managed>` → `1.6/Assemblies/TheNetwork.dll`, 0 errors, 0 C# warnings (one MSB3277 netstandard 2.0/2.1 notice caused by the trimmed reference set; a real `Managed` folder ships `netstandard.dll`) |
 | Game assemblies | Owner-provided `Rimworld DLLs (update).zip` from the `zRim_Source_XMLs` repository: `Assembly-CSharp 1.6.9676.17735`, Unity modules. Used as external references only; nothing proprietary is committed. |
-| Headless tests | Mono 6.8.0.105; `Tests/run-tests.sh <Managed> <0Harmony.dll>`; 62 tests, 3,426 checks, 0 failures. `0Harmony 2.4.1` is used **by the test runner only** to stub Unity-only `Log`/`DeepProfiler` calls and to let `GenTypes` see TheNetwork.dll as a loaded mod would. TheNetwork.dll references no Harmony (a test checks its referenced assemblies). |
+| Headless tests | Mono 6.8.0.105; `Tests/run-tests.sh <Managed> <0Harmony.dll>`; 71 tests, 4,588 checks, 0 failures (after the pre-runtime fix pass). `0Harmony 2.4.1` is used **by the test runner only** to stub Unity-only `Log`/`DeepProfiler` calls and to let `GenTypes` see TheNetwork.dll as a loaded mod would. TheNetwork.dll references no Harmony (a test checks its referenced assemblies). |
 
 ## Owner setup for every spike
 

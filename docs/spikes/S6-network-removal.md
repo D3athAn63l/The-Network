@@ -10,7 +10,7 @@ playable? Does re-adding the mod bootstrap cleanly?
 
 ## Build
 
-Source commit `4dca3d9`. Code under test: `NetworkWorldComponent`, `Integration/RemovalPreparer.cs`,
+Source commit `293e363`. Code under test: `NetworkWorldComponent`, `Integration/RemovalPreparer.cs`,
 `WorldObjectComp_NetworkSite`, the vanilla-only letters.
 
 ## Environment of this pass
@@ -37,6 +37,8 @@ Setup: a colony with a Network site not yet visited, a search in `Searching`, a 
 1. Load the setup save with the mod. Mod Settings → The Network → **Prepare this save for removal** → confirm.
    The summary lists sites unbound, searches called off and silver refunded (drop pod).
 2. Save as `S6-prepared`, quit, disable the mod, restart, load. Expected: exactly one error (the component class).
+3. (If The Network failed to start in a session, the settings show "failed to start" instead of the Prepare button
+   and nothing is changed; removal is then the unprepared path A.)
 
 **C. Re-adding**
 

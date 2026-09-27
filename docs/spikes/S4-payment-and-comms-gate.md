@@ -14,7 +14,7 @@
 
 ## Build
 
-Source commit `4dca3d9`. Code under test: `Integration/CommsAndPayment.cs`, `Domain/Intel/IntelService.cs`
+Source commit `293e363`. Code under test: `Integration/CommsAndPayment.cs`, `Domain/Intel/IntelService.cs`
 (gates, charges, refunds), `UI/MainTabWindow_Network.cs` (disabled buttons with tooltips).
 
 ## Environment of this pass

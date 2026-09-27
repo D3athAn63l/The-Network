@@ -11,7 +11,7 @@ targets?
 
 ## Build
 
-Source commit `4dca3d9`. Code under test: `Kernel/Scheduler.cs`, `History/HistoryService.cs`,
+Source commit `293e363`. Code under test: `Kernel/Scheduler.cs`, `History/HistoryService.cs`,
 `Diagnostics/PerfHarness.cs`, every store's `ExposeData`.
 
 ## Environment of this pass
@@ -30,10 +30,10 @@ its caps apply, and 10,000 synthetic jobs).
 
 | Measure | Value | Target |
 |---|---|---|
-| Idle per-tick cost (`Clock.Now < NextDueTick`) | ~10 ns per tick | "unmeasurable": one comparison |
+| Idle per-tick cost (`Clock.Now < NextDueTick`) | ~10 ns per tick (5.4 ns in the re-run after the pre-runtime fix pass; the start-up state check added then is one enum comparison and allocates nothing) | "unmeasurable": one comparison |
 | Scheduling 10,000 jobs | ~3 ms total | — |
 | All 10,000 jobs overdue at once | drained over 626 ticks, **at most 16 jobs per tick** | budget 16 jobs / 1.5 ms |
-| Cost of a busy tick (16 trivial jobs) | median 0.017 ms, p95 0.026 ms, one outlier ~2.5 ms (GC or JIT; the time budget is checked between jobs, so a single slow job can exceed it) | 1.5 ms |
+| Cost of a busy tick (16 trivial jobs) | median 0.017 ms, p95 0.026 ms, one outlier ~2.5 ms (GC or JIT; the time budget is checked between jobs, so a single slow job can exceed it). Re-run after the fix pass: median 0.011 ms, p95 0.016 ms, max 2.4 ms | 1.5 ms |
 | 5,000 history records through the consumer | ~18 ms total (after a fix below) | O(1) per record |
 | Full retention sweep | ~3 ms (budgeted at 500 records per run) | every 15 days |
 | Save: stress node without the synthetic jobs | **3.2 MB** (history 2,882 records after caps; 300 requests; 300 opportunities; 108 cast entries; 256 journal entries) | typical 1.2–1.8 MB, ceiling ~3.5 MB |

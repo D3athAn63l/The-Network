@@ -11,7 +11,7 @@ adds **no** errors.
 
 ## Build
 
-Source commit `4dca3d9`. Code under test: `Core/NetValidator.cs` (external references on the first tick
+Source commit `293e363`. Code under test: `Core/NetValidator.cs` (external references on the first tick
 after load), `IntelService.Invalidate`, `OpportunityService.Invalidate`, `Kernel/Refs.cs` (`DefRef`).
 
 ## Environment of this pass

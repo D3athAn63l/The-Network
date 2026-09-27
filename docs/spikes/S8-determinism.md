@@ -10,11 +10,14 @@ archetype and threat both times. Repeat with Odyssey active.
 
 ## Build
 
-Source commit `4dca3d9`. Code under test: `IntelService.ResolveRound`, `OpportunityGenerator`,
+Source commit `293e363`. Code under test: `IntelService.ResolveRound`, `OpportunityGenerator`,
 `SourceResolver`, `LeadReporter`, `SiteAdapter.TryFindTile`, `WorldFactsAdapter.PickStuff`.
 
 ## How determinism is built
 
+- The network seed of a fresh world is derived from the world's seed in `FinalizeInit`, before any runtime service
+  exists (same formula as before; a bootstrapped save keeps its persisted seed), so history and every other service
+  use the same seed from the first session (`Startup.FreshWorldSeedBeforeServices`).
 - Every request stores `seed` (from the network seed and its id) and `rerollNonce`; each round draws from
   `NetRng(seed, "intel.round.<nonce>", round)`; the opportunity uses named streams of its own seed
   (`opp.source`, `opp.quantity`, `opp.threat`, `opp.quality`, `opp.extra`, `opp.window`, `lead.report`).

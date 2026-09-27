@@ -13,7 +13,7 @@ present on the map; no errors; timeout and removal behave like vanilla item-stas
 
 ## Build
 
-Branch `claude/phase-1-foundation-intel`, source commit `4dca3d9` (see the PR for the head SHA).
+Branch `claude/phase-1-foundation-intel`, source commit `293e363` (see the PR for the head SHA).
 Code under test: `Integration/SiteAdapter.cs` (`Materialize`, `ChooseThreatPart`, `MakeThings`).
 
 ## Environment of this pass

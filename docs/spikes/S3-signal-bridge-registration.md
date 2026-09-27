@@ -15,7 +15,7 @@ site is destroyed.
 
 ## Build
 
-Source commit `SOURCE_COMMIT`. Code under test: `Integration/SiteCallbacks.cs` (`SignalBridge`),
+Source commit `293e363`. Code under test: `Integration/SiteCallbacks.cs` (`SignalBridge`),
 `NetworkWorldComponent.RunStartup` (through `NetworkRuntime.EnsureStarted`).
 
 ## Environment of this pass
