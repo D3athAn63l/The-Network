@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Patch>
+
+  <!--
+    The single approved Phase 1 patch (ADR-015): add the Network's comp to the vanilla Site
+    WorldObjectDef. The comp is inert on every site the Network did not create. Its data is stored
+    inline in the site's save node, so if The Network is removed the def no longer lists the comp
+    and vanilla silently ignores that data: no errors.
+  -->
+  <Operation Class="PatchOperationAdd">
+    <xpath>Defs/WorldObjectDef[defName="Site"]/comps</xpath>
+    <value>
+      <li Class="TheNetwork.WorldObjectCompProperties_NetworkSite" />
+    </value>
+  </Operation>
+
+</Patch>

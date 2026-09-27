@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Defs>
+
+  <!--
+    Name pools for the global cast (DATA_MODEL § 18.4). Names are display data, never identity.
+    Organizations: wordA + wordB (+ optional suffix), e.g. "Dead Red", "Golden Compass",
+    "Lucky Rats", "Horizon Company". People (Solos, Fixers): first "nickname" last.
+    Pools are content: other mods may add their own TheNetwork.NamePoolDef with the same kind to
+    extend them (entries of every def of a kind are merged).
+  -->
+
+  <TheNetwork.NamePoolDef>
+    <defName>TheNetwork_OrgNames</defName>
+    <kind>Organization</kind>
+    <wordsA>
+      <li>Dead</li><li>Golden</li><li>Lucky</li><li>Horizon</li><li>Iron</li><li>Grey</li>
+      <li>Rusted</li><li>Silent</li><li>Broken</li><li>Crooked</li><li>Last</li><li>Black</li>
+      <li>Hollow</li><li>Seventh</li><li>Salt</li><li>Ashen</li><li>Copper</li><li>Long</li>
+      <li>Burnt</li><li>Cold</li><li>Wandering</li><li>Red</li><li>White</li><li>Glass</li>
+      <li>Stray</li><li>Deep</li><li>Low</li><li>Bitter</li><li>Tall</li><li>Quiet</li>
+      <li>Old</li><li>Sharp</li><li>Lone</li><li>Twin</li><li>High</li><li>Dusty</li>
+      <li>Midnight</li><li>Steel</li><li>Pale</li><li>Scarlet</li><li>Green</li><li>Sunken</li>
+      <li>Northern</li><li>Southern</li><li>Rimward</li><li>Starless</li><li>Honest</li><li>Loaded</li>
+    </wordsA>
+    <wordsB>
+      <li>Red</li><li>Compass</li><li>Rats</li><li>Company</li><li>Hand</li><li>Coil</li>
+      <li>Lantern</li><li>Anchor</li><li>Jackals</li><li>Crows</li><li>Hounds</li><li>Wake</li>
+      <li>Ledger</li><li>Needle</li><li>Road</li><li>Sparrows</li><li>Vultures</li><li>Keys</li>
+      <li>Dice</li><li>Harvest</li><li>Mile</li><li>Banner</li><li>Signal</li><li>Tide</li>
+      <li>Hammer</li><li>Spur</li><li>Ferry</li><li>Veil</li><li>Wolves</li><li>Moths</li>
+      <li>Sun</li><li>Thread</li><li>Oath</li><li>Knot</li><li>Circle</li><li>Crown</li>
+      <li>Fork</li><li>Shovel</li><li>Salvage</li><li>Caravan</li><li>Magpies</li><li>Owls</li>
+      <li>Brothers</li><li>Sisters</li><li>Ghosts</li><li>Line</li><li>Well</li><li>Gate</li>
+    </wordsB>
+    <suffixes>
+      <li>Company</li><li>Crew</li><li>Outfit</li><li>Salvage</li><li>Recovery</li><li>Syndicate</li>
+      <li>Freelancers</li><li>Contracting</li><li>Expeditions</li><li>&amp; Sons</li><li>Collective</li><li>Irregulars</li>
+    </suffixes>
+  </TheNetwork.NamePoolDef>
+
+  <TheNetwork.NamePoolDef>
+    <defName>TheNetwork_PersonNames</defName>
+    <kind>Person</kind>
+    <firstNames>
+      <li>Mara</li><li>Rika</li><li>Tomas</li><li>Ines</li><li>Kade</li><li>Oren</li><li>Selah</li>
+      <li>Bram</li><li>Yusra</li><li>Dov</li><li>Lena</li><li>Pike</li><li>Ansel</li><li>Kira</li>
+      <li>Hollis</li><li>Wren</li><li>Joss</li><li>Ilya</li><li>Nadia</li><li>Cato</li><li>Mirel</li>
+      <li>Tavi</li><li>Ezra</li><li>Juno</li><li>Rook</li><li>Soren</li><li>Petra</li><li>Vance</li>
+      <li>Adaeze</li><li>Bastien</li><li>Coralie</li><li>Desmond</li><li>Esme</li><li>Farid</li><li>Greta</li>
+      <li>Halvard</li><li>Isolde</li><li>Jaro</li><li>Kestrel</li><li>Lior</li><li>Marek</li><li>Noor</li>
+      <li>Ottilie</li><li>Pascal</li><li>Quill</li><li>Ravi</li><li>Saoirse</li><li>Teodor</li><li>Uma</li>
+    </firstNames>
+    <lastNames>
+      <li>Morino</li><li>Voss</li><li>Kell</li><li>Arden</li><li>Draymoor</li><li>Faulk</li><li>Hale</li>
+      <li>Ivers</li><li>Jarrow</li><li>Kessler</li><li>Lowe</li><li>Marsh</li><li>Nakata</li><li>Okafor</li>
+      <li>Pryce</li><li>Quenby</li><li>Rask</li><li>Sallow</li><li>Thorne</li><li>Ulver</li><li>Vale</li>
+      <li>Wick</li><li>Yarrow</li><li>Zell</li><li>Ashdown</li><li>Brandt</li><li>Corvin</li><li>Delacroix</li>
+      <li>Everly</li><li>Fenwick</li><li>Grimaldi</li><li>Holt</li><li>Ibarra</li><li>Juniper</li><li>Kovac</li>
+      <li>Lindqvist</li><li>Mercer</li><li>Nightingale</li><li>Orsini</li><li>Petrov</li><li>Reyes</li><li>Strand</li>
+    </lastNames>
+    <nicknames>
+      <li>Ash</li><li>Ledger</li><li>Needle</li><li>Crow</li><li>Six</li><li>Dusty</li><li>Patch</li>
+      <li>Whisper</li><li>Tally</li><li>Rust</li><li>Salt</li><li>Kettle</li><li>Hinge</li><li>Moth</li>
+      <li>Two-Coins</li><li>Latch</li><li>Cinder</li><li>Grin</li><li>Mouse</li><li>Brick</li><li>Sparrow</li>
+      <li>Echo</li><li>Buckle</li><li>Lucky</li><li>Doc</li><li>Hush</li><li>Tinder</li><li>Nails</li>
+    </nicknames>
+  </TheNetwork.NamePoolDef>
+
+</Defs>
