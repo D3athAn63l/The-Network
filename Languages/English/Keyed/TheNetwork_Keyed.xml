@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+
+  <!-- ===== Main tab ===== -->
+  <TheNetwork_NotActive>The Network is not active in this game.</TheNetwork_NotActive>
+  <TheNetwork_Tab_Intel>Intel</TheNetwork_Tab_Intel>
+  <TheNetwork_Tab_History>History</TheNetwork_Tab_History>
+  <TheNetwork_CommsOk>Communications available: a comms console is ready.</TheNetwork_CommsOk>
+  <TheNetwork_CommsMissing>No usable comms console ({0}). You can read everything here, but you cannot contact anyone. Searches already running continue.</TheNetwork_CommsMissing>
+  <TheNetwork_Contacts>Contacts</TheNetwork_Contacts>
+  <TheNetwork_Catalog>Items</TheNetwork_Catalog>
+  <TheNetwork_Search>Search</TheNetwork_Search>
+  <TheNetwork_Sort_Name>Sort: name</TheNetwork_Sort_Name>
+  <TheNetwork_Sort_Value>Sort: value</TheNetwork_Sort_Value>
+  <TheNetwork_Sort_Mod>Sort: source mod</TheNetwork_Sort_Mod>
+  <TheNetwork_RequestIntel>Ask the selected contact about the selected item…</TheNetwork_RequestIntel>
+  <TheNetwork_Searches>Searches</TheNetwork_Searches>
+  <TheNetwork_NoSearches>No searches yet. Pick a contact and an item on the left.</TheNetwork_NoSearches>
+  <TheNetwork_RequestTitle>{0} — asked {1} — {2}</TheNetwork_RequestTitle>
+  <TheNetwork_ContinueSearch>Keep searching</TheNetwork_ContinueSearch>
+  <TheNetwork_EndSearch>End the search</TheNetwork_EndSearch>
+  <TheNetwork_CancelSearch>Cancel the search</TheNetwork_CancelSearch>
+  <TheNetwork_CancelConfirm>Cancel this search? Early in a round your contact returns part of that round's fee; later, nothing.</TheNetwork_CancelConfirm>
+  <TheNetwork_LookAtSite>Look at the site</TheNetwork_LookAtSite>
+  <TheNetwork_LeadTitle>Lead {0} (round {1})</TheNetwork_LeadTitle>
+  <TheNetwork_Quarantined>quarantined</TheNetwork_Quarantined>
+  <TheNetwork_Money>paid {0} silver</TheNetwork_Money>
+  <TheNetwork_MoneyRefunded>refunded {0}</TheNetwork_MoneyRefunded>
+  <TheNetwork_RefundPending>a refund is waiting for a home to deliver to</TheNetwork_RefundPending>
+
+  <TheNetwork_Kind_Fixer>fixer</TheNetwork_Kind_Fixer>
+  <TheNetwork_Kind_Institution>information network</TheNetwork_Kind_Institution>
+  <TheNetwork_Kind_Faction>faction contact</TheNetwork_Kind_Faction>
+
+  <!-- Request dialog: there is deliberately no quantity field. -->
+  <TheNetwork_RequestDialogTitle>Ask about: {0}</TheNetwork_RequestDialogTitle>
+  <TheNetwork_RequestDialogBody>You ask {0} to find out where {1} can be found.\n\nYou ask about the item, not an amount: what exists, and how much, is whatever your contact turns up.\n\nFee: {2} silver, paid now through your orbital trade beacons.\nPace: {3}.\nAfter a lead: {4}.</TheNetwork_RequestDialogBody>
+  <TheNetwork_RequestConfirm>Pay {0} silver and ask</TheNetwork_RequestConfirm>
+  <TheNetwork_Message_Submitted>{0} is looking into {1}.</TheNetwork_Message_Submitted>
+
+  <!-- Search timing: narrative, never a due tick. -->
+  <TheNetwork_ElapsedDays>{0} days</TheNetwork_ElapsedDays>
+  <TheNetwork_Estimate_VeryFast>usually a day or two</TheNetwork_Estimate_VeryFast>
+  <TheNetwork_Estimate_Fast>a few days</TheNetwork_Estimate_Fast>
+  <TheNetwork_Estimate_Medium>several days</TheNetwork_Estimate_Medium>
+  <TheNetwork_Estimate_Slow>the better part of a week</TheNetwork_Estimate_Slow>
+  <TheNetwork_Estimate_VerySlow>a week or more</TheNetwork_Estimate_VerySlow>
+  <TheNetwork_Timing_Searching>Round {0} · searching for {1} · estimate: {2}</TheNetwork_Timing_Searching>
+  <TheNetwork_Timing_Waiting>Waiting for your answer after round {0} · {1} since you asked</TheNetwork_Timing_Waiting>
+  <TheNetwork_Timing_Ended>{0} after {1}</TheNetwork_Timing_Ended>
+
+  <TheNetwork_IntelState_Submitted>submitted</TheNetwork_IntelState_Submitted>
+  <TheNetwork_IntelState_Searching>searching</TheNetwork_IntelState_Searching>
+  <TheNetwork_IntelState_AwaitingDecision>waiting for you</TheNetwork_IntelState_AwaitingDecision>
+  <TheNetwork_IntelState_Concluded>concluded</TheNetwork_IntelState_Concluded>
+  <TheNetwork_IntelState_Cancelled>cancelled</TheNetwork_IntelState_Cancelled>
+  <TheNetwork_IntelState_Invalidated>called off</TheNetwork_IntelState_Invalidated>
+  <TheNetwork_IntelState_Closed>archived</TheNetwork_IntelState_Closed>
+
+  <TheNetwork_EndReason_PlayerEnded>You ended the search</TheNetwork_EndReason_PlayerEnded>
+  <TheNetwork_EndReason_SourceDone>Your contact passed on what they had</TheNetwork_EndReason_SourceDone>
+  <TheNetwork_EndReason_RoundLimit>Your contact had searched as long as they would</TheNetwork_EndReason_RoundLimit>
+  <TheNetwork_EndReason_NothingCredible>Nothing credible was found</TheNetwork_EndReason_NothingCredible>
+  <TheNetwork_EndReason_SearchExhausted>The trail went cold</TheNetwork_EndReason_SearchExhausted>
+  <TheNetwork_EndReason_PlayerCancelled>You cancelled the search</TheNetwork_EndReason_PlayerCancelled>
+  <TheNetwork_EndReason_TopicMissing>The item no longer exists in this world</TheNetwork_EndReason_TopicMissing>
+  <TheNetwork_EndReason_SourceGone>Your contact is gone</TheNetwork_EndReason_SourceGone>
+  <TheNetwork_EndReason_ItemCannotBeProduced>The item could not be produced in this game</TheNetwork_EndReason_ItemCannotBeProduced>
+  <TheNetwork_EndReason_NetworkRemoved>The Network was prepared for removal</TheNetwork_EndReason_NetworkRemoved>
+  <TheNetwork_EndReason_Unknown>Ended</TheNetwork_EndReason_Unknown>
+
+  <!-- Continuation policies (the contact's own terms). -->
+  <TheNetwork_Cont_Auto>they keep looking on their own until they run out of leads</TheNetwork_Cont_Auto>
+  <TheNetwork_Cont_AskFree>they ask whether to keep looking; carrying on costs nothing extra</TheNetwork_Cont_AskFree>
+  <TheNetwork_Cont_AskFee>they ask whether to keep looking; carrying on costs {0} silver</TheNetwork_Cont_AskFee>
+  <TheNetwork_Cont_AskReduced>they ask whether to keep looking; carrying on costs a reduced {0} silver</TheNetwork_Cont_AskReduced>
+  <TheNetwork_Cont_Single>they pass on one lead and consider the job done</TheNetwork_Cont_Single>
+
+  <!-- Contact descriptors: learned, never raw numbers. -->
+  <TheNetwork_Fee_VeryLow>very cheap</TheNetwork_Fee_VeryLow>
+  <TheNetwork_Fee_Low>cheap</TheNetwork_Fee_Low>
+  <TheNetwork_Fee_Medium>fairly priced</TheNetwork_Fee_Medium>
+  <TheNetwork_Fee_High>expensive</TheNetwork_Fee_High>
+  <TheNetwork_Fee_VeryHigh>very expensive</TheNetwork_Fee_VeryHigh>
+  <TheNetwork_Speed_VeryLow>very slow</TheNetwork_Speed_VeryLow>
+  <TheNetwork_Speed_Low>slow</TheNetwork_Speed_Low>
+  <TheNetwork_Speed_Medium>steady</TheNetwork_Speed_Medium>
+  <TheNetwork_Speed_High>quick</TheNetwork_Speed_High>
+  <TheNetwork_Speed_VeryHigh>very quick</TheNetwork_Speed_VeryHigh>
+  <TheNetwork_Speed_Unknown>pace unknown</TheNetwork_Speed_Unknown>
+  <TheNetwork_Reliability_Untested>untested</TheNetwork_Reliability_Untested>
+  <TheNetwork_Reliability_Good>their leads have held up ({0} of {1})</TheNetwork_Reliability_Good>
+  <TheNetwork_Reliability_Mixed>their leads are hit and miss ({0} of {1})</TheNetwork_Reliability_Mixed>
+  <TheNetwork_Reliability_Poor>their leads rarely hold up ({0} of {1})</TheNetwork_Reliability_Poor>
+  <TheNetwork_Fame_Unknown>unknown</TheNetwork_Fame_Unknown>
+  <TheNetwork_Fame_Local>locally known</TheNetwork_Fame_Local>
+  <TheNetwork_Fame_Established>established</TheNetwork_Fame_Established>
+  <TheNetwork_Fame_Famous>famous</TheNetwork_Fame_Famous>
+  <TheNetwork_Fame_Legendary>legendary</TheNetwork_Fame_Legendary>
+  <TheNetwork_Experience_Green>green</TheNetwork_Experience_Green>
+  <TheNetwork_Experience_Experienced>experienced</TheNetwork_Experience_Experienced>
+  <TheNetwork_Experience_Seasoned>seasoned</TheNetwork_Experience_Seasoned>
+  <TheNetwork_Experience_Veteran>veteran</TheNetwork_Experience_Veteran>
+  <TheNetwork_Experience_Elite>elite</TheNetwork_Experience_Elite>
+  <TheNetwork_Experience_Legendary>legendary</TheNetwork_Experience_Legendary>
+
+  <!-- Leads: perception, not truth. -->
+  <TheNetwork_Lead_Amount>Reported amount: {0}–{1}</TheNetwork_Lead_Amount>
+  <TheNetwork_Lead_Holder>Held by: {0}</TheNetwork_Lead_Holder>
+  <TheNetwork_Lead_Threat>Danger: {0}</TheNetwork_Lead_Threat>
+  <TheNetwork_Lead_OtherCargo>Also there: {0}</TheNetwork_Lead_OtherCargo>
+  <TheNetwork_Lead_MaybeMore>maybe more</TheNetwork_Lead_MaybeMore>
+  <TheNetwork_Lead_Distance>About {0} tiles from home</TheNetwork_Lead_Distance>
+  <TheNetwork_Lead_Window>The window closes in roughly {0}</TheNetwork_Lead_Window>
+  <TheNetwork_Lead_WindowPast>The window has probably closed</TheNetwork_Lead_WindowPast>
+  <TheNetwork_Lead_Confidence>Your contact sounds {0}</TheNetwork_Lead_Confidence>
+  <TheNetwork_Confidence_VeryLow>very unsure</TheNetwork_Confidence_VeryLow>
+  <TheNetwork_Confidence_Low>unsure</TheNetwork_Confidence_Low>
+  <TheNetwork_Confidence_Moderate>fairly sure</TheNetwork_Confidence_Moderate>
+  <TheNetwork_Confidence_High>confident</TheNetwork_Confidence_High>
+  <TheNetwork_Confidence_VeryHigh>very confident</TheNetwork_Confidence_VeryHigh>
+  <TheNetwork_Threat_Unknown>unknown</TheNetwork_Threat_Unknown>
+  <TheNetwork_Threat_Negligible>negligible</TheNetwork_Threat_Negligible>
+  <TheNetwork_Threat_Light>light</TheNetwork_Threat_Light>
+  <TheNetwork_Threat_Moderate>moderate</TheNetwork_Threat_Moderate>
+  <TheNetwork_Threat_Heavy>heavy</TheNetwork_Threat_Heavy>
+  <TheNetwork_Threat_Extreme>extreme</TheNetwork_Threat_Extreme>
+  <TheNetwork_LeadState_Open>open</TheNetwork_LeadState_Open>
+  <TheNetwork_LeadState_Engaged>you are there</TheNetwork_LeadState_Engaged>
+  <TheNetwork_LeadState_Claimed>recovered: {0}</TheNetwork_LeadState_Claimed>
+  <TheNetwork_LeadState_Abandoned>left empty-handed</TheNetwork_LeadState_Abandoned>
+  <TheNetwork_LeadState_Expired>went cold</TheNetwork_LeadState_Expired>
+  <TheNetwork_LeadState_Closed>closed</TheNetwork_LeadState_Closed>
+  <TheNetwork_LeadState_Archived>archived</TheNetwork_LeadState_Archived>
+  <TheNetwork_Recovered_None>nothing</TheNetwork_Recovered_None>
+  <TheNetwork_Recovered_Little>a little of it</TheNetwork_Recovered_Little>
+  <TheNetwork_Recovered_Some>some of it</TheNetwork_Recovered_Some>
+  <TheNetwork_Recovered_Most>most of it</TheNetwork_Recovered_Most>
+  <TheNetwork_Recovered_All>all of it</TheNetwork_Recovered_All>
+  <TheNetwork_OppState_Latent>not yet found</TheNetwork_OppState_Latent>
+  <TheNetwork_OppState_Revealed>reported</TheNetwork_OppState_Revealed>
+  <TheNetwork_OppState_Materialized>open</TheNetwork_OppState_Materialized>
+  <TheNetwork_OppState_Engaged>you are there</TheNetwork_OppState_Engaged>
+  <TheNetwork_OppState_Claimed>recovered</TheNetwork_OppState_Claimed>
+  <TheNetwork_OppState_Abandoned>left empty-handed</TheNetwork_OppState_Abandoned>
+  <TheNetwork_OppState_Expired>went cold</TheNetwork_OppState_Expired>
+  <TheNetwork_OppState_LostToCompetitor>someone got there first</TheNetwork_OppState_LostToCompetitor>
+  <TheNetwork_OppState_Destroyed>gone</TheNetwork_OppState_Destroyed>
+  <TheNetwork_OppState_Vanished>gone</TheNetwork_OppState_Vanished>
+  <TheNetwork_OppState_Invalidated>called off</TheNetwork_OppState_Invalidated>
+  <TheNetwork_OppState_Closed>closed</TheNetwork_OppState_Closed>
+
+  <!-- World site -->
+  <TheNetwork_SiteLabel>cache: {0}</TheNetwork_SiteLabel>
+  <TheNetwork_SiteInspect>Network lead from {0}: {1}</TheNetwork_SiteInspect>
+  <TheNetwork_SiteInspectThreat>Reported danger: {0}</TheNetwork_SiteInspectThreat>
+
+  <!-- Catalog -->
+  <TheNetwork_Override_Auto>Auto</TheNetwork_Override_Auto>
+  <TheNetwork_Override_Allowed>Allowed</TheNetwork_Override_Allowed>
+  <TheNetwork_Override_Blocked>Blocked</TheNetwork_Override_Blocked>
+  <TheNetwork_Verdict_Eligible>eligible</TheNetwork_Verdict_Eligible>
+  <TheNetwork_Verdict_Unusual>unusual (hidden unless shown; "Allowed" makes it requestable)</TheNetwork_Verdict_Unusual>
+  <TheNetwork_Verdict_Ineligible>ineligible</TheNetwork_Verdict_Ineligible>
+  <TheNetwork_Catalog_Verdict>Verdict: {0}</TheNetwork_Catalog_Verdict>
+  <TheNetwork_Catalog_Reasons>Why: {0}</TheNetwork_Catalog_Reasons>
+  <TheNetwork_Catalog_TechnicalNote>This cannot exist as an item someone owns, so it can never be allowed.</TheNetwork_Catalog_TechnicalNote>
+
+  <!-- Reasons (commands refused, invalidations) -->
+  <TheNetwork_Reason_NoUsableCommsConsole>no comms console on a home map</TheNetwork_Reason_NoUsableCommsConsole>
+  <TheNetwork_Reason_CommsConsoleUnpowered>the comms console has no power</TheNetwork_Reason_CommsConsoleUnpowered>
+  <TheNetwork_Reason_CommsElectricityDisabled>electricity is down (solar flare or similar)</TheNetwork_Reason_CommsElectricityDisabled>
+  <TheNetwork_Reason_SubsystemDegraded>this part of the Network failed to load; see the log</TheNetwork_Reason_SubsystemDegraded>
+  <TheNetwork_Reason_NoTopic>choose an item first</TheNetwork_Reason_NoTopic>
+  <TheNetwork_Reason_SelectContactAndItem>choose a contact and an item first</TheNetwork_Reason_SelectContactAndItem>
+  <TheNetwork_Reason_NotRequestable>this item cannot be asked about</TheNetwork_Reason_NotRequestable>
+  <TheNetwork_Reason_NotInCatalog>this item is not in the catalog</TheNetwork_Reason_NotInCatalog>
+  <TheNetwork_Reason_FailedToGenerate>this item could not be produced in this game</TheNetwork_Reason_FailedToGenerate>
+  <TheNetwork_Reason_Ineligible>this cannot exist as an item someone owns</TheNetwork_Reason_Ineligible>
+  <TheNetwork_Reason_Blocked>you blocked this item</TheNetwork_Reason_Blocked>
+  <TheNetwork_Reason_Unusual>unusual item: set it to "Allowed" to ask about it</TheNetwork_Reason_Unusual>
+  <TheNetwork_Reason_SourceMissing>that contact is not available</TheNetwork_Reason_SourceMissing>
+  <TheNetwork_Reason_SourceQuarantined>that contact's record is damaged (quarantined)</TheNetwork_Reason_SourceQuarantined>
+  <TheNetwork_Reason_SourceEnded>that contact is gone</TheNetwork_Reason_SourceEnded>
+  <TheNetwork_Reason_SourceGone>your contact is gone</TheNetwork_Reason_SourceGone>
+  <TheNetwork_Reason_NotAnIntelSource>they do not deal in information</TheNetwork_Reason_NotAnIntelSource>
+  <TheNetwork_Reason_FactionMissing>that faction no longer exists</TheNetwork_Reason_FactionMissing>
+  <TheNetwork_Reason_FactionIsPlayer>that is your own faction</TheNetwork_Reason_FactionIsPlayer>
+  <TheNetwork_Reason_FactionDefeated>that faction has been defeated</TheNetwork_Reason_FactionDefeated>
+  <TheNetwork_Reason_FactionHidden>that faction cannot be contacted</TheNetwork_Reason_FactionHidden>
+  <TheNetwork_Reason_FactionTemporary>that group cannot be contacted</TheNetwork_Reason_FactionTemporary>
+  <TheNetwork_Reason_FactionNotHumanlike>that faction does not talk</TheNetwork_Reason_FactionNotHumanlike>
+  <TheNetwork_Reason_FactionHostile>that faction is hostile to you</TheNetwork_Reason_FactionHostile>
+  <TheNetwork_Reason_CannotAfford>not enough silver</TheNetwork_Reason_CannotAfford>
+  <TheNetwork_Reason_NoHomeMap>you have no home to pay from or deliver to</TheNetwork_Reason_NoHomeMap>
+  <TheNetwork_Reason_NotEnoughBeaconSilver>not enough silver within range of an orbital trade beacon</TheNetwork_Reason_NotEnoughBeaconSilver>
+  <TheNetwork_Reason_PaymentFailed>the payment failed; see the log</TheNetwork_Reason_PaymentFailed>
+  <TheNetwork_Reason_RequestMissing>that search no longer exists</TheNetwork_Reason_RequestMissing>
+  <TheNetwork_Reason_NotAwaitingDecision>your contact is not waiting for an answer</TheNetwork_Reason_NotAwaitingDecision>
+  <TheNetwork_Reason_NotSearching>that search is not running</TheNetwork_Reason_NotSearching>
+  <TheNetwork_Reason_RoundLimit>your contact will not search any longer</TheNetwork_Reason_RoundLimit>
+  <TheNetwork_Reason_NetworkPreparedForRemoval>the Network was prepared for removal</TheNetwork_Reason_NetworkPreparedForRemoval>
+  <TheNetwork_Reason_NetworkRemoved>the Network was prepared for removal</TheNetwork_Reason_NetworkRemoved>
+  <TheNetwork_Reason_TopicMissing>the item no longer exists in this world</TheNetwork_Reason_TopicMissing>
+  <TheNetwork_Reason_ItemCannotBeProduced>the item could not be produced in this game</TheNetwork_Reason_ItemCannotBeProduced>
+  <TheNetwork_Reason_MaterializeFailed>the site could not be set up</TheNetwork_Reason_MaterializeFailed>
+  <TheNetwork_Reason_DefMissing>the item no longer exists in this world</TheNetwork_Reason_DefMissing>
+  <TheNetwork_Reason_TileLayerMissing>that part of the world no longer exists</TheNetwork_Reason_TileLayerMissing>
+  <TheNetwork_Reason_Unknown>unknown reason</TheNetwork_Reason_Unknown>
+
+  <!-- Letters (vanilla letter classes only) -->
+  <TheNetwork_Letter_LeadLabel>Lead: {0}</TheNetwork_Letter_LeadLabel>
+  <TheNetwork_Letter_LeadText>{0} has a lead on {1}.</TheNetwork_Letter_LeadText>
+  <TheNetwork_Letter_LeadAsk>{0} is waiting to hear whether you want them to keep looking. Answer in the Network tab.</TheNetwork_Letter_LeadAsk>
+  <TheNetwork_Letter_LeadKeepsLooking>{0} keeps looking in case there is more.</TheNetwork_Letter_LeadKeepsLooking>
+  <TheNetwork_Letter_NothingLabel>Nothing on {0}</TheNetwork_Letter_NothingLabel>
+  <TheNetwork_Letter_NothingText>{0} searched, but found nothing credible about {1}. The fee pays for the search, not the result.</TheNetwork_Letter_NothingText>
+  <TheNetwork_Letter_InvalidatedLabel>Inquiry called off: {0}</TheNetwork_Letter_InvalidatedLabel>
+  <TheNetwork_Letter_InvalidatedText>{0} closed the inquiry about {1}: {2}.</TheNetwork_Letter_InvalidatedText>
+  <TheNetwork_Letter_Refund>{0} silver is being returned to you by drop pod.</TheNetwork_Letter_Refund>
+  <TheNetwork_Letter_ClaimedLabel>Recovered: {0}</TheNetwork_Letter_ClaimedLabel>
+  <TheNetwork_Letter_ClaimedText>Your people came away from the {0} cache held by {1} with {2}.</TheNetwork_Letter_ClaimedText>
+  <TheNetwork_Letter_AbandonedLabel>Left empty-handed: {0}</TheNetwork_Letter_AbandonedLabel>
+  <TheNetwork_Letter_AbandonedText>Your people left the {0} cache held by {1} without taking any of it.</TheNetwork_Letter_AbandonedText>
+  <TheNetwork_Letter_AbandonedNothing>There was no {0} at the site after all.</TheNetwork_Letter_AbandonedNothing>
+  <TheNetwork_Letter_ExpiringLabel>Lead going cold: {0}</TheNetwork_Letter_ExpiringLabel>
+  <TheNetwork_Letter_ExpiringText>The window on the {0} cache is closing. After about a day it will likely be gone.</TheNetwork_Letter_ExpiringText>
+  <TheNetwork_Letter_OppInvalidatedLabel>Lead called off: {0}</TheNetwork_Letter_OppInvalidatedLabel>
+  <TheNetwork_Letter_OppInvalidatedText>The lead on {0} no longer makes sense: {1}. The site, if any, is left as it is.</TheNetwork_Letter_OppInvalidatedText>
+  <TheNetwork_Message_SearchEnded>{0}'s search for {1} has ended ({2} leads).</TheNetwork_Message_SearchEnded>
+  <TheNetwork_Message_Cancelled>Search for {0} cancelled ({1} silver returned).</TheNetwork_Message_Cancelled>
+  <TheNetwork_Message_Expired>The lead on {0} went cold.</TheNetwork_Message_Expired>
+  <TheNetwork_DowngradeLabel>Network data from a newer version</TheNetwork_DowngradeLabel>
+  <TheNetwork_DowngradeText>This save was made with a newer version of The Network. Some Network data may be lost if you save.</TheNetwork_DowngradeText>
+
+  <!-- History -->
+  <TheNetwork_History_Summary>So far: {0} inquiries, {1} leads, {2} caches recovered ({3} in part), {4} left empty-handed.</TheNetwork_History_Summary>
+  <TheNetwork_History_NoneYet>The Network has no history with you yet.</TheNetwork_History_NoneYet>
+  <TheNetwork_History_Empty>Nothing has happened yet.</TheNetwork_History_Empty>
+  <TheNetwork_History_Lead>{0} found a lead on {1}.</TheNetwork_History_Lead>
+  <TheNetwork_History_Nothing>{0} searched for {1} for {2} rounds and found nothing credible.</TheNetwork_History_Nothing>
+  <TheNetwork_History_Concluded>{0}'s search for {1} ended after {2} leads.</TheNetwork_History_Concluded>
+  <TheNetwork_History_IntelInvalidated>The inquiry about {0} was called off: {1}.</TheNetwork_History_IntelInvalidated>
+  <TheNetwork_History_Engaged>Your people reached the {0} cache held by {1}.</TheNetwork_History_Engaged>
+  <TheNetwork_History_ClaimedFull>Your people recovered the {0} cache from {1}: {2}.</TheNetwork_History_ClaimedFull>
+  <TheNetwork_History_ClaimedPartial>A partial recovery: your people took {2} of the {0} from {1} and left.</TheNetwork_History_ClaimedPartial>
+  <TheNetwork_History_Abandoned>Your people left the {0} cache held by {1} empty-handed.</TheNetwork_History_Abandoned>
+  <TheNetwork_History_AbandonedNothing>The {0} cache turned out to hold none of it.</TheNetwork_History_AbandonedNothing>
+  <TheNetwork_History_Expired>The lead on {0} went cold before anyone got there.</TheNetwork_History_Expired>
+  <TheNetwork_History_Destroyed>The {0} cache was gone before anyone got there.</TheNetwork_History_Destroyed>
+  <TheNetwork_History_OppInvalidated>The lead on {0} was called off.</TheNetwork_History_OppInvalidated>
+  <TheNetwork_Journal_Requested>You asked {0} about {1} ({2} silver).</TheNetwork_Journal_Requested>
+  <TheNetwork_Journal_NoLead>{0} turned up nothing in round {1}.</TheNetwork_Journal_NoLead>
+  <TheNetwork_Journal_Continued>{0} keeps looking for {1}.</TheNetwork_Journal_Continued>
+  <TheNetwork_Journal_Cancelled>You cancelled the search for {0}.</TheNetwork_Journal_Cancelled>
+
+  <!-- Mod settings -->
+  <TheNetwork_Settings_ShowUnusual>Show unusual items in the Network catalog</TheNetwork_Settings_ShowUnusual>
+  <TheNetwork_Settings_ShowUnusualTip>Unusual items look odd by vanilla conventions but may be perfectly valid. Set one to "Allowed" to ask about it.</TheNetwork_Settings_ShowUnusualTip>
+  <TheNetwork_Settings_Verbose>Detailed Network logging</TheNetwork_Settings_Verbose>
+  <TheNetwork_Settings_Profiling>Network timing (profiling)</TheNetwork_Settings_Profiling>
+  <TheNetwork_Settings_CastSummary>Global cast: {0} contractors ({1} active), {2} fixers ({3} active), {4} quarantined. New worlds copy the active entries once; existing saves keep their own copy.</TheNetwork_Settings_CastSummary>
+  <TheNetwork_Settings_NewerFile>This settings file comes from a newer version of The Network; it is not rewritten unless you change something.</TheNetwork_Settings_NewerFile>
+  <TheNetwork_Settings_Regenerate>Regenerate generated entries</TheNetwork_Settings_Regenerate>
+  <TheNetwork_Settings_RegenerateConfirm>Replace every generated contractor and fixer with new ones? Custom entries are kept. Existing saves are not affected.</TheNetwork_Settings_RegenerateConfirm>
+  <TheNetwork_Settings_PrepareRemoval>Prepare this save for removal</TheNetwork_Settings_PrepareRemoval>
+  <TheNetwork_Settings_PrepareRemovalConfirm>Prepare this save for removing The Network? Network sites become ordinary sites, running searches are called off (with refunds), and the Network stops. Then save, disable the mod and reload.</TheNetwork_Settings_PrepareRemovalConfirm>
+  <TheNetwork_Settings_Prepared>Prepared for removal: save now, then disable the mod.</TheNetwork_Settings_Prepared>
+  <TheNetwork_Settings_Resume>Resume the Network</TheNetwork_Settings_Resume>
+  <TheNetwork_Settings_Contractors>Showing: contractors</TheNetwork_Settings_Contractors>
+  <TheNetwork_Settings_Fixers>Showing: fixers</TheNetwork_Settings_Fixers>
+  <TheNetwork_Settings_Unreadable>Unreadable entry kept as raw data ({0})</TheNetwork_Settings_Unreadable>
+  <TheNetwork_Settings_QuarantinedRow>quarantined: {0} {1}</TheNetwork_Settings_QuarantinedRow>
+  <TheNetwork_Settings_CanIssue>can post work</TheNetwork_Settings_CanIssue>
+  <TheNetwork_Settings_Rename>Rename</TheNetwork_Settings_Rename>
+  <TheNetwork_Settings_RenameTitle>Rename (the identity does not change)</TheNetwork_Settings_RenameTitle>
+  <TheNetwork_Settings_Name>Name</TheNetwork_Settings_Name>
+  <TheNetwork_Settings_Nickname>Nickname</TheNetwork_Settings_Nickname>
+  <TheNetwork_Settings_DuplicateName>Another active entry already has this name. It is allowed, but may be confusing.</TheNetwork_Settings_DuplicateName>
+  <TheNetwork_Provenance_Generated>generated</TheNetwork_Provenance_Generated>
+  <TheNetwork_Provenance_Custom>custom</TheNetwork_Provenance_Custom>
+  <TheNetwork_RemovalSummary>The Network is prepared for removal: {0} sites turned into ordinary sites, {1} searches called off, {2} silver refunded. Save the game now, then disable the mod and reload.</TheNetwork_RemovalSummary>
+
+</LanguageData>
