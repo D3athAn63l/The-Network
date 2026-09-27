@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Headless test runner (see TestMain.cs). Built by Tests/run-tests.sh against the freshly built
+    1.6/Assemblies/TheNetwork.dll and a local RimWorld Managed folder. 0Harmony is referenced HERE ONLY,
+    to stub a few Unity-only Verse calls; the mod itself has no Harmony reference.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>TheNetwork.Tests</AssemblyName>
+    <RootNamespace>TheNetwork.Tests</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>$(TestOut)</OutputPath>
+    <DebugType>portable</DebugType>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="TheNetwork"><HintPath>$(MSBuildThisFileDirectory)..\..\1.6\Assemblies\TheNetwork.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="Assembly-CSharp"><HintPath>$(RimWorldManaged)\Assembly-CSharp.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="UnityEngine"><HintPath>$(RimWorldManaged)\UnityEngine.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(RimWorldManaged)\UnityEngine.CoreModule.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(RimWorldManaged)\UnityEngine.IMGUIModule.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(HarmonyDll)</HintPath><Private>true</Private></Reference>
+    <Reference Include="netstandard" Condition="Exists('$(RimWorldManaged)\netstandard.dll')"><HintPath>$(RimWorldManaged)\netstandard.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="netstandard" Condition="!Exists('$(RimWorldManaged)\netstandard.dll') And '$(NetStandardDll)' != ''"><HintPath>$(NetStandardDll)</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+  <ItemGroup Condition="'$(FrameworkPathOverride)' == ''">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

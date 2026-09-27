@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  NetworkSettings fixture, settings version 0 (no settingsVersion node: a file written before versioning or by hand).
+  Exercises SAVE_AND_MIGRATION § 11: explicit defaults, canIssueWork defaulting to false, custom entries surviving,
+  per-template quarantine (malformed enum, missing id, duplicate id), an unreadable entry kept verbatim, and catalog
+  overrides for a def that does not exist in this game (kept dormant).
+  The root element stands in for the <ModSettings> node of a real settings file.
+-->
+<ModSettings>
+  <roster>
+    <contractorTemplates>
+      <li>
+        <templateId>7c9e6679742540de944be07fc1f90ae7</templateId>
+        <provenance>Generated</provenance>
+        <name>Dead Red</name>
+        <form>Company</form>
+        <startingExperience>Veteran</startingExperience>
+        <startingFame>Famous</startingFame>
+        <specialties><li>recovery</li></specialties>
+      </li>
+      <li>
+        <templateId>custom-lone-kessler</templateId>
+        <provenance>Custom</provenance>
+        <name>Lone Kessler</name>
+        <form>Solo</form>
+        <startingExperience>Legendary</startingExperience>
+        <startingFame>Legendary</startingFame>
+        <canIssueWork>True</canIssueWork>
+      </li>
+      <li>
+        <templateId>handmade-crew</templateId>
+        <name>Handmade Crew</name>
+        <form>Crew</form>
+      </li>
+      <li>
+        <templateId>bad-enum</templateId>
+        <provenance>Generated</provenance>
+        <name>Broken Wing</name>
+        <form>Battalion</form>
+      </li>
+      <li>
+        <provenance>Custom</provenance>
+        <name>No Id Outfit</name>
+        <form>Team</form>
+      </li>
+      <li Class="TheNetwork.Settings.TemplateFromTheFuture">
+        <templateId>future-entry</templateId>
+        <name>From The Future</name>
+      </li>
+      <li>
+        <templateId>7c9e6679742540de944be07fc1f90ae7</templateId>
+        <provenance>Custom</provenance>
+        <name>Duplicate Of Dead Red</name>
+        <form>Duo</form>
+      </li>
+    </contractorTemplates>
+    <fixerTemplates>
+      <li>
+        <templateId>fixer-mara</templateId>
+        <provenance>Custom</provenance>
+        <name>Mara Voss</name>
+        <nickname>Ledger</nickname>
+        <feeBand>High</feeBand>
+        <speedBand>Low</speedBand>
+        <reliabilityBand>VeryHigh</reliabilityBand>
+        <intelStyle>Patient</intelStyle>
+      </li>
+    </fixerTemplates>
+    <generation>
+      <generatorVersion>1</generatorVersion>
+      <castSeed>77</castSeed>
+    </generation>
+  </roster>
+  <itemOverrides>
+    <li><def>ModX_Weirdium</def><value>Allowed</value></li>
+    <li><def>SomeRemovedModItem</def><value>Blocked</value></li>
+  </itemOverrides>
+  <showUnusualItems>True</showUnusualItems>
+</ModSettings>

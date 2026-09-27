@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Save fragment, NetworkSaveVersion 1: an <intel> store with three requests, one of them corrupted (an unknown
+  persisted class) and one whose field throws while loading, followed by a sibling store that must still load.
+  Exercises the tolerant list loader (Spike S5 logic, headless): bad elements are quarantined with their raw XML,
+  siblings load, and Scribe's state is intact afterwards.
+-->
+<fragment>
+  <intel>
+    <requests>
+      <li>
+        <id>11</id>
+        <requester>1</requester>
+        <source>2</source>
+        <topic><kind>Item</kind><thing><defName>TestSteel</defName><label>test steel</label></thing></topic>
+        <terms><feePolicy>intel.fee.standard</feePolicy><continuationPolicy>intel.cont.askFree</continuationPolicy><initialFee>120</initialFee></terms>
+        <state>Searching</state>
+        <round>2</round>
+        <seed>987</seed>
+        <leads><li>15</li></leads>
+      </li>
+      <li Class="TheNetwork.Domain.Intel.IntelRequestFromTheFuture">
+        <id>12</id>
+      </li>
+      <li>
+        <id>13</id>
+        <topic><kind>Item</kind><thing><defName>TestRifle</defName></thing></topic>
+        <state>NotARealState</state>
+        <round>1</round>
+      </li>
+      <li>
+        <id>14</id>
+        <topic Class="TheNetwork.Kernel.NoSuchTopic"><kind>Item</kind></topic>
+        <state>Concluded</state>
+      </li>
+    </requests>
+    <leads />
+  </intel>
+  <after>
+    <marker>still-readable</marker>
+  </after>
+</fragment>
