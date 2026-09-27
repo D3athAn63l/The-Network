@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using TheNetwork.Domain.Ports;
 using TheNetwork.Kernel;
@@ -73,6 +74,37 @@ namespace TheNetwork.Domain.Intel
                 continuationPolicyKey = ContSingle,
                 discretion = 0.2f
             };
+        }
+
+        /// <summary>Contractor specialties that make someone worth asking where things are.</summary>
+        public static readonly string[] IntelSpecialties = { "scouting", "tech retrieval", "salvage", "recovery", "infiltration", "extraction" };
+
+        /// <summary>
+        /// A contractor as an Intel contact (Phase 2): derived from its specialties, what it has learned
+        /// (knowledge breadth), how far it ranges and its record. Not every contractor qualifies, and one
+        /// that does is still not a Fixer: it answers one search at a time and does not broker.
+        /// </summary>
+        public static IntelSourceProfile ForContractor(List<string> specialties, ExperienceBand experience, FameBand fame, Band range, float professionalism, float discretion, int knownTopics)
+        {
+            int spec = 0;
+            for (int i = 0; i < IntelSpecialties.Length; i++) if (specialties != null && specialties.Contains(IntelSpecialties[i])) spec++;
+            if (spec == 0 && knownTopics < 3) return null;
+            Band reliability = experience >= ExperienceBand.Veteran ? Band.High : (experience >= ExperienceBand.Seasoned ? Band.Medium : Band.Low);
+            if (professionalism < 0.35f && reliability > Band.VeryLow) reliability = reliability - 1;
+            if (specialties != null && specialties.Contains("scouting") && reliability < Band.VeryHigh) reliability = reliability + 1;
+            Band speed = range >= Band.High ? Band.High : (range <= Band.Low ? Band.Low : Band.Medium);
+            Band fee = fame >= FameBand.Famous ? Band.High : (fame >= FameBand.Established ? Band.Medium : Band.Low);
+            IntelSourceProfile p = new IntelSourceProfile
+            {
+                speedBand = speed,
+                reliabilityBand = reliability,
+                feeBand = fee,
+                feePolicyKey = FeeStandard,
+                continuationPolicyKey = ContSingle,
+                discretion = discretion
+            };
+            if (specialties != null) p.specialties.AddRange(specialties);
+            return p;
         }
 
         /// <summary>A faction may be asked for Intel only if it is a live, non-hostile, humanlike peer.</summary>

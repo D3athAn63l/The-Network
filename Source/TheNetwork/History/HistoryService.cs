@@ -85,7 +85,10 @@ namespace TheNetwork.History
             EventKeys.OpportunityExpired, EventKeys.OpportunityDestroyed, EventKeys.OpportunityInvalidated,
             EventKeys.ContractorCreated, EventKeys.ContractorEnded, EventKeys.ContractorOriginLost, EventKeys.ContractorCasualties,
             EventKeys.ContractorCaptured, EventKeys.ContractorMissing, EventKeys.ContractorStranded, EventKeys.CharacterKilled,
-            EventKeys.CharacterPromoted, EventKeys.LeaderKilled, EventKeys.LeaderSucceeded, EventKeys.MoraleShifted
+            EventKeys.CharacterPromoted, EventKeys.LeaderKilled, EventKeys.LeaderSucceeded, EventKeys.MoraleShifted,
+            EventKeys.ContractPosted, EventKeys.ContractRefused, EventKeys.ContractAwarded, EventKeys.ContractCompleted,
+            EventKeys.ContractPartiallyCompleted, EventKeys.ContractFailed, EventKeys.ContractCancelled, EventKeys.ContractVoided,
+            EventKeys.ContractExpired, EventKeys.ContractUnfilled, EventKeys.PaymentDefaulted, EventKeys.OpportunityFollowUpCreated
         };
 
         public void RebuildIndex()
@@ -141,7 +144,86 @@ namespace TheNetwork.History
                 return;
             }
             ContractorEvent ce = evt as ContractorEvent;
-            if (ce != null) HandleContractor(ce);
+            if (ce != null)
+            {
+                HandleContractor(ce);
+                return;
+            }
+            ContractEvent ke = evt as ContractEvent;
+            if (ke != null) HandleContract(ke);
+        }
+
+        /// <summary>
+        /// Procurement contracts (Phase 2). Outcomes the story remembers are records (completed, partial,
+        /// failed, a default on payment); routine steps only update counters. Operation.Resolved is not
+        /// recorded separately: the contract outcome and the casualties already tell it.
+        /// </summary>
+        private void HandleContract(ContractEvent e)
+        {
+            int now = e.tick;
+            ActorRecordSummary issuer = summaries.GetOrCreate(e.issuer);
+            ActorRecordSummary contractor = e.contractor.IsValid ? summaries.GetOrCreate(e.contractor) : null;
+            ActorRecordSummary broker = e.broker.IsValid ? summaries.GetOrCreate(e.broker) : null;
+            HistoryRecord r = null;
+            switch (e.typeKey)
+            {
+                case EventKeys.ContractPosted:
+                    issuer?.Add("contract.posted", 1, now);
+                    broker?.Add("contract.brokered", 1, now);
+                    return;
+                case EventKeys.ContractRefused:
+                    contractor?.Add("contract.refused", 1, now);
+                    return;
+                case EventKeys.ContractAwarded:
+                    issuer?.Add("contract.awarded", 1, now);
+                    contractor?.Add("contract.taken", 1, now);
+                    return;
+                case EventKeys.ContractUnfilled:
+                    issuer?.Add("contract.unfilled", 1, now);
+                    return;
+                case EventKeys.ContractCancelled:
+                    issuer?.Add("contract.cancelled", 1, now);
+                    return;
+                case EventKeys.ContractVoided:
+                    issuer?.Add("contract.voided", 1, now);
+                    return;
+                case EventKeys.ContractExpired:
+                    issuer?.Add("contract.expired", 1, now);
+                    return;
+                case EventKeys.ContractCompleted:
+                    issuer?.Add("contract.completed", 1, now);
+                    contractor?.Add("contract.completed", 1, now);
+                    r = NewRecord(e, Importance.Notable);
+                    break;
+                case EventKeys.ContractPartiallyCompleted:
+                    issuer?.Add("contract.partial", 1, now);
+                    contractor?.Add("contract.partial", 1, now);
+                    r = NewRecord(e, Importance.Notable);
+                    break;
+                case EventKeys.ContractFailed:
+                    issuer?.Add("contract.failed", 1, now);
+                    contractor?.Add("contract.failed", 1, now);
+                    r = NewRecord(e, e.importance >= Importance.Major ? Importance.Major : Importance.Notable);
+                    break;
+                case EventKeys.PaymentDefaulted:
+                    issuer?.Add("payment.defaulted", 1, now);
+                    r = NewRecord(e, Importance.Notable);
+                    break;
+            }
+            if (r == null) return;
+            AddActor(r, e.issuer, "issuer", true);
+            AddActor(r, e.contractor, "contractor", true);
+            AddActor(r, e.broker, "broker", false);
+            r.participants.Add(new Participation { entity = e.contract.Ref, roleKey = "contract" });
+            r.subjectDef = new DefRef<ThingDef> { defName = e.itemDefName, label = e.itemLabel };
+            r.awareness.scope = AwarenessScope.Involved;
+            r.outcomeKey = e.causeKey;
+            r.magnitudes.count = e.typeKey == EventKeys.PaymentDefaulted ? e.quantity : e.delivered;
+            r.magnitudes.value = e.silver;
+            r.SetNote("actor", e.contractorName);
+            r.SetNote("broker", e.brokerName);
+            r.SetNote("quantity", e.quantity.ToString());
+            Commit(r);
         }
 
         /// <summary>
@@ -290,6 +372,22 @@ namespace TheNetwork.History
             ActorRecordSummary source = e.source.IsValid ? summaries.GetOrCreate(e.source) : null;
             ActorRecordSummary holder = e.holderActor.IsValid ? summaries.GetOrCreate(e.holderActor) : null;
             HistoryRecord r = null;
+            if (e.typeKey == EventKeys.OpportunityFollowUpCreated)
+            {
+                // Consequence Engine v0: where a contractor was last heard from.
+                r = NewRecord(e, Importance.Notable);
+                AddActor(r, e.source, "contractor", true);
+                AddActor(r, e.holderActor, "holder", false);
+                r.participants.Add(new Participation { entity = e.opportunity.Ref, roleKey = "opportunity" });
+                for (int i = 0; i < e.subjects.Count; i++) if (e.subjects[i].Kind == EntityKind.Contract) r.participants.Add(new Participation { entity = e.subjects[i], roleKey = "contract" });
+                r.awareness.scope = AwarenessScope.Involved;
+                r.outcomeKey = e.reasonKey;
+                r.magnitudes.count = e.targetCount;
+                r.SetNote("actor", actors.NameOf(e.source));
+                r.SetNote("holder", e.holderName);
+                Commit(r);
+                return;
+            }
             switch (e.typeKey)
             {
                 case EventKeys.OpportunityEngaged:

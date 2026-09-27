@@ -24,14 +24,22 @@ namespace TheNetwork.UI
             if (s == null) return;
             NetworkStartup.EnsureRoster(s, "settings");
             Listing_Standard top = new Listing_Standard();
-            Rect topRect = new Rect(inRect.x, inRect.y, inRect.width, 240f);
+            Rect topRect = new Rect(inRect.x, inRect.y, inRect.width, 300f);
             top.Begin(topRect);
-            bool unusual = s.showUnusualItems, verbose = s.verboseLogging, prof = s.profiling, intel = s.intelEnabled;
+            bool unusual = s.showUnusualItems, verbose = s.verboseLogging, prof = s.profiling, intel = s.intelEnabled, proc = s.procurementEnabled;
+            int population = s.targetContractorCount;
             top.CheckboxLabeled("TheNetwork_Settings_ShowUnusual".Translate(), ref s.showUnusualItems, "TheNetwork_Settings_ShowUnusualTip".Translate());
             top.CheckboxLabeled("TheNetwork_Settings_Verbose".Translate(), ref s.verboseLogging);
             top.CheckboxLabeled("TheNetwork_Settings_Profiling".Translate(), ref s.profiling);
             top.CheckboxLabeled("TheNetwork_Settings_IntelEnabled".Translate(), ref s.intelEnabled, "TheNetwork_Settings_IntelEnabledTip".Translate());
-            bool changed = unusual != s.showUnusualItems || verbose != s.verboseLogging || prof != s.profiling || intel != s.intelEnabled;
+            top.CheckboxLabeled("TheNetwork_Settings_ProcurementEnabled".Translate(), ref s.procurementEnabled, "TheNetwork_Settings_ProcurementEnabledTip".Translate());
+            // Population scale: the weekly population manager tops a world up toward it (it never deletes
+            // anyone), and a regenerated cast uses it. Who already exists in a world never changes here.
+            top.Label("TheNetwork_Settings_Population".Translate(s.targetContractorCount), -1f, "TheNetwork_Settings_PopulationTip".Translate());
+            s.targetContractorCount = (int)top.Slider(s.targetContractorCount, 40f, 200f);
+            s.targetContractorCount = s.targetContractorCount / 10 * 10;
+            bool changed = unusual != s.showUnusualItems || verbose != s.verboseLogging || prof != s.profiling || intel != s.intelEnabled
+                || proc != s.procurementEnabled || population != s.targetContractorCount;
             if (changed)
             {
                 s.ApplyRuntimeToggles();
@@ -84,7 +92,7 @@ namespace TheNetwork.UI
             top.End();
 
             // ---- roster list
-            Rect listArea = new Rect(inRect.x, inRect.y + 245f, inRect.width, inRect.height - 245f);
+            Rect listArea = new Rect(inRect.x, inRect.y + 305f, inRect.width, inRect.height - 305f);
             Rect bar = new Rect(listArea.x, listArea.y, listArea.width, 28f);
             if (Widgets.ButtonText(new Rect(bar.x, bar.y, 160f, 26f), (showContractors ? "TheNetwork_Settings_Contractors" : "TheNetwork_Settings_Fixers").Translate()))
             {

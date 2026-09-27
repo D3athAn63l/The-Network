@@ -925,6 +925,54 @@ namespace TheNetwork.Domain.Contractors
             e.operation = op;
         }
 
+        /// <summary>
+        /// Keeps a contractor's Intel contact profile in step with what it is (SourcePolicies.ForContractor)
+        /// and whether the player knows it: a famous name, or someone the player has dealt with. Frozen
+        /// search terms are never touched: running searches keep what they agreed.
+        /// </summary>
+        public void RefreshIntelSource(NetworkActor a)
+        {
+            ContractorSimulation sim = a?.Get<ContractorSimulation>();
+            ContractorProfile p = a?.Get<ContractorProfile>();
+            if (sim == null || p == null || a.kind == ActorKind.PlayerProxy) return;
+            ActorId player = ctx.actors.PlayerProxyId;
+            bool known = a.reputation.fame >= FameBand.Established
+                || ctx.Relations.Get(player, a.id).familiarity > 0f || ctx.Relations.Get(a.id, player).familiarity > 0f;
+            IntelSourceProfile fresh = null;
+            if (known && a.status == ActorStatus.Active)
+            {
+                int topics = 0;
+                Knowledge.KnowledgeBook book = ctx.knowledge.Get(a.id);
+                if (book != null)
+                {
+                    for (int i = 0; i < book.entries.Count; i++)
+                    {
+                        if (book.entries[i].topic.StartsWith("thing:", StringComparison.Ordinal) && ctx.Knowledge.Proficiency(a.id, book.entries[i].topic) >= 0.3f) topics++;
+                    }
+                }
+                fresh = Intel.SourcePolicies.ForContractor(p.specialties, Experience(a), a.reputation.fame, sim.mobility.rangeBand, sim.doctrine.professionalism, sim.doctrine.discretion, topics);
+            }
+            IntelSourceProfile current = a.Get<IntelSourceProfile>();
+            if (fresh == null)
+            {
+                if (current != null) a.components.Remove(current);
+                return;
+            }
+            if (current == null)
+            {
+                a.Add(fresh);
+                return;
+            }
+            current.speedBand = fresh.speedBand;
+            current.reliabilityBand = fresh.reliabilityBand;
+            current.feeBand = fresh.feeBand;
+            current.feePolicyKey = fresh.feePolicyKey;
+            current.continuationPolicyKey = fresh.continuationPolicyKey;
+            current.discretion = fresh.discretion;
+            current.specialties.Clear();
+            current.specialties.AddRange(fresh.specialties);
+        }
+
         public static float Clamp(float v, float min, float max)
         {
             return v < min ? min : (v > max ? max : v);

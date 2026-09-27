@@ -48,6 +48,7 @@ namespace TheNetwork.Core
         public readonly CompactionService Compaction;
         public readonly NetworkCommands Commands;
         public readonly NetworkReadModels Read;
+        public readonly ContractReadModels ContractsRead;
         public readonly WorldFactsAdapter WorldFacts;
 
         /// <summary>This session's start-up state (runtime only).</summary>
@@ -125,6 +126,7 @@ namespace TheNetwork.Core
             Compaction = new CompactionService(State, Scheduler, clock, Ctx);
             Commands = new NetworkCommands(this);
             Read = new NetworkReadModels(this);
+            ContractsRead = new ContractReadModels(this);
 
             RegisterJobs();
             RegisterConsumers();
@@ -182,6 +184,7 @@ namespace TheNetwork.Core
             Bus.Register(ConsumerOrder.Relationships, Ctx.Relations, Domain.Relations.RelationService.ConsumedKeys);
             Bus.Register(ConsumerOrder.Consequences, Ctx.Consequences, Domain.Consequences.ConsequenceEngine.ConsumedKeys);
             Bus.Register(ConsumerOrder.Presentation, new LetterConsumer(Ctx), LetterConsumer.ConsumedKeys);
+            Bus.Register(ConsumerOrder.Presentation, new ContractLetterConsumer(Ctx), ContractLetterConsumer.ConsumedKeys);
         }
 
         /// <summary>A job that failed on every attempt: quarantine its target entity (kept, skipped).</summary>

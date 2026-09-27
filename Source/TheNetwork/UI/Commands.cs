@@ -1,5 +1,6 @@
 using TheNetwork.Core;
 using TheNetwork.Domain;
+using TheNetwork.Domain.Contracts;
 using TheNetwork.Domain.Intel;
 using TheNetwork.Kernel;
 
@@ -8,7 +9,8 @@ namespace TheNetwork.UI
     /// <summary>
     /// The single entry point for player actions (ARCHITECTURE § 9). Each command validates, mutates
     /// through its service, publishes events and returns a reason code. Buttons are enabled from the
-    /// matching CanX, which returns the same codes. No command takes a quantity.
+    /// matching CanX, which returns the same codes. No Intel command takes a quantity; procurement
+    /// asks for an exact one.
     /// </summary>
     public sealed class NetworkCommands
     {
@@ -94,6 +96,35 @@ namespace TheNetwork.UI
             if (Blocked(out blocked)) return blocked;
             return runtime.Ctx.Intel.Cancel(id);
         }
+
+        // ------------------------------------------------------------------ procurement (Phase 2)
+
+        private delegate CommandResult Act();
+
+        private CommandResult Run(Act act)
+        {
+            CommandResult blocked;
+            if (Blocked(out blocked)) return blocked;
+            return act();
+        }
+
+        private Domain.Contracts.ProcurementService P => runtime.Ctx.Procurement;
+
+        public CommandResult CanPostProcurement(ProcurementRequest req) => Run(() => P.CanPost(req));
+        public CommandResult PostProcurement(ProcurementRequest req) => Run(() => P.Post(req));
+        public CommandResult CanAcceptOffer(OfferId id, bool insure) => Run(() => P.CanAccept(id, insure));
+        public CommandResult AcceptOffer(OfferId id, bool insure) => Run(() => P.Accept(id, insure));
+        public CommandResult DeclineOffer(OfferId id) => Run(() => P.Decline(id));
+        public CommandResult CanCancelContract(ContractId id) => Run(() => P.CanCancel(id));
+        public CommandResult CancelContract(ContractId id) => Run(() => P.Cancel(id));
+        public CommandResult CanRepost(ContractId id) => Run(() => P.CanRepost(id));
+        public CommandResult Repost(ContractId id, bool openToAll) => Run(() => P.Repost(id, openToAll));
+        public CommandResult CanRespondWorse(ContractId id, WorseChoice choice) => Run(() => P.CanRespondWorse(id, choice));
+        public CommandResult RespondWorse(ContractId id, WorseChoice choice) => Run(() => P.RespondWorse(id, choice));
+        public CommandResult CanRespondPartial(ContractId id, PartialChoice choice) => Run(() => P.CanRespondPartial(id, choice));
+        public CommandResult RespondPartial(ContractId id, PartialChoice choice) => Run(() => P.RespondPartial(id, choice));
+        public CommandResult CanPayBalance(ContractId id) => Run(() => P.CanPayBalance(id));
+        public CommandResult PayBalance(ContractId id) => Run(() => P.PayBalance(id));
 
         /// <summary>A catalog preference (ModSettings), not world data; applies to every save.</summary>
         public void SetItemOverride(string defName, ItemOverride value)

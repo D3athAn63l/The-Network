@@ -58,6 +58,9 @@ namespace TheNetwork.Domain.Contractors
             OrganizationProfile org = a.Get<OrganizationProfile>();
             ContractorService contractors = ctx.Contractors;
 
+            // 0. Whether the player can ask this contractor for Intel.
+            ctx.Contractors.RefreshIntelSource(a);
+
             // 1. Heal.
             if (org != null)
             {

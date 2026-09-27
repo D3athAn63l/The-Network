@@ -155,7 +155,7 @@ namespace TheNetwork.UI
                 case EventKeys.OpportunityInvalidated:
                     return "TheNetwork_History_OppInvalidated".Translate(item).Resolve();
                 default:
-                    return r.typeKey + " (" + item + ")";
+                    return ContractNarrative.RecordLine(r) ?? r.typeKey + " (" + item + ")";
             }
         }
 
@@ -173,7 +173,7 @@ namespace TheNetwork.UI
                 }
                 return null;
             }
-            return null;
+            return ContractNarrative.JournalLine(e);
         }
 
         public static string Date(int tick)
