@@ -480,19 +480,21 @@
 
 ### ADR-041 · Abstract spatial simulation is deferred (design only)
 - **Decision.** Recorded for later; nothing of it is implemented in Phase 2.
-  1. Spatial truth is invisible: the Network knows where people and goods are without showing a map
-     marker.
-  2. `MobilityProfile` stays a capability (how far and how fast an actor can go), not a location.
-  3. A future `SpatialState` is world truth: an approximate tile, a destination, a travel state and
-     its timing.
-  4. Awareness is separate: what the player or another actor knows about a location is a belief, not
-     the truth.
-  5. Movement is coarse and lazy: computed from timestamps when asked, with no per-tick work, no
-     WorldObjects, no icons and no caravans.
+  1. Abstract spatial truth is invisible to the player: no map marker, no route, no omniscience.
+  2. `MobilityProfile` stays a CAPABILITY (range, speed, lift, transport), never a location.
+  3. A future `SpatialState` is WORLD TRUTH: an approximate current `TileRef`, an optional
+     destination `TileRef`, a coarse travel state or purpose, and the last update and journey timing
+     it needs.
+  4. Awareness is separate: spatial truth never reveals a contractor's position to the player by
+     itself.
+  5. Movement is coarse and lazy (scheduled or computed from timestamps when asked): no per-tick
+     updates, no persistent WorldObjects, no visible routes or icons, no NPC caravan simulation.
   6. Spatial answers WHERE; operations answer WHAT.
   7. Last Known Locations, rescues and visits may later read it.
-  8. Timing: after the owner validates Phase 2 at runtime and before a spatially aware Phase 3.
-- **Rejected (now).** Any spatial field, store, save-version change, route cache or movement job in
-  Phase 2.
+  8. Timing: a dedicated PR after Phase 2 is merged and validated at runtime, before spatially
+     aware Phase 3 physicalization matters.
+- **Rejected (now).** Any `SpatialState`, spatial field on `ContractorSimulation`, spatial store,
+  save-version change, route cache, movement job, position initialization, tile occupancy index,
+  intersection check, relay behaviour, ambient visit, tracking or map icon in Phase 2.
 - **Consequences.** Phase 2's save layout is unchanged by this decision.
 
