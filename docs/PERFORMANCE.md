@@ -20,7 +20,7 @@
 
 | Metric | Target |
 |---|---|
-| Per-tick cost when nothing is due | one `int` comparison (`Clock.Now < nextDue`), plus the `EnsureStarted` bool check |
+| Per-tick cost when nothing is due | one `int` comparison (`Clock.Now < nextDue`), plus the start-up state check (one enum comparison) |
 | Per-tick cost when jobs are due | ≤ 1.5 ms hard budget, ≤ 16 jobs. Typical job < 0.05 ms. |
 | Average added cost over an in-game day (about 100 contractor identities, 10 active contracts) | < 0.01 ms per tick amortized |
 | Off-map Known Character pawns | suspended (quest-reserved) **and** mothball-eligible after store-time normalization, so vanilla ticks them once per 15,000 ticks ([ABSTRACT_PHYSICAL_LIFECYCLE § 4.3](ABSTRACT_PHYSICAL_LIFECYCLE.md#43-consequences-of-suspension-frozen-pawns)) |
@@ -37,7 +37,7 @@
 | **Load-time** | tolerant load; migrations; cache rebuild; validation; custody audit | once per load (validation on the first tick) | linear in entity counts (bounded by caps) |
 | **Event-driven** | event dispatch and consumers (summary counters, edges, morale, knowledge) | when something happens | O(consumers) per event, each O(1); cascades capped at 64 |
 | **World-level scheduled** | Intel resolution, operation checkpoints, org upkeep, bidding passes, retention sweeps, population manager, gossip | due ticks, staggered | per-tick job and time budget; periodic jobs phase-offset by seed |
-| **Physical-only periodic** | site claim sampling; deployment watchdog | every 2,500 ticks, **only while** a Network site map or active deployment exists | O(things of one def on one map) via `listerThings.ThingsOfDef` |
+| **Physical-only periodic** | site claim sampling; deployment watchdog | every 2,500 ticks, **only while** a Network site map or active deployment exists; plus one final sample when vanilla is about to remove a Network site map (checked in the site comp's `CompTickInterval`: two field checks on a map-less site, vanilla's own `ShouldRemoveMapNow` only once no player pawn is on the map) | O(things of one def on one map) via `listerThings.ThingsOfDef` |
 | **UI-only** | read models, sorting, filtering, narrative formatting | while the window is open | cached per `StateVersion`; lists virtualized (only visible rows drawn) |
 | **Opportunity-generation spikes** | source/context resolution, tile finding, Thing creation for stashes, site creation | when Intel resolves (rare) | the resolver reads a session index `packageId → FactionDefs` and one pass over live factions (tens); `TileFinder` is vanilla and bounded; at most one per job; follow-ups are separate jobs |
 | **Map-generation spikes** | vanilla map generation for a Network site | when the player arrives | vanilla cost (the same as any item-stash quest); the Network adds only its comp callbacks |

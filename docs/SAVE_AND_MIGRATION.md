@@ -76,7 +76,8 @@
   deterministic diffs. Cross-store references are IDs, so load order does not change meaning.
 - Every store writes **empty** nodes when it has nothing to save, so the layout never varies
   with content.
-- Site comp data lives inside each vanilla `Site` node (`<opportunityId>`). Registry quest data
+- Site comp data lives inside each vanilla `Site` node (`<networkOpportunityId>`; comps of different
+  mods share the site node, so the name is prefixed). Registry quest data
   (Phase 3) lives inside the vanilla quest node and holds **no state**: the reserved-pawn set is
   rebuilt from `CharacterStore` and `DeploymentStore` at load.
 
@@ -173,7 +174,7 @@ invariants ([DEBUGGING § 6](DEBUGGING.md#6-headless-tests)). Fixture files live
 | 2 | `ResolvingCrossRefs` | vanilla resolves `PawnRef` pointers (warnings for any that are unresolvable) |
 | 3 | `PostLoadInit` | defaults for null collections; nothing else |
 | 4 | `FinalizeInit(fromLoad: true)` | run migrations; rebuild runtime caches (ID maps, heaps, reverse maps); **no events, no world mutation** |
-| 5 | first `WorldComponentTick` → `EnsureStarted` | validators: reference resolution (`ReferenceInvalidated` events), custody audit and re-reservation, scheduler/entity agreement, orphan detection; re-register `SignalBridge`; process queued migration follow-ups; then normal scheduling |
+| 5 | first `WorldComponentTick` → `EnsureStarted` (or an earlier callback or command; if it throws, the Network stays inactive for the session and the save data is left as loaded — [ARCHITECTURE § 6.1](ARCHITECTURE.md#61-networkworldcomponent-kernel-root)) | validators: reference resolution (`ReferenceInvalidated` events), custody audit and re-reservation, scheduler/entity agreement, orphan detection; re-register `SignalBridge`; process queued migration follow-ups; then normal scheduling |
 
 Step 5 is where the world may change (refunds, cancellations, letters). It happens inside the
 game's tick, after the game is fully loaded. It runs once per load and is budgeted and logged.
@@ -227,7 +228,8 @@ External defs are stored as defName strings, so repair is a **string remap**:
 1. `World.FillComponents` constructs the component, with `saveVersion = 0` and
    `bootstrapped = false`.
 2. `FinalizeInit(true)` detects a fresh state and skips migrations.
-3. The first tick bootstraps: `networkSeed`, the pseudo-actors (PlayerProxy, the Exchange),
+3. `networkSeed` is derived from the world's seed in `FinalizeInit`, before the runtime is
+   built. The first tick (start-up) bootstraps: the pseudo-actors (PlayerProxy, the Exchange),
    faction proxies (lazy), the **world cast snapshot** of the current global roster (Fixers
    instantiated; contractors instantiated from the same snapshot once Phase 2 is present), and
    nothing else. The snapshot is taken once; later settings changes do not reach this save.

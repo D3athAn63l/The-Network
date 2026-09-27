@@ -1,6 +1,6 @@
 # The Network
 
-**RimWorld 1.6 · standalone · status: Phase 0 (architecture only, no runtime code)**
+**RimWorld 1.6 · standalone · status: Phase 1 implemented (Foundation, Intel and Fixers) — in-game runtime validation pending**
 
 The Network is a persistent, procedural contractor ecosystem that runs behind the normal RimWorld
 game. The player hires outsiders to find and fetch things they cannot easily get themselves. The
@@ -21,10 +21,35 @@ developer wrote.
 
 ## Repository status
 
-This branch contains **only the Phase 0 technical architecture**, alongside the master design
-from `main`. It deliberately contains no C#, no XML Defs, no Harmony patches, no UI and no
-gameplay. Each implementation phase adds one vertical slice on top of the foundations described
-here. See [docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md).
+**Phase 1 (Foundation + Intel + Fixers)** is implemented on top of the frozen Phase 0 architecture:
+the global cast in Mod Settings, the world cast snapshot, Fixers, the Comms Console gate, the item
+catalog, Intel searches in rounds with zero to many leads (never a quantity), source resolution,
+vanilla sites with the injected comp, partial recovery without extermination, history, the
+Network tab (Intel, History), letters, dev actions and prepare-for-removal. No Harmony.
+Contractor actors, procurement and everything later are not implemented
+([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
+
+The headless tests pass; the in-game runtime spikes (sites, maps, caravans, silver, removal) have
+**not** been run yet. Their records and owner test steps are in [docs/spikes/](docs/spikes/README.md).
+
+### Build
+
+```
+./build.sh "<RimWorld>/RimWorldWin64_Data/Managed"     # or RIMWORLD_MANAGED=<dir> ./build.sh
+```
+
+Output: `1.6/Assemblies/TheNetwork.dll` (net472, C# 7.3). Game DLLs are external references and are
+never committed. The first `[TheNetwork]` line in `Player.log` shows the build stamp.
+
+### Tests
+
+```
+Tests/run-tests.sh "<RimWorld Managed folder>" "<path to 0Harmony.dll>"
+```
+
+Runs the real `TheNetwork.dll` against the real `Assembly-CSharp` under Mono with fake adapter ports.
+`0Harmony` is used by the **test runner only** (to stub Unity-only logging); the mod references no
+Harmony. These tests prove Network logic, not vanilla behaviour.
 
 > **Design authority.** The [master design document](The%20Network%20%E2%80%94%20Full%20Mod%20Design%20-%20Master%20Implementation%20Brief.md) defines product and gameplay intent. The
 > architecture documents define technical implementation. Where they conflict, the design takes
@@ -83,32 +108,32 @@ same change.
     saves through `ModSettings`; what happens to them belongs to each world alone and is never
     written back.
 
-## Conventions (for implementation phases)
+## Conventions
 
 | Item | Convention |
 |---|---|
 | Target | RimWorld 1.6, .NET Framework 4.7.2 class library |
-| Proposed packageId | `aRed.TheNetwork` (confirm before first release) |
+| packageId | `aRed.TheNetwork` |
 | Assembly / root namespace | `TheNetwork` |
 | Log prefix | `[TheNetwork]` |
 | Def name prefix | `TheNetwork_` |
 | Signal / quest-tag prefix | `TheNetwork.` |
-| Harmony | Not required for Phases 1–3 (see [RIMWORLD_INTEGRATION.md § Harmony](docs/RIMWORLD_INTEGRATION.md#3-harmony-policy)) |
+| Harmony | None. Not required for Phases 1–3 (see [RIMWORLD_INTEGRATION.md § Harmony](docs/RIMWORLD_INTEGRATION.md#3-harmony-policy)) |
 | Dependencies | None. Grandmaster21 and RegenNanites were read as references only. The Network does not depend on them or assume they are installed. |
 | Settings | `ModSettings`: preferences, catalog overrides and the global cast (with its own `NetworkSettingsVersion`). Never runtime history. |
 | Access | A usable vanilla Comms Console is required for Network actions (Phase 1). |
 
-Planned repository layout, created when Phase 1 begins and not before:
+Repository layout:
 
 ```
-About/                 About.xml, Preview.png
+About/                 About.xml (Preview.png is left to the owner)
 1.6/Assemblies/        TheNetwork.dll (build output)
-1.6/Defs/              Network-owned Defs (only for systems that exist)
-1.6/Patches/           XML patches (Phase 1: one comp added to the vanilla Site WorldObjectDef)
-Languages/English/     Keyed + DefInjected strings
-Source/TheNetwork/     C# sources (see ARCHITECTURE.md § 4 for module layout)
-Tests/                 Headless tests for pure domain logic
-docs/                  This architecture
+1.6/Defs/              TheNetwork_MainButton, the name pools (the only Phase 1 Defs)
+1.6/Patches/           the single patch adding the site comp to the vanilla Site WorldObjectDef
+Languages/English/     Keyed strings
+Source/TheNetwork/     Kernel/ Domain/ History/ Integration/ Core/ UI/ Diagnostics/ Settings/ Persist/
+Tests/                 headless tests (TheNetwork.Tests), fixtures, run-tests.sh
+docs/                  the architecture; docs/spikes/ holds the runtime spike records
 ```
 
 ## License

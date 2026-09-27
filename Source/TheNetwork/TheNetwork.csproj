@@ -1,0 +1,73 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Build:   dotnet build -c Release -p:RimWorldManaged=<.../RimWorldWin64_Data/Managed>
+             (from this folder), or ./build.sh from the repository root.
+    Output:  ../../1.6/Assemblies/TheNetwork.dll
+
+    RimWorld references come from a LOCAL RimWorld install. Nothing proprietary is committed.
+      -p:RimWorldManaged=<dir>   folder holding Assembly-CSharp.dll and UnityEngine*.dll
+                                 (default: assumes this repository sits in RimWorld/Mods/The-Network)
+      -p:NetStandardDll=<file>   only if <dir> has no netstandard.dll (Unity 2022 assemblies reference it)
+    There is NO Harmony reference: The Network does not patch anything.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>TheNetwork</AssemblyName>
+    <RootNamespace>TheNetwork</RootNamespace>
+    <Version>0.1.0</Version>
+    <OutputPath>$(MSBuildThisFileDirectory)..\..\1.6\Assemblies\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <DebugType>none</DebugType>
+    <Optimize>true</Optimize>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <Deterministic>true</Deterministic>
+
+    <RimWorldManaged Condition="'$(RimWorldManaged)' == ''">$(MSBuildThisFileDirectory)..\..\..\..\RimWorldWin64_Data\Managed</RimWorldManaged>
+  </PropertyGroup>
+
+  <Target Name="CheckRimWorldReferences" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(RimWorldManaged)\Assembly-CSharp.dll')"
+           Text="RimWorld assemblies not found. Pass -p:RimWorldManaged=&lt;path to RimWorld's Managed folder&gt; (it must contain Assembly-CSharp.dll)." />
+  </Target>
+
+  <ItemGroup>
+    <Reference Include="Assembly-CSharp"><HintPath>$(RimWorldManaged)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine"><HintPath>$(RimWorldManaged)\UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(RimWorldManaged)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(RimWorldManaged)\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(RimWorldManaged)\UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="netstandard" Condition="Exists('$(RimWorldManaged)\netstandard.dll')"><HintPath>$(RimWorldManaged)\netstandard.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="netstandard" Condition="!Exists('$(RimWorldManaged)\netstandard.dll') And '$(NetStandardDll)' != ''"><HintPath>$(NetStandardDll)</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <!-- .NET Framework reference assemblies for non-Windows builds (skipped if FrameworkPathOverride is given, e.g. Mono's 4.7.2-api) -->
+  <ItemGroup Condition="'$(FrameworkPathOverride)' == ''">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Build stamp: the assembly reports its own provenance once in Player.log (DEBUGGING § 2). -->
+  <Target Name="WriteBuildStamp" BeforeTargets="CoreCompile">
+    <Exec Command="git log -1 --format=%h -- ." WorkingDirectory="$(MSBuildThisFileDirectory)" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="NetworkGitCommit" />
+    </Exec>
+    <PropertyGroup>
+      <NetworkGitCommit Condition="'$(NetworkGitCommit)' == ''">no-git</NetworkGitCommit>
+      <NetworkBuildTime>$([System.DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mmZ"))</NetworkBuildTime>
+      <NetworkStampFile>$(IntermediateOutputPath)NetworkBuildStamp.g.cs</NetworkStampFile>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(NetworkStampFile)" Overwrite="true" WriteOnlyWhenDifferent="true"
+                      Lines="namespace TheNetwork { internal static class NetworkBuildStamp { public const string Stamp = &quot;built $(NetworkBuildTime), source commit $(NetworkGitCommit)&quot;%3B } }" />
+    <ItemGroup>
+      <Compile Include="$(NetworkStampFile)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

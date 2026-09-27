@@ -42,7 +42,9 @@
 - `FinalizeInit(bool fromLoad)`: for **new worlds** it is called from
   `WorldGenerator.cs:67` **during world generation**, before the colony and scenario exist. On
   load it is called from `Game.LoadGame` (`Game.cs:586`). **Consequence:** the bootstrap runs
-  lazily on the first `WorldComponentTick`, not in `FinalizeInit` ([ARCHITECTURE § 6.1](ARCHITECTURE.md#61-networkworldcomponent-kernel-root)).
+  lazily on first use (normally the first `WorldComponentTick`), not in `FinalizeInit`; only the
+  `networkSeed` of a not-yet-bootstrapped world is derived there, from the world's seed
+  ([ARCHITECTURE § 6.1](ARCHITECTURE.md#61-networkworldcomponent-kernel-root)).
 - `WorldComponentTick` is called every tick from `World.WorldTick` (`World.cs:220`).
 - A WorldComponent may implement `IThingHolder` (`World.GetChildHolders`, `World.cs:465`). This
   is **not used**: holding pawns ourselves would take them out of vanilla's pawn systems, and
@@ -101,7 +103,9 @@ Verdict:
 - Hooks available to a `WorldObjectComp`: `PostMapGenerate`, `PostCaravanFormed(Caravan)`
   (called from `MapParent.Notify_CaravanFormed` through `CaravanExitMapUtility.cs:66`),
   `PostMyMapRemoved`, `PostDestroy`, `CompInspectStringExtra`, `GetFloatMenuOptions(Caravan)`,
-  `GetGizmos`.
+  `GetGizmos`. *(Phase 1 finding:)* `WorldObjectComp.PostMyMapSettled` exists but is **not
+  virtual** in 1.6, so a comp cannot observe settling; `MapParent.Notify_MyMapSettled` also sends
+  the quest-target signal `MapSettled`, which the SignalBridge receives for Network-tagged sites.
 - World objects send quest-tag signals `Spawned`, `Despawned`, `Destroyed`
   (`WorldObject.cs:454/489/510`). A `MapParent` also sends `MapGenerated` and `MapRemoved`
   (`MapParent.cs:58/72`).

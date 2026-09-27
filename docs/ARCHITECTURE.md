@@ -186,12 +186,22 @@ Method names are illustrative. The responsibilities and boundaries are binding.
   - `ExposeData` saves or loads the stores.
   - `FinalizeInit(fromLoad)` is called for new worlds **during world generation**
     (`WorldGenerator.cs:67`), before the colony exists, and on load from `Game.LoadGame`. It
-    rebuilds runtime indexes only and emits nothing.
-  - The **first `WorldComponentTick`** runs `EnsureStarted()`. For a new game, or a save that
-    has just gained the mod, this bootstraps the pseudo-actors and the seed. On a load it runs
-    reconciliation (validation, reference repair, custody checks) and registers the signal
-    receiver. Starting lazily avoids depending on world-generation ordering and needs no
-    GameComponent.
+    rebuilds runtime indexes only and emits nothing. A world that has not bootstrapped derives
+    its `networkSeed` from the world's seed here, before any runtime service is built, so every
+    service sees the real seed; a bootstrapped save keeps its persisted seed.
+  - **Start-up** (`EnsureStarted()`) runs once per session on first use: normally the first
+    `WorldComponentTick`, or an earlier site callback, signal or command. For a new game, or a
+    save that has just gained the mod, it bootstraps the pseudo-actors and the cast snapshot. On
+    a load it runs reconciliation (validation, reference repair, custody checks) and registers
+    the signal receiver. Starting lazily avoids depending on world-generation ordering and needs
+    no GameComponent.
+  - **Start-up fails closed.** The session state is `NotStarted → Running` or `Failed`
+    (runtime only). If start-up throws, the error is logged once with the failing stage and the
+    Network is inactive for the rest of the session: the scheduler does not run, site callbacks
+    and signals are ignored, commands return `NetworkStartupFailed`, and the Network tab shows
+    that it is inactive (reading still works). Nothing is deleted or rewritten; `bootstrapped`
+    is set only after bootstrap has completed, and every bootstrap step is idempotent, so the
+    next load simply tries again.
   - `WorldComponentTick` checks `Clock.Now < scheduler.NextDueTick` and returns immediately
     when nothing is due.
 - **Future.** None expected. New subsystems register stores and handlers; the root does not grow.

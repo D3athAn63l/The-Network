@@ -98,7 +98,7 @@ is reported once by the validator.
 | `FactionRef` | `loadID` int | `name`, `def` defName, `wasPlayer` | runtime map `loadID → Faction`, rebuilt on load and on faction add | Proxy actor becomes `Destroyed(FactionVanished)`. Contracts issued by it are Voided. Encounter-faction links are cleared. History keeps the snapshot. |
 | `WorldObjectRef` | `ID` int | `def` defName, `label`, last `TileRef` | map `ID → WorldObject` (rebuilt on load; updated through our comp and signals) | The site vanished outside our callbacks: the Opportunity becomes `Vanished`, which is handled like Destroyed. |
 | `PawnRef` | `Scribe_References` pointer **plus** `thingIDNumber` int | `NameSnapshot`, gender, `kindDef` defName, faction snapshot | vanilla cross-ref resolution at load | The pointer is null after load, or the pawn is `Discarded`/`Destroyed` while not dead: the character becomes `Lost` (record only; never re-materialized). One *warning* per pawn from vanilla is acceptable and expected only when another mod discarded our pawn. |
-| `TileRef` | `PlanetTile` (via `Scribe_Values`, supported by `ParseHelper`) **plus** `layerDef` defName | region key | `Find.WorldGrid.PlanetLayers` contains the layer id, and the tile id is in range | The layer is gone (for example Odyssey was removed and orbit tiles no longer exist): location-dependent entities are Invalidated. Region-keyed knowledge stays as data. |
+| `TileRef` | `PlanetTile` (via `Scribe_Values`, supported by `ParseHelper`) **plus** `layerDef` defName | region key | `Find.WorldGrid.PlanetLayers` contains the layer id, the layer found there has the recorded `layerDef` (when one was recorded; a reused numeric id must not resolve to a different layer), and the tile id is in range | The layer is gone (for example Odyssey was removed and orbit tiles no longer exist): location-dependent entities are Invalidated. Region-keyed knowledge stays as data. |
 | `MapRef` | the `WorldObjectRef` of its `MapParent` | — | `mapParent.Map` | Treated as "map gone": deliveries reroute ([STATE_MACHINES § 4](STATE_MACHINES.md#4-procurement-contract-specialization)). |
 | `IdeoRef` (Ideology, later) | `Ideo.id` int | name | `Find.IdeoManager` | Dropped from derived features only. |
 | `QuestRef` (registry quest, Phase 3) | `Quest.id` int | — | `Find.QuestManager` | Recreate the registry quest and re-reserve pawns. |
@@ -544,8 +544,10 @@ Opportunity                                   // world truth
   expiresTick: int
   state: OpportunityState                     // see STATE_MACHINES § 2
   site: WorldObjectRef?                       // when materialized
-  engagement: { firstEngagedTick, playerClaimedCounts: ItemTally[], claimedBy: ActorId?,
-                recoveredBand: None | Little | Some | Most | All }   // of the Target payload
+  engagement: { firstEngagedTick, initialOnMap, lastRemaining, lastSampleTick, recovered,
+                claimedBy: ActorId?, recoveredBand: None | Little | Some | Most | All }
+                // of the Target payload; recovered = site stock at map generation − last sample,
+                // never a sum of what the player carried (their own copies must not count; STATE_MACHINES § 2.2)
   seed: int
   committedAtTick: int                        // truth fixed here; never recomputed
 ```

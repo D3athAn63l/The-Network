@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Defs>
+
+  <MainButtonDef>
+    <defName>TheNetwork_MainButton</defName>
+    <label>network</label>
+    <description>The Network: fixers, contacts and intelligence about things you are looking for. Reading it needs nothing; contacting anyone needs a powered comms console.</description>
+    <tabWindowClass>TheNetwork.UI.MainTabWindow_Network</tabWindowClass>
+    <order>95</order>
+    <validWithoutMap>true</validWithoutMap>
+  </MainButtonDef>
+
+</Defs>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A settings file written by a NEWER Network (settingsVersion 99): loaded best-effort, never migrated, version kept. -->
+<ModSettings>
+  <settingsVersion>99</settingsVersion>
+  <roster>
+    <contractorTemplates>
+      <li>
+        <templateId>newer-1</templateId>
+        <provenance>Generated</provenance>
+        <name>Future Company</name>
+        <form>Company</form>
+        <canIssueWork>True</canIssueWork>
+        <someFieldFromTheFuture>42</someFieldFromTheFuture>
+      </li>
+    </contractorTemplates>
+    <fixerTemplates />
+    <generation><generatorVersion>7</generatorVersion></generation>
+  </roster>
+</ModSettings>

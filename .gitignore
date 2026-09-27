@@ -1,0 +1,38 @@
+# Build intermediates
+bin/
+obj/
+*.pdb
+*.mdb
+
+# Proprietary game and Unity assemblies must never be committed.
+# Only The Network's own build output (1.6/Assemblies/TheNetwork.dll) is tracked.
+1.6/Assemblies/*
+!1.6/Assemblies/TheNetwork.dll
+Assembly-CSharp*.dll
+UnityEngine*.dll
+Unity.*.dll
+0Harmony.dll
+HarmonyMod.dll
+com.rlabrecque.steamworks.net.dll
+
+# Local RimWorld reference paths and machine-specific build settings
+local.props
+Directory.Build.local.props
+*.local.sh
+.env
+
+# IDE state
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.swp
+.DS_Store
+
+# Temporary test output
+Tests/out/
+Tests/**/bin/
+Tests/**/obj/
+TestResults/
+*.log
