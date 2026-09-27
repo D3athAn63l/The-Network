@@ -13,6 +13,7 @@ namespace TheNetwork.Tests
         {
             t.Add(new KeyValuePair<string, Action>("Kernel.TypedIds", TypedIds));
             t.Add(new KeyValuePair<string, Action>("Kernel.IdAllocator", IdAllocatorTest));
+            t.Add(new KeyValuePair<string, Action>("Kernel.TileRefLayerIdentity", TileRefLayerIdentity));
             t.Add(new KeyValuePair<string, Action>("Kernel.NetRngDeterminism", NetRngDeterminism));
             t.Add(new KeyValuePair<string, Action>("Kernel.SchedulerOrdering", SchedulerOrdering));
             t.Add(new KeyValuePair<string, Action>("Kernel.SchedulerBudget", SchedulerBudget));
@@ -42,6 +43,20 @@ namespace TheNetwork.Tests
                 if (k == EntityKind.None) continue;
                 T.Eq(k, EntityKindUtility.FromPrefix(EntityKindUtility.Prefix(k)), "prefix round trip " + k);
             }
+        }
+
+        private static void TileRefLayerIdentity()
+        {
+            // The pure check behind TileRef.IsValidNow (the live PlanetLayer lookup needs a world grid).
+            T.Check(TileRef.ValidFor(5, "Surface", true, "Surface", 100), "same layer def, in range: valid");
+            T.Check(!TileRef.ValidFor(5, "Surface", true, "Orbit", 100), "the id now resolves to a different layer def: invalid");
+            T.Check(!TileRef.ValidFor(5, "Surface", true, null, 100), "a layer whose def cannot be confirmed: invalid");
+            T.Check(TileRef.ValidFor(5, null, true, "Orbit", 100), "no recorded def: id and range only (as before)");
+            T.Check(TileRef.ValidFor(5, "", true, "Surface", 100), "empty recorded def: id and range only");
+            T.Check(!TileRef.ValidFor(5, "Surface", false, null, 0), "layer id gone: invalid");
+            T.Check(!TileRef.ValidFor(100, "Surface", true, "Surface", 100), "out of range: invalid");
+            T.Check(!TileRef.ValidFor(-1, "Surface", true, "Surface", 100), "no tile: invalid");
+            T.Check(!TileRef.ValidFor(5, "Surface", true, "surface", 100), "def names compare exactly");
         }
 
         private static void IdAllocatorTest()

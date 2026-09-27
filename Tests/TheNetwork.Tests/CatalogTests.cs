@@ -12,6 +12,7 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Catalog.Heuristics", Heuristics));
             t.Add(new KeyValuePair<string, Action>("Catalog.OverridesAndRuntimeFailure", Overrides));
             t.Add(new KeyValuePair<string, Action>("Catalog.ExtraCargoPoolIsGeneric", ExtraPool));
+            t.Add(new KeyValuePair<string, Action>("Catalog.ExtraCargoPoolFollowsOverrideChanges", ExtraPoolOverrides));
         }
 
         /// <summary>A plain, valid modded item: Eligible under every rule.</summary>
@@ -131,6 +132,41 @@ namespace TheNetwork.Tests
             T.Eq(1, low.Count, "extra cargo: stackable, tradeable, not a drug, within tech");
             T.Eq("CheapStack", low[0].defName, "pool content");
             T.Eq(2, cat.ExtraCargoPool(5).Count, "higher tech widens the pool");
+        }
+
+        private static void ExtraPoolOverrides()
+        {
+            List<CatalogFacts> facts = new List<CatalogFacts>();
+            CatalogFacts a = Item("AlphaStack"); a.marketValue = 3f; a.techLevel = 3;
+            CatalogFacts b = Item("BetaStack"); b.marketValue = 5f; b.techLevel = 3;
+            CatalogFacts c = Item("GammaStack"); c.marketValue = 7f; c.techLevel = 3;
+            facts.Add(a); facts.Add(b); facts.Add(c);
+            Dictionary<string, ItemOverride> over = new Dictionary<string, ItemOverride>();
+            ItemCatalog cat = new ItemCatalog(facts, d => { ItemOverride v; return over.TryGetValue(d, out v) ? v : ItemOverride.Auto; });
+            Func<int, List<string>> names = tech =>
+            {
+                List<string> l = new List<string>();
+                foreach (TheNetwork.Domain.Ports.ItemFacts f in cat.ExtraCargoPool(tech)) l.Add(f.defName);
+                return l;
+            };
+
+            List<string> first = names(4);
+            T.Eq(3, first.Count, "pool built with all three");
+            over["BetaStack"] = ItemOverride.Blocked; // the player blocks it after the pool was first built
+            List<string> blocked = names(4);
+            T.Check(!blocked.Contains("BetaStack"), "a blocked item leaves the pool at once, same session");
+            T.Eq("AlphaStack,GammaStack", string.Join(",", blocked.ToArray()), "stable order kept for the rest");
+            over["BetaStack"] = ItemOverride.Auto;
+            T.Check(names(4).Contains("BetaStack"), "back to Auto: eligible again");
+            over["BetaStack"] = ItemOverride.Allowed;
+            T.Check(names(4).Contains("BetaStack"), "Allowed: eligible");
+            T.Eq("AlphaStack,BetaStack,GammaStack", string.Join(",", names(4).ToArray()), "same order as the first build");
+
+            cat.MarkUnusable("GammaStack", "test");
+            T.Check(!names(4).Contains("GammaStack"), "a runtime failure also leaves the pool");
+            T.Check(!names(5).Contains("GammaStack"), "…for every tech level, including pools built later");
+            over["AlphaStack"] = ItemOverride.Blocked;
+            T.Eq("BetaStack", string.Join(",", names(5).ToArray()), "overrides apply to a pool first built after the change too");
         }
     }
 }

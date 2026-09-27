@@ -112,24 +112,38 @@ namespace TheNetwork.Domain.Catalog
             return Get(defName)?.item;
         }
 
+        /// <summary>
+        /// Believable extra cargo up to a tech level, in a stable (defName) order. Only what cannot change
+        /// during a session (verdict, category, value, tech) is cached; the player's current overrides and
+        /// this session's runtime failures are applied on every call, so blocking an item takes effect at
+        /// once. Called once per generated opportunity.
+        /// </summary>
         public IList<ItemFacts> ExtraCargoPool(int maxTechLevel)
         {
-            List<ItemFacts> pool;
-            if (extraPools.TryGetValue(maxTechLevel, out pool)) return pool;
-            pool = new List<ItemFacts>();
-            for (int i = 0; i < entries.Count; i++)
+            List<ItemFacts> candidates;
+            if (!extraPools.TryGetValue(maxTechLevel, out candidates))
             {
-                CatalogEntry e = entries[i];
-                CatalogFacts f = e.facts;
-                if (e.Verdict != CatalogVerdict.Eligible) continue;
-                if (f.category != "Item" || f.stackLimit <= 1 || !f.Tradeable || f.isDrug) continue;
-                if (f.marketValue < 0.5f || f.marketValue > 60f) continue;
-                if (f.techLevel > maxTechLevel) continue;
-                if (overrides(f.defName) == ItemOverride.Blocked) continue;
-                pool.Add(e.item);
+                candidates = new List<ItemFacts>();
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    CatalogEntry e = entries[i];
+                    CatalogFacts f = e.facts;
+                    if (e.Verdict != CatalogVerdict.Eligible) continue;
+                    if (f.category != "Item" || f.stackLimit <= 1 || !f.Tradeable || f.isDrug) continue;
+                    if (f.marketValue < 0.5f || f.marketValue > 60f) continue;
+                    if (f.techLevel > maxTechLevel) continue;
+                    candidates.Add(e.item);
+                }
+                candidates.Sort((a, b) => string.CompareOrdinal(a.defName, b.defName));
+                extraPools[maxTechLevel] = candidates;
             }
-            pool.Sort((a, b) => string.CompareOrdinal(a.defName, b.defName));
-            extraPools[maxTechLevel] = pool;
+            List<ItemFacts> pool = new List<ItemFacts>(candidates.Count);
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                string defName = candidates[i].defName;
+                if (overrides(defName) == ItemOverride.Blocked || runtimeFailures.ContainsKey(defName)) continue;
+                pool.Add(candidates[i]);
+            }
             return pool;
         }
 
@@ -137,7 +151,6 @@ namespace TheNetwork.Domain.Catalog
         {
             if (defName == null || runtimeFailures.ContainsKey(defName)) return;
             runtimeFailures[defName] = reason ?? "unknown";
-            foreach (List<ItemFacts> pool in extraPools.Values) pool.RemoveAll(x => x.defName == defName);
             NetLog.Warn(LogCategory.Catalog, "'" + defName + "' could not be produced in this game and is unusable until the next session: " + (reason ?? "unknown") + ".");
             StateVersion.Bump();
         }

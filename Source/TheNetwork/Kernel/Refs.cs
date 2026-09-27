@@ -211,7 +211,10 @@ namespace TheNetwork.Kernel
 
         public PlanetTile Tile => new PlanetTile(tileId, layerId);
 
-        /// <summary>True if the layer still exists and the tile is inside it.</summary>
+        /// <summary>
+        /// True if the layer id still resolves to the same kind of layer (its def, when one was recorded)
+        /// and the tile is inside it.
+        /// </summary>
         public bool IsValidNow
         {
             get
@@ -220,9 +223,23 @@ namespace TheNetwork.Kernel
                 WorldGrid grid = Find.WorldGrid;
                 if (grid == null) return false;
                 PlanetLayer layer;
-                if (!grid.PlanetLayers.TryGetValue(layerId, out layer) || layer == null) return false;
-                return tileId < layer.TilesCount;
+                bool found = grid.PlanetLayers.TryGetValue(layerId, out layer) && layer != null;
+                return ValidFor(tileId, layerDef, found, found ? layer.Def?.defName : null, found ? layer.TilesCount : 0);
             }
+        }
+
+        /// <summary>
+        /// The check behind <see cref="IsValidNow"/>. A numeric layer id can be reused after DLC, mod or
+        /// world-layer changes, so when the reference recorded its layer def, the layer found under that
+        /// id must have the same def; otherwise the reference is invalid rather than silently pointing at
+        /// a different layer. A reference with no recorded def (none was available when it was taken) is
+        /// checked by id and range only, as before.
+        /// </summary>
+        public static bool ValidFor(int tileId, string recordedLayerDef, bool layerFound, string foundLayerDef, int foundTileCount)
+        {
+            if (tileId < 0 || !layerFound) return false;
+            if (!string.IsNullOrEmpty(recordedLayerDef) && !string.Equals(recordedLayerDef, foundLayerDef, StringComparison.Ordinal)) return false;
+            return tileId < foundTileCount;
         }
 
         /// <summary>
