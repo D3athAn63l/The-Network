@@ -21,6 +21,7 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Persist.StoreLayoutFixedOrder", Layout));
             t.Add(new KeyValuePair<string, Action>("Persist.StateRoundTrip", StateRoundTrip));
             t.Add(new KeyValuePair<string, Action>("Persist.ReferencesAreStrings", ReferencesAreStrings));
+            t.Add(new KeyValuePair<string, Action>("Persist.S18SaveSize", S18SaveSize));
         }
 
         private static void Tolerant()
@@ -159,6 +160,83 @@ namespace TheNetwork.Tests
             T.Eq(state.history.records.Count, loaded.history.records.Count, "history records");
             T.Eq(state.scheduler.jobs.Count, loaded.scheduler.jobs.Count, "scheduler jobs");
             T.Eq(state.journal.entries.Count, loaded.journal.entries.Count, "journal (polymorphic event classes)");
+        }
+
+        /// <summary>
+        /// S18 save-size part: a stress-sized Network node (the full cast snapshot, 5,000 history records,
+        /// 10,000 scheduler jobs, a full journal, 300 searches with leads and opportunities) written through
+        /// the real Scribe. Compared with the EVENTS_AND_HISTORY § 11 budget (typical 1.2–1.8 MB, ceiling 3.5 MB).
+        /// </summary>
+        private static void S18SaveSize()
+        {
+            TestNet n = new TestNet(18);
+            TheNetwork.Settings.GlobalNetworkRoster roster = new TheNetwork.Settings.GlobalNetworkRoster();
+            TheNetwork.Settings.CastGenerator.RegenerateGenerated(roster, TheNetwork.Settings.NamePools.Fallback(), 18, 100, 8, null, "s18");
+            n.ctx.cast.imported = false;
+            n.ctx.Actors.ImportCast(roster, 1, null);
+            n.ctx.Actors.InstantiateFixers();
+            IntelDevOverrides.waiveFees = true;
+            NetworkActor fixer = null;
+            foreach (NetworkActor a in n.ctx.actors.actors) if (a.kind == ActorKind.Individual) { fixer = a; break; }
+            for (int i = 0; i < 300; i++)
+            {
+                n.ctx.Intel.Submit(Domain.Intel.SourceKey.ForActor(fixer.id), i % 2 == 0 ? "TestSteel" : "ModX_Weirdium");
+                IntelRequest r = n.Only();
+                IntelTests.ForceLead();
+                n.ResolveRound(r);
+                if (r.state == IntelState.AwaitingDecision) n.ctx.Intel.End(r.id);
+            }
+            IntelDevOverrides.waiveFees = false;
+            // 5,000 claims through the real History consumer, so the global caps apply as in a game.
+            for (int i = 0; i < 5000; i++)
+            {
+                TheNetwork.Persist.Events.OpportunityEvent e = TheNetwork.Persist.Events.EventFactory.Make<TheNetwork.Persist.Events.OpportunityEvent>(
+                    TheNetwork.Persist.Events.EventKeys.OpportunityClaimed, Importance.Notable, new OpportunityId(900000 + i).Ref);
+                e.seq = n.ids.NextEventSeq();
+                e.tick = 400000 + i * 10;
+                e.opportunity = new OpportunityId(900000 + i);
+                e.source = fixer.id;
+                e.holderActor = n.ctx.actors.Exchange.id;
+                e.holderName = "Red Hands";
+                e.sourceKindKey = "SameSourceFaction";
+                e.targetDefName = "TestSteel";
+                e.targetLabel = "test steel";
+                e.recoveredCount = 40;
+                e.recoveredBand = RecoveredBand.Some;
+                e.reasonKey = "PartialRecovery";
+                e.place = new TileRef { tileId = 1234 + i, layerId = 0, layerDef = "Surface", regionKey = "S0:R07" };
+                n.history.Handle(e);
+            }
+            n.scheduler.RegisterKind("s18.job", j => { }, false, false);
+            for (int i = 0; i < 10000; i++) n.scheduler.Schedule("s18.job", n.clock.Now + 1000 + i, i + 1);
+            NetworkState state = new NetworkState
+            {
+                cast = n.ctx.cast, actors = n.ctx.actors, characters = n.ctx.characters, intel = n.ctx.intel, opportunities = n.ctx.opportunities,
+                history = n.ledger, summaries = n.summaries, journal = n.journal, diagnostics = n.diag
+            };
+            n.scheduler.WriteTo(state.scheduler);
+            string path = SaveState(state, 1);
+            long bytes = new FileInfo(path).Length;
+            // Without the 10,000 synthetic jobs (a realistic Phase 1 save has a handful).
+            state.scheduler.jobs.Clear();
+            string path2 = SaveState(state, 1);
+            long realistic = new FileInfo(path2).Length;
+            Console.WriteLine("    S18 save size: " + (bytes / 1024) + " KB with 10,000 jobs + 5,000 records + 300 searches + full cast; "
+                + (realistic / 1024) + " KB without the synthetic jobs (" + state.history.records.Count + " records, " + state.intel.requests.Count + " requests, "
+                + state.opportunities.opportunities.Count + " opportunities, " + state.cast.entries.Count + " cast entries, " + state.journal.entries.Count + " journal entries)");
+            T.Check(realistic < 3584 * 1024, "within the 3.5 MB hard ceiling without synthetic jobs");
+            System.Xml.XmlDocument doc = new System.Xml.XmlDocument();
+            doc.Load(path2);
+            foreach (System.Xml.XmlNode node in doc.DocumentElement.ChildNodes)
+            {
+                if (node.NodeType == System.Xml.XmlNodeType.Element && node.OuterXml.Length > 20000) Console.WriteLine("      " + node.Name + ": " + (node.OuterXml.Length / 1024) + " KB");
+            }
+            long historyBytes = doc.DocumentElement["history"].OuterXml.Length;
+            Console.WriteLine("      bytes per history record: " + (historyBytes / Math.Max(1, state.history.records.Count)));
+            if (Environment.GetEnvironmentVariable("S18_DUMP") != null) Console.WriteLine(doc.DocumentElement["history"]["records"].FirstChild.OuterXml);
+            T.Check(state.history.records.Count <= TheNetwork.History.RetentionPolicy.NotableGlobalCap, "the Notable cap holds");
+            File.Delete(path);
+            File.Delete(path2);
         }
 
         private static void ReferencesAreStrings()
