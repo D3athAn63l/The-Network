@@ -21,11 +21,11 @@ using Verse;
 namespace TheNetwork.Diagnostics
 {
     /// <summary>
-    /// Phase 1 dev actions (DEBUGGING § 3), in the vanilla debug menu under "The Network". No Harmony.
+    /// Dev actions (DEBUGGING § 3), in the vanilla debug menu under "The Network". No Harmony.
     /// Each logs what it did and bumps StateVersion. They exist so the owner never has to wait
     /// in-game days to test a flow.
     /// </summary>
-    public static class NetworkDevActions
+    public static partial class NetworkDevActions
     {
         private const string Cat = "The Network";
 

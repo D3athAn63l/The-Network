@@ -291,6 +291,11 @@ namespace TheNetwork.Domain.Operations
                 o.secured = Math.Max(0, Math.Min(o.requested, ProcurementDevOverrides.forceSecured.Value));
                 ProcurementDevOverrides.forceSecured = null;
             }
+            if (ProcurementDevOverrides.forceDelayTicks.HasValue)
+            {
+                o.delayTicks = Math.Max(0, ProcurementDevOverrides.forceDelayTicks.Value);
+                ProcurementDevOverrides.forceDelayTicks = null;
+            }
             if (ProcurementDevOverrides.forceTroubled != null)
             {
                 o.troubledKey = ProcurementDevOverrides.forceTroubled;
@@ -473,6 +478,28 @@ namespace TheNetwork.Domain.Operations
                 if (c != null && !c.IsTerminal) ctx.Procurement.OnWrittenOff(c, op);
             }
             StateVersion.Bump();
+        }
+
+        /// <summary>Dev: runs the next checkpoint now (its due tick is moved to now; the same code path runs).</summary>
+        public bool DevAdvance(Operation op)
+        {
+            if (op == null || op.IsFinished) return false;
+            if (op.status == OpStatus.Troubled)
+            {
+                ctx.scheduler.Cancel(TroubledJob, op.id.Value);
+                op.troubledDeadlineTick = ctx.Now;
+                TroubledDeadline(new ScheduledJob { kind = TroubledJob, target = op.id.Value });
+                return true;
+            }
+            for (int i = 0; i < op.checkpoints.Count; i++)
+            {
+                if (op.checkpoints[i].done) continue;
+                op.checkpoints[i].dueTick = ctx.Now;
+                ctx.scheduler.Cancel(CheckpointJob, op.id.Value);
+                RunCheckpoint(new ScheduledJob { kind = CheckpointJob, target = op.id.Value, arg = i });
+                return true;
+            }
+            return false;
         }
 
         // ================================================================== helpers

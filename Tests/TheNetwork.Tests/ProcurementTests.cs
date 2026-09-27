@@ -51,6 +51,7 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Persist.ContractsAndOperationsRoundTrip", PersistRoundTrip));
             t.Add(new KeyValuePair<string, Action>("Validator.RebuildsJobsAndVoidsMissingDefs", ValidatorRepairs));
             t.Add(new KeyValuePair<string, Action>("Compaction.TerminalContractsArchived", Compaction));
+            t.Add(new KeyValuePair<string, Action>("Soak.HalfYearHundredContractors", Soak));
             t.Add(new KeyValuePair<string, Action>("NoPhaseCreep.Phase2Boundaries", NoPhaseCreep));
         }
 
@@ -904,6 +905,19 @@ namespace TheNetwork.Tests
             T.Check(n.ctx.contracts.Get(c.id) != null, "kept for a year");
             int removed = comp.Run(n.clock.Now + Ticks.PerYear + Ticks.PerDay, out finished);
             T.Check(removed >= 3 && n.ctx.contracts.Get(c.id) == null && n.ctx.operations.Count == 0 && n.ctx.contracts.offers.Count == 0, "then archived with its offers and operation (" + removed + ")");
+        }
+
+        private static void Soak()
+        {
+            TheNetwork.Diagnostics.SoakHarness.Result r = TheNetwork.Diagnostics.SoakHarness.Run(100, 14, 180, 2468);
+            Console.WriteLine(r.text);
+            T.Check(r.posted > 300, "a steady stream of contracts (" + r.posted + ")");
+            T.Eq(0, r.stuck, "no contract is left stuck");
+            T.Eq(0, r.npcIssued, "no NPC-issued contracts");
+            T.Check(r.contractorsEnd >= 90, "the population stays near its target (" + r.contractorsEnd + ")");
+            T.Check(r.Count(ContractStatus.Fulfilled) > 0 && r.Count(ContractStatus.Failed) + r.Count(ContractStatus.PartiallyFulfilled) > 0, "a mix of outcomes");
+            T.Check(r.relations <= RelationService.GlobalCap && r.jobs < 5000 && r.journal <= EventJournal.HardCap, "bounded stores");
+            T.Check(r.avgDayMs < 50.0, "cheap per simulated day (" + r.avgDayMs.ToString("0.00") + " ms)");
         }
 
         private static void NoPhaseCreep()

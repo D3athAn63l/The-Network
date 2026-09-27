@@ -491,6 +491,11 @@ namespace TheNetwork.Domain.Contracts
             Operation op = CurrentOperation(c);
             int seed = NetHash.Combine(c.seed, "delivery." + d.attempts);
             DeliveryPlan plan = ctx.delivery == null ? new DeliveryPlan { failureKey = "NoDeliveryAdapter" } : ctx.delivery.Plan(d.preferredMapId, seed);
+            if (ProcurementDevOverrides.forceDeliveryFailures > 0)
+            {
+                ProcurementDevOverrides.forceDeliveryFailures--;
+                plan = new DeliveryPlan { failureKey = "NoDropSpot" };
+            }
             if (!plan.ok)
             {
                 DeliveryFailed(c, plan.failureKey, rules);

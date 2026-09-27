@@ -134,6 +134,8 @@ namespace TheNetwork.Domain
     {
         public static Operations.OutcomeBand? forceBand;
         public static int? forceSecured;
+        public static int? forceDelayTicks;
+        public static int forceDeliveryFailures;
         public static string forceTroubled;
         public static bool forceWorseThanExpected;
         public static bool forceFollowUp;
@@ -143,6 +145,8 @@ namespace TheNetwork.Domain
         {
             forceBand = null;
             forceSecured = null;
+            forceDelayTicks = null;
+            forceDeliveryFailures = 0;
             forceTroubled = null;
             forceWorseThanExpected = false;
             forceFollowUp = false;
