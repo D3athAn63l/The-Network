@@ -90,7 +90,12 @@ namespace TheNetwork.History
             bool sorted = true;
             for (int i = 1; i < ledger.records.Count && sorted; i++) sorted = ledger.records[i - 1].id.Value < ledger.records[i].id.Value;
             if (!sorted) ledger.records.Sort((a, b) => a.id.Value.CompareTo(b.id.Value));
-            for (int i = 0; i < ledger.records.Count; i++) IndexRecord(ledger.records[i]);
+            for (int i = 0; i < ledger.records.Count; i++)
+            {
+                HistoryRecord r = ledger.records[i];
+                if (r.narrativeSeed == 0) r.narrativeSeed = NetHash.Combine(networkSeed, r.id.Value);
+                IndexRecord(r);
+            }
         }
 
         private void IndexRecord(HistoryRecord r)
@@ -245,8 +250,7 @@ namespace TheNetwork.History
             r.awareness.scope = AwarenessScope.Public;
             r.outcomeKey = e.reasonKey;
             r.SetNote("holder", e.holderName);
-            r.SetNote("band", e.recoveredBand.ToString());
-            r.SetNote("sourceKind", e.sourceKindKey);
+            if (e.recoveredBand != Domain.RecoveredBand.None) r.SetNote("band", e.recoveredBand.ToString());
             Commit(r);
         }
 
@@ -272,8 +276,8 @@ namespace TheNetwork.History
             OpportunityEvent oe = e as OpportunityEvent;
             if (oe != null)
             {
+                // The source is a participant (actors are never deleted, only tombstoned with their name).
                 r.subjectDef = new DefRef<ThingDef> { defName = oe.targetDefName, label = oe.targetLabel };
-                r.SetNote("source", actors.NameOf(oe.source));
             }
             return r;
         }

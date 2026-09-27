@@ -227,11 +227,10 @@ namespace TheNetwork.Kernel
             List<int> raw = null;
             if (Scribe.mode == LoadSaveMode.Saving)
             {
+                // An empty list is not written: a missing node loads as empty (keeps saves small).
+                if (list == null || list.Count == 0) return;
                 raw = new List<int>();
-                if (list != null)
-                {
-                    for (int i = 0; i < list.Count; i++) raw.Add(toInt(list[i]));
-                }
+                for (int i = 0; i < list.Count; i++) raw.Add(toInt(list[i]));
             }
             Scribe_Collections.Look(ref raw, label, LookMode.Value);
             if (IsLoading)
@@ -250,6 +249,7 @@ namespace TheNetwork.Kernel
 
         public static void LookStringList(ref List<string> list, string label)
         {
+            if (Scribe.mode == LoadSaveMode.Saving && (list == null || list.Count == 0)) return;
             Scribe_Collections.Look(ref list, label, LookMode.Value);
             if (list == null) list = new List<string>();
             if (IsLoading) list.RemoveAll(s => s == null);
@@ -260,11 +260,9 @@ namespace TheNetwork.Kernel
             List<string> raw = null;
             if (Scribe.mode == LoadSaveMode.Saving)
             {
+                if (list == null || list.Count == 0) return;
                 raw = new List<string>();
-                if (list != null)
-                {
-                    for (int i = 0; i < list.Count; i++) raw.Add(list[i].ToString());
-                }
+                for (int i = 0; i < list.Count; i++) raw.Add(list[i].ToString());
             }
             Scribe_Collections.Look(ref raw, label, LookMode.Value);
             if (IsLoading)
@@ -291,7 +289,8 @@ namespace TheNetwork.Kernel
         /// </summary>
         public static void LookEnum<TEnum>(ref TEnum value, string label, TEnum fallback, ref bool malformed) where TEnum : struct
         {
-            string s = Scribe.mode == LoadSaveMode.Saving ? value.ToString() : null;
+            // The fallback is the default: it is not written, and a missing node loads as it.
+            string s = Scribe.mode == LoadSaveMode.Saving && !value.Equals(fallback) ? value.ToString() : null;
             Scribe_Values.Look(ref s, label);
             if (IsLoading)
             {

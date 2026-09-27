@@ -102,22 +102,54 @@ namespace TheNetwork.History
             Scribe_Values.Look(ref typeKey, "type");
             Scribe_Values.Look(ref schema, "schema", (byte)1);
             NetScribe.LookEnum(ref importance, "importance", Importance.Notable);
-            NetScribe.LookListTolerant(ref participants, "participants", "history.participants");
+            LookParticipants();
             Scribe_Deep.Look(ref place, "place");
-            Scribe_Values.Look(ref regionKey, "region");
+            if (Scribe.mode != LoadSaveMode.Saving || place == null || place.regionKey != regionKey) Scribe_Values.Look(ref regionKey, "region");
             Scribe_Deep.Look(ref subjectDef, "subject");
             Scribe_Deep.Look(ref magnitudes, "magnitudes");
             Scribe_Values.Look(ref outcomeKey, "outcome");
             NetScribe.Look(ref causedBy, "causedBy");
             Scribe_Values.Look(ref sourceEventSeq, "eventSeq", 0L);
             Scribe_Deep.Look(ref awareness, "awareness");
-            Scribe_Values.Look(ref narrativeSeed, "narrativeSeed", 0);
+            // narrativeSeed is derived from (networkSeed, id) when the ledger is indexed; not persisted.
             NetScribe.LookStringList(ref notes, "notes");
             if (Scribe.mode == LoadSaveMode.LoadingVars)
             {
                 if (magnitudes == null) magnitudes = new RecordMagnitudes();
                 if (awareness == null) awareness = new Awareness();
+                if (regionKey == null && place != null) regionKey = place.regionKey;
             }
+        }
+
+        /// <summary>
+        /// Participants persist compactly as "A17|source|p" strings (entity|role|principal flag): records
+        /// are the bulk of a long save (EVENTS_AND_HISTORY § 11). Unparseable entries are dropped.
+        /// </summary>
+        private void LookParticipants()
+        {
+            List<string> raw = null;
+            if (Scribe.mode == LoadSaveMode.Saving)
+            {
+                raw = new List<string>(participants.Count);
+                for (int i = 0; i < participants.Count; i++)
+                {
+                    Participation p = participants[i];
+                    raw.Add(p.entity + "|" + (p.roleKey ?? "") + (p.principal ? "|p" : ""));
+                }
+            }
+            NetScribe.LookStringList(ref raw, "participants");
+            if (Scribe.mode == LoadSaveMode.LoadingVars)
+            {
+                participants = new List<Participation>();
+                for (int i = 0; i < raw.Count; i++)
+                {
+                    string[] parts = raw[i].Split('|');
+                    EntityRef e = EntityRef.Parse(parts[0]);
+                    if (!e.IsValid) continue;
+                    participants.Add(new Participation { entity = e, roleKey = parts.Length > 1 ? parts[1] : null, principal = parts.Length > 2 && parts[2] == "p" });
+                }
+            }
+            if (participants == null) participants = new List<Participation>();
         }
 
         public string Note(string key)
