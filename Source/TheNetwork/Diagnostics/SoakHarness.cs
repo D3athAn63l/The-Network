@@ -47,8 +47,13 @@ namespace TheNetwork.Diagnostics
             public int journal;
             public int jobs;
             public int operations;
+            public int contractsKept;
+            public int offersKept;
             public double totalMs;
             public double maxDayMs;
+
+            /// <summary>The scratch world's stores (for a save-size measurement by the caller).</summary>
+            public Core.NetworkState state;
             public double avgDayMs;
             public string text;
 
@@ -188,6 +193,17 @@ namespace TheNetwork.Diagnostics
             scheduler.RegisterKind(JobKinds.OppWarn, ctx.Opportunities.WarnJob, true, true);
             scheduler.RegisterKind(JobKinds.OppClose, ctx.Opportunities.CloseJob, true, true);
             Core.NetworkRuntime.RegisterPhaseTwoJobs(scheduler, ctx);
+            // Retention, as in a game: history sweeps and compaction every quadrum.
+            Core.NetworkState state = new Core.NetworkState
+            {
+                actors = ctx.actors, characters = ctx.characters, intel = ctx.intel, opportunities = ctx.opportunities, contracts = ctx.contracts,
+                operations = ctx.operations, consequences = ctx.consequences, relations = ctx.relations, knowledge = ctx.knowledge, history = ledger, summaries = summaries, journal = journal
+            };
+            Core.CompactionService compaction = new Core.CompactionService(state, scheduler, clock, ctx);
+            scheduler.RegisterKind(JobKinds.HistorySweep, job => history.SweepJob(job, scheduler), true, true);
+            scheduler.RegisterKind(JobKinds.CompactSweep, compaction.SweepJob, true, true);
+            scheduler.Schedule(JobKinds.HistorySweep, clock.Now + JobKinds.SweepPeriod, 0);
+            scheduler.Schedule(JobKinds.CompactSweep, clock.Now + JobKinds.SweepPeriod, 0);
             bus.Register(ConsumerOrder.History, history, HistoryService.ConsumedKeys);
             bus.Register(ConsumerOrder.Relationships, ctx.Relations, RelationService.ConsumedKeys);
             bus.Register(ConsumerOrder.Consequences, ctx.Consequences, ConsequenceEngine.ConsumedKeys);
@@ -259,6 +275,7 @@ namespace TheNetwork.Diagnostics
 
             ActorId player = ctx.actors.PlayerProxyId;
             int stuckAfter = clock.Now - 60 * Ticks.PerDay;
+            // Archived (compacted) contracts are terminal by construction; count what is still stored.
             foreach (Contract c in ctx.contracts.contracts)
             {
                 int n;
@@ -284,6 +301,8 @@ namespace TheNetwork.Diagnostics
             res.journal = journal.entries.Count;
             res.jobs = scheduler.Count;
             res.operations = ctx.operations.Count;
+            res.contractsKept = ctx.contracts.Count;
+            res.offersKept = ctx.contracts.offers.Count;
             dayMs.Sort();
             double sum = 0;
             foreach (double d in dayMs) sum += d;
@@ -299,10 +318,11 @@ namespace TheNetwork.Diagnostics
             sb.AppendLine();
             sb.AppendLine("  stuck (non-terminal after 60 days, not waiting on the client): " + res.stuck + "; NPC-issued: " + res.npcIssued + "; last known locations: " + res.followUps);
             sb.AppendLine("  contractors: " + res.contractorsEnd + " active at end, " + res.contractorsEnded + " ended (death/no successor), " + res.newcomers + " newcomers, " + missingStart + " starting actors deleted");
-            sb.AppendLine("  stores: " + ctx.contracts.Count + " contracts, " + ctx.contracts.offers.Count + " offers, " + res.operations + " operations, " + res.relations + " relation edges, " + res.knowledgeBooks + " knowledge books, " + res.historyRecords + " history records, " + res.journal + " journal entries, " + res.jobs + " scheduled jobs");
+            sb.AppendLine("  stores after retention (history sweeps, compaction a year after closing): " + ctx.contracts.Count + " contracts, " + ctx.contracts.offers.Count + " offers, " + res.operations + " operations, " + res.relations + " relation edges, " + res.knowledgeBooks + " knowledge books, " + res.historyRecords + " history records, " + res.journal + " journal entries, " + res.jobs + " scheduled jobs");
             sb.AppendLine("  silver: spent " + payment.spent + ", refunded " + payment.refunded);
             sb.AppendLine("  time per simulated day: avg " + res.avgDayMs.ToString("0.00") + " ms, p95 " + p95.ToString("0.00") + " ms, max " + res.maxDayMs.ToString("0.00") + " ms (total " + res.totalMs.ToString("0") + " ms)");
             res.text = sb.ToString();
+            res.state = state;
             ProcurementDevOverrides.Clear();
             return res;
         }

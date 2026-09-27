@@ -51,7 +51,12 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Persist.ContractsAndOperationsRoundTrip", PersistRoundTrip));
             t.Add(new KeyValuePair<string, Action>("Validator.RebuildsJobsAndVoidsMissingDefs", ValidatorRepairs));
             t.Add(new KeyValuePair<string, Action>("Compaction.TerminalContractsArchived", Compaction));
-            t.Add(new KeyValuePair<string, Action>("Soak.HalfYearHundredContractors", Soak));
+            t.Add(new KeyValuePair<string, Action>("Soak.ThreeGameYearsHundredContractors", Soak));
+            t.Add(new KeyValuePair<string, Action>("Soak.EighteenGameYearsRetentionAndSaveSize", SoakYears));
+            t.Add(new KeyValuePair<string, Action>("Operations.CapturedMissingAreRecords", CapturedMissingRecords));
+            t.Add(new KeyValuePair<string, Action>("Removal.OriginFactionGoneContractorSurvives", OriginGone));
+            t.Add(new KeyValuePair<string, Action>("Intel.KnownCapableContractorsBecomeContacts", ContractorContacts));
+            t.Add(new KeyValuePair<string, Action>("Persist.EveryContractStateRoundTrips", PersistEveryState));
             t.Add(new KeyValuePair<string, Action>("NoPhaseCreep.Phase2Boundaries", NoPhaseCreep));
         }
 
@@ -918,6 +923,159 @@ namespace TheNetwork.Tests
             T.Check(r.Count(ContractStatus.Fulfilled) > 0 && r.Count(ContractStatus.Failed) + r.Count(ContractStatus.PartiallyFulfilled) > 0, "a mix of outcomes");
             T.Check(r.relations <= RelationService.GlobalCap && r.jobs < 5000 && r.journal <= EventJournal.HardCap, "bounded stores");
             T.Check(r.avgDayMs < 50.0, "cheap per simulated day (" + r.avgDayMs.ToString("0.00") + " ms)");
+        }
+
+        private static void SoakYears()
+        {
+            TheNetwork.Diagnostics.SoakHarness.Result r = TheNetwork.Diagnostics.SoakHarness.Run(100, 14, 3 * 360, 1357);
+            Console.WriteLine(r.text);
+            T.Eq(0, r.stuck, "eighteen in-game years (1,080 days): nothing stuck");
+            T.Check(r.posted > 1800, "thousands of contracts over the years (" + r.posted + ")");
+            T.Check(r.contractsKept < r.posted * 0.6, "contracts closed over a year ago are archived (" + r.contractsKept + " of " + r.posted + " kept)");
+            T.Check(r.relations <= RelationService.GlobalCap && r.knowledgeBooks <= r.contractorsEnd + r.contractorsEnded + 20, "relations and knowledge bounded (" + r.relations + ", " + r.knowledgeBooks + ")");
+            T.Check(r.contractorsEnd >= 90, "population held over years (" + r.contractorsEnd + ")");
+            string path = PersistenceTests.SaveState(r.state, 2);
+            long bytes = new System.IO.FileInfo(path).Length;
+            System.Xml.XmlDocument doc = new System.Xml.XmlDocument();
+            doc.Load(path);
+            List<string> sizes = new List<string>();
+            foreach (System.Xml.XmlNode node in doc.DocumentElement.ChildNodes) if (node.OuterXml.Length > 20000) sizes.Add(node.Name + " " + (node.OuterXml.Length / 1024) + " KB");
+            System.IO.File.Delete(path);
+            Console.WriteLine("  save size of the Network node after 18 in-game years: " + (bytes / 1024) + " KB (" + string.Join(", ", sizes.ToArray()) + ")");
+            T.Check(bytes < 3500L * 1024, "save growth stays under the 3.5 MB ceiling (" + (bytes / 1024) + " KB)");
+        }
+
+        private static void CapturedMissingRecords()
+        {
+            TestNet n = World(0);
+            NetworkActor team = Reliable(n);
+            OrganizationProfile org = team.Get<OrganizationProfile>();
+            List<CharacterId> members = new List<CharacterId>(org.knownMembers);
+            members.Remove(org.leader);
+            T.Check(members.Count >= 2, "a team with known members");
+            CasualtyReport r = new CasualtyReport();
+            r.fates.Add(new CharacterFate { character = members[0], fate = Fate.Captured });
+            r.fates.Add(new CharacterFate { character = members[1], fate = Fate.Missing });
+            n.ctx.Contractors.ApplyCasualties(team, r, ContractId.None, OperationId.None, false);
+            T.Eq(CharacterStatus.Captured, n.ctx.characters.Get(members[0]).status, "captured is a record state");
+            T.Eq(CharacterStatus.Missing, n.ctx.characters.Get(members[1]).status, "missing is a record state");
+            T.Check(n.ctx.characters.Get(members[0]).IsAlive && !n.ctx.characters.Get(members[0]).IsAvailable, "alive but unavailable");
+            T.Eq(CustodyState.Unmaterialized, n.ctx.characters.Get(members[0]).custody, "no pawn: custody stays Unmaterialized");
+            T.Eq(ActorStatus.Active, team.status, "the organization goes on");
+        }
+
+        private static void OriginGone()
+        {
+            TestNet n = World(0);
+            n.world.factions.Add(FakeWorld.Faction(88, "Old Home", "ludeon.rimworld", 4, false));
+            NetworkActor a = Reliable(n);
+            ContractorSimulation sim = a.Get<ContractorSimulation>();
+            sim.origin = new FactionRef { loadId = 88, name = "Old Home", defName = "OldHome" };
+            sim.originSnapshot = "Old Home";
+            n.world.factions.Clear();
+            n.ctx.Upkeep.RunUpkeep(a, sim);
+            T.Check(sim.originLost, "the origin is marked unavailable");
+            T.Eq(ActorStatus.Active, a.status, "the contractor survives its faction");
+            T.Check(n.ctx.actors.Get(a.id) != null, "and is never deleted");
+            T.Eq(1, n.recorder.Count(EventKeys.ContractorOriginLost), "recorded");
+            T.Check(a.Get<ContractorSimulation>().origin.NameSnapshot == "Old Home", "the name snapshot remains for history");
+        }
+
+        private static void ContractorContacts()
+        {
+            TestNet n = World(0);
+            NetworkActor scout = Reliable(n);
+            scout.Get<ContractorProfile>().specialties.Add("scouting");
+            NetworkActor brawler = Reliable(n);
+            brawler.Get<ContractorProfile>().specialties.Clear();
+            brawler.Get<ContractorProfile>().specialties.Add("demolition");
+            n.ctx.Contractors.RefreshIntelSource(scout);
+            T.Check(!scout.Has<IntelSourceProfile>(), "an unknown contractor is not a contact");
+            ActorId player = n.ctx.actors.PlayerProxyId;
+            n.ctx.Relations.Apply(player, scout.id, new RelationDelta { familiarity = 0.1f }, HistoryRecordId.None);
+            n.ctx.Relations.Apply(player, brawler.id, new RelationDelta { familiarity = 0.1f }, HistoryRecordId.None);
+            n.ctx.Contractors.RefreshIntelSource(scout);
+            n.ctx.Contractors.RefreshIntelSource(brawler);
+            T.Check(scout.Has<IntelSourceProfile>(), "a known scout will tell you what they know");
+            T.Check(!brawler.Has<IntelSourceProfile>(), "not every contractor is an Intel source");
+            T.Check(!scout.Has<FixerProfile>(), "a contractor contact is not a Fixer");
+            T.Check(n.ctx.Actors.IntelSources().Contains(scout), "listed as a contact");
+            T.Eq(Domain.Intel.SourcePolicies.ContSingle, scout.Get<IntelSourceProfile>().continuationPolicyKey, "one search at a time, no brokering");
+        }
+
+        /// <summary>Contracts in every persistent state, their offers and operations, through the real Scribe.</summary>
+        private static void PersistEveryState()
+        {
+            TestNet n = World(10);
+            NetworkActor fixer = Fixer(n, "Standard", "Basic");
+            Dictionary<string, Contract> cs = new Dictionary<string, Contract>();
+            Contract bidding = Post(n, fixer, "TestSteel", 150, Reliable(n));
+            cs["Bidding"] = bidding;
+            NetworkActor tired = Reliable(n);
+            tired.Get<ContractorSimulation>().morale.descriptor = MoraleDescriptor.Exhausted;
+            Contract unfilled = Post(n, fixer, "TestSteel", 150, tired);
+            n.AdvanceTo(unfilled.windowCloseTick);
+            cs["Unfilled"] = unfilled;
+            Contract preparing = Awarded(n, fixer, Reliable(n), "TestSteel", 150, true);
+            cs["Active/Preparing"] = preparing;
+            Contract partial = Awarded(n, fixer, Reliable(n), "TestSteel", 200);
+            ProcurementDevOverrides.forceBand = OutcomeBand.Partial;
+            RunUntil(n, () => partial.status == ContractStatus.Renegotiating || partial.IsTerminal);
+            cs["Renegotiating/Partial"] = partial;
+            Contract troubled = Awarded(n, fixer, Reliable(n), "TestSteel", 150);
+            ProcurementDevOverrides.forceBand = OutcomeBand.Failure;
+            ProcurementDevOverrides.forceTroubled = SubStatus.Stranded;
+            RunUntil(n, () => troubled.status == ContractStatus.Troubled || troubled.IsTerminal);
+            cs["Troubled"] = troubled;
+            Contract hold = Awarded(n, fixer, Reliable(n), "TestSteel", 100);
+            n.delivery.homes.Clear();
+            ProcurementDevOverrides.forceBand = OutcomeBand.Triumph;
+            RunUntil(n, () => hold.subStatus == SubStatus.Hold || hold.IsTerminal);
+            cs["Hold"] = hold;
+            n.delivery.homes.Add(1);
+            Contract done = Awarded(n, fixer, Reliable(n), "TestSteel", 100);
+            ProcurementDevOverrides.forceBand = OutcomeBand.Triumph;
+            RunUntil(n, () => done.IsTerminal);
+            cs["Fulfilled"] = done;
+            Contract voided = Awarded(n, fixer, Reliable(n), "TestSteel", 100);
+            n.ctx.Procurement.Void(voided, Causes.DefMissing);
+            cs["Voided"] = voided;
+            Contract quoted = Post(n, fixer, "TestSteel", 150, Reliable(n));
+            Bid(n, quoted);
+            cs["Bidding/Quoted"] = quoted;
+
+            TheNetwork.Core.NetworkState state = new TheNetwork.Core.NetworkState { contracts = n.ctx.contracts, operations = n.ctx.operations, consequences = n.ctx.consequences, characters = n.ctx.characters, actors = n.ctx.actors };
+            string path = PersistenceTests.SaveState(state, 2);
+            TheNetwork.Core.NetworkState loaded = new TheNetwork.Core.NetworkState();
+            Verse.Scribe.loader.InitLoading(path);
+            try
+            {
+                List<string> failures = new List<string>();
+                loaded.ExposeStores(failures);
+                T.Eq(0, failures.Count, "no store failed (" + string.Join("; ", failures.ToArray()) + ")");
+            }
+            finally
+            {
+                Verse.Scribe.loader.FinalizeLoading();
+            }
+            loaded.RebuildIndexes();
+            System.IO.File.Delete(path);
+            foreach (KeyValuePair<string, Contract> kv in cs)
+            {
+                Contract a = kv.Value, b = loaded.contracts.Get(kv.Value.id);
+                T.Check(b != null && b.status == a.status && b.subStatus == a.subStatus && b.decisionDueTick == a.decisionDueTick && b.seed == a.seed, kv.Key + ": status " + a.status + "/" + a.subStatus + " survives");
+                if (b == null) continue;
+                T.Check(b.quarantinedReason == null, kv.Key + ": not quarantined");
+                T.Eq(a.Paid(), b.Paid(), kv.Key + ": money");
+                T.Eq(a.offers.Count, b.offers.Count, kv.Key + ": offers");
+                Operation oa = n.ctx.Procurement.CurrentOperation(a), ob = b.operations.Count == 0 ? null : loaded.operations.Get(b.operations[b.operations.Count - 1]);
+                if (oa == null) continue;
+                T.Check(ob != null && ob.phase == oa.phase && ob.status == oa.status, kv.Key + ": operation " + oa.phase + "/" + oa.status);
+                if (oa.outcome != null) T.Check(ob.outcome != null && ob.outcome.band == oa.outcome.band && ob.outcome.secured == oa.outcome.secured && ob.outcome.Killed == oa.outcome.Killed && ob.outcome.securedPayload.Count == oa.outcome.securedPayload.Count, kv.Key + ": committed outcome, casualties and cargo never rerolled");
+            }
+            HashSet<OfferState> offerStates = new HashSet<OfferState>();
+            foreach (Offer o in loaded.contracts.offers) offerStates.Add(o.state);
+            T.Check(offerStates.Contains(OfferState.Accepted) && offerStates.Contains(OfferState.Proposed), "offer states persisted (" + string.Join(",", new List<OfferState>(offerStates).ConvertAll(x => x.ToString()).ToArray()) + ")");
         }
 
         private static void NoPhaseCreep()

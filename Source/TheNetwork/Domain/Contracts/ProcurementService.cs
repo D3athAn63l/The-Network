@@ -803,6 +803,7 @@ namespace TheNetwork.Domain.Contracts
             Operation op = CurrentOperation(c);
             if (op != null && !op.IsFinished && op.outcome != null && op.status != OpStatus.Troubled) ctx.Operations.Finish(op);
             ContractEvent e = NewEvent(eventKey, importance, c);
+            PruneClosed(c);
             e.causeKey = causeKey;
             e.silver = silver;
             e.insuranceSilver = insurance;
@@ -810,6 +811,23 @@ namespace TheNetwork.Domain.Contracts
             e.delivered = c.outcome.delivered;
             ctx.bus.Publish(e);
             StateVersion.Bump();
+        }
+
+        /// <summary>
+        /// Retention at close (EVENTS_AND_HISTORY § 11): the losing bids are dropped (they were never
+        /// recomputed; they are simply no longer needed) and refusals are trimmed to the last three. The
+        /// accepted offer and its frozen quote stay with the contract until compaction.
+        /// </summary>
+        private void PruneClosed(Contract c)
+        {
+            for (int i = c.offers.Count - 1; i >= 0; i--)
+            {
+                if (c.offers[i] == c.acceptedOffer) continue;
+                Offer o = ctx.contracts.Get(c.offers[i]);
+                if (o != null) ctx.contracts.Remove(o);
+                c.offers.RemoveAt(i);
+            }
+            if (c.refusals.Count > 3) c.refusals.RemoveRange(0, c.refusals.Count - 3);
         }
 
         public Operation CurrentOperation(Contract c)
