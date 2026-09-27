@@ -56,10 +56,13 @@ namespace TheNetwork.Core
         /// <summary>Prepared for removal: started, but nothing may change Network state.</summary>
         public bool Inert => Root.preparedForRemoval;
 
+        // Cached so the per-tick check allocates nothing.
+        private readonly Action<SessionGate> startup;
+
         /// <summary>Starts the Network on first use; false when start-up failed this session (or is still running).</summary>
         public bool EnsureStarted()
         {
-            return Session.Ensure(Root.RunStartup);
+            return Session.IsRunning || Session.Ensure(startup);
         }
 
         /// <summary>May gameplay change Network state now? Started successfully and not prepared for removal.</summary>
@@ -69,6 +72,7 @@ namespace TheNetwork.Core
         {
             Root = root;
             State = root.state;
+            startup = root.RunStartup;
             Clock = clock;
             Scheduler = new NetScheduler(root.ids, clock);
             Bus = new NetworkEventBus(root.ids, clock, State.journal, State.diagnostics);
