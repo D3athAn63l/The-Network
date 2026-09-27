@@ -19,8 +19,8 @@ namespace TheNetwork.Core
         public WorldCastSnapshot cast = new WorldCastSnapshot();
         public ActorStore actors = new ActorStore();
         public CharacterStore characters = new CharacterStore();
-        public ReservedStore knowledge = new ReservedStore();
-        public ReservedStore relations = new ReservedStore();
+        public Domain.Knowledge.KnowledgeStore knowledge = new Domain.Knowledge.KnowledgeStore();
+        public Domain.Relations.RelationStore relations = new Domain.Relations.RelationStore();
         public ReservedStore obligations = new ReservedStore();
         public ReservedStore contacts = new ReservedStore();
         public IntelStore intel = new IntelStore();
@@ -48,8 +48,8 @@ namespace TheNetwork.Core
             Store(ref cast, "cast", "cast", failures);
             Store(ref actors, "actors", "actors", failures);
             Store(ref characters, "characters", "actors", failures);
-            Store(ref knowledge, "knowledge", null, failures);
-            Store(ref relations, "relations", null, failures);
+            Store(ref knowledge, "knowledge", "knowledge", failures);
+            Store(ref relations, "relations", "relations", failures);
             Store(ref obligations, "obligations", null, failures);
             Store(ref contacts, "contacts", null, failures);
             Store(ref intel, "intel", "intel", failures);
@@ -86,6 +86,8 @@ namespace TheNetwork.Core
         {
             actors.RebuildIndex();
             characters.RebuildIndex();
+            knowledge.RebuildIndex();
+            relations.RebuildIndex();
             intel.RebuildIndex();
             opportunities.RebuildIndex();
             summaries.RebuildIndex();

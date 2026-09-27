@@ -93,6 +93,9 @@ namespace TheNetwork.Core
                 intel = State.intel,
                 opportunities = State.opportunities,
                 summaries = State.summaries,
+                ledger = State.history,
+                relations = State.relations,
+                knowledge = State.knowledge,
                 catalog = new LazyCatalog(),
                 comms = new CommsAccessAdapter(),
                 payment = new PaymentAdapter(),
@@ -104,6 +107,8 @@ namespace TheNetwork.Core
             Ctx.Opportunities = new OpportunityService(Ctx);
             Ctx.Contractors = new Domain.Contractors.ContractorService(Ctx);
             Ctx.Upkeep = new Domain.Contractors.UpkeepService(Ctx);
+            Ctx.Relations = new Domain.Relations.RelationService(Ctx);
+            Ctx.Knowledge = new Domain.Knowledge.KnowledgeService(Ctx);
             Ctx.tuning.targetProvider = () => NetworkMod.Settings?.targetContractorCount ?? 100;
 
             History = new HistoryService(State.history, State.summaries, State.actors, root.ids, clock, root.networkSeed);
@@ -137,6 +142,7 @@ namespace TheNetwork.Core
         private void RegisterConsumers()
         {
             Bus.Register(ConsumerOrder.History, History, HistoryService.ConsumedKeys);
+            Bus.Register(ConsumerOrder.Relationships, Ctx.Relations, Domain.Relations.RelationService.ConsumedKeys);
             Bus.Register(ConsumerOrder.Presentation, new LetterConsumer(Ctx), LetterConsumer.ConsumedKeys);
         }
 

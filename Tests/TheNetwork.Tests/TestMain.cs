@@ -116,6 +116,7 @@ namespace TheNetwork.Tests
             HistoryTests.Register(tests);
             PersistenceTests.Register(tests);
             ContractorTests.Register(tests);
+            RelationsKnowledgeTests.Register(tests);
             StartupTests.Register(tests);
 
             int ran = 0;

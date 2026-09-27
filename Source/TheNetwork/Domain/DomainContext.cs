@@ -67,6 +67,9 @@ namespace TheNetwork.Domain
         public IntelStore intel;
         public OpportunityStore opportunities;
         public History.SummaryStore summaries;
+        public History.HistoryLedger ledger;
+        public Relations.RelationStore relations;
+        public Knowledge.KnowledgeStore knowledge;
         public NetworkTuning tuning = new NetworkTuning();
 
         public ICatalog catalog;
@@ -80,6 +83,8 @@ namespace TheNetwork.Domain
         public OpportunityService Opportunities;
         public ContractorService Contractors;
         public UpkeepService Upkeep;
+        public Relations.RelationService Relations;
+        public Knowledge.KnowledgeService Knowledge;
 
         public int Now => clock.Now;
     }

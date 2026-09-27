@@ -234,7 +234,8 @@ namespace TheNetwork.Tests
             {
                 networkSeed = seed, ids = ids, clock = clock, scheduler = scheduler, bus = bus, diagnostics = diag,
                 cast = new WorldCastSnapshot(), actors = new ActorStore(), characters = new CharacterStore(),
-                intel = new IntelStore(), opportunities = new OpportunityStore(), summaries = summaries,
+                intel = new IntelStore(), opportunities = new OpportunityStore(), summaries = summaries, ledger = ledger,
+                relations = new TheNetwork.Domain.Relations.RelationStore(), knowledge = new TheNetwork.Domain.Knowledge.KnowledgeStore(),
                 catalog = cat, comms = comms, payment = pay, world = world, sites = sites
             };
             ctx.Actors = new ActorService(ctx);
@@ -242,6 +243,8 @@ namespace TheNetwork.Tests
             ctx.Opportunities = new OpportunityService(ctx);
             ctx.Contractors = new TheNetwork.Domain.Contractors.ContractorService(ctx);
             ctx.Upkeep = new TheNetwork.Domain.Contractors.UpkeepService(ctx);
+            ctx.Relations = new TheNetwork.Domain.Relations.RelationService(ctx);
+            ctx.Knowledge = new TheNetwork.Domain.Knowledge.KnowledgeService(ctx);
             history = new HistoryService(ledger, summaries, ctx.actors, ids, clock, seed);
             scheduler.RegisterKind(JobKinds.IntelRound, ctx.Intel.RunRound, true, true);
             scheduler.RegisterKind(JobKinds.IntelClose, ctx.Intel.CloseJob, true, true);
@@ -252,6 +255,7 @@ namespace TheNetwork.Tests
             scheduler.RegisterKind(JobKinds.ContractorUpkeep, ctx.Upkeep.UpkeepJob, true, true);
             scheduler.RegisterKind(JobKinds.PopulationWeekly, ctx.Upkeep.PopulationJobRun, true, true);
             bus.Register(ConsumerOrder.History, history, HistoryService.ConsumedKeys);
+            bus.Register(ConsumerOrder.Relationships, ctx.Relations, TheNetwork.Domain.Relations.RelationService.ConsumedKeys);
             bus.Register(ConsumerOrder.Presentation, recorder);
             ctx.Actors.EnsurePlayerProxy(world.PlayerFaction());
             ctx.Actors.EnsureExchange();
