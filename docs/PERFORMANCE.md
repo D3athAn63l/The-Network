@@ -20,7 +20,7 @@
 
 | Metric | Target |
 |---|---|
-| Per-tick cost when nothing is due | one `int` comparison (`Clock.Now < nextDue`), plus the `EnsureStarted` bool check |
+| Per-tick cost when nothing is due | one `int` comparison (`Clock.Now < nextDue`), plus the start-up state check (one enum comparison) |
 | Per-tick cost when jobs are due | ≤ 1.5 ms hard budget, ≤ 16 jobs. Typical job < 0.05 ms. |
 | Average added cost over an in-game day (about 100 contractor identities, 10 active contracts) | < 0.01 ms per tick amortized |
 | Off-map Known Character pawns | suspended (quest-reserved) **and** mothball-eligible after store-time normalization, so vanilla ticks them once per 15,000 ticks ([ABSTRACT_PHYSICAL_LIFECYCLE § 4.3](ABSTRACT_PHYSICAL_LIFECYCLE.md#43-consequences-of-suspension-frozen-pawns)) |

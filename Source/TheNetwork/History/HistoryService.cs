@@ -71,6 +71,9 @@ namespace TheNetwork.History
             this.networkSeed = networkSeed;
         }
 
+        /// <summary>The world's Network seed this service derives narrative seeds from.</summary>
+        public int NetworkSeed => networkSeed;
+
         public HistoryLedger Ledger => ledger;
         public SummaryStore Summaries => summaries;
 

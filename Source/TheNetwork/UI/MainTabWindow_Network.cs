@@ -51,7 +51,15 @@ namespace TheNetwork.UI
             Widgets.DrawMenuSection(body);
             TabDrawer.DrawTabs(body, tabs, 1, 200f);
             Rect content = body.ContractedBy(10f);
-            if (rt.Inert)
+            if (!rt.EnsureStarted() && rt.Session.IsFailed)
+            {
+                // Readable, but nothing can be changed this session.
+                GUI.color = new Color(1f, 0.55f, 0.45f);
+                Widgets.Label(new Rect(content.x, content.y, content.width, 24f), "TheNetwork_StartupFailed".Translate(rt.Session.FailedStage ?? "?"));
+                GUI.color = Color.white;
+                content.yMin += 26f;
+            }
+            else if (rt.Inert)
             {
                 GUI.color = Color.yellow;
                 Widgets.Label(new Rect(content.x, content.y, content.width, 24f), "TheNetwork_Settings_Prepared".Translate());

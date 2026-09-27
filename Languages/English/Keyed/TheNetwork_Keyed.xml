@@ -3,6 +3,8 @@
 
   <!-- ===== Main tab ===== -->
   <TheNetwork_NotActive>The Network is not active in this game.</TheNetwork_NotActive>
+  <TheNetwork_StartupFailed>The Network failed to start this session (during {0}) and is inactive: nothing runs and nothing can be changed. Your saved Network data is untouched; it will try again the next time the game is loaded. See the log for details.</TheNetwork_StartupFailed>
+  <TheNetwork_StartupFailedShort>The Network failed to start this session and is inactive (see the log).</TheNetwork_StartupFailedShort>
   <TheNetwork_Tab_Intel>Intel</TheNetwork_Tab_Intel>
   <TheNetwork_Tab_History>History</TheNetwork_Tab_History>
   <TheNetwork_CommsOk>Communications available: a comms console is ready.</TheNetwork_CommsOk>
@@ -201,6 +203,8 @@
   <TheNetwork_Reason_NotSearching>that search is not running</TheNetwork_Reason_NotSearching>
   <TheNetwork_Reason_RoundLimit>your contact will not search any longer</TheNetwork_Reason_RoundLimit>
   <TheNetwork_Reason_NetworkPreparedForRemoval>the Network was prepared for removal</TheNetwork_Reason_NetworkPreparedForRemoval>
+  <TheNetwork_Reason_NetworkStartupFailed>the Network failed to start this session</TheNetwork_Reason_NetworkStartupFailed>
+  <TheNetwork_Reason_NetworkStarting>the Network is still starting</TheNetwork_Reason_NetworkStarting>
   <TheNetwork_Reason_NetworkRemoved>the Network was prepared for removal</TheNetwork_Reason_NetworkRemoved>
   <TheNetwork_Reason_TopicMissing>the item no longer exists in this world</TheNetwork_Reason_TopicMissing>
   <TheNetwork_Reason_ItemCannotBeProduced>the item could not be produced in this game</TheNetwork_Reason_ItemCannotBeProduced>

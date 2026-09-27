@@ -28,6 +28,8 @@ namespace TheNetwork.Core
     /// <summary>
     /// Runtime services, caches and adapters (ARCHITECTURE § 6.1). Rebuilt from persisted state in
     /// FinalizeInit; never saved. The only per-tick cost is <see cref="NetScheduler.NextDueTick"/>.
+    /// Every entry point (tick, site callback, signal, command) goes through <see cref="EnsureStarted"/>
+    /// or <see cref="Active"/>, so a failed start-up leaves nothing half-running.
     /// </summary>
     public sealed class NetworkRuntime
     {
@@ -48,7 +50,20 @@ namespace TheNetwork.Core
         public readonly NetworkReadModels Read;
         public readonly WorldFactsAdapter WorldFacts;
 
+        /// <summary>This session's start-up state (runtime only).</summary>
+        public readonly SessionGate Session = new SessionGate();
+
+        /// <summary>Prepared for removal: started, but nothing may change Network state.</summary>
         public bool Inert => Root.preparedForRemoval;
+
+        /// <summary>Starts the Network on first use; false when start-up failed this session (or is still running).</summary>
+        public bool EnsureStarted()
+        {
+            return Session.Ensure(Root.RunStartup);
+        }
+
+        /// <summary>May gameplay change Network state now? Started successfully and not prepared for removal.</summary>
+        public bool Active => EnsureStarted() && !Inert;
 
         public NetworkRuntime(NetworkWorldComponent root, IClock clock)
         {

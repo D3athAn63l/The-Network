@@ -42,7 +42,9 @@
 - `FinalizeInit(bool fromLoad)`: for **new worlds** it is called from
   `WorldGenerator.cs:67` **during world generation**, before the colony and scenario exist. On
   load it is called from `Game.LoadGame` (`Game.cs:586`). **Consequence:** the bootstrap runs
-  lazily on the first `WorldComponentTick`, not in `FinalizeInit` ([ARCHITECTURE § 6.1](ARCHITECTURE.md#61-networkworldcomponent-kernel-root)).
+  lazily on first use (normally the first `WorldComponentTick`), not in `FinalizeInit`; only the
+  `networkSeed` of a not-yet-bootstrapped world is derived there, from the world's seed
+  ([ARCHITECTURE § 6.1](ARCHITECTURE.md#61-networkworldcomponent-kernel-root)).
 - `WorldComponentTick` is called every tick from `World.WorldTick` (`World.cs:220`).
 - A WorldComponent may implement `IThingHolder` (`World.GetChildHolders`, `World.cs:465`). This
   is **not used**: holding pawns ourselves would take them out of vanilla's pawn systems, and

@@ -39,6 +39,25 @@ namespace TheNetwork.Diagnostics
             }
         }
 
+        /// <summary>
+        /// The runtime for an action that changes Network state: started first if needed, and refused
+        /// (nothing done) when start-up failed this session.
+        /// </summary>
+        private static NetworkRuntime Live
+        {
+            get
+            {
+                NetworkRuntime rt = Rt;
+                if (rt == null) return null;
+                if (!rt.EnsureStarted())
+                {
+                    Messages.Message("[TheNetwork] Start-up failed this session (" + (rt.Session.FailedStage ?? "?") + "); nothing was changed. See the log.", MessageTypeDefOf.RejectInput, false);
+                    return null;
+                }
+                return rt;
+            }
+        }
+
         private static void Out(string text)
         {
             Log.Message(text);
@@ -53,9 +72,10 @@ namespace TheNetwork.Diagnostics
             NetworkWorldComponent root = NetworkWorldComponent.Instance;
             NetworkRuntime rt = Rt;
             if (root == null || rt == null) return;
-            root.StartNow();
+            rt.EnsureStarted();
             StringBuilder sb = new StringBuilder();
             sb.AppendLine("[TheNetwork] Status");
+            sb.AppendLine("  session: " + rt.Session.State + (rt.Session.IsFailed ? " during " + rt.Session.FailedStage + " (" + rt.Session.FailureMessage + ")" : ""));
             sb.AppendLine("  save format " + root.saveVersion + ", created with " + root.createdWithModVersion + ", bootstrapped " + root.bootstrapped + ", seed " + root.networkSeed + (root.preparedForRemoval ? ", PREPARED FOR REMOVAL" : ""));
             sb.AppendLine("  next id " + root.ids.PeekNextId + ", next event " + root.ids.PeekNextEventSeq + ", next job " + root.ids.PeekNextJobSeq + ", next due tick " + rt.Scheduler.NextDueTick + " (now " + rt.Clock.Now + ")");
             sb.Append(NetValidator.CountsVsCaps(rt));
@@ -225,7 +245,7 @@ namespace TheNetwork.Diagnostics
         [DebugAction(Cat, "Submit intel…", allowedGameStates = AllowedGameStates.Playing)]
         public static void SubmitIntel()
         {
-            NetworkRuntime rt = Rt;
+            NetworkRuntime rt = Live;
             if (rt == null) return;
             List<FloatMenuOption> opts = new List<FloatMenuOption>();
             foreach (UI.ContactView c in rt.Read.Contacts())
@@ -246,7 +266,7 @@ namespace TheNetwork.Diagnostics
         [DebugAction(Cat, "Run the next search round now…", allowedGameStates = AllowedGameStates.Playing)]
         public static void RunRoundNow()
         {
-            PickRequest(r => r.state == IntelState.Searching, (rt, r) =>
+            PickRequest(true, r => r.state == IntelState.Searching, (rt, r) =>
             {
                 bool ok = rt.Ctx.Intel.ForceRoundNow(r.id);
                 Out("[TheNetwork] Forced round " + r.round + " of " + r.id + ": " + (ok ? "resolved → " + r.state : "not searching"));
@@ -296,7 +316,7 @@ namespace TheNetwork.Diagnostics
         [DebugAction(Cat, "Reroll the current round (nonce++)", allowedGameStates = AllowedGameStates.Playing)]
         public static void Reroll()
         {
-            PickRequest(r => r.state == IntelState.Searching, (rt, r) =>
+            PickRequest(true, r => r.state == IntelState.Searching, (rt, r) =>
             {
                 r.rerollNonce++;
                 Out("[TheNetwork] " + r.id + " reroll nonce now " + r.rerollNonce + " (dev only).");
@@ -331,7 +351,7 @@ namespace TheNetwork.Diagnostics
         [DebugAction(Cat, "Dump intel request…", allowedGameStates = AllowedGameStates.Playing)]
         public static void DumpIntel()
         {
-            PickRequest(r => true, (rt, r) =>
+            PickRequest(false, r => true, (rt, r) =>
             {
                 StringBuilder sb = new StringBuilder();
                 sb.AppendLine("[TheNetwork] " + r + " source " + r.source + " '" + r.terms.sourceName + "' seed " + r.seed + " nonce " + r.rerollNonce);
@@ -347,9 +367,9 @@ namespace TheNetwork.Diagnostics
             });
         }
 
-        private static void PickRequest(Predicate<IntelRequest> filter, Action<NetworkRuntime, IntelRequest> act)
+        private static void PickRequest(bool mutates, Predicate<IntelRequest> filter, Action<NetworkRuntime, IntelRequest> act)
         {
-            NetworkRuntime rt = Rt;
+            NetworkRuntime rt = mutates ? Live : Rt;
             if (rt == null) return;
             List<FloatMenuOption> opts = new List<FloatMenuOption>();
             foreach (IntelRequest r in rt.State.intel.requests)
@@ -367,7 +387,7 @@ namespace TheNetwork.Diagnostics
         [DebugAction(Cat, "Create representative opportunity…", allowedGameStates = AllowedGameStates.Playing)]
         public static void CreateOpportunity()
         {
-            NetworkRuntime rt = Rt;
+            NetworkRuntime rt = Live;
             if (rt == null) return;
             Find.WindowStack.Add(new Dialog_DevTextInput("defName for the cache", def =>
             {
@@ -389,7 +409,7 @@ namespace TheNetwork.Diagnostics
         [DebugAction(Cat, "Dump opportunity…", allowedGameStates = AllowedGameStates.Playing)]
         public static void DumpOpportunity()
         {
-            PickOpportunity(o => true, (rt, o) =>
+            PickOpportunity(false, o => true, (rt, o) =>
             {
                 StringBuilder sb = new StringBuilder();
                 sb.AppendLine("[TheNetwork] " + o + " origin " + o.origin + " seed " + o.seed + " committed " + o.committedAtTick + " expires " + o.expiresTick);
@@ -409,7 +429,7 @@ namespace TheNetwork.Diagnostics
         [DebugAction(Cat, "Sample opportunity now…", allowedGameStates = AllowedGameStates.Playing)]
         public static void SampleNow()
         {
-            PickOpportunity(o => o.state == OpportunityState.Engaged, (rt, o) =>
+            PickOpportunity(false, o => o.state == OpportunityState.Engaged, (rt, o) =>
             {
                 int remaining;
                 bool ok = rt.SiteAdapter.TrySampleRemaining(o, out remaining);
@@ -420,7 +440,7 @@ namespace TheNetwork.Diagnostics
         [DebugAction(Cat, "Expire opportunity now…", allowedGameStates = AllowedGameStates.Playing)]
         public static void ExpireNow()
         {
-            PickOpportunity(o => o.state == OpportunityState.Materialized, (rt, o) =>
+            PickOpportunity(true, o => o.state == OpportunityState.Materialized, (rt, o) =>
             {
                 rt.Ctx.Opportunities.DevExpire(o);
                 Out("[TheNetwork] " + o.id + " expired (dev). The vanilla site keeps its own timeout.");
@@ -430,16 +450,16 @@ namespace TheNetwork.Diagnostics
         [DebugAction(Cat, "Force claim (half)…", allowedGameStates = AllowedGameStates.Playing)]
         public static void ForceClaim()
         {
-            PickOpportunity(o => o.state == OpportunityState.Materialized || o.state == OpportunityState.Engaged, (rt, o) =>
+            PickOpportunity(true, o => o.state == OpportunityState.Materialized || o.state == OpportunityState.Engaged, (rt, o) =>
             {
                 rt.Ctx.Opportunities.DevForceResolve(o, 0.5f);
                 Out("[TheNetwork] " + o.id + " resolved (dev): " + o.state + " " + o.engagement.recoveredBand);
             });
         }
 
-        private static void PickOpportunity(Predicate<Opportunity> filter, Action<NetworkRuntime, Opportunity> act)
+        private static void PickOpportunity(bool mutates, Predicate<Opportunity> filter, Action<NetworkRuntime, Opportunity> act)
         {
-            NetworkRuntime rt = Rt;
+            NetworkRuntime rt = mutates ? Live : Rt;
             if (rt == null) return;
             List<FloatMenuOption> opts = new List<FloatMenuOption>();
             foreach (Opportunity o in rt.State.opportunities.opportunities)
@@ -457,7 +477,7 @@ namespace TheNetwork.Diagnostics
         [DebugAction(Cat, "Validate all", allowedGameStates = AllowedGameStates.Playing)]
         public static void ValidateAll()
         {
-            NetworkRuntime rt = Rt;
+            NetworkRuntime rt = Live;
             if (rt == null) return;
             ValidationReport r = NetValidator.Run(rt, ValidationMode.Full);
             Messages.Message("[TheNetwork] " + r.Summary() + " (see log)", MessageTypeDefOf.NeutralEvent, false);
@@ -522,7 +542,7 @@ namespace TheNetwork.Diagnostics
         [DebugAction(Cat, "Prepare save for removal", allowedGameStates = AllowedGameStates.Playing)]
         public static void PrepareRemoval()
         {
-            NetworkRuntime rt = Rt;
+            NetworkRuntime rt = Live;
             if (rt == null) return;
             Out(RemovalPreparer.Prepare(rt));
         }

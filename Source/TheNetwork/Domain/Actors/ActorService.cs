@@ -90,24 +90,31 @@ namespace TheNetwork.Domain.Actors
         public bool ImportCast(GlobalNetworkRoster roster, int settingsVersion, List<string> report)
         {
             if (ctx.cast.imported) return false;
+            // Copied aside and committed in one step: a failure part-way leaves nothing half-imported,
+            // so a start-up that failed is simply retried on the next load.
+            List<CastEntry> copied = new List<CastEntry>();
+            int skipped = 0;
+            if (roster != null)
+            {
+                for (int i = 0; i < roster.contractorTemplates.Count; i++)
+                {
+                    ContractorTemplate t = roster.contractorTemplates[i];
+                    if (!t.IsActive) { skipped++; continue; }
+                    copied.Add(new CastEntry { templateId = t.templateId, kind = CastEntryKind.Contractor, contractor = t.Copy() });
+                }
+                for (int i = 0; i < roster.fixerTemplates.Count; i++)
+                {
+                    FixerTemplate t = roster.fixerTemplates[i];
+                    if (!t.IsActive) { skipped++; continue; }
+                    copied.Add(new CastEntry { templateId = t.templateId, kind = CastEntryKind.Fixer, fixer = t.Copy() });
+                }
+            }
+            ctx.cast.entries.AddRange(copied);
             ctx.cast.imported = true;
             ctx.cast.importedTick = ctx.Now;
             ctx.cast.settingsVersionAtImport = settingsVersion;
             ctx.cast.generatorVersionAtImport = roster?.generation?.generatorVersion ?? 0;
             if (roster == null) return true;
-            int skipped = 0;
-            for (int i = 0; i < roster.contractorTemplates.Count; i++)
-            {
-                ContractorTemplate t = roster.contractorTemplates[i];
-                if (!t.IsActive) { skipped++; continue; }
-                ctx.cast.entries.Add(new CastEntry { templateId = t.templateId, kind = CastEntryKind.Contractor, contractor = t.Copy() });
-            }
-            for (int i = 0; i < roster.fixerTemplates.Count; i++)
-            {
-                FixerTemplate t = roster.fixerTemplates[i];
-                if (!t.IsActive) { skipped++; continue; }
-                ctx.cast.entries.Add(new CastEntry { templateId = t.templateId, kind = CastEntryKind.Fixer, fixer = t.Copy() });
-            }
             report?.Add("Imported " + ctx.cast.Count(CastEntryKind.Contractor) + " contractor and " + ctx.cast.Count(CastEntryKind.Fixer) + " Fixer templates" + (skipped > 0 ? " (" + skipped + " disabled or quarantined skipped)" : "") + ".");
             return true;
         }
@@ -155,7 +162,6 @@ namespace TheNetwork.Domain.Actors
             fp.specialties.AddRange(t.specialties);
             a.Add(fp);
             a.Add(SourcePolicies.ForFixer(t));
-            ctx.actors.Add(a);
 
             KnownCharacter c = new KnownCharacter
             {
@@ -166,8 +172,11 @@ namespace TheNetwork.Domain.Actors
                 createdTick = ctx.Now,
                 notability = 0.3f + 0.15f * (int)t.startingFame
             };
-            ctx.characters.Add(c);
             a.bindings.embodies = c.id;
+            // Stored only once fully built, so a start-up that fails part-way never leaves a Fixer
+            // without its cast binding (a retry would otherwise create a second one).
+            ctx.actors.Add(a);
+            ctx.characters.Add(c);
             return a;
         }
 

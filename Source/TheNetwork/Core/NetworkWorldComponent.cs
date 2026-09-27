@@ -18,8 +18,10 @@ namespace TheNetwork
     /// and when the mod is added to an existing save).</item>
     /// <item>ExposeData reads <c>saveVersion</c> first, then every store in the fixed order.</item>
     /// <item>FinalizeInit rebuilds runtime structures only: no events, no world mutation.</item>
-    /// <item>The first WorldComponentTick bootstraps (new world or newly added mod) or runs the
-    /// post-load reconciliation. After that, the idle tick is one integer comparison.</item>
+    /// <item>Start-up runs once per session on first use (normally the first WorldComponentTick): it
+    /// bootstraps (new world or newly added mod) or runs the post-load reconciliation. If it throws, the
+    /// Network stays inactive for the rest of the session (<see cref="SessionGate"/>). After a good
+    /// start the idle tick is one integer comparison.</item>
     /// </list>
     /// </summary>
     public class NetworkWorldComponent : WorldComponent
@@ -40,13 +42,11 @@ namespace TheNetwork
 
         // ---- runtime
         private NetworkRuntime runtime;
-        private bool started;
         private int loadedVersion;
         private readonly List<string> loadFailures = new List<string>();
         private MigrationContext migrationContext;
 
         public NetworkRuntime Runtime => runtime;
-        public bool Started => started;
 
         public NetworkWorldComponent(World world) : base(world)
         {
@@ -135,10 +135,24 @@ namespace TheNetwork
         {
             state.RebuildIndexes();
             RepairIdCounters();
+            // Before any service exists, so every one of them sees the world's real seed.
+            EnsureNetworkSeed();
             runtime = new NetworkRuntime(this, new GameClock());
             runtime.History.RebuildIndex();
             runtime.LoadScheduler();
-            started = false;
+        }
+
+        /// <summary>
+        /// A world that has not bootstrapped yet derives its Network seed from the world's own seed now,
+        /// so no runtime service is ever built with a placeholder. A bootstrapped save keeps its persisted
+        /// seed: nothing already committed is ever recomputed.
+        /// </summary>
+        private void EnsureNetworkSeed()
+        {
+            if (bootstrapped || networkSeed != 0) return;
+            WorldInfo info = world?.info ?? Find.World?.info;
+            string seedSource = (info?.seedString ?? "") + "|" + (info?.persistentRandomValue ?? 0);
+            networkSeed = NetHash.String(seedSource);
         }
 
         /// <summary>IDs must stay above every id in use, even after a hand-edited or partial save.</summary>
@@ -158,36 +172,37 @@ namespace TheNetwork
         public override void WorldComponentTick()
         {
             if (runtime == null) return;
-            if (!started) EnsureStarted();
-            if (preparedForRemoval) return;
+            // Failed start-up: nothing runs for the rest of the session (and nothing is logged again).
+            if (!runtime.EnsureStarted() || preparedForRemoval) return;
             runtime.Tick();
         }
 
         /// <summary>
-        /// First tick after a new world, a newly added mod or a load. Bootstraps or reconciles, re-registers
-        /// the signal receiver. Runs once per session; failures are contained.
+        /// Start-up, run once per session by <see cref="SessionGate"/> on first use: re-registers the signal
+        /// receiver, then bootstraps or reconciles. Throwing leaves the session Failed; nothing here deletes
+        /// or rewrites saved data, and every step is safe to run again on the next load.
         /// </summary>
-        private void EnsureStarted()
+        internal void RunStartup(SessionGate gate)
         {
-            started = true;
-            try
+            gate.Stage("signal registration");
+            if (!runtime.Signals.Register()) throw new InvalidOperationException("the vanilla SignalManager is not available");
+            if (preparedForRemoval) return;
+            if (!bootstrapped)
             {
-                runtime.Signals.Register();
-                if (preparedForRemoval) return;
-                if (!bootstrapped) Bootstrap();
-                else AfterLoad();
+                gate.Stage("bootstrap");
+                Bootstrap();
             }
-            catch (Exception ex)
+            else
             {
-                NetLog.Error(LogCategory.Kernel, "Network start-up failed: " + ex);
+                gate.Stage("load reconciliation");
+                AfterLoad();
             }
         }
 
         private void Bootstrap()
         {
             DomainContext ctx = runtime.Ctx;
-            string seedSource = (Find.World?.info?.seedString ?? "") + "|" + (Find.World?.info?.persistentRandomValue ?? 0);
-            networkSeed = NetHash.String(seedSource);
+            EnsureNetworkSeed();
             ctx.networkSeed = networkSeed;
             createdWithModVersion = ModVersion;
             saveVersion = SaveMigrations.Current;
@@ -200,7 +215,6 @@ namespace TheNetwork
             List<string> report = new List<string>();
             ctx.Actors.ImportCast(settings?.roster, settings?.LoadedVersion ?? NetworkSettings.CurrentVersion, report);
             int fixers = ctx.Actors.InstantiateFixers();
-            bootstrapped = true;
 
             ScheduleSweeps();
             SystemEvent boot = EventFactory.Make<SystemEvent>(EventKeys.NetworkBootstrapped, Importance.Minor);
@@ -212,6 +226,9 @@ namespace TheNetwork
             cast.count3 = fixers;
             cast.note = report.Count > 0 ? report[0] : null;
             runtime.Bus.Publish(cast);
+            // Only once every step above has finished: a bootstrap that failed part-way is simply run
+            // again on the next load (each step is idempotent).
+            bootstrapped = true;
             NetLog.Info(LogCategory.Kernel, "The Network bootstrapped (save format " + saveVersion + "): " + fixers + " Fixers, the Exchange, "
                 + state.cast.Count(Domain.Actors.CastEntryKind.Contractor) + " contractor templates held for later phases. " + NetworkBuildStamp.Stamp);
         }
@@ -255,10 +272,10 @@ namespace TheNetwork
             }
         }
 
-        /// <summary>Dev / tests: forces the lazy start now.</summary>
-        public void StartNow()
+        /// <summary>Dev / tests: forces the lazy start now. True when the Network is running.</summary>
+        public bool StartNow()
         {
-            if (runtime != null && !started) EnsureStarted();
+            return runtime != null && runtime.EnsureStarted();
         }
     }
 }

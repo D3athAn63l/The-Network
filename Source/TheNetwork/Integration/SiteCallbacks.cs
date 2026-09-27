@@ -101,28 +101,49 @@ namespace TheNetwork.Integration
 
     /// <summary>
     /// Receives <c>TheNetwork.*</c> quest-tag signals (RIMWORLD_INTEGRATION § 2.19). The SignalManager is
-    /// not persisted, so this re-registers on every load; registration checks first, so it never
-    /// duplicates (Spike S3). Phase 1 needs one signal: a Network site's map was settled, which the
-    /// comp cannot observe (its hook is not virtual).
+    /// not persisted, so this re-registers on every load; registration checks first, so the same
+    /// instance never registers twice. Whether a receiver from an earlier runtime can survive in the
+    /// same SignalManager (a reload within one game session) is runtime Spike S3, and is not assumed
+    /// either way: the traces below number each bridge instance and count Network receivers, and a
+    /// bridge that is not the current runtime's ignores signals (so a stale one could never act on old
+    /// state or send a second letter). Handling is also idempotent: a settled opportunity is terminal
+    /// and a second MapSettled does nothing. Phase 1 needs one signal: a Network site's map was
+    /// settled, which the comp cannot observe (its hook is not virtual).
     /// </summary>
     public sealed class SignalBridge : ISignalReceiver
     {
         public const string SettledSuffix = ".MapSettled";
 
+        private static int instances;
+
         private readonly DomainContext ctx;
+        private readonly int instance;
 
         public SignalBridge(DomainContext ctx)
         {
             this.ctx = ctx;
+            instance = ++instances;
         }
 
-        public void Register()
+        /// <summary>Registers once; false only when there is no SignalManager (start-up then fails).</summary>
+        public bool Register()
         {
             SignalManager sm = Find.SignalManager;
-            if (sm == null) return;
-            if (sm.receivers.Contains(this)) return;
+            if (sm == null) return false;
+            if (sm.receivers.Contains(this))
+            {
+                NetLog.Trace(LogCategory.Sites, "Signal bridge #" + instance + " already registered.");
+                return true;
+            }
             sm.RegisterReceiver(this);
-            NetLog.Trace(LogCategory.Sites, "Signal receiver registered (" + sm.receivers.Count + " receivers).");
+            int ours = 0;
+            for (int i = 0; i < sm.receivers.Count; i++) if (sm.receivers[i] is SignalBridge) ours++;
+            NetLog.Trace(LogCategory.Sites, "Signal bridge #" + instance + " registered (" + sm.receivers.Count + " receivers, " + ours + " Network bridge(s)).");
+            if (ours > 1)
+            {
+                NetLog.WarnOnce(LogCategory.Sites, "signal-bridges", ours + " Network signal bridges are registered in this SignalManager (expected 1). Only the current one acts; please report this for Spike S3.");
+            }
+            return true;
         }
 
         public void Notify_SignalReceived(Signal signal)
@@ -135,20 +156,20 @@ namespace TheNetwork.Integration
                 {
                     string idPart = tag.Substring(SiteAdapter.TagPrefix.Length, tag.Length - SiteAdapter.TagPrefix.Length - SettledSuffix.Length);
                     int id;
-                    NetLog.Trace(LogCategory.Sites, "Signal " + tag);
-                    if (int.TryParse(idPart, out id) && id > 0 && NetworkRuntimeInert() == false) ctx.Opportunities.OnMapSettled(new OpportunityId(id));
+                    Core.NetworkRuntime current = Core.NetworkRuntime.Current;
+                    if (current == null || current.Signals != this)
+                    {
+                        NetLog.Trace(LogCategory.Sites, "Signal " + tag + " at stale bridge #" + instance + ": ignored.");
+                        return;
+                    }
+                    NetLog.Trace(LogCategory.Sites, "Signal " + tag + " handled by bridge #" + instance + ".");
+                    if (int.TryParse(idPart, out id) && id > 0 && current.Active) ctx.Opportunities.OnMapSettled(new OpportunityId(id));
                 }
             }
             catch (Exception ex)
             {
                 NetLog.ErrorOnce(LogCategory.Sites, "signal:" + tag, "Signal " + tag + " failed: " + ex);
             }
-        }
-
-        private static bool NetworkRuntimeInert()
-        {
-            Core.NetworkRuntime r = Core.NetworkRuntime.Current;
-            return r == null || r.Inert;
         }
     }
 }

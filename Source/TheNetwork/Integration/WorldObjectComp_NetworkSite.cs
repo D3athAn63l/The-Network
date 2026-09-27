@@ -91,7 +91,8 @@ namespace TheNetwork
         private void Forward(string what, Action<NetworkRuntime> call)
         {
             NetworkRuntime runtime = NetworkRuntime.Current;
-            if (runtime == null || runtime.Inert) return;
+            // Starts the Network on first use; ignored after a failed start-up or when prepared for removal.
+            if (runtime == null || !runtime.Active) return;
             try
             {
                 call(runtime);

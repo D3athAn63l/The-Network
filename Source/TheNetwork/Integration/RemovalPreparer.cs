@@ -20,6 +20,7 @@ namespace TheNetwork.Integration
         public static string Prepare(NetworkRuntime rt)
         {
             if (rt == null) return "No Network in this game.";
+            if (!rt.EnsureStarted()) return "The Network failed to start this session (see the log); nothing was changed. It can be removed without preparation.";
             int sites = 0, searches = 0, refunded = 0, tags = 0;
 
             List<IntelRequest> requests = new List<IntelRequest>(rt.State.intel.requests);
@@ -69,7 +70,7 @@ namespace TheNetwork.Integration
         /// <summary>Undo: re-binds live, non-terminal sites and resumes. Invalidated searches stay invalidated.</summary>
         public static void Resume(NetworkRuntime rt)
         {
-            if (rt == null || !rt.Root.preparedForRemoval) return;
+            if (rt == null || !rt.Root.preparedForRemoval || !rt.EnsureStarted()) return;
             List<Opportunity> opps = rt.State.opportunities.opportunities;
             for (int i = 0; i < opps.Count; i++)
             {

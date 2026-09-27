@@ -115,6 +115,7 @@ namespace TheNetwork.Tests
             OpportunityTests.Register(tests);
             HistoryTests.Register(tests);
             PersistenceTests.Register(tests);
+            StartupTests.Register(tests);
 
             int ran = 0;
             foreach (KeyValuePair<string, Action> t in tests)

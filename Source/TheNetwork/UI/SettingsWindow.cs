@@ -56,7 +56,13 @@ namespace TheNetwork.UI
             NetworkRuntime rt = NetworkRuntime.Current;
             if (Current.ProgramState == ProgramState.Playing && rt != null)
             {
-                if (!rt.Inert)
+                if (!rt.EnsureStarted())
+                {
+                    GUI.color = new Color(1f, 0.55f, 0.45f);
+                    Widgets.Label(new Rect(buttons.x + 270f, buttons.y + 4f, 540f, 24f), "TheNetwork_StartupFailedShort".Translate());
+                    GUI.color = Color.white;
+                }
+                else if (!rt.Inert)
                 {
                     if (Widgets.ButtonText(new Rect(buttons.x + 270f, buttons.y, 260f, 28f), "TheNetwork_Settings_PrepareRemoval".Translate()))
                     {
