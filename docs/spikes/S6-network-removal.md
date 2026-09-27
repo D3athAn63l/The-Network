@@ -10,7 +10,7 @@ playable? Does re-adding the mod bootstrap cleanly?
 
 ## Build
 
-Source commit `SOURCE_COMMIT`. Code under test: `NetworkWorldComponent`, `Integration/RemovalPreparer.cs`,
+Source commit `4dca3d9`. Code under test: `NetworkWorldComponent`, `Integration/RemovalPreparer.cs`,
 `WorldObjectComp_NetworkSite`, the vanilla-only letters.
 
 ## Environment of this pass

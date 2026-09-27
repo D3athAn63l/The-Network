@@ -10,7 +10,7 @@ archetype and threat both times. Repeat with Odyssey active.
 
 ## Build
 
-Source commit `SOURCE_COMMIT`. Code under test: `IntelService.ResolveRound`, `OpportunityGenerator`,
+Source commit `4dca3d9`. Code under test: `IntelService.ResolveRound`, `OpportunityGenerator`,
 `SourceResolver`, `LeadReporter`, `SiteAdapter.TryFindTile`, `WorldFactsAdapter.PickStuff`.
 
 ## How determinism is built

@@ -10,7 +10,7 @@ sites; and does removing the mod leave the site working with **no errors from th
 
 ## Build
 
-Source commit `SOURCE_COMMIT`. Code under test: `Integration/WorldObjectComp_NetworkSite.cs`,
+Source commit `4dca3d9`. Code under test: `Integration/WorldObjectComp_NetworkSite.cs`,
 `Integration/SiteCallbacks.cs`, the patch.
 
 ## Environment of this pass

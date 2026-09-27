@@ -11,7 +11,7 @@ targets?
 
 ## Build
 
-Source commit `SOURCE_COMMIT`. Code under test: `Kernel/Scheduler.cs`, `History/HistoryService.cs`,
+Source commit `4dca3d9`. Code under test: `Kernel/Scheduler.cs`, `History/HistoryService.cs`,
 `Diagnostics/PerfHarness.cs`, every store's `ExposeData`.
 
 ## Environment of this pass

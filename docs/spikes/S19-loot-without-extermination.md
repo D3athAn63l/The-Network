@@ -18,7 +18,7 @@ departure; the site cleans up as vanilla does. Leaving empty-handed resolves as 
 
 ## Build
 
-Source commit `SOURCE_COMMIT`. Code under test: `OpportunityService` (engagement, samples, `ResolveEngagement`),
+Source commit `4dca3d9`. Code under test: `OpportunityService` (engagement, samples, `ResolveEngagement`),
 `SiteAdapter` (`TrySampleRemaining`, `CountUncountedTransporterCargo`, `CountInCaravan`), `SiteCallbacks`.
 
 ## How claim accounting works (what to watch)
