@@ -5,8 +5,8 @@ using Verse;
 namespace TheNetwork.Persist.Events
 {
     /// <summary>
-    /// Phase 2 event keys (EVENTS_AND_HISTORY § 2). Only events that Phase 2 actually publishes. Three
-    /// small additions to the catalog are recorded there: <c>Contractor.Created</c> (a world-generated
+    /// Phase 2 event keys (EVENTS_AND_HISTORY § 2). Only events that Phase 2 actually publishes. Five
+    /// additions to the catalog are recorded there: <c>Contractor.Created</c> (a world-generated
     /// newcomer), <c>Contractor.Ended</c> (a Solo died or an organization had no possible successor;
     /// the richer Phase 6 lifecycle keeps its own keys), <c>Contractor.OriginLost</c>,
     /// <c>Contract.Unfilled</c> and <c>Opportunity.FollowUpCreated</c> (Consequence Engine v0).
@@ -42,7 +42,6 @@ namespace TheNetwork.Persist.Events
         public const string ContractExpired = "Contract.Expired";
         public const string PaymentReceived = "Payment.Received";
         public const string PaymentDefaulted = "Payment.Defaulted";
-        public const string CargoLost = "Cargo.Lost";
 
         public const string OperationStarted = "Operation.Started";
         public const string OperationResolved = "Operation.Resolved";

@@ -330,6 +330,22 @@ and the relation edge:
 - **Hostile** (Phase 5+, criminal doctrine only): a follow-up "debt collection" opportunity is
   created. It is never an instant raid.
 
+**Phase 2 as implemented.** Only the Hold and partial-handover branches exist. The contractor's
+professionalism, loyalty, greed and trust in the client decide: a high score hands over at once;
+otherwise it holds for a 7-day grace period (the client can pay the balance any time), then hands
+over what the deposit covered. The debt branch waits for Obligations (Phase 5).
+
+**Grace defaults (Phase 2, `NetworkContractKindDef` tuning).**
+
+| Waiting on the client | Grace | Default |
+|---|---|---|
+| `Renegotiating(WorseThanExpected)` | 3 days | accept the reduced scope |
+| `Renegotiating(PartialResult)` | 5 days | accept the partial result at a pro-rated price |
+| `AwaitingPayment` | 7 days | partial handover |
+| Delivery `Hold` | daily retries, 15 days | `Failed(UndeliverableNoHome)`, paid balance refunded |
+| `Troubled` | 10 days | the group turns up (seeded), or `Failed(ContractorLost)` |
+| `Unfilled` | 10 days | `Expired` |
+
 ### 4.4 Destination and map destruction
 
 `DeliverObjective.destination = DeliveryTarget { preferred: MapRef, fallback: AnyPlayerHome | Hold }`.

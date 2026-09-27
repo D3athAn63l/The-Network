@@ -464,7 +464,7 @@ result in `docs/spikes/Sx-<name>.md` (created when run).
 | **S10** | 3 | Temporary encounter factions | as listed there |
 | **S11** | 3 | Pawns in the `SitePart.things` holder | as listed there |
 | **S12** | 3 | Catch-up healing and aging of suspended pawns | as listed there |
-| **S13** | 2 | Drop-pod delivery: destination map missing, roofed or crowded; incoming transporters blocking map removal | delivery lands or reroutes; no stuck state |
+| **S13** | 2 | Drop-pod delivery: destination map missing, roofed or crowded; incoming transporters blocking map removal | delivery lands or reroutes; no stuck state. **Phase 2: NOT RUN** ([spikes/S13](spikes/S13-drop-pod-delivery.md)); `Integration/DeliveryAdapter.cs` uses `DropCellFinder.TryFindDropSpotNear` (no roof punching, no random cell) and `DropPodUtility.DropThingsNear` |
 | **S14** | 3 | Walk-in delivery or visit Lord; hostility flip mid-visit | as listed there |
 | **S15** | 6+ | Odyssey: orbital site creation, gravship landing on a Network site, save without Odyssey afterwards | orbit opportunities Invalidated cleanly without Odyssey |
 | **S16** | 2+ | Royalty shuttle delivery adapter | shuttle arrives and leaves; no quest-reservation conflicts |

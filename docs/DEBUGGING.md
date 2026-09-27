@@ -67,6 +67,21 @@ debug menu. No Harmony. Each action logs what it did and bumps `StateVersion`.
 `Fast-forward` and `Simulate` never touch maps or pawns. They drive only the abstract layer, so
 they are safe to run in a test save to observe long-run dynamics (population, legends, save size).
 
+**Phase 2 as implemented** (debug menu category **"The Network (Phase 2)"**). Each action runs the
+ordinary code path sooner or with a forced draw. None skips a state's bookkeeping.
+
+| Group | Action |
+|---|---|
+| Contractors | Inspect contractor… (dev-only numbers: doctrine values, strength, skill) · Create world-generated contractor · Kill contractor (Solo) or its leader… · Force leader succession… · Set morale descriptor… · Run upkeep now (every contractor, plus the population manager) |
+| Contracts | Post procurement contract (dev)… · Close bidding window now… · Dump contract (bidders, refusals, quote components, ledger, operation, delivery)… · Force an offer from a contractor… · Accept the cheapest open offer… · Apply the pending decision's grace default now… |
+| Operations | Run next operation checkpoint now… (also resolves a Troubled deadline) · Force outcome band on next resolution… · Force partial result · Force catastrophe · Force 3-day delay · Force Troubled (missing) · Force "worse than expected" on next engagement · Force Last Known Location on next loss · Force a newcomer bidder on the next open contract |
+| Delivery | Deliver now… · Force the next 3 delivery attempts to fail (→ Hold) · Delivery plan report |
+| Relations and knowledge | Dump relationships (strongest 40) · Dump knowledge… |
+| Simulate | Simulate procurement (soak harness: 100 contractors, 360 days, synthetic items) · Simulate procurement with this game's catalog. Both run in a scratch in-memory world and never touch the save. |
+
+The forced draws live in `ProcurementDevOverrides` (runtime only, never saved) and are consumed by
+the next matching decision. The headless tests use the same overrides.
+
 ## 4. Validators
 
 `NetValidator.RunAll(mode)`. The mode is `OnLoad` (automatic, budgeted) or `Full` (dev action).

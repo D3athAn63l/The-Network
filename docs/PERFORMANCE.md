@@ -114,7 +114,20 @@ summaries or edges in O(1), or knowledge books in O(64) at most.
    behaviour and save size.
 2. **Phase 2 soak**: simulate 60 orgs for 20 in-game years with the dev fast-forward action
    (abstract resolution only). Record timing histograms per job kind and the save size at each
-   year.
+   year. **As implemented:** `Diagnostics/SoakHarness` runs a scratch in-memory world with the
+   real Domain services: about 100 contractors, 6 Fixers, 14 procurement contracts every 7 days,
+   daily staggered upkeep, the weekly population manager, history sweeps and compaction. A
+   headless test runs 1,080 days (18 in-game years, 2,160 contracts) with these results:
+   - no stuck contract, no NPC-issued contract, the population held;
+   - bounded stores: about 620 relation edges, 90 knowledge books, 630 history records after
+     sweeps, and contracts archived a year after closing;
+   - about 1.3 ms of Network work per simulated day (p95 1.8 ms, max 4.8 ms);
+   - a Network save node of about 2.4 MB.
+
+   The soak posts far more contracts than a normal game would. The same harness is a dev action,
+   with synthetic items or with a sample of the running game's catalog. No per-tick contractor
+   logic exists: contractors cost only their daily upkeep job, and contracts cost only their
+   window, checkpoint, decision and delivery jobs.
 3. **Phase 3 soak**: 150 stored pawns plus 5 concurrent deployments. Compare TPS with and
    without The Network on the same save (the prepared-removal path).
 4. **Regression gate**: the timing report (see [DEBUGGING § 5](DEBUGGING.md#5-timing-instrumentation))

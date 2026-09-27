@@ -170,6 +170,7 @@ N = Notable, Ma = Major, L = Legendary.
 | `Opportunity.LostToCompetitor` | 4 | N | opportunity, competitor | relations (rivalry), consequences |
 | `Reference.Invalidated` | 1 | Mi | owning entity | owning subsystem |
 | `Contract.Posted` | 2 | Mi | contract, issuer | bidding |
+| `Contract.Unfilled` | 2 | Mi | contract, issuer (reason keys of the round's refusals) | summaries, letters (added in Phase 2: the bidding window closed with no offer) |
 | `Contract.OfferReceived` / `Contract.Refused` | 2 | Mi | contract, bidder, broker | summaries (refusal counters), UI |
 | `Contract.Quoted` | 2 | Mi | contract, bidder, broker | UI (the client-facing quote) |
 | `Contract.Awarded` | 2 | Mi | contract, contractor | relations (familiarity) |
@@ -180,7 +181,10 @@ N = Notable, Ma = Major, L = Legendary.
 | `Contract.Continued` | 3 | N | parent, child, inheritor | history (causal link) |
 | `Payment.Received` / `Payment.Defaulted` | 2 | Mi / N | payer, payee | relations, obligations |
 | `Operation.Started` / `.Checkpoint` | 2 | Mi | operation | — |
-| `Operation.Resolved` | 2 | N | operation, contractor, band | orgs, knowledge, history |
+| `Operation.Resolved` | 2 | Mi (see note) | operation, contractor, band | orgs, knowledge |
+| `Contractor.Created` | 2 | Mi | org (a world-generated newcomer; reason `Population` or `NewcomerBidder`) | summaries, letters (added in Phase 2) |
+| `Contractor.Ended` | 2 | Ma | org, reason (`Died`, `NoSuccessor`, `LostContact`, `Captured`) | history (added in Phase 2; the Phase 6 lifecycle keeps its own keys) |
+| `Contractor.OriginLost` | 2 | Mi | org, origin faction snapshot | history (added in Phase 2: the contractor carries on) |
 | `Contractor.Casualties` | 2 | N / Ma | org, counts | morale, roster, history |
 | `Contractor.Captured` / `.Missing` / `.Stranded` | 2 | Ma | org, characters, captor | consequences (rescue), relations |
 | `Contractor.Rescued` | 3 | Ma | rescuer, rescued org, characters | history, relations, obligations, morale, gossip |
@@ -190,6 +194,7 @@ N = Notable, Ma = Major, L = Legendary.
 | `KnownCharacter.CapturedByPlayer` / `.Defected` / `.Lost` | 3 | Ma / Ma / N | character | relations, history |
 | `Deployment.Reconciled` | 3 | Mi | deployment | roster (return), leases |
 | `Cargo.Lost` / `Cargo.Stolen` | 2 | N / Ma | contract, thief? | consequences (hunt), relations |
+| `Opportunity.FollowUpCreated` | 2 | N | opportunity, contractor, contract | history, letters (added in Phase 2: Consequence Engine v0, a last known location) |
 | `Player.BetrayedContractor` | 3 | Ma | player, org | relations, gossip, reputation, sanctions |
 | `Employer.RefusedPayment` | 2 | Ma | issuer, contractor | relations, gossip, sanctions |
 | `JointOperation.Completed` | 7 | N | actors | relations (+) |
@@ -202,6 +207,16 @@ N = Notable, Ma = Major, L = Legendary.
 | `Exposure.Changed` (evidence, witnesses) | 7 | N / Ma | record, perpetrator, principal | consequences (faction goodwill), relations |
 | `Legend.Promoted` | 6 | L | subject | letters, UI |
 | `Epithet.Gained` / `.Lost` | 4 | Mi | actor, epithet | letters (optional) |
+
+**Phase 2 notes.** Five keys were added to the catalog when Phase 2 was implemented:
+`Contract.Unfilled`, `Contractor.Created`, `Contractor.Ended`, `Contractor.OriginLost` and
+`Opportunity.FollowUpCreated`. One deviation: `Operation.Resolved` is published as **Minor**.
+The outcome of an operation is told once, by the contract outcome (`Contract.Completed`,
+`.PartiallyCompleted`, `.Failed`) and by `Contractor.Casualties`. A Notable record at resolution
+would duplicate it, and would reveal the result before the contractor has reported it (the
+player learns it at the return checkpoint). `Cargo.Lost`, `Cargo.Stolen`, `Contract.Continued`
+and `Employer.RefusedPayment` are not published in Phase 2: continuations are linked through
+lineage and announced as `Contract.Posted` with a parent.
 
 The table is a catalogue, not a commitment to implement everything early. Adding an event type
 is cheap: a class, a typeKey and consumer registrations.

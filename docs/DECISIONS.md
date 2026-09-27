@@ -390,3 +390,53 @@
   orbital links, other mods). They may come later as additional access providers.
 - **Consequences.** A colony without a powered console cannot start or answer Network business
   until it has one again.
+
+### ADR-033 · Procurement quotes are frozen per offer; losing bids are dropped at close
+- **Decision.** Each offer stores the contractor's own components and the Fixer's components
+  (fee, coordination, market access, contingency, market-floor top-up) with their contributors,
+  the final price, deposit and balance, the insurance offer, the replacement and refund policy
+  keys, and the validity. It is never recomputed. When the contract closes, the offers that were
+  not accepted are dropped; the accepted quote stays with the contract until compaction.
+- **Rejected.** Recomputing a quote when the UI opens (it would draw randomness and drift);
+  keeping every losing bid forever (save growth for no story value).
+- **Consequences.** History and the economy can see who charged what. Save growth stays bounded
+  (about 2.4 MB after 18 in-game years of heavy procurement in the soak).
+
+### ADR-034 · Money moves only when the goods can land
+- **Decision.** Delivery plans a drop spot first, with no side effect. The balance is charged only
+  when a plan exists; then the pods launch. With no home map or no drop spot, the contract goes to
+  Hold (daily retries) and fails after the kind's limit (15 days), refunding any paid balance.
+- **Rejected.** Charging at the return checkpoint and refunding on failure (it charges players who
+  have no home at all); dropping pods on a random cell (roof punching, lost goods).
+- **Consequences.** No contract can be stuck, and no player pays for goods that never arrive.
+
+### ADR-035 · Phase-2-safe payment default
+- **Decision.** If the client cannot pay the balance, the contractor applies its doctrine and the
+  relationship. It either holds the goods (AwaitingPayment, pay later, 7-day grace) or hands over
+  what the deposit covered (partial handover, also the grace default).
+  `Payment.Defaulted` hurts the relationship.
+- **Rejected (for now).** The debt option: it needs Obligations (Phase 5). Hostile collection is
+  Phase 5+.
+- **Consequences.** A later phase adds the debt branch without changing the states.
+
+### ADR-036 · Consequence Engine v0 fires at dispatch and builds content in a job
+- **Decision.** One rule (Last Known Location). It fires when `Contract.Failed(CatastrophicLoss)`,
+  `Contractor.Missing` or `Contractor.Stranded` is dispatched, seeded by the event's sequence
+  number, with guards: one per contract, at most six active follow-ups, one per day, lineage
+  depth ≤ 4. The pending rule is persisted in the `consequences` store; a job generates the site
+  with the Phase 1 machinery from its own seed.
+- **Rejected.** Building the site inside the event consumer (world mutation inside dispatch, and
+  no persisted commit point); contractor pawns, survivors, captives or bodies (Phase 3).
+- **Consequences.** A reload between firing and generation gives the same site. The deposit is not
+  refunded because a follow-up exists.
+
+### ADR-037 · The client learns an operation's result when the contractor reports it
+- **Decision.** The resolver runs once, at the resolve checkpoint, and commits the outcome.
+  The client sees it only at the return checkpoint, through the contract (delivery, partial
+  result, failure) or earlier through a report the contractor sends (delay, Troubled, "worse
+  than expected"). `Operation.Resolved` is Minor and not shown in history.
+- **Rejected.** A Notable history record at resolution (it duplicates the contract outcome and
+  reveals it early).
+- **Consequences.** A deviation from the catalog's default importance, recorded in
+  [EVENTS_AND_HISTORY § 2](EVENTS_AND_HISTORY.md#2-event-catalog).
+

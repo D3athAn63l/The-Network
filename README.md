@@ -1,6 +1,6 @@
 # The Network
 
-**RimWorld 1.6 · standalone · status: Phase 1 implemented (Foundation, Intel and Fixers) — in-game runtime validation pending**
+**RimWorld 1.6 · standalone · status: Phase 2 implemented (abstract contractors and procurement) — in-game runtime validation pending**
 
 The Network is a persistent, procedural contractor ecosystem that runs behind the normal RimWorld
 game. The player hires outsiders to find and fetch things they cannot easily get themselves. The
@@ -26,11 +26,30 @@ the global cast in Mod Settings, the world cast snapshot, Fixers, the Comms Cons
 catalog, Intel searches in rounds with zero to many leads (never a quantity), source resolution,
 vanilla sites with the injected comp, partial recovery without extermination, history, the
 Network tab (Intel, History), letters, dev actions and prepare-for-removal. No Harmony.
-Contractor actors, procurement and everything later are not implemented
-([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
 
-The headless tests pass; the in-game runtime spikes (sites, maps, caravans, silver, removal) have
-**not** been run yet. Their records and owner test steps are in [docs/spikes/](docs/spikes/README.md).
+**Phase 2 (abstract contractors + procurement)** adds the invisible contractor economy:
+- **Contractors.** About 100 persistent contractors come from the world's cast snapshot: Solos and
+  organizations with doctrine, morale, equipment, funds, careers, rosters, wounded recovery,
+  recruitment and minimal succession. Known Characters are records only; there are no pawns.
+- **Procurement.** Ask for an **exact item and quantity** through a Fixer, Open or Direct. Real
+  contractors decide whether they want the job and give their reasons when they refuse. One to
+  three quotes come in, assembled by the Fixer from each contractor's own bid. The deposit is
+  charged at award and is normally lost on failure. Insurance is optional and partial.
+- **The work.** Abstract operations resolve once, from frozen inputs, into outcome bands with
+  casualties, captures, delays and partial cargo. The client decides on partial results and
+  renegotiations.
+- **Consequences.** A loss can leave a last known location (a real vanilla site). Successful goods
+  arrive by drop pod.
+- **Memory.** Relationships and knowledge make history change how contractors act and what they
+  charge.
+- **UI.** The tabs are Intel, Procurement, Contracts, Contractors and History.
+
+Contractor pawns, the contract board, the player as contractor and the social layer are later
+phases ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
+
+The headless tests pass (123 tests, including an 18-in-game-year procurement soak). The in-game
+runtime spikes (sites, maps, caravans, silver, drop pods, removal) have **not** been run yet. Their
+records and owner test steps are in [docs/spikes/](docs/spikes/README.md).
 
 ### Build
 
