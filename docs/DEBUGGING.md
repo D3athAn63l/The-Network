@@ -73,7 +73,7 @@ ordinary code path sooner or with a forced draw. None skips a state's bookkeepin
 | Group | Action |
 |---|---|
 | Contractors | Inspect contractor… (dev-only numbers: doctrine values, strength, skill) · Create world-generated contractor · Kill contractor (Solo) or its leader… · Force leader succession… · Set morale descriptor… · Run upkeep now (every contractor, plus the population manager) |
-| Contracts | Post procurement contract (dev)… · Close bidding window now… · Dump contract (bidders, refusals, quote components, ledger, operation, delivery)… · Force an offer from a contractor… · Accept the cheapest open offer… · Apply the pending decision's grace default now… |
+| Contracts | Post procurement contract (dev)… · Close bidding window now… · Dump contract (bidders, refusals, quote components, ledger as `money <direction> <purpose> <silver> [with #linked contract]`, operation, delivery)… · Force an offer from a contractor… · Accept the cheapest open offer… · Apply the pending decision's grace default now… |
 | Operations | Run next operation checkpoint now… (also resolves a Troubled deadline) · Force outcome band on next resolution… · Force partial result · Force catastrophe · Force 3-day delay · Force Troubled (missing) · Force "worse than expected" on next engagement · Force Last Known Location on next loss · Force a newcomer bidder on the next open contract |
 | Delivery | Deliver now… · Force the next 3 delivery attempts to fail (→ Hold) · Delivery plan report |
 | Relations and knowledge | Dump relationships (strongest 40) · Dump knowledge… |
@@ -90,11 +90,11 @@ the repair is safe.
 
 | Check | Validates | Auto-repair |
 |---|---|---|
-| **ID uniqueness** | every entity ID is unique and `< nextId`; typed ID kinds match their stores | raise `nextId` above the maximum; quarantine duplicates |
+| **ID uniqueness** | every entity ID is unique and `< nextId`; typed ID kinds match their stores | raise `nextId` above the maximum of every kind that draws from it (actors, characters, intel requests, leads, opportunities, history records, contracts, offers, operations) on load; quarantine duplicates |
 | **Orphan references** | each `ActorId`, `ContractId`, … field resolves to an entity or a tombstone; `EntityRef` kinds are consistent | clear optional refs; quarantine entities with required orphans |
 | **External references** | DefRefs, FactionRefs, WorldObjectRefs and TileRefs resolve | raise `Reference.Invalidated` (subsystem policy) |
 | **Custody invariants** | I-1…I-10 ([ABSTRACT_PHYSICAL_LIFECYCLE § 3](ABSTRACT_PHYSICAL_LIFECYCLE.md#3-invariants)); reserved set = custody records; tags present | re-reserve; re-tag; mark Lost when the pawn is gone |
-| **Scheduler agreement** | every entity-side due tick has a job and every job has a live target | recreate or delete jobs |
+| **Scheduler agreement** | every entity-side due tick has a job and every job has a live target (including each live contractor's `contractor.upkeep` job) | recreate or delete jobs; a missing upkeep job keeps its saved due tick when valid, runs shortly when past due, otherwise gets the normal stagger; never for ended or quarantined contractors |
 | **State-machine sanity** | each state is valid for its entity type; terminal entities have outcomes; timers exist for waiting states | quarantine |
 | **Lineage** | contract, opportunity and actor lineage graphs are acyclic; depth is within the cap | cut cycles and log |
 | **Roster arithmetic** | `committed ≤ healthy + wounded`; no negative counts | clamp and log |

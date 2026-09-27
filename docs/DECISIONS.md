@@ -400,7 +400,7 @@
 - **Rejected.** Recomputing a quote when the UI opens (it would draw randomness and drift);
   keeping every losing bid forever (save growth for no story value).
 - **Consequences.** History and the economy can see who charged what. Save growth stays bounded
-  (about 2.4 MB after 18 in-game years of heavy procurement in the soak).
+  (about 2.5 MB after 18 in-game years of heavy procurement in the soak).
 
 ### ADR-034 · Money moves only when the goods can land
 - **Decision.** Delivery plans a drop spot first, with no side effect. The balance is charged only
@@ -439,4 +439,60 @@
   reveals it early).
 - **Consequences.** A deviation from the catalog's default importance, recorded in
   [EVENTS_AND_HISTORY § 2](EVENTS_AND_HISTORY.md#2-event-catalog).
+
+### ADR-038 · Contract money is a typed ledger; a replacement is an internal transfer
+- **Decision.** Every contract money record has a direction and a purpose. Only `PlayerPaid` and
+  `PlayerRefunded` move real silver. A replacement (a Fixer handing a lost job to a new contractor)
+  moves the parent's whole remaining position to the child as a `TransferOut` on the parent and a
+  matching `TransferIn` on the child: same amount, same purpose (deposit, premium, insurance
+  premium, …), each naming the other contract. Policies read `Funding(purpose)` = charged + carried in
+  − carried out; a technical invalidation refunds `NetFunding()` = all funding − already returned.
+  No accounting reads a note string. The new contractor is not paid again for carried money.
+- **Invariant.** Across a lineage, external charges − external refunds = the player's real net
+  silver, and transfers sum to zero (in total and per purpose). Tests A–H and the soak check it.
+- **Rejected.** Counting transfers as payments (a parent would stay refundable for money it gave
+  away, and a void would refund twice); one `Transferred` direction on both sides (the parent's
+  record cannot be told from the child's).
+- **Consequences.** A replaced parent holds nothing refundable; the child recognises the carried
+  deposit everywhere (success balance, cancel, insurance, pro-rating, handover, void).
+
+### ADR-039 · One live job per named person; capacity is rechecked at acceptance
+- **Decision.** Which named people (KnownCharacters) are out is derived from the contractor's live
+  operation commitments, never stored: checkout skips anyone on another live operation, so one
+  person is in at most one abstract operation. `JobCapacity` counts the whole able roster (people
+  out on jobs included), and acceptance refuses a quote whose bidder has filled its capacity since
+  quoting (`BidderNowCommitted`: nothing charged, no operation, the offer stays open until it
+  expires). A quote from a contractor already working says "alongside other work"; nothing is
+  queued.
+- **Rejected.** A global assignment system or pawn references (Phase 3); a job queue.
+- **Consequences.** The soak counts zero commitments above capacity and zero people on two live
+  jobs; about one acceptance in five in the soak now falls back to another quote.
+
+### ADR-040 · A Last Known Location holds at most what was secured; only survivors report
+- **Decision.** The goods left at a Last Known Location are bounded by the committed
+  `outcome.secured` (between half and all of it; none when nothing was secured) and are the exact
+  committed payload (def, stuff, quality). Unrelated extra loot is still allowed. Knowledge gained
+  from an operation is committed only if someone came back: the killed, captured and missing carry
+  nothing home.
+- **Rejected.** Inventing goods at the site when none were secured; a Disaster that teaches a
+  contractor with nobody left to report.
+- **Consequences.** The site never contradicts the operation's result.
+
+### ADR-041 · Abstract spatial simulation is deferred (design only)
+- **Decision.** Recorded for later; nothing of it is implemented in Phase 2.
+  1. Spatial truth is invisible: the Network knows where people and goods are without showing a map
+     marker.
+  2. `MobilityProfile` stays a capability (how far and how fast an actor can go), not a location.
+  3. A future `SpatialState` is world truth: an approximate tile, a destination, a travel state and
+     its timing.
+  4. Awareness is separate: what the player or another actor knows about a location is a belief, not
+     the truth.
+  5. Movement is coarse and lazy: computed from timestamps when asked, with no per-tick work, no
+     WorldObjects, no icons and no caravans.
+  6. Spatial answers WHERE; operations answer WHAT.
+  7. Last Known Locations, rescues and visits may later read it.
+  8. Timing: after the owner validates Phase 2 at runtime and before a spatially aware Phase 3.
+- **Rejected (now).** Any spatial field, store, save-version change, route cache or movement job in
+  Phase 2.
+- **Consequences.** Phase 2's save layout is unchanged by this decision.
 

@@ -914,6 +914,27 @@ PaymentStep { when: OnAward | OnMilestone(key) | OnDelivery | OnClose, amount: i
 - **Account credit** (a Fixer holding value for the client instead of paying it out) is an
   `Obligation(credit.account)` owed by the Fixer, spent on later fees or quotes.
 
+### 16.1 Phase 2 contract ledger (implemented)
+
+```
+MoneyRecord { tick, silver, direction, purpose, linkedContract, noteKey, round, pending }
+direction: PlayerPaid | PlayerRefunded | TransferIn | TransferOut
+purpose:   Unspecified | Deposit | Premium | InsurancePremium | Balance | Renegotiation | Refund | InsurancePayout
+```
+
+- **External** records (`PlayerPaid`, `PlayerRefunded`) move real silver through the payment port.
+  **Internal** records (`TransferIn`, `TransferOut`) move none: a replacement contract takes over its
+  parent's funding. Every `TransferIn` has a `TransferOut` of the same amount and purpose on the
+  contract named by `linkedContract`, and vice versa. A transfer is never a charge or a refund.
+- `Funding(purpose)` = charged + carried in − carried out, for that purpose. This is "the deposit",
+  "the premium" and so on for every policy (cancel refund, pre-work loss, insurance payout,
+  pro-rating, partial handover, balance due).
+- `NetFunding()` = all funding − everything already returned. A technical invalidation refunds exactly
+  this; a replacement carries exactly this (the parent is left with 0).
+- `noteKey` is display only. Intel request fees keep `purpose = Unspecified`.
+- Invariant, per lineage: Σ external charges − Σ external refunds = the player's real net silver;
+  Σ transfers = 0 (in total and per purpose). See [DECISIONS ADR-038](DECISIONS.md).
+
 ---
 
 ## 17. Persistence conventions

@@ -119,10 +119,16 @@ summaries or edges in O(1), or knowledge books in O(64) at most.
    daily staggered upkeep, the weekly population manager, history sweeps and compaction. A
    headless test runs 1,080 days (18 in-game years, 2,160 contracts) with these results:
    - no stuck contract, no NPC-issued contract, the population held;
-   - bounded stores: about 620 relation edges, 90 knowledge books, 630 history records after
+   - every daily invariant at zero: commitments above job capacity, named people on two live
+     operations, empty or negative money records, duplicate refunds or payouts, Last Known Location
+     cargo above what was secured, drift between the payment port and the ledgers, and transfers
+     that do not sum to zero;
+   - 360 acceptances fell back to another quote because the cheapest bidder had filled its job
+     capacity since quoting (before the correction pass these overcommitted the contractor);
+   - bounded stores: about 700 relation edges, 100 knowledge books, 660 history records after
      sweeps, and contracts archived a year after closing;
-   - about 1.3 ms of Network work per simulated day (p95 1.8 ms, max 4.8 ms);
-   - a Network save node of about 2.4 MB.
+   - about 1.2 ms of Network work per simulated day (p95 1.7 ms, max 3.6 ms);
+   - a Network save node of about 2.5 MB.
 
    The soak posts far more contracts than a normal game would. The same harness is a dev action,
    with synthetic items or with a sample of the running game's catalog. No per-tick contractor

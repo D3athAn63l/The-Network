@@ -171,7 +171,7 @@ invariants ([DEBUGGING § 6](DEBUGGING.md#6-headless-tests)). Fixture files live
 | Version | Phase | Change |
 |---|---|---|
 | 1 | 1 | First format. The `contracts`, `operations` and `consequences` slots are reserved, empty nodes. |
-| 2 | 2 | The reserved slots now hold `ContractStore` (contracts and offers), `OperationStore` and `ConsequenceStore`. `knowledge` and `relations` hold real stores. The migration `V1ToV2PhaseTwoStores` is a logged no-op: a reserved node loads as an empty store, and contractor actors are instantiated from the world's own cast snapshot on the first load (idempotently). Global settings are never read to decide who exists. Additive fields (`MoneyDirection.Transferred`, `ItemFacts` valuation signals, `ActorStore.worldGenerated` and `lastNewcomerBidder`) take their defaults when absent. |
+| 2 | 2 | The reserved slots now hold `ContractStore` (contracts and offers), `OperationStore` and `ConsequenceStore`. `knowledge` and `relations` hold real stores. The migration `V1ToV2PhaseTwoStores` is a logged no-op: a reserved node loads as an empty store, and contractor actors are instantiated from the world's own cast snapshot on the first load (idempotently). Global settings are never read to decide who exists. Additive fields (the money record's `purpose` and `linked` contract, which default to `Unspecified` and 0; the directions `TransferIn`/`TransferOut`; `ItemFacts` valuation signals, `ActorStore.worldGenerated` and `lastNewcomerBidder`) take their defaults when absent. |
 
 ## 5. Load pipeline
 

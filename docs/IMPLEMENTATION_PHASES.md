@@ -250,11 +250,17 @@ Tuning and deviations worth knowing (the formulas are replaceable policy; see
 - **Events.** `Operation.Resolved` is published as Minor. Five catalog additions are listed in
   [EVENTS_AND_HISTORY § 2](EVENTS_AND_HISTORY.md#2-event-catalog).
 
-Headless evidence: 123 tests, 11,317 checks, 0 failures. They include every persistent contract
-state round-tripping through the real Scribe, and a soak of 1,080 simulated days (18 in-game years,
-2,160 contracts, about 100 contractors). In that soak nothing gets stuck, the population holds,
-relations and knowledge stay bounded, and the Network save node is about 2.4 MB, with about 1.3 ms
-of work per simulated day.
+Headless evidence (after the final correction pass): 144 tests, 12,026 checks, 0 failures. They
+include every persistent contract state round-tripping through the real Scribe, replacement money
+across a lineage (A → B → C, void, cancel, insured failure, pro-rating, handover, save/load), named
+character exclusivity, job capacity at acceptance, Last Known Location cargo, ID and upkeep-job
+repair, the Decline comms gate and survivor-only knowledge. A soak of 1,080 simulated days (18
+in-game years, 2,160 contracts, about 100 contractors) leaves nothing stuck, holds the population and
+keeps relations and knowledge bounded. Every simulated day it also checks that no contractor runs
+more jobs than its capacity, no named person is on two live operations, no money record is empty,
+negative or duplicated, ledger charges minus refunds equal the silver that actually moved, transfers
+sum to zero, and no Last Known Location holds more than was secured: all zero. The Network save node
+is about 2.5 MB, with about 1.2 ms of work per simulated day.
 
 ---
 

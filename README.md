@@ -47,7 +47,7 @@ Network tab (Intel, History), letters, dev actions and prepare-for-removal. No H
 Contractor pawns, the contract board, the player as contractor and the social layer are later
 phases ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
 
-The headless tests pass (123 tests, including an 18-in-game-year procurement soak). The in-game
+The headless tests pass (144 tests, including an 18-in-game-year procurement soak with daily invariant checks). The in-game
 runtime spikes (sites, maps, caravans, silver, drop pods, removal) have **not** been run yet. Their
 records and owner test steps are in [docs/spikes/](docs/spikes/README.md).
 
