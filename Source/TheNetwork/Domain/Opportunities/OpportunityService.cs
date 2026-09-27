@@ -111,6 +111,7 @@ namespace TheNetwork.Domain.Opportunities
                 stateTick = ctx.Now
             };
             lead.reported = LeadReporter.Report(opp, draft, divergence, r.terms.reliabilityBand, NetHash.Combine(seed, "report"), HolderText(opp));
+            lead.reported.travelTicks = ctx.world.TravelTicksFromPlayerHome(opp.location);
             ctx.intel.Add(lead);
             opp.lead = lead.id;
             Transition(opp, OpportunityState.Revealed);

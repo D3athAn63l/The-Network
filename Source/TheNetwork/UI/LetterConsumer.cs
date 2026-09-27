@@ -56,7 +56,7 @@ namespace TheNetwork.UI
                 {
                     Lead lead = ctx.intel.Get(e.lead);
                     IntelRequest r = ctx.intel.Get(e.request);
-                    string text = "TheNetwork_Letter_LeadText".Translate(source, item).Resolve();
+                    string text = LeadOpening(lead, source, item);
                     if (lead != null) text += "\n\n" + Narrative.LeadSummary(lead, ctx);
                     if (r != null && r.state == IntelState.AwaitingDecision) text += "\n\n" + "TheNetwork_Letter_LeadAsk".Translate(source).Resolve();
                     else if (r != null && r.state == IntelState.Searching) text += "\n\n" + "TheNetwork_Letter_LeadKeepsLooking".Translate(source).Resolve();
@@ -115,6 +115,23 @@ namespace TheNetwork.UI
                     Send("TheNetwork_Letter_OppInvalidatedLabel".Translate(item).Resolve(), "TheNetwork_Letter_OppInvalidatedText".Translate(item, reason).Resolve(), LetterDefOf.NegativeEvent, LookTargets.Invalid);
                     break;
                 }
+            }
+        }
+
+        /// <summary>
+        /// The report in the source's words (master § 81: read like a RimWorld event, not a system notice).
+        /// Built from what the lead REPORTS, never from the hidden truth.
+        /// </summary>
+        private static string LeadOpening(Lead lead, string source, string item)
+        {
+            if (lead == null) return "TheNetwork_Letter_LeadText".Translate(source, item).Resolve();
+            string holder = lead.reported.holderText ?? "?";
+            switch (lead.reported.sourceKindKey)
+            {
+                case "Mechanoids": return "TheNetwork_Letter_LeadMechs".Translate(source, item).Resolve();
+                case "AncientSite": return "TheNetwork_Letter_LeadRuin".Translate(source, item).Resolve();
+                case "AbandonedCache": return "TheNetwork_Letter_LeadAbandoned".Translate(source, item).Resolve();
+                default: return "TheNetwork_Letter_LeadHeld".Translate(source, item, holder).Resolve();
             }
         }
 

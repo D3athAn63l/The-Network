@@ -99,6 +99,9 @@ namespace TheNetwork.Domain.Ports
         /// <summary>Approximate travel distance in tiles from the nearest player home to a tile; -1 if unknown.</summary>
         int TilesFromPlayerHome(TileRef tile);
 
+        /// <summary>Estimated caravan travel time (ticks) from the nearest player home; -1 if unknown. Called once per lead.</summary>
+        int TravelTicksFromPlayerHome(TileRef tile);
+
         /// <summary>The player's own faction, as facts (for the PlayerProxy binding).</summary>
         FactionFacts PlayerFaction();
     }

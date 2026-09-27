@@ -74,6 +74,12 @@ namespace TheNetwork.Domain
         public int Now => clock.Now;
     }
 
+    /// <summary>Service switches read from Mod Settings (ARCHITECTURE § 9). Runtime only.</summary>
+    public static class ServiceToggles
+    {
+        public static bool IntelEnabled = true;
+    }
+
     /// <summary>
     /// Dev-mode overrides consumed by the next Intel round (DEBUGGING § 3). Runtime only, never saved,
     /// never reachable by a player without dev mode.

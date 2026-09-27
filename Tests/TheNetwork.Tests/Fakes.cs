@@ -125,6 +125,7 @@ namespace TheNetwork.Tests
         public float BaseThreatPoints() { return threat; }
         public string PickStuff(string thingDefName, int seed) { return null; }
         public int TilesFromPlayerHome(TileRef tile) { return tile == null ? -1 : 6; }
+        public int TravelTicksFromPlayerHome(TileRef tile) { return tile == null ? -1 : 108000; }
         public FactionFacts PlayerFaction() { return Player(); }
 
         public static FactionFacts Faction(int loadId, string name, string package, int tech, bool hostile, bool pirate = false, bool ludeon = false)

@@ -123,6 +123,7 @@ namespace TheNetwork.Domain.Intel
             string reason;
             if (!CommsOk(out reason)) return CommandResult.Fail(reason);
             if (ctx.diagnostics.IsDegraded("intel")) return CommandResult.Fail("SubsystemDegraded");
+            if (!ServiceToggles.IntelEnabled) return CommandResult.Fail("IntelDisabled");
             if (string.IsNullOrEmpty(defName)) return CommandResult.Fail("NoTopic");
             if (!ctx.catalog.IsRequestable(defName, out reason)) return CommandResult.Fail(reason ?? "NotRequestable");
             if (ResolveSource(source, false, out reason) == null && !(source.IsFaction && reason == null)) return CommandResult.Fail(reason ?? "SourceMissing");

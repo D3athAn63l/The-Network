@@ -24,13 +24,15 @@ namespace TheNetwork.UI
             if (s == null) return;
             NetworkStartup.EnsureRoster(s, "settings");
             Listing_Standard top = new Listing_Standard();
-            Rect topRect = new Rect(inRect.x, inRect.y, inRect.width, 200f);
+            Rect topRect = new Rect(inRect.x, inRect.y, inRect.width, 240f);
             top.Begin(topRect);
-            bool unusual = s.showUnusualItems, verbose = s.verboseLogging, prof = s.profiling;
+            bool unusual = s.showUnusualItems, verbose = s.verboseLogging, prof = s.profiling, intel = s.intelEnabled;
             top.CheckboxLabeled("TheNetwork_Settings_ShowUnusual".Translate(), ref s.showUnusualItems, "TheNetwork_Settings_ShowUnusualTip".Translate());
             top.CheckboxLabeled("TheNetwork_Settings_Verbose".Translate(), ref s.verboseLogging);
             top.CheckboxLabeled("TheNetwork_Settings_Profiling".Translate(), ref s.profiling);
-            if (unusual != s.showUnusualItems || verbose != s.verboseLogging || prof != s.profiling)
+            top.CheckboxLabeled("TheNetwork_Settings_IntelEnabled".Translate(), ref s.intelEnabled, "TheNetwork_Settings_IntelEnabledTip".Translate());
+            bool changed = unusual != s.showUnusualItems || verbose != s.verboseLogging || prof != s.profiling || intel != s.intelEnabled;
+            if (changed)
             {
                 s.ApplyRuntimeToggles();
                 s.NeedsWrite = true;
@@ -45,6 +47,11 @@ namespace TheNetwork.UI
             if (Widgets.ButtonText(new Rect(buttons.x, buttons.y, 260f, 28f), "TheNetwork_Settings_Regenerate".Translate()))
             {
                 Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation("TheNetwork_Settings_RegenerateConfirm".Translate(), () => NetworkStartup.Regenerate(s), true));
+            }
+            if (Current.ProgramState == ProgramState.Playing && Widgets.ButtonText(new Rect(buttons.x + 830f, buttons.y, 200f, 28f), "TheNetwork_Settings_RebuildCatalog".Translate()))
+            {
+                CatalogCache.Reset();
+                Kernel.StateVersion.Bump();
             }
             NetworkRuntime rt = NetworkRuntime.Current;
             if (Current.ProgramState == ProgramState.Playing && rt != null)
@@ -71,7 +78,7 @@ namespace TheNetwork.UI
             top.End();
 
             // ---- roster list
-            Rect listArea = new Rect(inRect.x, inRect.y + 205f, inRect.width, inRect.height - 205f);
+            Rect listArea = new Rect(inRect.x, inRect.y + 245f, inRect.width, inRect.height - 245f);
             Rect bar = new Rect(listArea.x, listArea.y, listArea.width, 28f);
             if (Widgets.ButtonText(new Rect(bar.x, bar.y, 160f, 26f), (showContractors ? "TheNetwork_Settings_Contractors" : "TheNetwork_Settings_Fixers").Translate()))
             {

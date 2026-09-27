@@ -111,6 +111,7 @@
   <TheNetwork_Lead_OtherCargo>Also there: {0}</TheNetwork_Lead_OtherCargo>
   <TheNetwork_Lead_MaybeMore>maybe more</TheNetwork_Lead_MaybeMore>
   <TheNetwork_Lead_Distance>About {0} tiles from home</TheNetwork_Lead_Distance>
+  <TheNetwork_Lead_Travel>About {0} days away by caravan</TheNetwork_Lead_Travel>
   <TheNetwork_Lead_Window>The window closes in roughly {0}</TheNetwork_Lead_Window>
   <TheNetwork_Lead_WindowPast>The window has probably closed</TheNetwork_Lead_WindowPast>
   <TheNetwork_Lead_Confidence>Your contact sounds {0}</TheNetwork_Lead_Confidence>
@@ -211,6 +212,10 @@
   <!-- Letters (vanilla letter classes only) -->
   <TheNetwork_Letter_LeadLabel>Lead: {0}</TheNetwork_Letter_LeadLabel>
   <TheNetwork_Letter_LeadText>{0} has a lead on {1}.</TheNetwork_Letter_LeadText>
+  <TheNetwork_Letter_LeadHeld>{0} reports that {2} are sitting on a cache of {1}. Word is it is not heavily watched, but word is not always right.</TheNetwork_Letter_LeadHeld>
+  <TheNetwork_Letter_LeadMechs>{0} reports a cache of {1} out among dormant mechanoids. Nobody has been foolish enough to wake them yet.</TheNetwork_Letter_LeadMechs>
+  <TheNetwork_Letter_LeadRuin>{0} reports a cache of {1} in an old ruin. The wildlife around it is said to be unfriendly.</TheNetwork_Letter_LeadRuin>
+  <TheNetwork_Letter_LeadAbandoned>{0} reports an abandoned cache of {1}, left behind by whoever stashed it.</TheNetwork_Letter_LeadAbandoned>
   <TheNetwork_Letter_LeadAsk>{0} is waiting to hear whether you want them to keep looking. Answer in the Network tab.</TheNetwork_Letter_LeadAsk>
   <TheNetwork_Letter_LeadKeepsLooking>{0} keeps looking in case there is more.</TheNetwork_Letter_LeadKeepsLooking>
   <TheNetwork_Letter_NothingLabel>Nothing on {0}</TheNetwork_Letter_NothingLabel>
@@ -259,6 +264,11 @@
   <TheNetwork_Settings_ShowUnusualTip>Unusual items look odd by vanilla conventions but may be perfectly valid. Set one to "Allowed" to ask about it.</TheNetwork_Settings_ShowUnusualTip>
   <TheNetwork_Settings_Verbose>Detailed Network logging</TheNetwork_Settings_Verbose>
   <TheNetwork_Settings_Profiling>Network timing (profiling)</TheNetwork_Settings_Profiling>
+  <TheNetwork_Settings_IntelEnabled>Intel requests enabled</TheNetwork_Settings_IntelEnabled>
+  <TheNetwork_Settings_IntelEnabledTip>When off, no new Intel requests can be made. Searches already running finish normally and nothing is lost.</TheNetwork_Settings_IntelEnabledTip>
+  <TheNetwork_Settings_RebuildCatalog>Rebuild item catalog</TheNetwork_Settings_RebuildCatalog>
+  <TheNetwork_Reason_IntelDisabled>Intel requests are turned off in Mod Settings</TheNetwork_Reason_IntelDisabled>
+  <TheNetwork_Reason_RefundFailed>the refund failed; see the log</TheNetwork_Reason_RefundFailed>
   <TheNetwork_Settings_CastSummary>Global cast: {0} contractors ({1} active), {2} fixers ({3} active), {4} quarantined. New worlds copy the active entries once; existing saves keep their own copy.</TheNetwork_Settings_CastSummary>
   <TheNetwork_Settings_NewerFile>This settings file comes from a newer version of The Network; it is not rewritten unless you change something.</TheNetwork_Settings_NewerFile>
   <TheNetwork_Settings_Regenerate>Regenerate generated entries</TheNetwork_Settings_Regenerate>

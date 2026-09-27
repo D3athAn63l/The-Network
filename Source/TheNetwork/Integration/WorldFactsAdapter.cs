@@ -151,6 +151,32 @@ namespace TheNetwork.Integration
             return best;
         }
 
+        public int TravelTicksFromPlayerHome(TileRef tile)
+        {
+            if (tile == null || !tile.IsValidNow) return -1;
+            PlanetTile t = tile.Tile;
+            List<PlanetTile> homes = PlayerHomeTiles();
+            PlanetTile best = PlanetTile.Invalid;
+            float bestDist = float.MaxValue;
+            for (int i = 0; i < homes.Count; i++)
+            {
+                if (homes[i].Layer != t.Layer) continue;
+                float d = Find.WorldGrid.ApproxDistanceInTiles(homes[i], t);
+                if (d < bestDist) { bestDist = d; best = homes[i]; }
+            }
+            if (!best.Valid) return -1;
+            try
+            {
+                // Vanilla's estimate for a default caravan along a real world path (no Rand involved).
+                int ticks = CaravanArrivalTimeEstimator.EstimatedTicksToArrive(best, t, null);
+                return ticks > 0 ? ticks : -1;
+            }
+            catch (Exception)
+            {
+                return -1;
+            }
+        }
+
         public static List<PlanetTile> PlayerHomeTiles()
         {
             List<PlanetTile> list = new List<PlanetTile>();

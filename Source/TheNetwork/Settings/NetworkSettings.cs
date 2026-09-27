@@ -45,6 +45,9 @@ namespace TheNetwork
         public bool verboseLogging;
         public bool profiling;
 
+        /// <summary>Service toggle: off refuses new Intel requests; searches already running finish normally.</summary>
+        public bool intelEnabled = true;
+
         // Runtime only.
         public int LoadedVersion { get; private set; } = -1;
         public bool LoadedFromNewerVersion => LoadedVersion > CurrentVersion;
@@ -70,6 +73,7 @@ namespace TheNetwork
             Scribe_Values.Look(ref showUnusualItems, "showUnusualItems", false);
             Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
             Scribe_Values.Look(ref profiling, "profiling", false);
+            Scribe_Values.Look(ref intelEnabled, "intelEnabled", true);
 
             if (Scribe.mode == LoadSaveMode.PostLoadInit || Scribe.mode == LoadSaveMode.LoadingVars)
             {
@@ -106,6 +110,7 @@ namespace TheNetwork
         {
             NetLog.VerboseEnabled = verboseLogging;
             NetProfiler.Enabled = profiling;
+            Domain.ServiceToggles.IntelEnabled = intelEnabled;
         }
 
         public ItemOverride GetOverride(string defName)

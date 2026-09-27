@@ -38,12 +38,14 @@ namespace TheNetwork.Integration
 
         public void OnMapGenerated(WorldObjectComp_NetworkSite comp)
         {
+            NetLog.Trace(LogCategory.Sites, "Site " + comp.parent?.ID + " (O" + comp.networkOpportunityId + "): PostMapGenerate");
             Opportunity opp = Bound(comp);
             if (opp != null) ctx.Opportunities.OnMapGenerated(opp.id);
         }
 
         public void OnCaravanFormed(WorldObjectComp_NetworkSite comp, Caravan caravan)
         {
+            NetLog.Trace(LogCategory.Sites, "Site " + comp.parent?.ID + " (O" + comp.networkOpportunityId + "): PostCaravanFormed " + caravan?.Name);
             Opportunity opp = Bound(comp);
             if (opp == null || caravan == null || !caravan.IsPlayerControlled) return;
             ThingDef def = DefResolver<ThingDef>.Get(opp.Target?.thing?.defName);
@@ -53,18 +55,21 @@ namespace TheNetwork.Integration
 
         public void OnMapRemoved(WorldObjectComp_NetworkSite comp)
         {
+            NetLog.Trace(LogCategory.Sites, "Site " + comp.parent?.ID + " (O" + comp.networkOpportunityId + "): PostMyMapRemoved");
             Opportunity opp = Bound(comp);
             if (opp != null) ctx.Opportunities.OnMapRemoved(opp.id);
         }
 
         public void OnSiteDestroyed(WorldObjectComp_NetworkSite comp)
         {
+            NetLog.Trace(LogCategory.Sites, "Site " + comp.parent?.ID + " (O" + comp.networkOpportunityId + "): PostDestroy");
             Opportunity opp = Bound(comp);
             if (opp != null) ctx.Opportunities.OnSiteDestroyed(opp.id);
         }
 
         public void OnMapSettled(OpportunityId id)
         {
+            NetLog.Trace(LogCategory.Sites, id + ": MapSettled signal");
             ctx.Opportunities.OnMapSettled(id);
         }
 
@@ -106,7 +111,9 @@ namespace TheNetwork.Integration
         {
             SignalManager sm = Find.SignalManager;
             if (sm == null) return;
-            if (!sm.receivers.Contains(this)) sm.RegisterReceiver(this);
+            if (sm.receivers.Contains(this)) return;
+            sm.RegisterReceiver(this);
+            NetLog.Trace(LogCategory.Sites, "Signal receiver registered (" + sm.receivers.Count + " receivers).");
         }
 
         public void Notify_SignalReceived(Signal signal)
@@ -119,6 +126,7 @@ namespace TheNetwork.Integration
                 {
                     string idPart = tag.Substring(SiteAdapter.TagPrefix.Length, tag.Length - SiteAdapter.TagPrefix.Length - SettledSuffix.Length);
                     int id;
+                    NetLog.Trace(LogCategory.Sites, "Signal " + tag);
                     if (int.TryParse(idPart, out id) && id > 0 && NetworkRuntimeInert() == false) ctx.Opportunities.OnMapSettled(new OpportunityId(id));
                 }
             }

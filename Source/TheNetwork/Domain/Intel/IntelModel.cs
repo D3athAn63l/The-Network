@@ -248,6 +248,10 @@ namespace TheNetwork.Domain.Intel
         public bool unknownExtra;
         public ThreatBand threatBand = ThreatBand.Unknown;
         public TileRef location;
+
+        /// <summary>The source's travel estimate from home, committed when the lead is made (master § 11 "Distance").</summary>
+        public int travelTicks = -1;
+
         public string holderText;
         public string sourceKindKey;
         public int expiresAroundTick = -1;
@@ -262,6 +266,7 @@ namespace TheNetwork.Domain.Intel
             Scribe_Values.Look(ref unknownExtra, "unknownExtra", false);
             NetScribe.LookEnum(ref threatBand, "threat", ThreatBand.Unknown);
             Scribe_Deep.Look(ref location, "location");
+            Scribe_Values.Look(ref travelTicks, "travelTicks", -1);
             Scribe_Values.Look(ref holderText, "holder");
             Scribe_Values.Look(ref sourceKindKey, "sourceKind");
             Scribe_Values.Look(ref expiresAroundTick, "expiresAround", -1);

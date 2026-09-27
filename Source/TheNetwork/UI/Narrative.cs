@@ -91,8 +91,15 @@ namespace TheNetwork.UI
             sb.Append("\n").Append("TheNetwork_Lead_Threat".Translate(("TheNetwork_Threat_" + r.threatBand).Translate()).Resolve());
             string cargo = OtherCargo(r);
             if (cargo != null) sb.Append("\n").Append(cargo);
-            int tiles = ctx.world.TilesFromPlayerHome(r.location);
-            if (tiles >= 0) sb.Append("\n").Append("TheNetwork_Lead_Distance".Translate(tiles).Resolve());
+            if (r.travelTicks > 0)
+            {
+                sb.Append("\n").Append("TheNetwork_Lead_Travel".Translate((r.travelTicks / (float)Ticks.PerDay).ToString("0.0")).Resolve());
+            }
+            else
+            {
+                int tiles = ctx.world.TilesFromPlayerHome(r.location);
+                if (tiles >= 0) sb.Append("\n").Append("TheNetwork_Lead_Distance".Translate(tiles).Resolve());
+            }
             if (r.expiresAroundTick > 0)
             {
                 int left = r.expiresAroundTick - ctx.Now;
