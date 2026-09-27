@@ -101,7 +101,9 @@ Verdict:
 - Hooks available to a `WorldObjectComp`: `PostMapGenerate`, `PostCaravanFormed(Caravan)`
   (called from `MapParent.Notify_CaravanFormed` through `CaravanExitMapUtility.cs:66`),
   `PostMyMapRemoved`, `PostDestroy`, `CompInspectStringExtra`, `GetFloatMenuOptions(Caravan)`,
-  `GetGizmos`.
+  `GetGizmos`. *(Phase 1 finding:)* `WorldObjectComp.PostMyMapSettled` exists but is **not
+  virtual** in 1.6, so a comp cannot observe settling; `MapParent.Notify_MyMapSettled` also sends
+  the quest-target signal `MapSettled`, which the SignalBridge receives for Network-tagged sites.
 - World objects send quest-tag signals `Spawned`, `Despawned`, `Destroyed`
   (`WorldObject.cs:454/489/510`). A `MapParent` also sends `MapGenerated` and `MapRemoved`
   (`MapParent.cs:58/72`).

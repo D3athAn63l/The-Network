@@ -177,7 +177,8 @@ text uses coarse phrases ("recovered part of the cache", "recovered most of the 
 caravan departure is tallied once; items that come back onto the map are not counted again,
 because the fallback measures what is left rather than adding to the tally.
 
-**Player settles the site** (`Notify_MyMapSettled`): the opportunity is treated as Claimed with
+**Player settles the site** (`Notify_MyMapSettled`, observed through the site's `MapSettled`
+quest-tag signal because the comp hook is not virtual): the opportunity is treated as Claimed with
 the remaining sampled amount, and the site becomes the player's.
 
 ---

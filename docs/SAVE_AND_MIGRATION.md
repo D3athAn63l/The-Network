@@ -76,7 +76,8 @@
   deterministic diffs. Cross-store references are IDs, so load order does not change meaning.
 - Every store writes **empty** nodes when it has nothing to save, so the layout never varies
   with content.
-- Site comp data lives inside each vanilla `Site` node (`<opportunityId>`). Registry quest data
+- Site comp data lives inside each vanilla `Site` node (`<networkOpportunityId>`; comps of different
+  mods share the site node, so the name is prefixed). Registry quest data
   (Phase 3) lives inside the vanilla quest node and holds **no state**: the reserved-pawn set is
   rebuilt from `CharacterStore` and `DeploymentStore` at load.
 

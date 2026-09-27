@@ -166,6 +166,7 @@ N = Notable, Ma = Major, L = Legendary.
 | `Opportunity.Engaged` | 1 | Mi | opportunity, player | summaries |
 | `Opportunity.Claimed` | 1 | N (Ma if high value) | opportunity, claimer, `recoveredBand` (partial recovery is a claim) | history, knowledge, summaries, letters |
 | `Opportunity.Expired` / `.Abandoned` / `.Destroyed` / `.Invalidated` | 1 | Mi | opportunity | summaries |
+| `Opportunity.ExpiringSoon` | 1 | Mi | opportunity | letters (the optional expiry warning) |
 | `Opportunity.LostToCompetitor` | 4 | N | opportunity, competitor | relations (rivalry), consequences |
 | `Reference.Invalidated` | 1 | Mi | owning entity | owning subsystem |
 | `Contract.Posted` | 2 | Mi | contract, issuer | bidding |
@@ -435,7 +436,7 @@ companies) and a small set of Fixers:
 | Cast snapshot (template copies until instantiated, then links) | ~120 | 300 / 40 | ~10–40 KB |
 | Actors (active + tombstones) | ~120 + 400 | 1,200 / 60 | ~170 KB |
 | Known Characters (records; every Solo and Fixer embodies one) | 400 | 400 | ~160 KB |
-| History records | ≤ 4,900 (3,000 + 1,500 + 400) | 350 | ≤ 1.7 MB (typical 300–600 KB) |
+| History records | ≤ 4,900 (3,000 + 1,500 + 400) | 350 (measured in Phase 1: ~500 before indentation, ~600 in the file; see [S18](spikes/S18-performance.md)) | ≤ 1.7 MB (typical 300–600 KB); ≈ 2.5–3 MB at full caps with the measured size |
 | Legends | ≤ 400 | 1,200 | ≤ 480 KB (typical 50 KB) |
 | Relation edges | ~1,500 | 250 | ~375 KB |
 | Contracts, operations (terminal ones compacted after 1 year into history) | ~200 live | 1,000 | ~200 KB |
