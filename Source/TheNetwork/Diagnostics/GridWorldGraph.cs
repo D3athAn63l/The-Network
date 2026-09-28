@@ -182,15 +182,11 @@ namespace TheNetwork.Diagnostics
         public bool TryFindAnyPassable(int seed, out TileRef tile)
         {
             tile = null;
-            int start = (seed & 0x7fffffff) % Count;
-            for (int i = 0; i < Count; i++)
-            {
-                int id = (start + i * 7919) % Count;
-                if (!Passable(id, 0)) continue;
-                tile = Ref(id, 0);
-                return true;
-            }
-            return false;
+            // The same search the RimWorld adapter uses: seeded probes, then a guaranteed scan.
+            int id = Domain.Spatial.SpatialSearch.FirstPassable(Count, seed, i => Passable(i, 0));
+            if (id < 0) return false;
+            tile = Ref(id, 0);
+            return true;
         }
 
         public bool TryRoute(TileRef from, TileRef to, int maxSteps, List<int> steps, out string failureKey)

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using RimWorld;
 using RimWorld.Planet;
 using TheNetwork.Domain.Ports;
+using TheNetwork.Domain.Spatial;
 using TheNetwork.Kernel;
 using Verse;
 
@@ -123,21 +124,17 @@ namespace TheNetwork.Integration
             {
                 SurfaceLayer surface = Find.WorldGrid?.Surface;
                 if (surface == null || surface.TilesCount <= 0) return false;
-                Rand.PushState(seed);
-                try
+                World world = Find.World;
+                WorldGrid grid = Find.WorldGrid;
+                // Seeded probes, then a full deterministic scan: land is found whenever any exists.
+                int id = SpatialSearch.FirstPassable(surface.TilesCount, seed, i =>
                 {
-                    for (int i = 0; i < 400; i++)
-                    {
-                        PlanetTile t = new PlanetTile(Rand.Range(0, surface.TilesCount), surface);
-                        if (Find.World.Impassable(t) || Find.WorldGrid[t].WaterCovered) continue;
-                        tile = TileRef.Of(t);
-                        return tile != null;
-                    }
-                }
-                finally
-                {
-                    Rand.PopState();
-                }
+                    PlanetTile t = new PlanetTile(i, surface);
+                    return !world.Impassable(t) && !grid[t].WaterCovered;
+                });
+                if (id < 0) return false;
+                tile = TileRef.Of(new PlanetTile(id, surface));
+                return tile != null;
             }
             catch (Exception ex)
             {

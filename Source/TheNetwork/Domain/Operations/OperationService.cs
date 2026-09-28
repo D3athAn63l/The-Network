@@ -483,6 +483,7 @@ namespace TheNetwork.Domain.Operations
                 op.phase = OpPhase.Delivering;
                 Checkpoint ret = op.Find(Checkpoint.Return);
                 if (ret != null) ret.done = true;
+                ctx.Spatial?.OnTroubledRecovered(op);
                 if (c != null && !c.IsTerminal) ctx.Procurement.OnRecovered(c, op);
             }
             else

@@ -24,6 +24,12 @@ namespace TheNetwork.Domain.Spatial
 
         public const float AmbientRelocateChance = 0.55f;
 
+        /// <summary>
+        /// Candidates found cheaply by approximate distance are proven with real route queries only for a
+        /// short list of this many (never an all-settlement search).
+        /// </summary>
+        public const int SearchShortlist = 3;
+
         /// <summary>World tiles an abstract group covers in a day, by speed band.</summary>
         public static int TilesPerDay(Band speed)
         {
@@ -56,6 +62,38 @@ namespace TheNetwork.Domain.Spatial
         }
     }
 
+    /// <summary>
+    /// The guaranteed fallback search over one layer's tiles (SPATIAL § 3): a few seeded probes first
+    /// (cheap on an ordinary planet), then a scan of every tile from a seeded offset, so a passable tile
+    /// is found whenever one exists, however sparse the land. Deterministic (no camera, no global RNG);
+    /// the same seed never retries the same failed sample set forever. A one-time initialization cost,
+    /// never per tick.
+    /// </summary>
+    public static class SpatialSearch
+    {
+        public const int Probes = 400;
+
+        /// <summary>The first passable tile id found, or -1 when the layer has none.</summary>
+        public static int FirstPassable(int count, int seed, Func<int, bool> passable)
+        {
+            if (count <= 0 || passable == null) return -1;
+            NetRng rng = new NetRng(seed, "spatial.any");
+            for (int i = 0; i < Probes; i++)
+            {
+                int id = rng.Range(0, count);
+                if (passable(id)) return id;
+            }
+            int start = (int)((uint)seed % (uint)count);
+            for (int i = 0; i < count; i++)
+            {
+                int id = start + i;
+                if (id >= count) id -= count;
+                if (passable(id)) return id;
+            }
+            return -1;
+        }
+    }
+
     /// <summary>Runtime counters (not saved): the soak harness and the dev performance readout print them.</summary>
     public sealed class SpatialCounters
     {
@@ -77,6 +115,12 @@ namespace TheNetwork.Domain.Spatial
         public int lklFallback;
         public int faults;
 
+        /// <summary>Journeys made later than committed because the contractor could not cover the route sooner (never faster).</summary>
+        public int lateArrivals;
+
+        /// <summary>Troubled operations the Phase 2 lifecycle declared recovered: the group is put back where it returns to.</summary>
+        public int reconciled;
+
         /// <summary>A unit of movement work: a catch-up, plus the steps it advanced and the routes it built.</summary>
         public long Work => catchUps + stepsAdvanced + routesBuilt * 20L;
 
@@ -85,7 +129,7 @@ namespace TheNetwork.Domain.Spatial
             return "initialized " + initialized + " (failed " + initFailed + "), catch-ups " + catchUps + ", steps " + stepsAdvanced + ", routes built " + routesBuilt
                 + " (rebuilt " + routesRebuilt + ", failed " + routeFailures + "), blocked " + blocked + ", invalid destinations " + invalidDestinations + ", invalid anchors " + invalidAnchors
                 + ", ambient journeys " + ambientJourneys + ", operation plans " + operationPlans + " (work-region fallbacks " + workRegionFallbacks + "), arrivals " + arrivals
-                + ", LKL near incident " + lklNear + " (fallback " + lklFallback + "), faults " + faults;
+                + " (late " + lateArrivals + "), recovered and reconciled " + reconciled + ", LKL near incident " + lklNear + " (fallback " + lklFallback + "), faults " + faults;
         }
     }
 
@@ -116,6 +160,11 @@ namespace TheNetwork.Domain.Spatial
         public readonly SpatialCounters counters = new SpatialCounters();
         private string lastRouteFailure;
 
+        // Runtime diagnostics (not saved): when each contractor last changed place for a stated reason
+        // other than walking (re-anchoring, a lifecycle reconciliation). The soak uses it to tell an
+        // explained discontinuity from an impossible jump.
+        private readonly Dictionary<int, int> explainedJumps = new Dictionary<int, int>();
+
         public SpatialService(DomainContext ctx)
         {
             this.ctx = ctx;
@@ -132,6 +181,18 @@ namespace TheNetwork.Domain.Spatial
         public void ClearRouteCache()
         {
             routes.Clear();
+        }
+
+        /// <summary>Diagnostics: the last tick this contractor changed place for a stated non-walking reason (-1 if never).</summary>
+        public int LastExplainedJump(int actorId)
+        {
+            int t;
+            return explainedJumps.TryGetValue(actorId, out t) ? t : -1;
+        }
+
+        private void MarkExplainedJump(NetworkActor a)
+        {
+            explainedJumps[a.id.Value] = ctx.Now;
         }
 
         // ================================================================== fail-soft entry points
@@ -200,6 +261,13 @@ namespace TheNetwork.Domain.Spatial
         {
             try { ReturnFromWorkCore(op); }
             catch (Exception ex) { Fault("back", OpKey(op), ex, 0); }
+        }
+
+        /// <summary>Phase 2 declared a Troubled operation's group found and back (see <see cref="OnTroubledRecoveredCore"/>).</summary>
+        public void OnTroubledRecovered(Operation op)
+        {
+            try { OnTroubledRecoveredCore(op); }
+            catch (Exception ex) { Fault("recovered", OpKey(op), ex, 0); }
         }
 
         public void EndOperation(Operation op)
@@ -314,11 +382,15 @@ namespace TheNetwork.Domain.Spatial
             }
             if (candidates.Count > 0)
             {
-                SettlementFacts pick = candidates[rng.Range(0, candidates.Count)];
+                int first = rng.Range(0, candidates.Count);
                 TileRef near;
-                // Around the settlement, not on it: the contractor operates in the area, it owns nothing.
-                if (Graph.TryFindPassableNear(pick.tile, 1, 3, NetHash.Combine(a.seed, "spatial.init.near"), out near)) return near;
-                if (Graph.IsPassable(pick.tile)) return pick.tile.Copy();
+                // Around a settlement, never on it: the contractor operates in the area, it owns nothing. A
+                // settlement with no free tile around it is passed over for the next one.
+                for (int k = 0; k < Math.Min(SpatialPolicy.SearchShortlist, candidates.Count); k++)
+                {
+                    SettlementFacts pick = candidates[(first + k) % candidates.Count];
+                    if (Graph.TryFindPassableNear(pick.tile, 1, 3, NetHash.Combine(NetHash.Combine(a.seed, "spatial.init.near"), k), out near)) return near;
+                }
             }
             TileRef any;
             return Graph.TryFindAnyPassable(NetHash.Combine(a.seed, "spatial.init.any"), out any) ? any : null;
@@ -330,16 +402,24 @@ namespace TheNetwork.Domain.Spatial
         /// Brings the contractor's position up to now from its committed journey (SPATIAL § 5). Cheap when
         /// it is not travelling; builds a route only when a journey needs one and the runtime cache has
         /// none. Progress is proportional to time between the last update and the committed arrival, and
-        /// fractional progress is kept, so a slow journey never jumps at the end. At or after the arrival
-        /// tick the contractor is at the destination (the destination is never rerolled).
+        /// fractional progress is kept, so a slow journey never jumps at the end. The remaining journey is
+        /// proven before any progress, including the final arrival: a destination that is still a valid
+        /// tile is no evidence it can still be reached (a cache lost at load, a world that changed), so
+        /// without a route there is no arrival. An ended contractor never moves.
         /// </summary>
         public void CatchUp(NetworkActor a)
         {
-            ContractorSimulation sim = a?.Get<ContractorSimulation>();
+            if (a == null || a.status != ActorStatus.Active) return;
+            ContractorSimulation sim = a.Get<ContractorSimulation>();
             if (sim == null) return;
+            if (!sim.spatial.IsInitialized && !EnsureInitializedCore(a)) return;
+            Advance(a, sim);
+        }
+
+        private void Advance(NetworkActor a, ContractorSimulation sim)
+        {
             SpatialState s = sim.spatial;
-            if (!s.IsInitialized && !EnsureInitializedCore(a)) return;
-            if (!GraphReady) return;
+            if (!s.IsInitialized || !GraphReady) return;
             counters.catchUps++;
             int now = ctx.Now;
             if (!Graph.IsValid(s.anchor))
@@ -360,11 +440,6 @@ namespace TheNetwork.Domain.Spatial
             }
             int from = Math.Max(s.lastUpdateTick, s.journeyStartTick);
             if (now <= from) return;
-            if (now >= s.arrivalTick)
-            {
-                Arrive(a, sim);
-                return;
-            }
             RouteCache r = Route(a, s);
             if (r == null)
             {
@@ -372,7 +447,15 @@ namespace TheNetwork.Domain.Spatial
                 return;
             }
             int remaining = r.steps.Count - r.index;
-            if (remaining <= 0)
+            // Never faster than the contractor moves: a route that is longer than the committed timing
+            // allows (a world change, a rebuild after load) makes the journey later, never quicker.
+            int earliest = from + remaining * SpatialPolicy.TicksPerTile(sim.mobility.speedBand);
+            if (s.arrivalTick < earliest)
+            {
+                s.arrivalTick = earliest;
+                counters.lateArrivals++;
+            }
+            if (remaining <= 0 || now >= s.arrivalTick)
             {
                 Arrive(a, sim);
                 return;
@@ -480,6 +563,7 @@ namespace TheNetwork.Domain.Spatial
             s.status = SpatialStatus.Uninitialized;
             s.anchor = null;
             if (!EnsureInitializedCore(a)) return;
+            MarkExplainedJump(a);
             // Still with its operation, where it now is.
             s.operation = bound;
             s.purpose = bound.IsValid ? purpose : SpatialPurpose.None;
@@ -526,12 +610,27 @@ namespace TheNetwork.Domain.Spatial
                 s.nextAmbientTick = now + rng.RangeInclusive(10, 30) * Ticks.PerDay;
                 return false;
             }
-            TileRef dest = ChooseAmbientDestination(a, sim, rng);
-            return dest != null && StartJourney(a, sim, dest, SpatialPurpose.Ambient, now, -1, rng);
+            // Ambient movement is ground-only and never longer, in real route steps, than the ambient range.
+            int range = AmbientRange(sim);
+            TileRef dest = ChooseAmbientDestination(a, sim, rng, range);
+            if (dest != null && StartJourney(a, sim, dest, SpatialPurpose.Ambient, now, -1, rng, range)) return true;
+            TileRef ring;
+            int seed = NetHash.Combine(NetHash.Combine(a.seed, "spatial.ambient.ring"), s.journeys);
+            return s.destination == null && Graph.TryFindPassableNear(s.anchor, 3, range, seed, out ring)
+                && StartJourney(a, sim, ring, SpatialPurpose.Ambient, now, -1, rng, range);
         }
 
-        /// <summary>Starts a journey now. The arrival follows the route length and the speed band unless given.</summary>
-        private bool StartJourney(NetworkActor a, ContractorSimulation sim, TileRef dest, SpatialPurpose purpose, int start, int arrival, NetRng rng)
+        private static int AmbientRange(ContractorSimulation sim)
+        {
+            return Math.Max(3, (int)(SpatialPolicy.RangeTiles(sim.mobility.rangeBand) * 0.6f));
+        }
+
+        /// <summary>
+        /// Starts a journey. The arrival follows the route length and the speed band unless given, and is
+        /// never sooner than the contractor can walk the route (a given arrival that is too soon becomes
+        /// later: never faster). A route longer than <paramref name="maxSteps"/> real steps is refused.
+        /// </summary>
+        private bool StartJourney(NetworkActor a, ContractorSimulation sim, TileRef dest, SpatialPurpose purpose, int start, int arrival, NetRng rng, int maxSteps = SpatialPolicy.MaxRouteSteps)
         {
             SpatialState s = sim.spatial;
             int now = ctx.Now;
@@ -542,7 +641,7 @@ namespace TheNetwork.Domain.Spatial
             }
             List<int> steps = new List<int>();
             string failure;
-            if (!Graph.TryRoute(s.anchor, dest, SpatialPolicy.MaxRouteSteps, steps, out failure))
+            if (!Graph.TryRoute(s.anchor, dest, Math.Min(maxSteps, SpatialPolicy.MaxRouteSteps), steps, out failure))
             {
                 counters.routeFailures++;
                 if (purpose == SpatialPurpose.Ambient) s.nextAmbientTick = now + 5 * Ticks.PerDay;
@@ -556,17 +655,22 @@ namespace TheNetwork.Domain.Spatial
             s.status = SpatialStatus.Travelling;
             s.journeyStartTick = start;
             s.lastUpdateTick = start;
-            s.arrivalTick = arrival > start ? arrival : start + Math.Max(1, steps.Count) * SpatialPolicy.TicksPerTile(sim.mobility.speedBand);
+            int walk = start + Math.Max(1, steps.Count) * SpatialPolicy.TicksPerTile(sim.mobility.speedBand);
+            if (arrival > start && arrival < walk) counters.lateArrivals++;
+            s.arrivalTick = Math.Max(arrival, walk);
             s.blockedReason = null;
             s.journeys++;
             if (purpose == SpatialPurpose.Ambient) counters.ambientJourneys++;
             return true;
         }
 
-        private TileRef ChooseAmbientDestination(NetworkActor a, ContractorSimulation sim, NetRng rng)
+        /// <summary>
+        /// A settlement area in range, chosen cheaply by approximate distance (origin faction preferred).
+        /// The caller proves it with the real route length; null when there is none.
+        /// </summary>
+        private TileRef ChooseAmbientDestination(NetworkActor a, ContractorSimulation sim, NetRng rng, int range)
         {
             SpatialState s = sim.spatial;
-            int range = Math.Max(3, (int)(SpatialPolicy.RangeTiles(sim.mobility.rangeBand) * 0.6f));
             int origin = sim.origin != null && !sim.originLost ? sim.origin.loadId : -1;
             List<SettlementFacts> all = Graph.Settlements();
             List<SettlementFacts> near = new List<SettlementFacts>();
@@ -585,11 +689,10 @@ namespace TheNetwork.Domain.Spatial
             if (near.Count > 0)
             {
                 SettlementFacts pick = near[rng.WeightedIndex(weights.ToArray())];
-                // Around the settlement, and still within the contractor's range.
+                // Around the settlement (never on it), and still within the contractor's range.
                 if (Graph.TryFindPassableNear(pick.tile, 1, SpatialPolicy.PresenceRadius, seed, out dest) && Graph.ApproxDistance(s.anchor, dest) <= range) return dest;
-                if (Graph.IsPassable(pick.tile)) return pick.tile.Copy();
             }
-            return Graph.TryFindPassableNear(s.anchor, 3, range, seed, out dest) ? dest : null;
+            return null;
         }
 
         // ================================================================== operations
@@ -613,9 +716,13 @@ namespace TheNetwork.Domain.Spatial
             Operation bound = s.operation.IsValid ? ctx.operations.Get(s.operation) : null;
             plan.detached = bound != null && bound != op && !bound.IsFinished;
             Checkpoint prep = op.Find(Checkpoint.Prep), arrive = op.Find(Checkpoint.Arrive);
+            Checkpoint resolve = op.Find(Checkpoint.Resolve), ret = op.Find(Checkpoint.Return);
             int depart = prep?.dueTick ?? op.startedTick;
             int arriveAt = Math.Max(depart + 1, arrive?.dueTick ?? depart + 1);
-            plan.workRegion = ChooseWorkRegion(a, sim, op, c, f, plan.origin, arriveAt - depart);
+            // The way back must fit the planned return window as well as the way out.
+            int travel = arriveAt - depart;
+            if (resolve != null && ret != null && ret.dueTick > resolve.dueTick) travel = Math.Min(travel, ret.dueTick - resolve.dueTick);
+            plan.workRegion = ChooseWorkRegion(a, sim, op, c, f, plan.origin, travel);
             if (plan.workRegion == null)
             {
                 plan.workRegion = plan.origin.Copy();
@@ -652,11 +759,19 @@ namespace TheNetwork.Domain.Spatial
             }
         }
 
+        /// <summary>
+        /// The hidden work region. Approximate distance only DISCOVERS candidates cheaply; a candidate is
+        /// committed only when its real route, in steps, fits what the contractor can walk in the travel
+        /// window and within its range (a short hop across a bay can be a long detour on land). Null when
+        /// nothing fits (the work then happens where they are).
+        /// </summary>
         private TileRef ChooseWorkRegion(NetworkActor a, ContractorSimulation sim, Operation op, Contract c, ItemFacts f, TileRef origin, int travelTicks)
         {
             int budget = travelTicks / SpatialPolicy.TicksPerTile(sim.mobility.speedBand);
+            int range = SpatialPolicy.RangeTiles(sim.mobility.rangeBand);
+            int walkable = Math.Min(range, budget);
             float difficulty = f == null ? 0.5f : Math.Max(0f, Math.Min(1f, Valuation.Difficulty(f, c.Quantity)));
-            int maxDist = Math.Min(SpatialPolicy.RangeTiles(sim.mobility.rangeBand), (int)Math.Round(budget * (0.5f + 0.5f * difficulty)));
+            int maxDist = Math.Min(range, (int)Math.Round(budget * (0.5f + 0.5f * difficulty)));
             if (maxDist <= 0) return origin.Copy();
             int minDist = Math.Max(1, maxDist / 3);
             int seed = NetHash.Combine(op.seed, "spatial.work");
@@ -673,17 +788,22 @@ namespace TheNetwork.Domain.Spatial
             TileRef t;
             if (inReach.Count > 0 && rng.Chance(0.7f))
             {
-                SettlementFacts pick = inReach[rng.Range(0, inReach.Count)];
-                if (Graph.TryFindPassableNear(pick.tile, 0, 1, seed, out t) && Graph.ApproxDistance(origin, t) <= maxDist && Reachable(origin, t)) return t;
+                int first = rng.Range(0, inReach.Count);
+                for (int k = 0; k < Math.Min(SpatialPolicy.SearchShortlist, inReach.Count); k++)
+                {
+                    SettlementFacts pick = inReach[(first + k) % inReach.Count];
+                    if (Graph.TryFindPassableNear(pick.tile, 1, 2, NetHash.Combine(seed, k), out t) && GroundSteps(origin, t, walkable) >= 0) return t;
+                }
             }
-            return Graph.TryFindPassableNear(origin, minDist, maxDist, seed, out t) ? t : null;
+            return Graph.TryFindPassableNear(origin, minDist, maxDist, seed, out t) && GroundSteps(origin, t, walkable) >= 0 ? t : null;
         }
 
-        private bool Reachable(TileRef from, TileRef to)
+        /// <summary>Real ground route steps from one tile to another, or -1 when there is none within <paramref name="maxSteps"/>.</summary>
+        private int GroundSteps(TileRef from, TileRef to, int maxSteps)
         {
             List<int> steps = new List<int>();
             string failure;
-            return Graph.TryRoute(from, to, SpatialPolicy.MaxRouteSteps, steps, out failure);
+            return Graph.TryRoute(from, to, Math.Min(maxSteps, SpatialPolicy.MaxRouteSteps), steps, out failure) ? steps.Count : -1;
         }
 
         /// <summary>A checkpoint that reads position: the bound contractor is caught up first.</summary>
@@ -694,30 +814,26 @@ namespace TheNetwork.Domain.Spatial
         }
 
         /// <summary>
-        /// The Arrive checkpoint: the operation says they are there, so they are. A journey the timeline
-        /// has completed (or a checkpoint run early from the dev menu) ends at the committed work region.
+        /// The Arrive checkpoint. The journey was committed to arrive when this checkpoint is due, so a
+        /// caught-up contractor is normally there now. It is never snapped there: a journey the world made
+        /// longer, or a checkpoint run early from the dev menu, leaves it still travelling (spatial lags,
+        /// the operation's timeline goes on).
         /// </summary>
         private void ArriveAtWorkCore(Operation op)
         {
             NetworkActor a = BoundActor(op);
-            if (a == null) return;
-            ContractorSimulation sim = a.Get<ContractorSimulation>();
-            CatchUp(a);
-            SpatialState s = sim.spatial;
-            if (s.purpose == SpatialPurpose.Outbound && s.destination != null && SameTile(s.destination, op.spatial.workRegion)) Arrive(a, sim);
-            if (s.status != SpatialStatus.Blocked) s.status = SpatialStatus.OnAssignment;
+            if (a != null) CatchUp(a);
         }
 
         /// <summary>
         /// The resolver has just committed the outcome (still WHAT; this is only WHERE). Trouble or disaster
-        /// happened at the work area: that tile becomes the incident, before any consequence reads it,
-        /// and the group stays there.
+        /// happened where the group is: that tile becomes the incident, before any consequence reads it.
         /// </summary>
         private void RecordIncidentCore(Operation op)
         {
             if (op?.spatial == null || op.outcome == null) return;
             if (op.outcome.troubledKey == null && op.outcome.band != OutcomeBand.Disaster) return;
-            NetworkActor a = BoundActor(op);
+            NetworkActor a = TrackedActor(op);
             if (a == null)
             {
                 if (op.spatial.incident == null) op.spatial.incident = op.spatial.workRegion?.Copy();
@@ -728,14 +844,16 @@ namespace TheNetwork.Domain.Spatial
         }
 
         /// <summary>
-        /// After the Resolve checkpoint (and any delay it committed): a group that is not in trouble heads
-        /// back, arriving when the Return checkpoint is due. A later change of that checkpoint is followed
-        /// at the checkpoint itself; there is no separate spatial delay.
+        /// After the Resolve checkpoint (and any delay it committed): a group that is not Troubled heads
+        /// back, arriving when the Return checkpoint is due, or later if it cannot walk that fast (never
+        /// sooner). Only a Troubled outcome keeps the group out: a Disaster with survivors that is not
+        /// Troubled comes back like any other, and its incident stays recorded for the consequences.
+        /// There is no separate spatial delay.
         /// </summary>
         private void StartReturnCore(Operation op)
         {
-            if (op?.spatial == null || op.outcome == null || op.IsFinished || op.spatial.incident != null) return;
-            if (op.outcome.troubledKey != null || op.outcome.band == OutcomeBand.Disaster) return;
+            if (op?.spatial == null || op.outcome == null || op.IsFinished) return;
+            if (op.outcome.troubledKey != null) return;
             NetworkActor a = BoundActor(op);
             if (a == null) return;
             ContractorSimulation sim = a.Get<ContractorSimulation>();
@@ -744,7 +862,16 @@ namespace TheNetwork.Domain.Spatial
             Checkpoint ret = op.Find(Checkpoint.Return);
             int arrival = ret?.dueTick ?? ctx.Now + 1;
             TileRef home = op.spatial.returnTo;
-            if (home == null || !Graph.IsValid(home) || SameTile(home, s.anchor)) return;
+            if (home == null || !Graph.IsValid(home)) return;
+            // Whatever leg was still under way (a late outbound leg) ends here: they head back from where they are.
+            routes.Remove(a.id.Value);
+            s.destination = null;
+            s.purpose = SpatialPurpose.Return;
+            if (SameTile(home, s.anchor))
+            {
+                s.status = SpatialStatus.Idle;
+                return;
+            }
             if (!StartJourney(a, sim, home, SpatialPurpose.Return, ctx.Now, Math.Max(ctx.Now + 1, arrival), null))
             {
                 // They stay near the work area; the operation's own timeline is unaffected.
@@ -752,21 +879,45 @@ namespace TheNetwork.Domain.Spatial
             }
         }
 
-        /// <summary>The Return checkpoint: back where they were heading (a late return follows the delayed checkpoint).</summary>
+        /// <summary>The Return checkpoint: caught up on the way back (a late return follows the delayed checkpoint; never snapped home).</summary>
         private void ReturnFromWorkCore(Operation op)
+        {
+            NetworkActor a = BoundActor(op);
+            if (a != null) CatchUp(a);
+        }
+
+        /// <summary>
+        /// Phase 2's Troubled deadline decided the group turned up again and has returned (its Return
+        /// checkpoint is complete). Spatial agrees with that authoritative lifecycle: the group is where it
+        /// returns to, not left at the incident. This is a reconciliation, not a journey (Phase 2 already
+        /// declared the return done); the incident stays recorded on the plan.
+        /// </summary>
+        private void OnTroubledRecoveredCore(Operation op)
         {
             NetworkActor a = BoundActor(op);
             if (a == null) return;
             ContractorSimulation sim = a.Get<ContractorSimulation>();
-            CatchUp(a);
             SpatialState s = sim.spatial;
-            if (s.purpose == SpatialPurpose.Return && s.destination != null) Arrive(a, sim);
+            TileRef home = op.spatial.returnTo;
+            if (home == null || !Graph.IsPassable(home)) return;
+            routes.Remove(a.id.Value);
+            s.anchor = home.Copy();
+            s.destination = null;
+            s.purpose = SpatialPurpose.None;
+            s.journeyStartTick = -1;
+            s.arrivalTick = -1;
+            s.lastUpdateTick = ctx.Now;
+            s.blockedReason = null;
+            s.status = SpatialStatus.Idle;
+            counters.reconciled++;
+            MarkExplainedJump(a);
         }
 
         /// <summary>
-        /// The operation ended (finished, aborted, written off). The contractor stays where it is now
-        /// (an aborted journey stops mid-way; a group in trouble stays at the incident) and is idle again,
-        /// resting a while before any ambient move.
+        /// The operation ended (finished, aborted, written off). The contractor stays where it is now (an
+        /// aborted journey stops mid-way; a group in trouble stays at the incident) and is idle again,
+        /// resting a while before any ambient move. A group still on its way home keeps going. An ended
+        /// contractor is only released: it never moves again.
         /// </summary>
         private void EndOperationCore(Operation op)
         {
@@ -774,43 +925,60 @@ namespace TheNetwork.Domain.Spatial
             NetworkActor a = ctx.actors.Get(op.contractor);
             ContractorSimulation sim = a?.Get<ContractorSimulation>();
             if (sim == null || sim.spatial.operation != op.id) return;
-            CatchUp(a);
             SpatialState s = sim.spatial;
-            routes.Remove(a.id.Value);
+            if (a.status != ActorStatus.Active)
+            {
+                s.operation = OperationId.None;
+                return;
+            }
+            CatchUp(a);
             s.operation = OperationId.None;
+            int rest = new NetRng(a.seed, "spatial.afterOp", s.journeys).RangeInclusive(3, 10) * Ticks.PerDay;
+            if (s.purpose == SpatialPurpose.Return && s.destination != null)
+            {
+                s.nextAmbientTick = Math.Max(s.nextAmbientTick, s.arrivalTick + rest);
+                return;
+            }
+            routes.Remove(a.id.Value);
             s.destination = null;
             s.purpose = SpatialPurpose.None;
             s.journeyStartTick = -1;
             s.arrivalTick = -1;
             s.lastUpdateTick = ctx.Now;
             if (s.IsInitialized) s.status = SpatialStatus.Idle;
-            s.nextAmbientTick = Math.Max(s.nextAmbientTick, ctx.Now + new NetRng(a.seed, "spatial.afterOp", s.journeys).RangeInclusive(3, 10) * Ticks.PerDay);
+            s.nextAmbientTick = Math.Max(s.nextAmbientTick, ctx.Now + rest);
         }
 
-        /// <summary>The actor ended (death, dissolution): its last position stays as truth for later phases.</summary>
+        /// <summary>
+        /// The actor ended (death, dissolution). Its position is brought up to the moment it ended, then
+        /// frozen: that last valid position stays as truth for later phases, and nothing (no checkpoint, no
+        /// return, no upkeep) moves it again.
+        /// </summary>
         private void OnActorEndedCore(NetworkActor a)
         {
             ContractorSimulation sim = a?.Get<ContractorSimulation>();
             if (sim == null || !sim.spatial.IsInitialized) return;
-            CatchUp(a);
+            Advance(a, sim);
             SpatialState s = sim.spatial;
             routes.Remove(a.id.Value);
             s.destination = null;
+            s.purpose = SpatialPurpose.None;
             s.journeyStartTick = -1;
             s.arrivalTick = -1;
-            if (s.status == SpatialStatus.Travelling) s.status = SpatialStatus.Idle;
+            s.lastUpdateTick = ctx.Now;
+            if (s.status == SpatialStatus.Travelling || s.status == SpatialStatus.OnAssignment) s.status = SpatialStatus.Idle;
         }
 
         /// <summary>
         /// Where a Last Known Location should be (SPATIAL § 7): the recorded incident, else where the main
-        /// body is now, else the work region. Null for an operation without a spatial plan (the old
-        /// placement is used).
+        /// body is (or was, if it ended), else the work region. Null for an operation without a spatial
+        /// plan (the old placement is used).
         /// </summary>
         private TileRef IncidentTileCore(Operation op)
         {
             if (op?.spatial == null) return null;
             if (op.spatial.incident != null && Graph != null && Graph.IsValid(op.spatial.incident)) return op.spatial.incident;
-            NetworkActor a = BoundActor(op);
+            NetworkActor a = TrackedActor(op);
             if (a != null)
             {
                 CatchUp(a);
@@ -820,8 +988,18 @@ namespace TheNetwork.Domain.Spatial
             return op.spatial.workRegion != null && Graph != null && Graph.IsValid(op.spatial.workRegion) ? op.spatial.workRegion : null;
         }
 
-        /// <summary>The contractor whose main body is on this operation (null for a detachment or a legacy operation).</summary>
+        /// <summary>
+        /// The contractor whose main body is on this operation and may move for it: active only (null for
+        /// an ended contractor, a detachment or a legacy operation).
+        /// </summary>
         private NetworkActor BoundActor(Operation op)
+        {
+            NetworkActor a = TrackedActor(op);
+            return a != null && a.status == ActorStatus.Active && a.quarantinedReason == null ? a : null;
+        }
+
+        /// <summary>The contractor whose main body is (or was, if it ended) on this operation: for reading truth, never for moving.</summary>
+        private NetworkActor TrackedActor(Operation op)
         {
             if (op?.spatial == null || op.spatial.detached) return null;
             NetworkActor a = ctx.actors.Get(op.contractor);
