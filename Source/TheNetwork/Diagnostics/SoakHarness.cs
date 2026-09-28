@@ -99,6 +99,15 @@ namespace TheNetwork.Diagnostics
             /// <summary>An ambient journey with charter ends (charter is operation travel only).</summary>
             public int ambientCharters;
 
+            /// <summary>A live chartered leg whose ends are not the plan's committed charter, or a plan claiming an unused charter for an outbound leg that walks.</summary>
+            public int charterPlanMismatches;
+
+            /// <summary>A return on foot although the charter used on the way out is still in force (its pickup ignored).</summary>
+            public int charterReturnWalks;
+
+            /// <summary>A live player contract whose Field Log says "reached the area" while its group is not at the work region.</summary>
+            public int falseArrived;
+
             /// <summary>Charter providers' settlements removed and founded again elsewhere during the run.</summary>
             public int providersChurned;
 
@@ -275,6 +284,24 @@ namespace TheNetwork.Diagnostics
                     continue;
                 }
                 if (s.purpose == SpatialPurpose.Ambient && s.bridgeFrom != null) res.ambientCharters++;
+                // The live leg (SpatialState) and the committed plan (OperationSpatialPlan) never disagree.
+                Operation bound = s.operation.IsValid ? ctx.operations.Get(s.operation) : null;
+                OperationSpatialPlan plan = bound?.spatial;
+                if (plan != null && !plan.detached && !bound.IsFinished)
+                {
+                    if (s.bridgeFrom != null && !s.bridged)
+                    {
+                        bool matches = plan.Charter && (s.purpose == SpatialPurpose.Outbound
+                            ? SameTile(s.bridgeFrom, plan.hub) && SameTile(s.bridgeTo, plan.landing)
+                            : s.purpose == SpatialPurpose.Return && SameTile(s.bridgeFrom, plan.landing) && SameTile(s.bridgeTo, plan.hub));
+                        if (!matches) res.charterPlanMismatches++;
+                    }
+                    else if (s.destination != null && s.bridgeFrom == null && plan.Charter)
+                    {
+                        if (s.purpose == SpatialPurpose.Outbound && !plan.charterUsed) res.charterPlanMismatches++;
+                        if (s.purpose == SpatialPurpose.Return && plan.charterUsed) res.charterReturnWalks++;
+                    }
+                }
                 if (had && last.anchor != null && !SameTile(last.anchor, s.anchor))
                 {
                     if (ctx.Spatial.LastExplainedJump(a.id.Value) >= last.tick) res.explainedJumps++;
@@ -308,7 +335,16 @@ namespace TheNetwork.Diagnostics
             {
                 if (c.fieldLog.Count == 0) continue;
                 if (c.parties.issuer != player || c.IsTerminal) res.fieldLogLeaks += c.fieldLog.Count;
+                bool arrived = false;
+                for (int i = 0; i < c.fieldLog.Count; i++) arrived |= c.fieldLog[i].key == FieldLogKeys.Arrived;
                 for (int i = 1; i < c.fieldLog.Count; i++) if (c.fieldLog[i].SameAs(c.fieldLog[i - 1])) res.fieldLogDuplicates++;
+                // "Reached the area" is spatial truth: until the work is resolved the group is at its work region.
+                Operation op = arrived && !c.IsTerminal ? ctx.Procurement.CurrentOperation(c) : null;
+                if (op?.spatial == null || op.spatial.detached || op.outcome != null || op.Find(Checkpoint.Arrive)?.done != true) continue;
+                NetworkActor who = ctx.actors.Get(op.contractor);
+                SpatialState ws = who?.Get<ContractorSimulation>()?.spatial;
+                if (who == null || who.status != ActorStatus.Active || ws == null || ws.operation != op.id) continue;
+                if (ws.destination != null || !SameTile(ws.anchor, op.spatial.workRegion)) res.falseArrived++;
             }
         }
 
@@ -588,7 +624,8 @@ namespace TheNetwork.Diagnostics
             sb.AppendLine("  spatial: " + res.spatial);
             sb.AppendLine("  spatial invariants (all must be 0): contractors without a valid anchor " + res.spatialInvalid + ", teleports " + res.teleports + " (longest daily move " + res.maxDailyMove + " tiles)"
                 + ", route-budget violations " + res.routeBudgetViolations + ", ended contractors that moved " + res.endedMoved + ", recovered operations disagreeing with Phase 2 " + res.recoveredMismatches
-                + ", ambient charters " + res.ambientCharters + ", Field Log duplicates " + res.fieldLogDuplicates + ", Field Log leaks " + res.fieldLogLeaks
+                + ", ambient charters " + res.ambientCharters + ", charter plan/live leg mismatches " + res.charterPlanMismatches
+                + ", chartered returns that walked " + res.charterReturnWalks + ", false \"reached the area\" " + res.falseArrived + ", Field Log duplicates " + res.fieldLogDuplicates + ", Field Log leaks " + res.fieldLogLeaks
                 + " (explained discontinuities, not counted: " + res.explainedJumps + "; provider settlements replaced: " + res.providersChurned + ")");
             sb.AppendLine("  movement work per day: avg " + res.avgMoveWork.ToString("0.0") + ", max " + res.maxMoveWork + " units; " + res.simulatedLoads + " simulated loads (route caches dropped); live Field Logs " + res.fieldLogsLive + " with " + res.fieldLogEntriesLive + " entries");
             sb.AppendLine("  time per simulated day: avg " + res.avgDayMs.ToString("0.00") + " ms, p95 " + p95.ToString("0.00") + " ms, max " + res.maxDayMs.ToString("0.00") + " ms (total " + res.totalMs.ToString("0") + " ms)");
