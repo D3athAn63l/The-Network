@@ -75,6 +75,7 @@ namespace TheNetwork.Domain.Spatial
         public int arrivals;
         public int lklNear;
         public int lklFallback;
+        public int faults;
 
         /// <summary>A unit of movement work: a catch-up, plus the steps it advanced and the routes it built.</summary>
         public long Work => catchUps + stepsAdvanced + routesBuilt * 20L;
@@ -84,7 +85,7 @@ namespace TheNetwork.Domain.Spatial
             return "initialized " + initialized + " (failed " + initFailed + "), catch-ups " + catchUps + ", steps " + stepsAdvanced + ", routes built " + routesBuilt
                 + " (rebuilt " + routesRebuilt + ", failed " + routeFailures + "), blocked " + blocked + ", invalid destinations " + invalidDestinations + ", invalid anchors " + invalidAnchors
                 + ", ambient journeys " + ambientJourneys + ", operation plans " + operationPlans + " (work-region fallbacks " + workRegionFallbacks + "), arrivals " + arrivals
-                + ", LKL near incident " + lklNear + " (fallback " + lklFallback + ")";
+                + ", LKL near incident " + lklNear + " (fallback " + lklFallback + "), faults " + faults;
         }
     }
 
@@ -133,6 +134,114 @@ namespace TheNetwork.Domain.Spatial
             routes.Clear();
         }
 
+        // ================================================================== fail-soft entry points
+
+        // Everything Phase 2 code, start-up and the load validator call goes through these. Spatial answers
+        // only WHERE, so a fault in it is logged once, counted and swallowed: it never stops the upkeep,
+        // checkpoint, consequence or load that called it, and an operation keeps its Phase 2 timeline
+        // (the load validator repairs whatever spatial state was left half-updated).
+
+        /// <summary>
+        /// Gives an NPC contractor its first anchor (see <see cref="EnsureInitializedCore"/>). False when
+        /// world data is not available yet, or on a fault.
+        /// </summary>
+        public bool EnsureInitialized(NetworkActor a)
+        {
+            try { return EnsureInitializedCore(a); }
+            catch (Exception ex) { return Fault("init", a?.id.Value ?? 0, ex, false); }
+        }
+
+        /// <summary>Initializes every active NPC contractor still Uninitialized (start-up, after load). Returns how many.</summary>
+        public int InitializeAll()
+        {
+            try { return InitializeAllCore(); }
+            catch (Exception ex) { return Fault("initAll", 0, ex, 0); }
+        }
+
+        /// <summary>From the contractor's own staggered daily upkeep: catch up, then maybe relocate.</summary>
+        public void Upkeep(NetworkActor a)
+        {
+            try { UpkeepCore(a); }
+            catch (Exception ex) { Fault("upkeep", a?.id.Value ?? 0, ex, 0); }
+        }
+
+        /// <summary>A new operation: its origin and hidden work region (see <see cref="BeginOperationCore"/>).</summary>
+        public void BeginOperation(Operation op, NetworkActor a, Contract c, ItemFacts f)
+        {
+            try { BeginOperationCore(op, a, c, f); }
+            catch (Exception ex) { Fault("begin", OpKey(op), ex, 0); }
+        }
+
+        public void OnCheckpoint(Operation op)
+        {
+            try { OnCheckpointCore(op); }
+            catch (Exception ex) { Fault("checkpoint", OpKey(op), ex, 0); }
+        }
+
+        public void ArriveAtWork(Operation op)
+        {
+            try { ArriveAtWorkCore(op); }
+            catch (Exception ex) { Fault("arrive", OpKey(op), ex, 0); }
+        }
+
+        public void RecordIncident(Operation op)
+        {
+            try { RecordIncidentCore(op); }
+            catch (Exception ex) { Fault("incident", OpKey(op), ex, 0); }
+        }
+
+        public void StartReturn(Operation op)
+        {
+            try { StartReturnCore(op); }
+            catch (Exception ex) { Fault("return", OpKey(op), ex, 0); }
+        }
+
+        public void ReturnFromWork(Operation op)
+        {
+            try { ReturnFromWorkCore(op); }
+            catch (Exception ex) { Fault("back", OpKey(op), ex, 0); }
+        }
+
+        public void EndOperation(Operation op)
+        {
+            try { EndOperationCore(op); }
+            catch (Exception ex) { Fault("end", OpKey(op), ex, 0); }
+        }
+
+        public void OnActorEnded(NetworkActor a)
+        {
+            try { OnActorEndedCore(a); }
+            catch (Exception ex) { Fault("actorEnded", a?.id.Value ?? 0, ex, 0); }
+        }
+
+        /// <summary>Where a Last Known Location should be; null (the old placement is used) on a fault.</summary>
+        public TileRef IncidentTile(Operation op)
+        {
+            try { return IncidentTileCore(op); }
+            catch (Exception ex) { return Fault<TileRef>("incidentTile", OpKey(op), ex, null); }
+        }
+
+        /// <summary>Load reconciliation (see <see cref="ValidateCore"/>). Returns the number of repairs.</summary>
+        public int Validate(List<string> findings)
+        {
+            try { return ValidateCore(findings); }
+            catch (Exception ex)
+            {
+                findings?.Add("Spatial reconciliation failed and was skipped: " + ex.Message);
+                return Fault("validate", 0, ex, 0);
+            }
+        }
+
+        private static int OpKey(Operation op) => op == null ? 0 : op.id.Value;
+
+        private T Fault<T>(string what, int key, Exception ex, T fallback)
+        {
+            counters.faults++;
+            NetLog.ErrorOnce(LogCategory.Spatial, "spatial.fault." + what + "." + key,
+                "Spatial '" + what + "' failed for " + key + "; the Phase 2 flow continues without it: " + ex);
+            return fallback;
+        }
+
         // ================================================================== initialization
 
         /// <summary>
@@ -141,7 +250,7 @@ namespace TheNetwork.Domain.Spatial
         /// settlement, else any passable tile. Never at a player colony, never a claim on the settlement.
         /// False when world data is not available yet (it stays Uninitialized and is tried again later).
         /// </summary>
-        public bool EnsureInitialized(NetworkActor a)
+        private bool EnsureInitializedCore(NetworkActor a)
         {
             ContractorSimulation sim = a?.Get<ContractorSimulation>();
             if (sim == null) return false;
@@ -173,7 +282,7 @@ namespace TheNetwork.Domain.Spatial
         }
 
         /// <summary>Initializes every active NPC contractor still Uninitialized (start-up, after load). Returns how many.</summary>
-        public int InitializeAll()
+        private int InitializeAllCore()
         {
             if (!GraphReady) return 0;
             int n = 0;
@@ -229,7 +338,7 @@ namespace TheNetwork.Domain.Spatial
             ContractorSimulation sim = a?.Get<ContractorSimulation>();
             if (sim == null) return;
             SpatialState s = sim.spatial;
-            if (!s.IsInitialized && !EnsureInitialized(a)) return;
+            if (!s.IsInitialized && !EnsureInitializedCore(a)) return;
             if (!GraphReady) return;
             counters.catchUps++;
             int now = ctx.Now;
@@ -370,7 +479,7 @@ namespace TheNetwork.Domain.Spatial
             SpatialPurpose purpose = s.purpose;
             s.status = SpatialStatus.Uninitialized;
             s.anchor = null;
-            if (!EnsureInitialized(a)) return;
+            if (!EnsureInitializedCore(a)) return;
             // Still with its operation, where it now is.
             s.operation = bound;
             s.purpose = bound.IsValid ? purpose : SpatialPurpose.None;
@@ -380,7 +489,7 @@ namespace TheNetwork.Domain.Spatial
         // ================================================================== daily upkeep and ambient relocation
 
         /// <summary>From the contractor's own staggered daily upkeep: catch up, then maybe relocate.</summary>
-        public void Upkeep(NetworkActor a)
+        private void UpkeepCore(NetworkActor a)
         {
             CatchUp(a);
             MaybeRelocate(a);
@@ -493,7 +602,7 @@ namespace TheNetwork.Domain.Spatial
         /// organization is a detachment: it gets a plan, the main body's anchor does not move. Without
         /// world data the operation simply runs on its Phase 2 timeline (no plan).
         /// </summary>
-        public void BeginOperation(Operation op, NetworkActor a, Contract c, ItemFacts f)
+        private void BeginOperationCore(Operation op, NetworkActor a, Contract c, ItemFacts f)
         {
             ContractorSimulation sim = a?.Get<ContractorSimulation>();
             if (sim == null || op == null) return;
@@ -578,7 +687,7 @@ namespace TheNetwork.Domain.Spatial
         }
 
         /// <summary>A checkpoint that reads position: the bound contractor is caught up first.</summary>
-        public void OnCheckpoint(Operation op)
+        private void OnCheckpointCore(Operation op)
         {
             NetworkActor a = BoundActor(op);
             if (a != null) CatchUp(a);
@@ -588,7 +697,7 @@ namespace TheNetwork.Domain.Spatial
         /// The Arrive checkpoint: the operation says they are there, so they are. A journey the timeline
         /// has completed (or a checkpoint run early from the dev menu) ends at the committed work region.
         /// </summary>
-        public void ArriveAtWork(Operation op)
+        private void ArriveAtWorkCore(Operation op)
         {
             NetworkActor a = BoundActor(op);
             if (a == null) return;
@@ -604,7 +713,7 @@ namespace TheNetwork.Domain.Spatial
         /// happened at the work area: that tile becomes the incident, before any consequence reads it,
         /// and the group stays there.
         /// </summary>
-        public void RecordIncident(Operation op)
+        private void RecordIncidentCore(Operation op)
         {
             if (op?.spatial == null || op.outcome == null) return;
             if (op.outcome.troubledKey == null && op.outcome.band != OutcomeBand.Disaster) return;
@@ -623,7 +732,7 @@ namespace TheNetwork.Domain.Spatial
         /// back, arriving when the Return checkpoint is due. A later change of that checkpoint is followed
         /// at the checkpoint itself; there is no separate spatial delay.
         /// </summary>
-        public void StartReturn(Operation op)
+        private void StartReturnCore(Operation op)
         {
             if (op?.spatial == null || op.outcome == null || op.IsFinished || op.spatial.incident != null) return;
             if (op.outcome.troubledKey != null || op.outcome.band == OutcomeBand.Disaster) return;
@@ -644,7 +753,7 @@ namespace TheNetwork.Domain.Spatial
         }
 
         /// <summary>The Return checkpoint: back where they were heading (a late return follows the delayed checkpoint).</summary>
-        public void ReturnFromWork(Operation op)
+        private void ReturnFromWorkCore(Operation op)
         {
             NetworkActor a = BoundActor(op);
             if (a == null) return;
@@ -659,7 +768,7 @@ namespace TheNetwork.Domain.Spatial
         /// (an aborted journey stops mid-way; a group in trouble stays at the incident) and is idle again,
         /// resting a while before any ambient move.
         /// </summary>
-        public void EndOperation(Operation op)
+        private void EndOperationCore(Operation op)
         {
             if (op == null) return;
             NetworkActor a = ctx.actors.Get(op.contractor);
@@ -679,7 +788,7 @@ namespace TheNetwork.Domain.Spatial
         }
 
         /// <summary>The actor ended (death, dissolution): its last position stays as truth for later phases.</summary>
-        public void OnActorEnded(NetworkActor a)
+        private void OnActorEndedCore(NetworkActor a)
         {
             ContractorSimulation sim = a?.Get<ContractorSimulation>();
             if (sim == null || !sim.spatial.IsInitialized) return;
@@ -697,7 +806,7 @@ namespace TheNetwork.Domain.Spatial
         /// body is now, else the work region. Null for an operation without a spatial plan (the old
         /// placement is used).
         /// </summary>
-        public TileRef IncidentTile(Operation op)
+        private TileRef IncidentTileCore(Operation op)
         {
             if (op?.spatial == null) return null;
             if (op.spatial.incident != null && Graph != null && Graph.IsValid(op.spatial.incident)) return op.spatial.incident;
@@ -796,7 +905,7 @@ namespace TheNetwork.Domain.Spatial
         /// invalid destinations are dropped where they stand (an operation keeps its timeline); a binding
         /// to an operation that has ended is released. Returns the number of repairs.
         /// </summary>
-        public int Validate(List<string> findings)
+        private int ValidateCore(List<string> findings)
         {
             int repairs = 0;
             List<NetworkActor> all = ctx.actors.actors;
@@ -809,7 +918,7 @@ namespace TheNetwork.Domain.Spatial
                 SpatialState s = sim.spatial;
                 if (!s.IsInitialized)
                 {
-                    if (EnsureInitialized(a))
+                    if (EnsureInitializedCore(a))
                     {
                         repairs++;
                         findings?.Add("Contractor " + a.id + ": spatial state initialized at " + s.anchor + ".");
