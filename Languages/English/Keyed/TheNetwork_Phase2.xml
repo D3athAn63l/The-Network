@@ -372,6 +372,7 @@
   <TheNetwork_FieldLog_TookOver>{0} took over the job from the contractor who was lost.</TheNetwork_FieldLog_TookOver>
   <TheNetwork_FieldLog_SetOut>{0} has set out.</TheNetwork_FieldLog_SetOut>
   <TheNetwork_FieldLog_WorkingNearby>{0} is working close to where they were.</TheNetwork_FieldLog_WorkingNearby>
+  <TheNetwork_FieldLog_TransportArranged>{0} has arranged charter transport for the part of the journey that cannot be made overland.</TheNetwork_FieldLog_TransportArranged>
   <TheNetwork_FieldLog_Arrived>{0} has reached the area; the work is underway.</TheNetwork_FieldLog_Arrived>
   <TheNetwork_FieldLog_WorseThanExpected>{0} reports the job is much harder than expected: {1} silver more, or only {2} {3}.</TheNetwork_FieldLog_WorseThanExpected>
   <TheNetwork_FieldLog_PaidMore>You agreed to pay {0} silver more.</TheNetwork_FieldLog_PaidMore>

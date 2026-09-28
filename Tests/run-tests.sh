@@ -30,6 +30,12 @@ if grep -rnE "PawnGenerator|CaravanMaker|WorldObjectMaker|MakeWorldObject|Genera
 fi
 echo "ok"
 
+echo "### Source scan: abstract charter spawns no craft and moves no money (ADR-045)"
+if grep -rnE "ThingMaker|GenSpawn|SkyfallerMaker|TransportShuttle|CompShuttle|DropPodUtility|ctx\.payment|MoneyRecord|ledger" Source/TheNetwork/Domain/Spatial Source/TheNetwork/Integration/SpatialWorldAdapter.cs ; then
+  echo "FAIL: spatial code spawns things or touches money" >&2; exit 1
+fi
+echo "ok"
+
 OUT="${TEST_OUT:-$(mktemp -d)}"
 EXTRA=()
 if [ ! -f "$MANAGED/netstandard.dll" ]; then

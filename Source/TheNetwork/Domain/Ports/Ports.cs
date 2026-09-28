@@ -119,6 +119,13 @@ namespace TheNetwork.Domain.Ports
         public TileRef tile;
         public int factionLoadId;
         public bool player;
+
+        /// <summary>
+        /// The settlement's faction is technologically able to charter reusable two-way transport across
+        /// same-layer geography (ADR-045). The adapter derives it from the faction's actual technology;
+        /// the Domain never names a faction or a tech level.
+        /// </summary>
+        public bool canProvideCharterTransport;
     }
 
     /// <summary>

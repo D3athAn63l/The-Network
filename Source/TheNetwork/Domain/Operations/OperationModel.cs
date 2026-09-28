@@ -210,6 +210,21 @@ namespace TheNetwork.Domain.Operations
         /// <summary>Why the plan degraded (no route, no work region), or null.</summary>
         public string fallbackKey;
 
+        /// <summary>
+        /// Abstract charter transport (ADR-045): the settlement of a high-tech provider where the group
+        /// embarks on the way out and is set down again on the way back. Null for a ground plan.
+        /// </summary>
+        public TileRef hub;
+
+        /// <summary>
+        /// Where the reusable charter sets the group down near the work region, and later picks it up
+        /// again for the return (the same committed area both ways). Null for a ground plan.
+        /// </summary>
+        public TileRef landing;
+
+        /// <summary>The plan crosses otherwise disconnected (or impractically long) same-layer geography by charter.</summary>
+        public bool Charter => hub != null && landing != null;
+
         public void ExposeData()
         {
             Scribe_Deep.Look(ref origin, "origin");
@@ -218,6 +233,8 @@ namespace TheNetwork.Domain.Operations
             Scribe_Deep.Look(ref incident, "incident");
             Scribe_Values.Look(ref detached, "detached", false);
             Scribe_Values.Look(ref fallbackKey, "fallback");
+            Scribe_Deep.Look(ref hub, "hub");
+            Scribe_Deep.Look(ref landing, "landing");
         }
     }
 

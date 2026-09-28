@@ -210,6 +210,8 @@ namespace TheNetwork.Domain.Operations
                         ctx.Spatial?.OnCheckpoint(op);
                         bool local = op.spatial != null && op.spatial.origin != null && op.spatial.workRegion != null && op.spatial.origin.tileId == op.spatial.workRegion.tileId;
                         ctx.FieldLog?.Note(c, local ? FieldLogKeys.WorkingNearby : FieldLogKeys.SetOut, op.contractorName);
+                        // A chartered crossing earns one beat, never the hub, the landing or the route.
+                        if (op.spatial != null && op.spatial.Charter) ctx.FieldLog?.NoteOnce(c, FieldLogKeys.TransportArranged, op.contractorName);
                         ScheduleNext(op);
                     }
                     else

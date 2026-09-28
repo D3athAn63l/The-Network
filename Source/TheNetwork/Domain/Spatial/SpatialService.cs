@@ -30,6 +30,24 @@ namespace TheNetwork.Domain.Spatial
         /// </summary>
         public const int SearchShortlist = 3;
 
+        /// <summary>
+        /// Arranging and flying an abstract charter (ADR-045): the time a chartered crossing takes out of
+        /// the travel window. The flight itself is abstract and never walked.
+        /// </summary>
+        public const int CharterTicks = Ticks.PerDay / 2;
+
+        /// <summary>A charter sets down (and later picks up) within this many tiles of the work region.</summary>
+        public const int LandingRadius = 2;
+
+        /// <summary>Candidate work regions a plan may try to reach by charter (each costs a few route queries).</summary>
+        public const int CharterAttempts = 2;
+
+        /// <summary>A chartered crossing, in steps of the contractor's own pace (progress spacing only).</summary>
+        public static int BridgeUnits(Band speed)
+        {
+            return Math.Max(1, CharterTicks / TicksPerTile(speed));
+        }
+
         /// <summary>World tiles an abstract group covers in a day, by speed band.</summary>
         public static int TilesPerDay(Band speed)
         {
@@ -121,6 +139,19 @@ namespace TheNetwork.Domain.Spatial
         /// <summary>Troubled operations the Phase 2 lifecycle declared recovered: the group is put back where it returns to.</summary>
         public int reconciled;
 
+        /// <summary>Journeys started on foot (ambient and operation legs) and with a chartered crossing.</summary>
+        public int groundJourneys;
+        public int charterJourneys;
+
+        /// <summary>Operation plans committed with a charter; searches that found no provider or landing; legs replanned from current truth.</summary>
+        public int charterPlans;
+        public int charterFailures;
+        public int charterReplans;
+        public int charterCrossings;
+
+        /// <summary>Operation legs that could no longer be proven and were planned again from current truth (on foot or by charter).</summary>
+        public int replans;
+
         /// <summary>A unit of movement work: a catch-up, plus the steps it advanced and the routes it built.</summary>
         public long Work => catchUps + stepsAdvanced + routesBuilt * 20L;
 
@@ -129,7 +160,9 @@ namespace TheNetwork.Domain.Spatial
             return "initialized " + initialized + " (failed " + initFailed + "), catch-ups " + catchUps + ", steps " + stepsAdvanced + ", routes built " + routesBuilt
                 + " (rebuilt " + routesRebuilt + ", failed " + routeFailures + "), blocked " + blocked + ", invalid destinations " + invalidDestinations + ", invalid anchors " + invalidAnchors
                 + ", ambient journeys " + ambientJourneys + ", operation plans " + operationPlans + " (work-region fallbacks " + workRegionFallbacks + "), arrivals " + arrivals
-                + " (late " + lateArrivals + "), recovered and reconciled " + reconciled + ", LKL near incident " + lklNear + " (fallback " + lklFallback + "), faults " + faults;
+                + " (late " + lateArrivals + "), recovered and reconciled " + reconciled + ", journeys on foot " + groundJourneys + ", chartered " + charterJourneys
+                + " (plans " + charterPlans + ", crossings " + charterCrossings + ", charter replans " + charterReplans + ", no provider or landing " + charterFailures + ")"
+                + ", legs replanned " + replans + ", LKL near incident " + lklNear + " (fallback " + lklFallback + "), faults " + faults;
         }
     }
 
@@ -144,6 +177,11 @@ namespace TheNetwork.Domain.Spatial
     /// </summary>
     public sealed class SpatialService
     {
+        /// <summary>
+        /// A runtime route (never saved). A chartered leg is one sequence: the walk to the hub, the crossing
+        /// (<see cref="bridgeUnits"/> entries: waiting at the hub, then set down at the landing), and the
+        /// walk on to the destination.
+        /// </summary>
         private sealed class RouteCache
         {
             public int fromTile;
@@ -152,7 +190,26 @@ namespace TheNetwork.Domain.Spatial
             public List<int> steps;
             public int index;
 
+            /// <summary>Index of the first crossing entry, and how many there are (0 for a ground leg).</summary>
+            public int bridgeStart;
+            public int bridgeUnits;
+
             public int CurrentTile => index == 0 ? fromTile : steps[index - 1];
+
+            /// <summary>Reached once <see cref="index"/> gets here: the group has been set down on the far side.</summary>
+            public int LandedIndex => bridgeUnits == 0 ? -1 : bridgeStart + bridgeUnits;
+
+            /// <summary>Steps still to be walked (the crossing is flown, not walked).</summary>
+            public int GroundLeft
+            {
+                get
+                {
+                    int left = steps.Count - index;
+                    if (bridgeUnits == 0) return left;
+                    int flown = Math.Max(0, Math.Min(bridgeUnits, bridgeStart + bridgeUnits - Math.Max(index, bridgeStart)));
+                    return left - flown;
+                }
+            }
         }
 
         private readonly DomainContext ctx;
@@ -335,7 +392,7 @@ namespace TheNetwork.Domain.Spatial
             int now = ctx.Now;
             s.status = SpatialStatus.Idle;
             s.anchor = anchor;
-            s.destination = null;
+            ClearLeg(s);
             s.journeyOrigin = null;
             s.purpose = SpatialPurpose.None;
             s.operation = OperationId.None;
@@ -440,16 +497,19 @@ namespace TheNetwork.Domain.Spatial
             }
             int from = Math.Max(s.lastUpdateTick, s.journeyStartTick);
             if (now <= from) return;
-            RouteCache r = Route(a, s);
+            RouteCache r = Route(a, sim);
+            if (r == null && ReplanLeg(a, sim)) r = Route(a, sim);
             if (r == null)
             {
                 Block(a, sim, lastRouteFailure ?? "NoRoute");
                 return;
             }
+            from = Math.Max(s.lastUpdateTick, s.journeyStartTick);
             int remaining = r.steps.Count - r.index;
             // Never faster than the contractor moves: a route that is longer than the committed timing
-            // allows (a world change, a rebuild after load) makes the journey later, never quicker.
-            int earliest = from + remaining * SpatialPolicy.TicksPerTile(sim.mobility.speedBand);
+            // allows (a world change, a rebuild after load) makes the journey later, never quicker. Only
+            // walked steps count; a chartered crossing is flown.
+            int earliest = from + r.GroundLeft * SpatialPolicy.TicksPerTile(sim.mobility.speedBand);
             if (s.arrivalTick < earliest)
             {
                 s.arrivalTick = earliest;
@@ -470,19 +530,35 @@ namespace TheNetwork.Domain.Spatial
             }
             r.index += advance;
             s.anchor = Graph.OnLayerOf(s.anchor, r.steps[r.index - 1]);
+            if (!s.bridged && r.LandedIndex > 0 && r.index >= r.LandedIndex) Crossed(a, s);
             // The time at which the last step was reached, so the remainder is never lost to rounding.
             s.lastUpdateTick = (int)(from + advance * span / remaining);
             counters.stepsAdvanced += advance;
         }
 
-        private RouteCache Route(NetworkActor a, SpatialState s)
+        /// <summary>
+        /// The runtime route of the current leg: the cached one while it still matches the saved truth, else
+        /// rebuilt from the persisted anchor, destination and (for a chartered leg not yet crossed) the
+        /// committed charter ends. Null when the leg can no longer be proven (no route, a charter end that
+        /// no longer resolves, the provider gone).
+        /// </summary>
+        private RouteCache Route(NetworkActor a, ContractorSimulation sim)
         {
+            SpatialState s = sim.spatial;
             RouteCache r;
             bool had = routes.TryGetValue(a.id.Value, out r);
-            if (had && r.toTile == s.destination.tileId && r.layer == s.destination.layerId && r.CurrentTile == s.anchor.tileId) return r;
-            List<int> steps = new List<int>();
+            bool charter = s.bridgeFrom != null && !s.bridged;
+            if (had && r.toTile == s.destination.tileId && r.layer == s.destination.layerId && r.CurrentTile == s.anchor.tileId)
+            {
+                // A cached ground leg (or one already past its crossing) stands; a crossing still ahead
+                // needs its charter ends and provider to still be there.
+                bool crossingAhead = r.bridgeUnits > 0 && r.index < r.LandedIndex;
+                if (!charter && !crossingAhead) return r;
+                if (charter && crossingAhead && CharterEndsFailure(s.anchor, s.destination, s.bridgeFrom, s.bridgeTo) == null) return r;
+            }
             string failure;
-            if (!Graph.TryRoute(s.anchor, s.destination, SpatialPolicy.MaxRouteSteps, steps, out failure))
+            r = BuildRoute(s.anchor, s.destination, charter ? s.bridgeFrom : null, charter ? s.bridgeTo : null, SpatialPolicy.MaxRouteSteps, sim.mobility.speedBand, out failure);
+            if (r == null)
             {
                 routes.Remove(a.id.Value);
                 counters.routeFailures++;
@@ -492,19 +568,82 @@ namespace TheNetwork.Domain.Spatial
             counters.routesBuilt++;
             // A journey already under way (cache lost at load, or stale): rebuilt from the persisted anchor.
             if (had || s.lastUpdateTick > s.journeyStartTick) counters.routesRebuilt++;
-            r = new RouteCache { fromTile = s.anchor.tileId, layer = s.anchor.layerId, toTile = s.destination.tileId, steps = steps, index = 0 };
             routes[a.id.Value] = r;
             return r;
+        }
+
+        /// <summary>
+        /// A leg from <paramref name="from"/> to <paramref name="to"/>, on foot, or (with both charter ends)
+        /// on foot to <paramref name="bridgeFrom"/>, a chartered crossing to <paramref name="bridgeTo"/>, and on
+        /// foot again. A charter needs valid, passable ends on the same layer and a provider at one of them
+        /// (it never explains an invalid or cross-layer destination). Null with a reason when it cannot be proven.
+        /// </summary>
+        private RouteCache BuildRoute(TileRef from, TileRef to, TileRef bridgeFrom, TileRef bridgeTo, int maxSteps, Band speed, out string failure)
+        {
+            List<int> steps = new List<int>();
+            if (bridgeFrom == null || bridgeTo == null)
+            {
+                if (!Graph.TryRoute(from, to, Math.Min(maxSteps, SpatialPolicy.MaxRouteSteps), steps, out failure)) return null;
+                return new RouteCache { fromTile = from.tileId, layer = from.layerId, toTile = to.tileId, steps = steps };
+            }
+            failure = CharterEndsFailure(from, to, bridgeFrom, bridgeTo);
+            if (failure != null) return null;
+            List<int> after = new List<int>();
+            if (!Graph.TryRoute(from, bridgeFrom, SpatialPolicy.MaxRouteSteps, steps, out failure)) return null;
+            if (!Graph.TryRoute(bridgeTo, to, SpatialPolicy.MaxRouteSteps, after, out failure)) return null;
+            int bridgeStart = steps.Count, units = SpatialPolicy.BridgeUnits(speed);
+            for (int i = 0; i < units - 1; i++) steps.Add(bridgeFrom.tileId);
+            steps.Add(bridgeTo.tileId);
+            steps.AddRange(after);
+            return new RouteCache { fromTile = from.tileId, layer = from.layerId, toTile = to.tileId, steps = steps, bridgeStart = bridgeStart, bridgeUnits = units };
+        }
+
+        /// <summary>Why a committed charter can no longer carry this leg, or null when it still can.</summary>
+        private string CharterEndsFailure(TileRef from, TileRef to, TileRef bridgeFrom, TileRef bridgeTo)
+        {
+            if (!Graph.IsPassable(bridgeFrom) || !Graph.IsPassable(bridgeTo) || !Graph.IsPassable(to)) return "CharterEndInvalid";
+            if (bridgeFrom.layerId != from.layerId || bridgeTo.layerId != from.layerId || to.layerId != from.layerId) return "CrossLayer";
+            if (!IsCharterHub(bridgeFrom) && !IsCharterHub(bridgeTo)) return "CharterProviderGone";
+            return null;
+        }
+
+        /// <summary>A live settlement of a charter-capable (high-tech) faction stands on this tile.</summary>
+        private bool IsCharterHub(TileRef t)
+        {
+            List<SettlementFacts> all = Graph.Settlements();
+            for (int i = 0; i < all.Count; i++)
+            {
+                if (all[i].canProvideCharterTransport && !all[i].player && SameTile(all[i].tile, t)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>The chartered crossing of the current leg is done: set down on the far side (an explained jump).</summary>
+        private void Crossed(NetworkActor a, SpatialState s)
+        {
+            s.bridged = true;
+            counters.charterCrossings++;
+            MarkExplainedJump(a);
+        }
+
+        /// <summary>Ends the committed journey truth of the current leg (never the position).</summary>
+        private static void ClearLeg(SpatialState s)
+        {
+            s.destination = null;
+            s.bridgeFrom = null;
+            s.bridgeTo = null;
+            s.bridged = false;
+            s.journeyStartTick = -1;
+            s.arrivalTick = -1;
         }
 
         private void Arrive(NetworkActor a, ContractorSimulation sim)
         {
             SpatialState s = sim.spatial;
             int now = ctx.Now;
+            if (s.bridgeFrom != null && !s.bridged) Crossed(a, s);
             s.anchor = s.destination.Copy();
-            s.destination = null;
-            s.journeyStartTick = -1;
-            s.arrivalTick = -1;
+            ClearLeg(s);
             s.lastUpdateTick = now;
             s.blockedReason = null;
             routes.Remove(a.id.Value);
@@ -536,9 +675,7 @@ namespace TheNetwork.Domain.Spatial
             counters.blocked++;
             routes.Remove(a.id.Value);
             NetLog.Info(LogCategory.Spatial, a.name.Display + ": journey to " + s.destination + " cannot be represented (" + reason + "); staying at " + s.anchor + ".");
-            s.destination = null;
-            s.journeyStartTick = -1;
-            s.arrivalTick = -1;
+            ClearLeg(s);
             s.lastUpdateTick = ctx.Now;
             s.status = SpatialStatus.Blocked;
             s.blockedReason = reason;
@@ -628,10 +765,12 @@ namespace TheNetwork.Domain.Spatial
         /// <summary>
         /// Starts a journey. The arrival follows the route length and the speed band unless given, and is
         /// never sooner than the contractor can walk the route (a given arrival that is too soon becomes
-        /// later: never faster). A route longer than <paramref name="maxSteps"/> real steps is refused.
+        /// later: never faster). A route longer than <paramref name="maxSteps"/> real steps is refused. With
+        /// both charter ends the leg crosses by abstract charter (operation legs only, never ambient).
         /// </summary>
-        private bool StartJourney(NetworkActor a, ContractorSimulation sim, TileRef dest, SpatialPurpose purpose, int start, int arrival, NetRng rng, int maxSteps = SpatialPolicy.MaxRouteSteps)
+        private bool StartJourney(NetworkActor a, ContractorSimulation sim, TileRef dest, SpatialPurpose purpose, int start, int arrival, NetRng rng, int maxSteps = SpatialPolicy.MaxRouteSteps, TileRef bridgeFrom = null, TileRef bridgeTo = null)
         {
+            if (purpose == SpatialPurpose.Ambient) bridgeFrom = bridgeTo = null;
             SpatialState s = sim.spatial;
             int now = ctx.Now;
             if (dest.tileId == s.anchor.tileId && dest.layerId == s.anchor.layerId)
@@ -639,23 +778,29 @@ namespace TheNetwork.Domain.Spatial
                 if (purpose == SpatialPurpose.Ambient) s.nextAmbientTick = now + (rng != null ? rng.RangeInclusive(10, 30) : 15) * Ticks.PerDay;
                 return false;
             }
-            List<int> steps = new List<int>();
             string failure;
-            if (!Graph.TryRoute(s.anchor, dest, Math.Min(maxSteps, SpatialPolicy.MaxRouteSteps), steps, out failure))
+            RouteCache r = BuildRoute(s.anchor, dest, bridgeFrom, bridgeTo, maxSteps, sim.mobility.speedBand, out failure);
+            if (r == null)
             {
                 counters.routeFailures++;
                 if (purpose == SpatialPurpose.Ambient) s.nextAmbientTick = now + 5 * Ticks.PerDay;
                 return false;
             }
             counters.routesBuilt++;
-            routes[a.id.Value] = new RouteCache { fromTile = s.anchor.tileId, layer = s.anchor.layerId, toTile = dest.tileId, steps = steps, index = 0 };
+            routes[a.id.Value] = r;
+            ClearLeg(s);
             s.journeyOrigin = s.anchor.Copy();
             s.destination = dest.Copy();
+            s.bridgeFrom = r.bridgeUnits > 0 ? bridgeFrom.Copy() : null;
+            s.bridgeTo = r.bridgeUnits > 0 ? bridgeTo.Copy() : null;
             s.purpose = purpose;
             s.status = SpatialStatus.Travelling;
             s.journeyStartTick = start;
             s.lastUpdateTick = start;
-            int walk = start + Math.Max(1, steps.Count) * SpatialPolicy.TicksPerTile(sim.mobility.speedBand);
+            if (r.bridgeUnits > 0) counters.charterJourneys++;
+            else counters.groundJourneys++;
+            // The crossing is spaced like steps of the group's own pace; only the walked steps bound the pace.
+            int walk = start + Math.Max(1, r.steps.Count) * SpatialPolicy.TicksPerTile(sim.mobility.speedBand);
             if (arrival > start && arrival < walk) counters.lateArrivals++;
             s.arrivalTick = Math.Max(arrival, walk);
             s.blockedReason = null;
@@ -722,12 +867,20 @@ namespace TheNetwork.Domain.Spatial
             // The way back must fit the planned return window as well as the way out.
             int travel = arriveAt - depart;
             if (resolve != null && ret != null && ret.dueTick > resolve.dueTick) travel = Math.Min(travel, ret.dueTick - resolve.dueTick);
-            plan.workRegion = ChooseWorkRegion(a, sim, op, c, f, plan.origin, travel);
+            TileRef hub, landing;
+            plan.workRegion = ChooseWorkRegion(a, sim, op, c, f, plan.origin, travel, out hub, out landing);
             if (plan.workRegion == null)
             {
                 plan.workRegion = plan.origin.Copy();
                 plan.fallbackKey = "NoWorkRegion";
                 counters.workRegionFallbacks++;
+            }
+            else if (hub != null)
+            {
+                // Committed truth: the same reusable charter carries them out and picks them up again.
+                plan.hub = hub;
+                plan.landing = landing;
+                counters.charterPlans++;
             }
             plan.returnTo = plan.origin.Copy();
             op.spatial = plan;
@@ -737,7 +890,7 @@ namespace TheNetwork.Domain.Spatial
             // The main body goes. An ambient journey in progress stops where it is (already caught up).
             routes.Remove(a.id.Value);
             s.operation = op.id;
-            s.destination = null;
+            ClearLeg(s);
             s.purpose = SpatialPurpose.Outbound;
             s.blockedReason = null;
             if (SameTile(plan.workRegion, s.anchor))
@@ -748,9 +901,11 @@ namespace TheNetwork.Domain.Spatial
                 s.lastUpdateTick = ctx.Now;
                 return;
             }
-            if (!StartJourney(a, sim, plan.workRegion, SpatialPurpose.Outbound, depart, arriveAt, null))
+            if (!StartJourney(a, sim, plan.workRegion, SpatialPurpose.Outbound, depart, arriveAt, null, SpatialPolicy.MaxRouteSteps, plan.hub, plan.landing))
             {
                 // No route after all: the work happens where they are; the timeline is untouched.
+                plan.hub = null;
+                plan.landing = null;
                 plan.workRegion = s.anchor.Copy();
                 plan.fallbackKey = "NoRoute";
                 counters.workRegionFallbacks++;
@@ -765,8 +920,9 @@ namespace TheNetwork.Domain.Spatial
         /// window and within its range (a short hop across a bay can be a long detour on land). Null when
         /// nothing fits (the work then happens where they are).
         /// </summary>
-        private TileRef ChooseWorkRegion(NetworkActor a, ContractorSimulation sim, Operation op, Contract c, ItemFacts f, TileRef origin, int travelTicks)
+        private TileRef ChooseWorkRegion(NetworkActor a, ContractorSimulation sim, Operation op, Contract c, ItemFacts f, TileRef origin, int travelTicks, out TileRef hub, out TileRef landing)
         {
+            hub = landing = null;
             int budget = travelTicks / SpatialPolicy.TicksPerTile(sim.mobility.speedBand);
             int range = SpatialPolicy.RangeTiles(sim.mobility.rangeBand);
             int walkable = Math.Min(range, budget);
@@ -789,13 +945,152 @@ namespace TheNetwork.Domain.Spatial
             if (inReach.Count > 0 && rng.Chance(0.7f))
             {
                 int first = rng.Range(0, inReach.Count);
+                List<TileRef> outOfReach = new List<TileRef>();
                 for (int k = 0; k < Math.Min(SpatialPolicy.SearchShortlist, inReach.Count); k++)
                 {
                     SettlementFacts pick = inReach[(first + k) % inReach.Count];
-                    if (Graph.TryFindPassableNear(pick.tile, 1, 2, NetHash.Combine(seed, k), out t) && GroundSteps(origin, t, walkable) >= 0) return t;
+                    if (!Graph.TryFindPassableNear(pick.tile, 1, 2, NetHash.Combine(seed, k), out t)) continue;
+                    if (GroundSteps(origin, t, walkable) >= 0) return t;
+                    outOfReach.Add(t);
+                }
+                // Out of reach on foot in the time (no ground route at all, or a detour too long): an
+                // abstract charter from a high-tech provider may bridge it (operation travel only).
+                for (int k = 0; k < Math.Min(SpatialPolicy.CharterAttempts, outOfReach.Count); k++)
+                {
+                    if (PlanCharter(origin, outOfReach[k], true, null, null, travelTicks, sim.mobility.speedBand, range, NetHash.Combine(seed, "charter." + k), out hub, out landing)) return outOfReach[k];
                 }
             }
             return Graph.TryFindPassableNear(origin, minDist, maxDist, seed, out t) && GroundSteps(origin, t, walkable) >= 0 ? t : null;
+        }
+
+        /// <summary>
+        /// Plans an abstract charter (ADR-045) for an operation leg from <paramref name="from"/> to
+        /// <paramref name="to"/> that cannot be walked in the time it has: a hub (a settlement of a
+        /// charter-capable, high-tech faction) reached on foot on its side, and a landing area (set down on
+        /// the way out, picked up again on the way back) near the other end, all on the same layer. On the
+        /// way out (<paramref name="hubNearFrom"/>) they walk to the hub, are flown to the landing and walk
+        /// to the work region; on the way back they walk to the pickup, are flown to the hub and walk home.
+        /// The committed hub and landing are preferred (one reusable two-way charter); otherwise only a
+        /// short list of the nearest providers is proven with real routes. Never for an invalid, impassable
+        /// or cross-layer destination. The walked steps plus the crossing must fit <paramref name="windowTicks"/>
+        /// (int.MaxValue: no window, the leg may be late). No money moves: the charter is part of the
+        /// contractor's own quoted costs.
+        /// </summary>
+        private bool PlanCharter(TileRef from, TileRef to, bool hubNearFrom, TileRef preferHub, TileRef preferLanding, int windowTicks, Band speed, int range, int seed, out TileRef hub, out TileRef landing)
+        {
+            hub = landing = null;
+            if (from == null || to == null || !Graph.IsValid(from) || !Graph.IsPassable(to) || from.layerId != to.layerId) return false;
+            int tpt = SpatialPolicy.TicksPerTile(speed);
+            int maxWalk = windowTicks == int.MaxValue ? SpatialPolicy.MaxRouteSteps : (windowTicks - SpatialPolicy.CharterTicks) / tpt;
+            if (maxWalk < 0)
+            {
+                counters.charterFailures++;
+                return false;
+            }
+            // The field end: set down near the work region on the way out; picked up near where they are on the way back.
+            TileRef field = hubNearFrom ? to : from;
+            TileRef land = null;
+            int landWalk = -1;
+            if (preferLanding != null && Graph.IsPassable(preferLanding) && preferLanding.layerId == field.layerId)
+            {
+                landWalk = hubNearFrom ? GroundSteps(preferLanding, to, range) : GroundSteps(from, preferLanding, range);
+                if (landWalk >= 0) land = preferLanding;
+            }
+            if (land == null)
+            {
+                TileRef t;
+                if (Graph.TryFindPassableNear(field, 1, SpatialPolicy.LandingRadius, seed, out t))
+                {
+                    landWalk = hubNearFrom ? GroundSteps(t, to, range) : GroundSteps(from, t, range);
+                    if (landWalk >= 0) land = t;
+                }
+                if (land == null)
+                {
+                    land = field.Copy();
+                    landWalk = 0;
+                }
+            }
+            if (landWalk > maxWalk)
+            {
+                counters.charterFailures++;
+                return false;
+            }
+            // The hub end: the committed provider first, then the few nearest providers by approximate distance.
+            TileRef home = hubNearFrom ? from : to;
+            List<TileRef> hubs = new List<TileRef>();
+            if (preferHub != null && preferHub.layerId == home.layerId && IsCharterHub(preferHub)) hubs.Add(preferHub);
+            List<SettlementFacts> all = Graph.Settlements();
+            List<SettlementFacts> providers = new List<SettlementFacts>();
+            for (int i = 0; i < all.Count; i++)
+            {
+                SettlementFacts f = all[i];
+                if (!f.canProvideCharterTransport || f.player || f.tile == null || f.tile.layerId != home.layerId || !Graph.IsPassable(f.tile)) continue;
+                if (SameTile(f.tile, preferHub) || SameTile(f.tile, land)) continue;
+                providers.Add(f);
+            }
+            providers.Sort((x, y) =>
+            {
+                int c = Graph.ApproxDistance(home, x.tile).CompareTo(Graph.ApproxDistance(home, y.tile));
+                return c != 0 ? c : x.tile.tileId.CompareTo(y.tile.tileId);
+            });
+            for (int i = 0; i < providers.Count && i < SpatialPolicy.SearchShortlist; i++) hubs.Add(providers[i].tile);
+            int hubBudget = Math.Min(range, maxWalk - landWalk);
+            for (int i = 0; i < hubs.Count; i++)
+            {
+                TileRef h = hubs[i];
+                if (SameTile(h, land)) continue;
+                int hubWalk = hubNearFrom ? GroundSteps(from, h, hubBudget) : GroundSteps(h, to, hubBudget);
+                if (hubWalk < 0) continue;
+                hub = h.Copy();
+                landing = land.Copy();
+                return true;
+            }
+            counters.charterFailures++;
+            return false;
+        }
+
+        /// <summary>
+        /// An operation leg that can no longer be proven (its route gone after a world change, a charter end
+        /// or its provider gone) is planned again from the contractor's CURRENT truth: on foot if a route
+        /// exists, else by charter (the committed hub and landing preferred). The committed arrival stands
+        /// unless the contractor cannot make it (then later, never sooner). Ambient journeys are never
+        /// replanned into a charter. False when neither works: the caller blocks the leg, and the operation
+        /// timeline goes on.
+        /// </summary>
+        private bool ReplanLeg(NetworkActor a, ContractorSimulation sim)
+        {
+            SpatialState s = sim.spatial;
+            if (s.purpose != SpatialPurpose.Outbound && s.purpose != SpatialPurpose.Return) return false;
+            Operation op = s.operation.IsValid ? ctx.operations.Get(s.operation) : null;
+            if (op?.spatial == null || op.IsFinished || s.destination == null) return false;
+            TileRef dest = s.destination.Copy();
+            if (!Graph.IsPassable(dest) || dest.layerId != s.anchor.layerId) return false;
+            int now = ctx.Now, arrival = s.arrivalTick;
+            SpatialPurpose purpose = s.purpose;
+            bool outbound = purpose == SpatialPurpose.Outbound;
+            if (GroundSteps(s.anchor, dest, SpatialPolicy.MaxRouteSteps) >= 0 && StartJourney(a, sim, dest, purpose, now, arrival, null))
+            {
+                counters.replans++;
+                return true;
+            }
+            TileRef hub, landing;
+            int seed = NetHash.Combine(op.seed, "spatial.replan." + s.journeys);
+            if (!PlanCharter(s.anchor, dest, outbound, op.spatial.hub, op.spatial.landing, int.MaxValue, sim.mobility.speedBand, SpatialPolicy.RangeTiles(sim.mobility.rangeBand), seed, out hub, out landing)) return false;
+            if (!StartJourney(a, sim, dest, purpose, now, arrival, null, SpatialPolicy.MaxRouteSteps, outbound ? hub : landing, outbound ? landing : hub)) return false;
+            bool wasCharter = op.spatial.Charter;
+            op.spatial.hub = hub;
+            op.spatial.landing = landing;
+            counters.replans++;
+            counters.charterReplans++;
+            if (outbound && !wasCharter) NoteTransport(op);
+            return true;
+        }
+
+        /// <summary>The one Field Log beat a charter earns, on the player's own contract (no hub, no landing, no route).</summary>
+        private void NoteTransport(Operation op)
+        {
+            Contract c = ctx.contracts.Get(op.contract);
+            if (c != null) ctx.FieldLog?.NoteOnce(c, FieldLogKeys.TransportArranged, op.contractorName);
         }
 
         /// <summary>Real ground route steps from one tile to another, or -1 when there is none within <paramref name="maxSteps"/>.</summary>
@@ -865,14 +1160,33 @@ namespace TheNetwork.Domain.Spatial
             if (home == null || !Graph.IsValid(home)) return;
             // Whatever leg was still under way (a late outbound leg) ends here: they head back from where they are.
             routes.Remove(a.id.Value);
-            s.destination = null;
+            ClearLeg(s);
             s.purpose = SpatialPurpose.Return;
             if (SameTile(home, s.anchor))
             {
                 s.status = SpatialStatus.Idle;
                 return;
             }
-            if (!StartJourney(a, sim, home, SpatialPurpose.Return, ctx.Now, Math.Max(ctx.Now + 1, arrival), null))
+            int now = ctx.Now, due = Math.Max(now + 1, arrival);
+            bool started = false;
+            if (op.spatial.Charter && GroundSteps(s.anchor, home, (due - now) / SpatialPolicy.TicksPerTile(sim.mobility.speedBand)) < 0)
+            {
+                // The same reusable charter picks them up again at the landing and sets them down at the
+                // hub; if either end is gone, the pickup is planned again from where they are.
+                TileRef hub, landing;
+                int seed = NetHash.Combine(op.seed, "spatial.pickup");
+                if (PlanCharter(s.anchor, home, false, op.spatial.hub, op.spatial.landing, int.MaxValue, sim.mobility.speedBand, SpatialPolicy.RangeTiles(sim.mobility.rangeBand), seed, out hub, out landing))
+                {
+                    started = StartJourney(a, sim, home, SpatialPurpose.Return, now, due, null, SpatialPolicy.MaxRouteSteps, landing, hub);
+                    if (started && (!SameTile(hub, op.spatial.hub) || !SameTile(landing, op.spatial.landing)))
+                    {
+                        op.spatial.hub = hub;
+                        op.spatial.landing = landing;
+                        counters.charterReplans++;
+                    }
+                }
+            }
+            if (!started && !StartJourney(a, sim, home, SpatialPurpose.Return, now, due, null))
             {
                 // They stay near the work area; the operation's own timeline is unaffected.
                 if (op.spatial.fallbackKey == null) op.spatial.fallbackKey = "NoReturnRoute";
@@ -902,10 +1216,8 @@ namespace TheNetwork.Domain.Spatial
             if (home == null || !Graph.IsPassable(home)) return;
             routes.Remove(a.id.Value);
             s.anchor = home.Copy();
-            s.destination = null;
+            ClearLeg(s);
             s.purpose = SpatialPurpose.None;
-            s.journeyStartTick = -1;
-            s.arrivalTick = -1;
             s.lastUpdateTick = ctx.Now;
             s.blockedReason = null;
             s.status = SpatialStatus.Idle;
@@ -940,10 +1252,8 @@ namespace TheNetwork.Domain.Spatial
                 return;
             }
             routes.Remove(a.id.Value);
-            s.destination = null;
+            ClearLeg(s);
             s.purpose = SpatialPurpose.None;
-            s.journeyStartTick = -1;
-            s.arrivalTick = -1;
             s.lastUpdateTick = ctx.Now;
             if (s.IsInitialized) s.status = SpatialStatus.Idle;
             s.nextAmbientTick = Math.Max(s.nextAmbientTick, ctx.Now + rest);
@@ -961,10 +1271,8 @@ namespace TheNetwork.Domain.Spatial
             Advance(a, sim);
             SpatialState s = sim.spatial;
             routes.Remove(a.id.Value);
-            s.destination = null;
+            ClearLeg(s);
             s.purpose = SpatialPurpose.None;
-            s.journeyStartTick = -1;
-            s.arrivalTick = -1;
             s.lastUpdateTick = ctx.Now;
             if (s.status == SpatialStatus.Travelling || s.status == SpatialStatus.OnAssignment) s.status = SpatialStatus.Idle;
         }
@@ -1022,7 +1330,7 @@ namespace TheNetwork.Domain.Spatial
             CatchUp(a);
             if (!sim.spatial.IsInitialized || sim.spatial.operation.IsValid) return false;
             routes.Remove(a.id.Value);
-            sim.spatial.destination = null;
+            ClearLeg(sim.spatial);
             return StartJourney(a, sim, dest, SpatialPurpose.Ambient, ctx.Now, -1, null);
         }
 
@@ -1045,11 +1353,17 @@ namespace TheNetwork.Domain.Spatial
             return true;
         }
 
-        /// <summary>Dev: a running operation's work region moves to the given tile (the timeline is untouched).</summary>
+        /// <summary>
+        /// Dev: a running operation's work region moves to the given tile (the timeline is untouched). An
+        /// outbound leg under way is re-proven from where they are at the next catch-up: on foot if it can,
+        /// by charter if it cannot (the committed charter of the old region no longer applies).
+        /// </summary>
         public bool DevRetarget(Operation op, TileRef work)
         {
             if (op?.spatial == null || work == null || op.IsFinished) return false;
             op.spatial.workRegion = work.Copy();
+            op.spatial.hub = null;
+            op.spatial.landing = null;
             NetworkActor a = BoundActor(op);
             if (a == null) return true;
             ContractorSimulation sim = a.Get<ContractorSimulation>();
@@ -1058,9 +1372,63 @@ namespace TheNetwork.Domain.Spatial
             if (s.purpose == SpatialPurpose.Outbound && s.destination != null)
             {
                 routes.Remove(a.id.Value);
+                int start = s.journeyStartTick, arrival = s.arrivalTick;
+                ClearLeg(s);
                 s.destination = work.Copy();
+                s.journeyStartTick = start;
+                s.arrivalTick = arrival;
             }
             return true;
+        }
+
+        /// <summary>
+        /// Dev: moves a running operation's work region to a passable tile on the same layer that has NO
+        /// ground route from the contractor (an island, a sealed-off region), so the charter path is
+        /// exercised. Null when this world has no such tile near a settlement.
+        /// </summary>
+        public TileRef DevRetargetAcrossWater(Operation op)
+        {
+            NetworkActor a = BoundActor(op);
+            if (a == null || !GraphReady) return null;
+            CatchUp(a);
+            TileRef here = a.Get<ContractorSimulation>().spatial.anchor;
+            List<SettlementFacts> all = new List<SettlementFacts>(Graph.Settlements());
+            all.Sort((x, y) => Graph.ApproxDistance(here, x.tile).CompareTo(Graph.ApproxDistance(here, y.tile)));
+            for (int i = 0; i < all.Count; i++)
+            {
+                TileRef t;
+                if (all[i].player || !Graph.TryFindPassableNear(all[i].tile, 1, 2, NetHash.Combine(op.seed, "dev.water." + i), out t)) continue;
+                if (t.layerId != here.layerId || GroundSteps(here, t, SpatialPolicy.MaxRouteSteps) >= 0) continue;
+                DevRetarget(op, t);
+                CatchUp(a);
+                return t;
+            }
+            return null;
+        }
+
+        /// <summary>Dev: the committed charter hub stops resolving (as a destroyed provider would); the next catch-up reconciles from current truth.</summary>
+        public bool DevInvalidateCharter(Operation op)
+        {
+            if (op?.spatial?.hub == null) return false;
+            TileRef dead = new TileRef { tileId = -1, layerId = op.spatial.hub.layerId, layerDef = op.spatial.hub.layerDef };
+            NetworkActor a = TrackedActor(op);
+            SpatialState s = a?.Get<ContractorSimulation>()?.spatial;
+            if (s != null)
+            {
+                if (SameTile(s.bridgeFrom, op.spatial.hub)) s.bridgeFrom = dead.Copy();
+                if (SameTile(s.bridgeTo, op.spatial.hub)) s.bridgeTo = dead.Copy();
+            }
+            op.spatial.hub = dead;
+            return true;
+        }
+
+        /// <summary>Dev: an operation's hidden plan, ground or charter (exact tiles; diagnostics only).</summary>
+        public string DevDescribePlan(Operation op)
+        {
+            OperationSpatialPlan p = op?.spatial;
+            if (p == null) return "(no spatial plan: a legacy operation, or no world data when it started)";
+            return (p.Charter ? "CHARTER" : "ground") + (p.detached ? " (detachment)" : "") + ": origin " + p.origin + ", work region " + p.workRegion + ", return to " + p.returnTo
+                + (p.Charter ? ", hub " + p.hub + ", landing and pickup " + p.landing : "") + (p.incident != null ? ", incident " + p.incident : "") + (p.fallbackKey != null ? ", fallback " + p.fallbackKey : "");
         }
 
         public string DevDescribe(NetworkActor a)
@@ -1069,7 +1437,14 @@ namespace TheNetwork.Domain.Spatial
             if (sim == null) return "(not an NPC contractor)";
             SpatialState s = sim.spatial;
             RouteCache r;
-            string route = routes.TryGetValue(a.id.Value, out r) ? "cached route " + (r.steps.Count - r.index) + " of " + r.steps.Count + " steps left" : "no cached route";
+            string route = routes.TryGetValue(a.id.Value, out r) ? "cached route " + (r.steps.Count - r.index) + " of " + r.steps.Count + " steps left (" + r.GroundLeft + " on foot)" : "no cached route";
+            if (s.bridgeFrom != null)
+            {
+                string segment = s.bridged ? "on foot from the landing"
+                    : r != null && r.bridgeUnits > 0 && r.index < r.bridgeStart ? "on foot to the charter hub"
+                    : "at the hub or crossing by charter";
+                route += "; segment: " + segment;
+            }
             string dist = s.destination != null && Graph != null ? ", " + Graph.ApproxDistance(s.anchor, s.destination) + " tiles to go" : "";
             return a.name.Display + " [" + a.id + "]: " + s + ", purpose " + s.purpose + ", operation " + s.operation + ", origin " + (s.journeyOrigin?.ToString() ?? "-")
                 + ", departs " + s.journeyStartTick + ", updated " + s.lastUpdateTick + ", next ambient " + s.nextAmbientTick + ", journeys " + s.journeys
@@ -1125,7 +1500,8 @@ namespace TheNetwork.Domain.Spatial
                     {
                         s.operation = OperationId.None;
                         s.purpose = SpatialPurpose.None;
-                        s.destination = null;
+                        routes.Remove(a.id.Value);
+                        ClearLeg(s);
                         s.status = SpatialStatus.Idle;
                         repairs++;
                         findings?.Add("Contractor " + a.id + ": released from ended operation.");

@@ -47,9 +47,22 @@ namespace TheNetwork.Diagnostics
             return new TileRef { tileId = id, layerId = layer, layerDef = def, regionKey = "S" + layer + ":R" + ((y * 6 / Math.Max(1, height)) * 8 + x * 8 / Math.Max(1, width)).ToString("00") };
         }
 
-        public void AddSettlement(int x, int y, int factionLoadId, bool player = false)
+        public void AddSettlement(int x, int y, int factionLoadId, bool player = false, bool charter = false)
         {
-            settlements.Add(new SettlementFacts { tile = Tile(x, y), factionLoadId = factionLoadId, player = player });
+            settlements.Add(new SettlementFacts { tile = Tile(x, y), factionLoadId = factionLoadId, player = player, canProvideCharterTransport = charter });
+        }
+
+        /// <summary>Opens a rectangle again (an island interior inside a blocked sea square).</summary>
+        public void Open(int x0, int y0, int x1, int y1)
+        {
+            for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) impassable.Remove(y * width + x);
+        }
+
+        /// <summary>Sealed-off land in the sea: x 46–54, y 6–14, with two tiles of water all round.</summary>
+        public void CarveIsland()
+        {
+            Block(44, 4, 56, 16);
+            Open(46, 6, 54, 14);
         }
 
         public void Block(int x0, int y0, int x1, int y1)
@@ -61,25 +74,35 @@ namespace TheNetwork.Diagnostics
         /// The default synthetic planet: 64 × 40 tiles, a sea band with one land bridge, and settlements
         /// for the given faction load ids spread over the land (plus one player colony).
         /// </summary>
-        public static GridWorldGraph Default(IList<int> factionLoadIds, int seed)
+        public static GridWorldGraph Default(IList<int> factionLoadIds, int seed, bool charterWorld = false)
         {
             GridWorldGraph g = new GridWorldGraph(64, 40);
             g.Block(30, 0, 33, 26);
             g.Block(30, 32, 33, 39);
             g.Block(0, 0, 63, 0);
+            // A charter world adds an island with no ground connection, and some high-tech factions.
+            if (charterWorld) g.CarveIsland();
             NetRng rng = new NetRng(seed, "grid.world");
             g.AddSettlement(8, 8, 1, true);
             int n = Math.Max(1, factionLoadIds?.Count ?? 0);
             for (int i = 0; i < 36; i++)
             {
                 int fid = factionLoadIds != null && factionLoadIds.Count > 0 ? factionLoadIds[i % n] : 100 + i % 6;
+                bool charter = charterWorld && (i % n) % 3 == 0;
                 for (int tries = 0; tries < 20; tries++)
                 {
                     int x = rng.Range(2, 62), y = rng.Range(2, 38);
                     if (g.impassable.Contains(y * 64 + x)) continue;
-                    g.AddSettlement(x, y, fid);
+                    g.AddSettlement(x, y, fid, false, charter);
                     break;
                 }
+            }
+            if (charterWorld)
+            {
+                int fa = factionLoadIds != null && factionLoadIds.Count > 0 ? factionLoadIds[0] : 100;
+                int fb = factionLoadIds != null && factionLoadIds.Count > 1 ? factionLoadIds[1] : 101;
+                g.AddSettlement(49, 9, fa, false, true);
+                g.AddSettlement(52, 12, fb);
             }
             return g;
         }

@@ -81,7 +81,7 @@ namespace TheNetwork.Integration
                     if (!t.Valid || t.Layer == null || t.Layer.Def == null || t.Layer.Def.isSpace) continue;
                     TileRef r = TileRef.Of(t);
                     if (r == null) continue;
-                    list.Add(new SettlementFacts { tile = r, factionLoadId = s.Faction.loadID, player = s.Faction.IsPlayer });
+                    list.Add(new SettlementFacts { tile = r, factionLoadId = s.Faction.loadID, player = s.Faction.IsPlayer, canProvideCharterTransport = CanCharter(s.Faction) });
                 }
                 catch (Exception)
                 {
@@ -92,6 +92,16 @@ namespace TheNetwork.Integration
             settlementsAtTick = now;
             settlementsCount = all.Count;
             return list;
+        }
+
+        /// <summary>
+        /// Reusable two-way charter transport needs a faction of at least Spacer technology (the game's own
+        /// <see cref="TechLevel"/>): the Empire and any modded high-tech faction qualify naturally; tribal,
+        /// medieval and industrial settlements do not own reusable shuttles. Never the player.
+        /// </summary>
+        private static bool CanCharter(Faction f)
+        {
+            return f != null && !f.IsPlayer && f.def != null && f.def.techLevel >= TechLevel.Spacer;
         }
 
         public bool TryFindPassableNear(TileRef center, int minDist, int maxDist, int seed, out TileRef tile)

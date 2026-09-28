@@ -29,6 +29,7 @@ namespace TheNetwork.Domain.Contracts
         public const string DeliveryRetry = "DeliveryRetry";
         public const string PaymentDue = "PaymentDue";
         public const string Handover = "Handover";
+        public const string TransportArranged = "TransportArranged";
     }
 
     /// <summary>
@@ -70,6 +71,14 @@ namespace TheNetwork.Domain.Contracts
             c.fieldLog.Add(e);
             if (c.fieldLog.Count > MaxEntries) c.fieldLog.RemoveRange(0, c.fieldLog.Count - MaxEntries);
             StateVersion.Bump();
+        }
+
+        /// <summary>A beat that is told once per contract, however often its cause recurs (a replanned charter, a reload).</summary>
+        public void NoteOnce(Contract c, string key, params string[] args)
+        {
+            if (c == null) return;
+            for (int i = 0; i < c.fieldLog.Count; i++) if (c.fieldLog[i].key == key) return;
+            Note(c, key, args);
         }
 
         /// <summary>What the player may read: the live log of their own running, accepted contract; otherwise nothing.</summary>

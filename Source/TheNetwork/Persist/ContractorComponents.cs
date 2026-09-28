@@ -228,6 +228,18 @@ namespace TheNetwork.Persist
         public int initializedTick = -1;
         public string blockedReason;
 
+        /// <summary>
+        /// A chartered leg (ADR-045): the group walks to <see cref="bridgeFrom"/>, is flown to
+        /// <see cref="bridgeTo"/>, and walks on to the destination. Both null on a ground journey. Only the
+        /// two committed ends are saved: no craft, no flight path, no fuel, no passenger list.
+        /// </summary>
+        public TileRef bridgeFrom;
+
+        public TileRef bridgeTo;
+
+        /// <summary>The chartered crossing of the current leg is done (the group is on the far side).</summary>
+        public bool bridged;
+
         public bool IsInitialized => status != SpatialStatus.Uninitialized && anchor != null;
 
         public void ExposeData()
@@ -245,12 +257,16 @@ namespace TheNetwork.Persist
             Scribe_Values.Look(ref journeys, "journeys", 0);
             Scribe_Values.Look(ref initializedTick, "initialized", -1);
             Scribe_Values.Look(ref blockedReason, "blocked");
+            Scribe_Deep.Look(ref bridgeFrom, "bridgeFrom");
+            Scribe_Deep.Look(ref bridgeTo, "bridgeTo");
+            Scribe_Values.Look(ref bridged, "bridged", false);
             if (Scribe.mode == LoadSaveMode.LoadingVars && status != SpatialStatus.Uninitialized && anchor == null) status = SpatialStatus.Uninitialized;
         }
 
         public override string ToString()
         {
-            return status + " at " + (anchor?.ToString() ?? "-") + (destination != null ? " → " + destination + " (" + purpose + ", arrives " + arrivalTick + ")" : "");
+            return status + " at " + (anchor?.ToString() ?? "-") + (destination != null ? " → " + destination + " (" + purpose + ", arrives " + arrivalTick + ")" : "")
+                + (bridgeFrom != null ? " via charter " + bridgeFrom + " ⇒ " + bridgeTo + (bridged ? " (crossed)" : "") : "");
         }
     }
 
