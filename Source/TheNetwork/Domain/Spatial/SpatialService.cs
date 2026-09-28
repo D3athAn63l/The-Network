@@ -32,21 +32,16 @@ namespace TheNetwork.Domain.Spatial
 
         /// <summary>
         /// Arranging and flying an abstract charter (ADR-045): the time a chartered crossing takes out of
-        /// the travel window. The flight itself is abstract and never walked.
+        /// the travel window (at least one step of the slowest pace, so walking is never hurried to make
+        /// room for it). The flight itself is abstract and never walked.
         /// </summary>
-        public const int CharterTicks = Ticks.PerDay / 2;
+        public const int CharterTicks = Ticks.PerDay / 4;
 
         /// <summary>A charter sets down (and later picks up) within this many tiles of the work region.</summary>
         public const int LandingRadius = 2;
 
         /// <summary>Candidate work regions a plan may try to reach by charter (each costs a few route queries).</summary>
         public const int CharterAttempts = 2;
-
-        /// <summary>A chartered crossing, in steps of the contractor's own pace (progress spacing only).</summary>
-        public static int BridgeUnits(Band speed)
-        {
-            return Math.Max(1, CharterTicks / TicksPerTile(speed));
-        }
 
         /// <summary>World tiles an abstract group covers in a day, by speed band.</summary>
         public static int TilesPerDay(Band speed)
@@ -179,8 +174,9 @@ namespace TheNetwork.Domain.Spatial
     {
         /// <summary>
         /// A runtime route (never saved). A chartered leg is one sequence: the walk to the hub, the crossing
-        /// (<see cref="bridgeUnits"/> entries: waiting at the hub, then set down at the landing), and the
-        /// walk on to the destination.
+        /// (one entry: set down at the landing), and the walk on to the destination. The crossing is a
+        /// single step between the two committed ends, so a route rebuilt at the hub after a load is
+        /// exactly the journey that was left (nothing about the flight needs saving).
         /// </summary>
         private sealed class RouteCache
         {
@@ -591,11 +587,10 @@ namespace TheNetwork.Domain.Spatial
             List<int> after = new List<int>();
             if (!Graph.TryRoute(from, bridgeFrom, SpatialPolicy.MaxRouteSteps, steps, out failure)) return null;
             if (!Graph.TryRoute(bridgeTo, to, SpatialPolicy.MaxRouteSteps, after, out failure)) return null;
-            int bridgeStart = steps.Count, units = SpatialPolicy.BridgeUnits(speed);
-            for (int i = 0; i < units - 1; i++) steps.Add(bridgeFrom.tileId);
+            int bridgeStart = steps.Count;
             steps.Add(bridgeTo.tileId);
             steps.AddRange(after);
-            return new RouteCache { fromTile = from.tileId, layer = from.layerId, toTile = to.tileId, steps = steps, bridgeStart = bridgeStart, bridgeUnits = units };
+            return new RouteCache { fromTile = from.tileId, layer = from.layerId, toTile = to.tileId, steps = steps, bridgeStart = bridgeStart, bridgeUnits = 1 };
         }
 
         /// <summary>Why a committed charter can no longer carry this leg, or null when it still can.</summary>
@@ -799,8 +794,9 @@ namespace TheNetwork.Domain.Spatial
             s.lastUpdateTick = start;
             if (r.bridgeUnits > 0) counters.charterJourneys++;
             else counters.groundJourneys++;
-            // The crossing is spaced like steps of the group's own pace; only the walked steps bound the pace.
-            int walk = start + Math.Max(1, r.steps.Count) * SpatialPolicy.TicksPerTile(sim.mobility.speedBand);
+            // Every walked step at the group's own pace, plus the time a chartered crossing takes.
+            int walked = r.steps.Count - r.bridgeUnits;
+            int walk = start + Math.Max(1, walked) * SpatialPolicy.TicksPerTile(sim.mobility.speedBand) + (r.bridgeUnits > 0 ? SpatialPolicy.CharterTicks : 0);
             if (arrival > start && arrival < walk) counters.lateArrivals++;
             s.arrivalTick = Math.Max(arrival, walk);
             s.blockedReason = null;
@@ -944,20 +940,17 @@ namespace TheNetwork.Domain.Spatial
             TileRef t;
             if (inReach.Count > 0 && rng.Chance(0.7f))
             {
-                int first = rng.Range(0, inReach.Count);
-                List<TileRef> outOfReach = new List<TileRef>();
+                int first = rng.Range(0, inReach.Count), charterTries = 0;
                 for (int k = 0; k < Math.Min(SpatialPolicy.SearchShortlist, inReach.Count); k++)
                 {
                     SettlementFacts pick = inReach[(first + k) % inReach.Count];
                     if (!Graph.TryFindPassableNear(pick.tile, 1, 2, NetHash.Combine(seed, k), out t)) continue;
+                    // On foot first. Out of reach on foot in the time (no ground route at all, or a detour
+                    // too long): an abstract charter from a high-tech provider may bridge this candidate
+                    // (operation travel only); otherwise the next candidate.
                     if (GroundSteps(origin, t, walkable) >= 0) return t;
-                    outOfReach.Add(t);
-                }
-                // Out of reach on foot in the time (no ground route at all, or a detour too long): an
-                // abstract charter from a high-tech provider may bridge it (operation travel only).
-                for (int k = 0; k < Math.Min(SpatialPolicy.CharterAttempts, outOfReach.Count); k++)
-                {
-                    if (PlanCharter(origin, outOfReach[k], true, null, null, travelTicks, sim.mobility.speedBand, range, NetHash.Combine(seed, "charter." + k), out hub, out landing)) return outOfReach[k];
+                    if (charterTries++ < SpatialPolicy.CharterAttempts
+                        && PlanCharter(origin, t, true, null, null, travelTicks, sim.mobility.speedBand, range, NetHash.Combine(seed, "charter." + k), out hub, out landing)) return t;
                 }
             }
             return Graph.TryFindPassableNear(origin, minDist, maxDist, seed, out t) && GroundSteps(origin, t, walkable) >= 0 ? t : null;
