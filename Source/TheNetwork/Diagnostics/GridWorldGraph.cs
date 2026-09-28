@@ -65,6 +65,13 @@ namespace TheNetwork.Diagnostics
             Open(46, 6, 54, 14);
         }
 
+        /// <summary>A larger sealed-off island in the south-west: x 6–18, y 28–36, with two tiles of water all round.</summary>
+        public void CarveSouthIsland()
+        {
+            Block(4, 26, 20, 38);
+            Open(6, 28, 18, 36);
+        }
+
         public void Block(int x0, int y0, int x1, int y1)
         {
             for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) if (x >= 0 && y >= 0 && x < width && y < height) impassable.Add(y * width + x);
@@ -80,15 +87,20 @@ namespace TheNetwork.Diagnostics
             g.Block(30, 0, 33, 26);
             g.Block(30, 32, 33, 39);
             g.Block(0, 0, 63, 0);
-            // A charter world adds an island with no ground connection, and some high-tech factions.
-            if (charterWorld) g.CarveIsland();
+            // A charter world adds two islands with no ground connection, and a high-tech provider at
+            // every fourth settlement.
+            if (charterWorld)
+            {
+                g.CarveIsland();
+                g.CarveSouthIsland();
+            }
             NetRng rng = new NetRng(seed, "grid.world");
             g.AddSettlement(8, 8, 1, true);
             int n = Math.Max(1, factionLoadIds?.Count ?? 0);
             for (int i = 0; i < 36; i++)
             {
                 int fid = factionLoadIds != null && factionLoadIds.Count > 0 ? factionLoadIds[i % n] : 100 + i % 6;
-                bool charter = charterWorld && (i % n) % 3 == 0;
+                bool charter = charterWorld && i % 4 == 0;
                 for (int tries = 0; tries < 20; tries++)
                 {
                     int x = rng.Range(2, 62), y = rng.Range(2, 38);
@@ -103,6 +115,8 @@ namespace TheNetwork.Diagnostics
                 int fb = factionLoadIds != null && factionLoadIds.Count > 1 ? factionLoadIds[1] : 101;
                 g.AddSettlement(49, 9, fa, false, true);
                 g.AddSettlement(52, 12, fb);
+                g.AddSettlement(10, 30, fb, false, true);
+                g.AddSettlement(15, 34, fa);
             }
             return g;
         }

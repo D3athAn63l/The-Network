@@ -86,6 +86,25 @@ namespace TheNetwork.Diagnostics
             public int fieldLogEntriesLive;
             /// <summary>Simulated loads (the runtime route cache dropped) and the routes rebuilt afterwards.</summary>
             public int simulatedLoads;
+
+            /// <summary>A contractor moved farther between two observations than its own pace allows in the time it had (unexplained).</summary>
+            public int routeBudgetViolations;
+
+            /// <summary>An ended contractor's position changed after it ended.</summary>
+            public int endedMoved;
+
+            /// <summary>A Troubled operation Phase 2 declared recovered, whose group Spatial did not put back where it returns to.</summary>
+            public int recoveredMismatches;
+
+            /// <summary>An ambient journey with charter ends (charter is operation travel only).</summary>
+            public int ambientCharters;
+
+            /// <summary>Charter providers' settlements removed and founded again elsewhere during the run.</summary>
+            public int providersChurned;
+
+            /// <summary>Discontinuities with a stated reason (a chartered crossing, a lifecycle reconciliation, re-anchoring); excluded from the pace checks.</summary>
+            public int explainedJumps;
+
             public double avgMoveWork;
             public long maxMoveWork;
 
@@ -194,32 +213,95 @@ namespace TheNetwork.Diagnostics
 
         // ------------------------------------------------------------------ run
 
+        /// <summary>Removes one charter provider's settlement and founds another on free land (the synthetic world only).</summary>
+        private static void ChurnProvider(GridWorldGraph graph, NetRng rng, Result res)
+        {
+            List<int> providers = new List<int>();
+            for (int i = 0; i < graph.settlements.Count; i++) if (graph.settlements[i].canProvideCharterTransport) providers.Add(i);
+            if (providers.Count == 0) return;
+            SettlementFacts gone = graph.settlements[providers[rng.Range(0, providers.Count)]];
+            graph.settlements.Remove(gone);
+            for (int tries = 0; tries < 40; tries++)
+            {
+                int x = rng.Range(2, graph.width - 2), y = rng.Range(2, graph.height - 2);
+                if (!graph.IsPassable(graph.Tile(x, y))) continue;
+                graph.AddSettlement(x, y, gone.factionLoadId, false, true);
+                break;
+            }
+            res.providersChurned++;
+        }
+
+        /// <summary>What the daily spatial pass last saw of a contractor.</summary>
+        private sealed class Seen
+        {
+            public int tick;
+            public TileRef anchor;
+            public int updated;
+            public bool ended;
+        }
+
+        private static bool SameTile(TileRef a, TileRef b)
+        {
+            return a != null && b != null && a.tileId == b.tileId && a.layerId == b.layerId;
+        }
+
         /// <summary>
-        /// The daily spatial pass: every active contractor has a valid anchor, nobody moved farther in a
-        /// day than any speed band allows (no teleport), and Field Logs exist only on the player's live
-        /// contracts, without repeated lines.
+        /// The daily spatial pass: every active contractor has a valid anchor; nobody moved farther than any
+        /// speed band allows (no teleport) nor farther than ITS OWN pace allows in the time it had (no route
+        /// budget broken) unless a stated reason explains it (a chartered crossing, a lifecycle
+        /// reconciliation, re-anchoring); an ended contractor never moves again; ambient movement never
+        /// charters; a Troubled group Phase 2 declared recovered is where it returns to; and Field Logs exist
+        /// only on the player's live contracts, without repeated lines.
         /// </summary>
-        private static void CheckSpatial(DomainContext ctx, Result res, Dictionary<int, KeyValuePair<int, TileRef>> lastAnchor)
+        private static void CheckSpatial(DomainContext ctx, Result res, Dictionary<int, Seen> seen, HashSet<int> recoveredChecked)
         {
             int limitPerDay = Domain.Spatial.SpatialPolicy.TilesPerDay(Band.VeryHigh) * 2 + 2;
             foreach (NetworkActor a in ctx.actors.actors)
             {
-                if (!ContractorService.IsNpcContractor(a) || a.status != ActorStatus.Active) continue;
-                SpatialState s = a.Get<ContractorSimulation>().spatial;
+                if (!ContractorService.IsNpcContractor(a)) continue;
+                ContractorSimulation sim = a.Get<ContractorSimulation>();
+                SpatialState s = sim.spatial;
+                Seen last;
+                bool had = seen.TryGetValue(a.id.Value, out last);
+                if (a.status != ActorStatus.Active)
+                {
+                    if (had && last.ended && s.anchor != null && !SameTile(last.anchor, s.anchor)) res.endedMoved++;
+                    if (!had || !last.ended) seen[a.id.Value] = new Seen { tick = ctx.Now, anchor = s.anchor?.Copy(), updated = s.lastUpdateTick, ended = true };
+                    continue;
+                }
                 if (!s.IsInitialized || !ctx.graph.IsValid(s.anchor))
                 {
                     res.spatialInvalid++;
                     continue;
                 }
-                KeyValuePair<int, TileRef> last;
-                if (lastAnchor.TryGetValue(a.id.Value, out last))
+                if (s.purpose == SpatialPurpose.Ambient && s.bridgeFrom != null) res.ambientCharters++;
+                if (had && last.anchor != null && !SameTile(last.anchor, s.anchor))
                 {
-                    int d = ctx.graph.ApproxDistance(last.Value, s.anchor);
-                    int days = Math.Max(1, (ctx.Now - last.Key + Ticks.PerDay - 1) / Ticks.PerDay);
-                    if (d != int.MaxValue && d / days > res.maxDailyMove) res.maxDailyMove = d / days;
-                    if (d == int.MaxValue || d > limitPerDay * days) res.teleports++;
+                    if (ctx.Spatial.LastExplainedJump(a.id.Value) >= last.tick) res.explainedJumps++;
+                    else
+                    {
+                        int d = ctx.graph.ApproxDistance(last.anchor, s.anchor);
+                        int days = Math.Max(1, (ctx.Now - last.tick + Ticks.PerDay - 1) / Ticks.PerDay);
+                        if (d != int.MaxValue && d / days > res.maxDailyMove) res.maxDailyMove = d / days;
+                        if (d == int.MaxValue || d > limitPerDay * days) res.teleports++;
+                        // Its own pace: the tiles between the two positions cannot outnumber the steps it
+                        // could walk between the ticks each position was reached (plus rounding).
+                        int tpt = Domain.Spatial.SpatialPolicy.TicksPerTile(sim.mobility.speedBand);
+                        int dt = Math.Max(0, s.lastUpdateTick - last.updated);
+                        if (d == int.MaxValue || d > dt / tpt + 1) res.routeBudgetViolations++;
+                    }
                 }
-                lastAnchor[a.id.Value] = new KeyValuePair<int, TileRef>(ctx.Now, s.anchor.Copy());
+                seen[a.id.Value] = new Seen { tick = ctx.Now, anchor = s.anchor.Copy(), updated = s.lastUpdateTick };
+            }
+            foreach (Operation op in ctx.operations.operations)
+            {
+                if (op.spatial == null || op.spatial.detached || op.outcome == null || op.outcome.troubledKey == null) continue;
+                Checkpoint ret = op.Find(Checkpoint.Return);
+                if (ret == null || !ret.done || !recoveredChecked.Add(op.id.Value)) continue;
+                NetworkActor a = ctx.actors.Get(op.contractor);
+                SpatialState s = a?.Get<ContractorSimulation>()?.spatial;
+                if (a == null || a.status != ActorStatus.Active || s == null) continue;
+                if (s.destination == null && !SameTile(s.anchor, op.spatial.returnTo)) res.recoveredMismatches++;
             }
             ActorId player = ctx.actors.PlayerProxyId;
             foreach (Contract c in ctx.contracts.contracts)
@@ -270,7 +352,9 @@ namespace TheNetwork.Diagnostics
             }
         }
 
-        public static Result Run(int contractors, int contractsPerWeek, int days, int seed, IList<ItemFacts> items = null)
+        /// <param name="archipelago">Closes the land bridge too: the two halves of the synthetic world have no
+        /// ground connection at all, so work across the sea band needs a charter (a stress of ADR-045).</param>
+        public static Result Run(int contractors, int contractsPerWeek, int days, int seed, IList<ItemFacts> items = null, bool archipelago = false)
         {
             Result res = new Result { days = days };
             IdAllocator ids = new IdAllocator();
@@ -279,7 +363,9 @@ namespace TheNetwork.Diagnostics
             EventJournal journal = new EventJournal();
             DiagnosticsState diag = new DiagnosticsState();
             NetworkEventBus bus = new NetworkEventBus(ids, clock, journal, diag);
-            GridWorldGraph graph = GridWorldGraph.Default(new[] { 10, 11 }, seed);
+            // A charter world: an island with no ground connection, and some high-tech providers.
+            GridWorldGraph graph = GridWorldGraph.Default(new[] { 10, 11 }, seed, true);
+            if (archipelago) graph.Block(30, 27, 33, 31);
             Catalog catalog = new Catalog();
             foreach (ItemFacts f in items ?? SyntheticItems()) catalog.Add(f);
             World world = new World();
@@ -350,7 +436,8 @@ namespace TheNetwork.Diagnostics
             NetRng rng = new NetRng(seed, "soak");
             // Last seen (charged, refunded, transfers in, transfers out) per contract, kept after compaction.
             Dictionary<int, long[]> money = new Dictionary<int, long[]>();
-            Dictionary<int, KeyValuePair<int, TileRef>> lastAnchor = new Dictionary<int, KeyValuePair<int, TileRef>>();
+            Dictionary<int, Seen> seen = new Dictionary<int, Seen>();
+            HashSet<int> recoveredChecked = new HashSet<int>();
             List<long> moveWork = new List<long>();
             long workBefore = ctx.Spatial.counters.Work;
             List<double> dayMs = new List<double>();
@@ -407,7 +494,7 @@ namespace TheNetwork.Diagnostics
                 }
                 dayMs.Add((Stopwatch.GetTimestamp() - t0) * 1000.0 / Stopwatch.Frequency);
                 CheckInvariants(ctx, res, money);
-                CheckSpatial(ctx, res, lastAnchor);
+                CheckSpatial(ctx, res, seen, recoveredChecked);
                 long work = ctx.Spatial.counters.Work;
                 moveWork.Add(work - workBefore);
                 workBefore = work;
@@ -417,6 +504,9 @@ namespace TheNetwork.Diagnostics
                     ctx.Spatial.ClearRouteCache();
                     res.simulatedLoads++;
                 }
+                // Settlements come and go: every half year a high-tech provider's settlement is gone and
+                // another is founded, so committed charters must reconcile from current truth.
+                if (day % 180 == 179) ChurnProvider(graph, rng, res);
             }
             res.totalMs = (Stopwatch.GetTimestamp() - all0) * 1000.0 / Stopwatch.Frequency;
             long charged = 0, refunded = 0, transfers = 0;
@@ -497,7 +587,9 @@ namespace TheNetwork.Diagnostics
             sb.AppendLine("  stale quotes refused at acceptance (bidder at capacity since quoting; another quote was tried): " + res.staleRefused);
             sb.AppendLine("  spatial: " + res.spatial);
             sb.AppendLine("  spatial invariants (all must be 0): contractors without a valid anchor " + res.spatialInvalid + ", teleports " + res.teleports + " (longest daily move " + res.maxDailyMove + " tiles)"
-                + ", Field Log duplicates " + res.fieldLogDuplicates + ", Field Log leaks " + res.fieldLogLeaks);
+                + ", route-budget violations " + res.routeBudgetViolations + ", ended contractors that moved " + res.endedMoved + ", recovered operations disagreeing with Phase 2 " + res.recoveredMismatches
+                + ", ambient charters " + res.ambientCharters + ", Field Log duplicates " + res.fieldLogDuplicates + ", Field Log leaks " + res.fieldLogLeaks
+                + " (explained discontinuities, not counted: " + res.explainedJumps + "; provider settlements replaced: " + res.providersChurned + ")");
             sb.AppendLine("  movement work per day: avg " + res.avgMoveWork.ToString("0.0") + ", max " + res.maxMoveWork + " units; " + res.simulatedLoads + " simulated loads (route caches dropped); live Field Logs " + res.fieldLogsLive + " with " + res.fieldLogEntriesLive + " entries");
             sb.AppendLine("  time per simulated day: avg " + res.avgDayMs.ToString("0.00") + " ms, p95 " + p95.ToString("0.00") + " ms, max " + res.maxDayMs.ToString("0.00") + " ms (total " + res.totalMs.ToString("0") + " ms)");
             res.text = sb.ToString();
