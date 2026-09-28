@@ -1526,9 +1526,10 @@ namespace TheNetwork.Domain.Spatial
             string route = routes.TryGetValue(a.id.Value, out r) ? "cached route " + (r.steps.Count - r.index) + " of " + r.steps.Count + " steps left (" + r.GroundLeft + " on foot)" : "no cached route";
             if (s.bridgeFrom != null)
             {
-                string segment = s.bridged ? "on foot from the landing"
-                    : r != null && r.bridgeUnits > 0 && r.index < r.bridgeStart ? "on foot to the charter hub"
-                    : "at the hub or crossing by charter";
+                bool back = s.purpose == SpatialPurpose.Return;
+                string segment = s.bridged ? (back ? "on foot home from the hub" : "on foot from the landing")
+                    : r != null && r.bridgeUnits > 0 && r.index < r.bridgeStart ? (back ? "on foot to the pickup" : "on foot to the charter hub")
+                    : (back ? "at the pickup or crossing by charter" : "at the hub or crossing by charter");
                 route += "; segment: " + segment;
             }
             string dist = s.destination != null && Graph != null ? ", " + Graph.ApproxDistance(s.anchor, s.destination) + " tiles to go" : "";
