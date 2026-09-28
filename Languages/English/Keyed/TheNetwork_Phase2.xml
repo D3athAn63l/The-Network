@@ -365,4 +365,31 @@
   <TheNetwork_Settings_Population>Contractor population: about {0}</TheNetwork_Settings_Population>
   <TheNetwork_Settings_PopulationTip>How many contractors a world keeps. In a running game, new outfits appear over time to reach it; nobody is ever removed to meet it. A newly generated cast uses it too.</TheNetwork_Settings_PopulationTip>
 
+
+  <!-- Phase 2.5: the Field Log of the player's running job (reports, never locations) -->
+  <TheNetwork_FieldLog_Header>Field log</TheNetwork_FieldLog_Header>
+  <TheNetwork_FieldLog_Accepted>{0} accepted the job.</TheNetwork_FieldLog_Accepted>
+  <TheNetwork_FieldLog_TookOver>{0} took over the job from the contractor who was lost.</TheNetwork_FieldLog_TookOver>
+  <TheNetwork_FieldLog_SetOut>{0} has set out.</TheNetwork_FieldLog_SetOut>
+  <TheNetwork_FieldLog_WorkingNearby>{0} is working close to where they were.</TheNetwork_FieldLog_WorkingNearby>
+  <TheNetwork_FieldLog_TransportArranged>{0} has arranged charter transport for the part of the journey that cannot be made overland.</TheNetwork_FieldLog_TransportArranged>
+  <TheNetwork_FieldLog_Arrived>{0} has reached the area; the work is underway.</TheNetwork_FieldLog_Arrived>
+  <TheNetwork_FieldLog_WorseThanExpected>{0} reports the job is much harder than expected: {1} silver more, or only {2} {3}.</TheNetwork_FieldLog_WorseThanExpected>
+  <TheNetwork_FieldLog_PaidMore>You agreed to pay {0} silver more.</TheNetwork_FieldLog_PaidMore>
+  <TheNetwork_FieldLog_ReducedScope>The job now covers {0} {1}.</TheNetwork_FieldLog_ReducedScope>
+  <TheNetwork_FieldLog_CarryOn>{0} carries on at the original terms, not happily.</TheNetwork_FieldLog_CarryOn>
+  <TheNetwork_FieldLog_Delayed>The work is running behind schedule.</TheNetwork_FieldLog_Delayed>
+  <TheNetwork_FieldLog_Missing>Contact with {0} has been lost.</TheNetwork_FieldLog_Missing>
+  <TheNetwork_FieldLog_Stranded>{0} is stranded and cannot come back yet.</TheNetwork_FieldLog_Stranded>
+  <TheNetwork_FieldLog_Captured>Word is that {0}'s people have been taken.</TheNetwork_FieldLog_Captured>
+  <TheNetwork_FieldLog_CapturedSolo>Word is that {0} has been captured.</TheNetwork_FieldLog_CapturedSolo>
+  <TheNetwork_FieldLog_Recovered>{0} has turned up again.</TheNetwork_FieldLog_Recovered>
+  <TheNetwork_FieldLog_SecuredAll>{0} reports that all {1} {2} have been secured.</TheNetwork_FieldLog_SecuredAll>
+  <TheNetwork_FieldLog_SecuredPart>{0} reports that {1} of {2} {3} have been secured.</TheNetwork_FieldLog_SecuredPart>
+  <TheNetwork_FieldLog_PartialAccepted>You accepted the partial shipment of {0} {1}.</TheNetwork_FieldLog_PartialAccepted>
+  <TheNetwork_FieldLog_PartialContinued>You accepted {0} and asked for the other {1} {2} on a new job.</TheNetwork_FieldLog_PartialContinued>
+  <TheNetwork_FieldLog_DeliveryRetry>The shipment could not be sent yet; it will be tried again.</TheNetwork_FieldLog_DeliveryRetry>
+  <TheNetwork_FieldLog_DeliveryHeld>The shipment is being held until it can be delivered.</TheNetwork_FieldLog_DeliveryHeld>
+  <TheNetwork_FieldLog_PaymentDue>{0} silver is due before the goods are released.</TheNetwork_FieldLog_PaymentDue>
+  <TheNetwork_FieldLog_Handover>They are sending the {0} {1} your payments covered.</TheNetwork_FieldLog_Handover>
 </LanguageData>

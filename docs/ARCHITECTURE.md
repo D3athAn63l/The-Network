@@ -114,7 +114,8 @@ The architecture has to:
 
 Arrows point in the direction of calls. Services never call Presentation. Domain never calls
 Integration directly: domain code asks through narrow adapter interfaces
-(`ISiteAdapter`, `ICustody`, `IPayment`, `IDelivery`) so that domain logic and state machines
+(`ISiteAdapter`, `ICustody`, `IPayment`, `IDelivery`, and from Phase 2.5 `ISpatialWorld` for the
+world graph, [SPATIAL § 4](SPATIAL.md#4-the-world-graph-port-and-adapter)) so that domain logic and state machines
 can be tested headless ([DEBUGGING § Headless tests](DEBUGGING.md#6-headless-tests)).
 
 ## 4. Layers, modules and dependency rules

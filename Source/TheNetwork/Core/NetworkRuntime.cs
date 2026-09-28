@@ -105,7 +105,8 @@ namespace TheNetwork.Core
                 payment = new PaymentAdapter(),
                 world = WorldFacts,
                 sites = SiteAdapter,
-                delivery = new DropPodDelivery()
+                delivery = new DropPodDelivery(),
+                graph = new SpatialWorldAdapter()
             };
             Ctx.Actors = new ActorService(Ctx);
             Ctx.Intel = new IntelService(Ctx);
@@ -117,6 +118,8 @@ namespace TheNetwork.Core
             Ctx.Procurement = new Domain.Contracts.ProcurementService(Ctx);
             Ctx.Operations = new Domain.Operations.OperationService(Ctx);
             Ctx.Consequences = new Domain.Consequences.ConsequenceEngine(Ctx);
+            Ctx.Spatial = new Domain.Spatial.SpatialService(Ctx);
+            Ctx.FieldLog = new Domain.Contracts.FieldLogService(Ctx);
             RegisterContractKinds();
             Ctx.tuning.targetProvider = () => NetworkMod.Settings?.targetContractorCount ?? 100;
 

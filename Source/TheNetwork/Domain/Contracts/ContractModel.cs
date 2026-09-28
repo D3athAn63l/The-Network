@@ -388,6 +388,12 @@ namespace TheNetwork.Domain.Contracts
 
         public string quarantinedReason;
 
+        /// <summary>
+        /// The live Field Log (Phase 2.5): short reports about this job, kept only on a player-issued
+        /// contract while it runs, and cleared when it closes (History keeps what lasts).
+        /// </summary>
+        public List<FieldLogEntry> fieldLog = new List<FieldLogEntry>();
+
         public bool IsTerminal => ContractStates.IsTerminal(status);
         public bool IsSeeking => ContractStates.IsSeeking(status);
         public bool IsUnderway => ContractStates.IsUnderway(status);
@@ -494,8 +500,10 @@ namespace TheNetwork.Domain.Contracts
             Scribe_Deep.Look(ref renegotiation, "renegotiation");
             Scribe_Values.Look(ref causeKey, "cause");
             Scribe_Values.Look(ref quarantinedReason, "quarantined");
+            NetScribe.LookListTolerant(ref fieldLog, "fieldLog", "contracts.fieldLog");
             if (Scribe.mode == LoadSaveMode.LoadingVars)
             {
+                if (fieldLog == null) fieldLog = new List<FieldLogEntry>();
                 if (parties == null) parties = new Parties();
                 if (request == null) request = new ContractRequest();
                 if (lineage == null) lineage = new ContractLineage();
@@ -508,6 +516,32 @@ namespace TheNetwork.Domain.Contracts
         public override string ToString()
         {
             return id + " " + kindKey + " " + status + (subStatus != null ? "/" + subStatus : "") + " " + Quantity + "x " + ItemLabel;
+        }
+    }
+
+    /// <summary>
+    /// One Field Log line: a translation key and the snapshotted words it needs (names, labels, numbers
+    /// as text), fixed when written so opening the UI never rewords it. Never a coordinate.
+    /// </summary>
+    public sealed class FieldLogEntry : IExposable
+    {
+        public int tick;
+        public string key;
+        public List<string> args = new List<string>();
+
+        public bool SameAs(FieldLogEntry o)
+        {
+            if (o == null || o.key != key || o.args.Count != args.Count) return false;
+            for (int i = 0; i < args.Count; i++) if (args[i] != o.args[i]) return false;
+            return true;
+        }
+
+        public void ExposeData()
+        {
+            Scribe_Values.Look(ref tick, "tick", 0);
+            Scribe_Values.Look(ref key, "key");
+            NetScribe.LookStringList(ref args, "args");
+            if (Scribe.mode == LoadSaveMode.LoadingVars && args == null) args = new List<string>();
         }
     }
 

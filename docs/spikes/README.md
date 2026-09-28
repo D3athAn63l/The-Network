@@ -1,4 +1,4 @@
-# Runtime spikes (Phase 1 and Phase 2)
+# Runtime spikes (Phase 1, Phase 2 and Phase 2.5)
 
 One file per spike ([RIMWORLD_INTEGRATION § 5](../RIMWORLD_INTEGRATION.md#5-runtime-spikes)). Each records the
 question, the build, the environment, the steps, the result, the logs, the verdict and the consequence.
@@ -8,7 +8,7 @@ question, the build, the environment, the steps, the result, the logs, the verdi
 | Verdict | Meaning |
 |---|---|
 | **PASS** | Run in RimWorld 1.6 and met every pass criterion. |
-| **PARTIAL** | Some of the question was answered by real evidence that is not a RimWorld runtime run (for example the real Verse `Scribe` executed headlessly). What remains is listed. |
+| **PARTIAL** | Some of the question was answered by real evidence: either not a RimWorld runtime run (for example the real Verse `Scribe` executed headlessly), or a runtime run that covered only some of the cases. What remains is listed. |
 | **NOT RUN — OWNER RUNTIME VALIDATION REQUIRED** | Needs the RimWorld player (maps, sites, caravans, UI, letters). It was **not** run. The owner steps below are reproducible. |
 | **FAIL** | Run and did not meet the criteria. |
 
@@ -22,7 +22,7 @@ compiling, static inspection or headless tests are not runtime passes.
 | Machine | Linux container (`Linux 6.18`), no Unity player, no GPU, no RimWorld install |
 | Build | .NET SDK 8.0.131, target `net472`, `LangVersion 7.3`; `./build.sh <Managed>` → `1.6/Assemblies/TheNetwork.dll`, 0 errors, 0 C# warnings (one MSB3277 netstandard 2.0/2.1 notice caused by the trimmed reference set; a real `Managed` folder ships `netstandard.dll`) |
 | Game assemblies | Owner-provided `Rimworld DLLs (update).zip` from the `zRim_Source_XMLs` repository: `Assembly-CSharp 1.6.9676.17735`, Unity modules. Used as external references only; nothing proprietary is committed. |
-| Headless tests | Mono 6.8.0.105; `Tests/run-tests.sh <Managed> <0Harmony.dll>`; Phase 1: 71 tests, 4,588 checks, 0 failures (after the pre-runtime fix pass). Phase 2 (after the final correction pass): 144 tests, 12,026 checks, 0 failures. `0Harmony 2.4.1` is used **by the test runner only** to stub Unity-only `Log`/`DeepProfiler` calls and to let `GenTypes` see TheNetwork.dll as a loaded mod would. TheNetwork.dll references no Harmony (a test checks its referenced assemblies). |
+| Headless tests | Mono 6.8.0.105; `Tests/run-tests.sh <Managed> <0Harmony.dll>`; Phase 1: 71 tests, 4,588 checks, 0 failures (after the pre-runtime fix pass). Phase 2 (after the final correction pass): 144 tests, 12,026 checks, 0 failures. Phase 2.5 (after its correction passes): 213 tests, 15,169 checks, 0 failures. `0Harmony 2.4.1` is used **by the test runner only** to stub Unity-only `Log`/`DeepProfiler` calls and to let `GenTypes` see TheNetwork.dll as a loaded mod would. TheNetwork.dll references no Harmony (a test checks its referenced assemblies). |
 
 ## Owner setup for every spike
 
@@ -52,4 +52,5 @@ compiling, static inspection or headless tests are not runtime passes.
 | [S8](S8-determinism.md) reload determinism (incl. Odyssey) | PARTIAL (Network logic headless; vanilla tile finder and Odyssey not run) |
 | [S18](S18-performance.md) performance and save size | PARTIAL (harness and real Scribe run headlessly; in-game run pending) |
 | [S19](S19-loot-without-extermination.md) loot without extermination | NOT RUN — OWNER RUNTIME VALIDATION REQUIRED |
-| [S13](S13-drop-pod-delivery.md) drop-pod delivery (Phase 2) | NOT RUN — OWNER RUNTIME VALIDATION REQUIRED |
+| [S13](S13-drop-pod-delivery.md) drop-pod delivery (Phase 2) | PARTIAL — normal home delivery PASSED in the owner's runtime test; edge cases NOT RUN |
+| [S20](S20-abstract-spatial-routing.md) abstract spatial routing, charter transport and Last Known Location placement (Phase 2.5) | NOT RUN — OWNER RUNTIME VALIDATION REQUIRED |

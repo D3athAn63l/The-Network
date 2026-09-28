@@ -184,6 +184,80 @@ namespace TheNetwork.Domain.Operations
         }
     }
 
+    /// <summary>
+    /// An operation's hidden geography (SPATIAL § 6), committed when it starts. The existing checkpoints
+    /// stay the timeline: the contractor sets out at Prep, is at the work region from Arrive, and heads
+    /// for <see cref="returnTo"/> after Resolve. It explains WHERE; the resolver still decides WHAT.
+    /// Null on operations started before Phase 2.5 (their lifecycle is unchanged).
+    /// </summary>
+    public sealed class OperationSpatialPlan : IExposable
+    {
+        /// <summary>The contractor's real anchor when the operation started.</summary>
+        public TileRef origin;
+
+        /// <summary>The approximate area where the work takes place (not a site, not a world object).</summary>
+        public TileRef workRegion;
+
+        /// <summary>Where the group heads after the work.</summary>
+        public TileRef returnTo;
+
+        /// <summary>Where trouble or disaster struck (committed at resolution; consequences read it).</summary>
+        public TileRef incident;
+
+        /// <summary>A concurrent job of an organization: a detachment went; the main body's anchor did not move.</summary>
+        public bool detached;
+
+        /// <summary>Why the plan degraded (no route, no work region), or null.</summary>
+        public string fallbackKey;
+
+        /// <summary>
+        /// Abstract charter transport (ADR-045): the settlement of a high-tech provider where the group
+        /// embarks on the way out and is set down again on the way back. Null for a ground plan.
+        /// </summary>
+        public TileRef hub;
+
+        /// <summary>
+        /// Where the reusable charter sets the group down near the work region, and later picks it up
+        /// again for the return (the same committed area both ways). Null for a ground plan.
+        /// </summary>
+        public TileRef landing;
+
+        /// <summary>
+        /// History: the outbound crossing by this charter actually happened (the group was flown to the
+        /// landing). Never cleared: a later degraded return does not rewrite it.
+        /// </summary>
+        public bool charterUsed;
+
+        /// <summary>
+        /// Why the committed charter, already used on the way out, can no longer carry the rest of the
+        /// round trip (its provider or pickup gone, no replacement): the return degraded to foot. Null
+        /// while the charter is in force. <see cref="hub"/> and <see cref="landing"/> are kept as history.
+        /// </summary>
+        public string charterLost;
+
+        /// <summary>
+        /// A committed round-trip charter is IN FORCE for this operation: out via the hub and the landing,
+        /// back from the same landing to the same hub. False for a ground plan, a charter dropped before it
+        /// was used (hub and landing cleared), and a charter lost after use (<see cref="charterLost"/>).
+        /// What the CURRENT leg does is the contractor's live <c>SpatialState.bridgeFrom/bridgeTo</c>.
+        /// </summary>
+        public bool Charter => hub != null && landing != null && charterLost == null;
+
+        public void ExposeData()
+        {
+            Scribe_Deep.Look(ref origin, "origin");
+            Scribe_Deep.Look(ref workRegion, "work");
+            Scribe_Deep.Look(ref returnTo, "returnTo");
+            Scribe_Deep.Look(ref incident, "incident");
+            Scribe_Values.Look(ref detached, "detached", false);
+            Scribe_Values.Look(ref fallbackKey, "fallback");
+            Scribe_Deep.Look(ref hub, "hub");
+            Scribe_Deep.Look(ref landing, "landing");
+            Scribe_Values.Look(ref charterUsed, "charterUsed", false);
+            Scribe_Values.Look(ref charterLost, "charterLost");
+        }
+    }
+
     public sealed class Operation : IExposable
     {
         public const string ProcureKind = "Procure";
@@ -214,6 +288,9 @@ namespace TheNetwork.Domain.Operations
         public string abortReasonKey;
         public bool outcomeApplied;
         public string quarantinedReason;
+
+        /// <summary>Hidden geography (Phase 2.5); null for operations from an older save.</summary>
+        public OperationSpatialPlan spatial;
 
         public bool IsFinished => status == OpStatus.Aborted || phase == OpPhase.Done;
 
@@ -254,6 +331,7 @@ namespace TheNetwork.Domain.Operations
             Scribe_Values.Look(ref abortReasonKey, "abortReason");
             Scribe_Values.Look(ref outcomeApplied, "applied", false);
             Scribe_Values.Look(ref quarantinedReason, "quarantined");
+            Scribe_Deep.Look(ref spatial, "spatial");
             if (Scribe.mode == LoadSaveMode.LoadingVars && (badPhase || badStatus) && quarantinedReason == null)
             {
                 quarantinedReason = badPhase ? "MalformedEnum:phase" : "MalformedEnum:status";

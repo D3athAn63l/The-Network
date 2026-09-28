@@ -62,6 +62,7 @@ namespace TheNetwork.Core
             CheckExternalRefs(rt, report);
             CheckOrphansAndStates(rt, report);
             CheckScheduler(rt, report);
+            CheckSpatial(rt, report);
             int endedProxies = ctx.Actors.ReconcileFactionProxies();
             if (endedProxies > 0) report.Add(endedProxies + " faction proxies ended (FactionVanished).", true);
             CheckCaps(rt, report);
@@ -305,6 +306,15 @@ namespace TheNetwork.Core
                 sch.Cancel(orphans[i].kind, orphans[i].target);
                 report.Add("Job " + orphans[i] + ": target gone; removed.", true);
             }
+        }
+
+        /// <summary>Spatial reconciliation (SPATIAL § 9): anchors, destinations and operation bindings.</summary>
+        private static void CheckSpatial(NetworkRuntime rt, ValidationReport report)
+        {
+            if (rt.Ctx.Spatial == null) return;
+            List<string> findings = new List<string>();
+            rt.Ctx.Spatial.Validate(findings);
+            for (int i = 0; i < findings.Count; i++) report.Add(findings[i], true);
         }
 
         private static void CheckCaps(NetworkRuntime rt, ValidationReport report)

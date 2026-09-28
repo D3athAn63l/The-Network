@@ -91,6 +91,9 @@ namespace TheNetwork.Domain
         public ISiteAdapter sites;
         public IDelivery delivery;
 
+        /// <summary>The world graph for hidden spatial continuity (Phase 2.5).</summary>
+        public ISpatialWorld graph;
+
         public ActorService Actors;
         public IntelService Intel;
         public OpportunityService Opportunities;
@@ -101,6 +104,8 @@ namespace TheNetwork.Domain
         public Contracts.ProcurementService Procurement;
         public Operations.OperationService Operations;
         public Consequences.ConsequenceEngine Consequences;
+        public Spatial.SpatialService Spatial;
+        public Contracts.FieldLogService FieldLog;
 
         public int Now => clock.Now;
     }
@@ -141,6 +146,12 @@ namespace TheNetwork.Domain
         public static bool forceFollowUp;
         public static bool forceNewcomer;
 
+        /// <summary>The next resolution is not Troubled (its band and casualties stand).</summary>
+        public static bool forceNotTroubled;
+
+        /// <summary>The next Troubled deadline finds the group (true) or writes it off (false) instead of drawing.</summary>
+        public static bool? forceTroubledFound;
+
         public static void Clear()
         {
             forceBand = null;
@@ -151,6 +162,8 @@ namespace TheNetwork.Domain
             forceWorseThanExpected = false;
             forceFollowUp = false;
             forceNewcomer = false;
+            forceNotTroubled = false;
+            forceTroubledFound = null;
         }
     }
 

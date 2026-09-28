@@ -249,6 +249,13 @@ always → update summaries (actor, character, pair) with the event's deed delta
 
 Everything else is aggregated into counters and never stored individually.
 
+**Not events, not history (Phase 2.5).** Hidden spatial movement (ambient relocation, journeys,
+arrivals) publishes nothing: no event, record, letter, relationship change or summary. The Field Log
+of a player's running contract is not built from the journal either: it is written by the domain in
+the same step as the state change it reports, lives on the contract, and is cleared when the contract
+closes. History keeps the durable record ("X fulfilled the contract"); the Field Log keeps the
+temporary one ("X has set out") and is never copied into History ([SPATIAL § 8](SPATIAL.md#8-the-field-log), ADR-044).
+
 ---
 
 ## 4. Retention, pruning and aggregation

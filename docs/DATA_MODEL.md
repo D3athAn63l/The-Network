@@ -357,6 +357,7 @@ ContractorSimulation : ActorComponent   // NPC Organization or Individual (Solo)
   careerStage: CareerStage           // Rising | Established | Veteran | Declining
   retirementPressure: float
   mobility: MobilityProfile          // how far, how fast and what the contractor can move (below)
+  spatial: SpatialState              // Phase 2.5: where it is approximately (hidden world truth, below)
   nextUpkeepTick: int                // mirrored by a scheduler job; kept for validation
 ```
 
@@ -383,6 +384,25 @@ MobilityProfile                      // part of ContractorSimulation; capability
   Royalty; passenger transport with Odyssey). None of that presentation is designed in Phase 0.
 - **Abstract only.** No simulated world caravans, persistent vehicles, off-map ships, per-tick
   movement or vehicle inventories. It becomes physical only when a contractor does.
+
+#### Spatial state (SpatialState, Phase 2.5)
+
+```
+SpatialState                          // part of ContractorSimulation; world truth, never shown to the player
+  status: Uninitialized | Idle | Travelling | OnAssignment | Blocked
+  anchor: TileRef?                    // one tile: "approximately around here"
+  destination: TileRef?               // committed; never rerolled
+  journeyOrigin: TileRef?
+  purpose: None | Ambient | Outbound | Return
+  operation: OperationId              // the operation the main body is on
+  journeyStartTick, lastUpdateTick, arrivalTick: int
+  nextAmbientTick: int, journeys: int, initializedTick: int, blockedReason: string?
+  bridgeFrom, bridgeTo: TileRef?      // a chartered leg: the two committed ends of the crossing (ADR-045)
+  bridged: bool                       // the crossing of the current leg is done
+```
+
+- Separate from `MobilityProfile`: mobility says what the contractor *can* do, spatial state says
+  *where it is*. Routes, presence areas and caches are never persisted ([SPATIAL § 2](SPATIAL.md#2-spatial-truth-and-ownership)).
 
 ### 6.3 OrganizationProfile (NPC organizations and crews only)
 
@@ -625,6 +645,8 @@ Contract
     children: ContractId[]
     depth: int
   flags: ContractFlags                     // Quarantined, PlayerIssued, PlayerContractor, …
+  fieldLog: FieldLogEntry[]                // Phase 2.5: player-issued, running contracts only; ≤ 24; cleared at close
+    tick: int, key: string, args: string[] // a translation key and snapshotted words (never a location)
 
 Offer                                      // the CONTRACTOR's bid: its own contribution to a quote
   id: OfferId
@@ -721,7 +743,16 @@ Operation
     extraLoot: ItemTally[]
     knowledgeGains: TopicGain[]
   physical: DeploymentId?               // when the operation went physical
+  spatial: OperationSpatialPlan?        // Phase 2.5; null for operations from an older save
+    origin, workRegion, returnTo, incident: TileRef?
+    detached: bool                      // an organization's concurrent job: the main body did not move
+    fallbackKey: string?                // why the plan degraded (NoRoute, DestinationInvalid, …)
+    hub, landing: TileRef?              // a committed two-way charter: the provider's settlement, and the
+                                        // set-down / pickup area near the work region (ADR-045)
 ```
+
+The spatial plan is hidden geography committed at start ([SPATIAL § 6](SPATIAL.md#6-operation-integration)):
+it explains WHERE; the checkpoints stay the timeline and the resolver decides WHAT.
 
 ---
 

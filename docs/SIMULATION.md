@@ -84,6 +84,7 @@ across the day, never all at once.
 | Journal prune | on append | — | 1 |
 | Reference validation | load pipeline and checkpoints | on load, and per checkpoint | 1 |
 | NPC contractor upkeep (recovery, morale drift, funds, recruitment for organizations, retirement pressure) | job per NPC contractor (Solo or organization; never the player), staggered | every 60,000 ticks (1 day) | 2 |
+| Spatial catch-up and ambient relocation (hidden position, [SPATIAL § 5](SPATIAL.md#5-movement)) | inside the NPC contractor upkeep job above; also at operation checkpoints | no job of its own; a route only when a journey starts or a cache is rebuilt | 2.5 |
 | Operation checkpoints | job at each checkpoint | per operation, 3–6 per contract | 2 |
 | Bidding window collection | jobs | at open, one mid-window pass, at close | 2 |
 | Population manager (spawn or retire orgs toward target counts) | job | every 7 days | 2 |
@@ -200,6 +201,8 @@ real colony ([ARCHITECTURE § 6.6.1](ARCHITECTURE.md#661-contractor-actors-capab
    to Regular to Veteran based on survived operations (counters).
 5. Update retirement pressure (from career age, leader age, losses, prosperity).
 6. Invalidate cached strength.
+7. (Phase 2.5) Catch the hidden spatial state up to now and, if the contractor is idle and its
+   committed ambient time has come, maybe relocate its operating area ([SPATIAL § 5](SPATIAL.md#5-movement)).
 
 The job is O(1) per NPC contractor and small. It never touches pawns.
 

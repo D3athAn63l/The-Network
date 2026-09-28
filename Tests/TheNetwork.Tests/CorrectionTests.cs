@@ -75,7 +75,7 @@ namespace TheNetwork.Tests
             return false;
         }
 
-        private static NetworkState StateOf(TestNet n)
+        public static NetworkState StateOf(TestNet n)
         {
             return new NetworkState
             {
@@ -85,7 +85,7 @@ namespace TheNetwork.Tests
         }
 
         /// <summary>Saves the TestNet's stores through the real Scribe and loads them back.</summary>
-        private static NetworkState SaveLoad(TestNet n)
+        public static NetworkState SaveLoad(TestNet n)
         {
             string path = PersistenceTests.SaveState(StateOf(n), 2);
             NetworkState loaded = new NetworkState();
@@ -105,7 +105,7 @@ namespace TheNetwork.Tests
             return loaded;
         }
 
-        private static void Swap(TestNet n, NetworkState s)
+        public static void Swap(TestNet n, NetworkState s)
         {
             n.ctx.actors = s.actors;
             n.ctx.characters = s.characters;
@@ -397,7 +397,7 @@ namespace TheNetwork.Tests
             // Generation is a pure function of the saved inputs: the same inputs give the same content.
             Operation op = n.ctx.operations.Get(lp.operation);
             string failure;
-            Opportunity again = n.ctx.Opportunities.GenerateFollowUp(n.cat.Facts("TestBlade"), lost, op.outcome.securedPayload[0], seed, lc.id.Ref, depth, null, out failure);
+            Opportunity again = n.ctx.Opportunities.GenerateFollowUp(n.cat.Facts("TestBlade"), lost, op.outcome.securedPayload[0], seed, lc.id.Ref, depth, null, lp.near, out failure);
             T.Check(again != null, "regenerated for comparison (" + failure + ")");
             if (again == null) return;
             T.Eq(Describe(first), Describe(again), "identical content: def, stuff, quality, count and extras");

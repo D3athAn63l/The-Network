@@ -478,8 +478,10 @@
   contractor with nobody left to report.
 - **Consequences.** The site never contradicts the operation's result.
 
-### ADR-041 · Abstract spatial simulation is deferred (design only)
-- **Decision.** Recorded for later; nothing of it is implemented in Phase 2.
+### ADR-041 · Abstract spatial continuity (implemented by Phase 2.5)
+- **Status.** Recorded as a deferred design during Phase 2; **implemented by Phase 2.5**
+  ([SPATIAL](SPATIAL.md)) with its philosophy unchanged. Concrete choices: ADR-042 to ADR-045.
+- **Decision.**
   1. Abstract spatial truth is invisible to the player: no map marker, no route, no omniscience.
   2. `MobilityProfile` stays a CAPABILITY (range, speed, lift, transport), never a location.
   3. A future `SpatialState` is WORLD TRUTH: an approximate current `TileRef`, an optional
@@ -493,8 +495,108 @@
   7. Last Known Locations, rescues and visits may later read it.
   8. Timing: a dedicated PR after Phase 2 is merged and validated at runtime, before spatially
      aware Phase 3 physicalization matters.
-- **Rejected (now).** Any `SpatialState`, spatial field on `ContractorSimulation`, spatial store,
-  save-version change, route cache, movement job, position initialization, tile occupancy index,
-  intersection check, relay behaviour, ambient visit, tracking or map icon in Phase 2.
-- **Consequences.** Phase 2's save layout is unchanged by this decision.
+- **Rejected (still).** Tile occupancy indexes, intersection checks and travel corridors, relay
+  behaviour, ambient visits, tracking, map icons, world objects, caravans, pawns, cross-layer travel.
+- **Consequences.** Phase 2 shipped without spatial data. Phase 2.5 added it as save format 3, with a
+  migration that invents no past and leaves running Phase 2 operations untouched.
 
+### ADR-042 · Spatial movement is lazy catch-up over a rebuildable route
+- **Decision.** Persist only world truth that cannot be reconstructed: one anchor tile, an optional
+  committed destination, the journey's timing (start, last update, arrival) and the next ambient
+  decision. Position is caught up proportionally to elapsed time toward the committed arrival, only
+  when something needs it: the contractor's existing staggered daily upkeep, operation checkpoints,
+  consequences, load. The route is a runtime cache rebuilt from the saved anchor to the saved
+  destination; the exact path is softer truth than a committed outcome (a changed world may give a
+  different path, never a teleport or a reroll). Failure is soft: the last valid anchor is kept and
+  the journey is dropped (`Blocked`); contracts are never touched. World access goes through the
+  `ISpatialWorld` port (RimWorld adapter; a synthetic grid for tests and the soak).
+- **Amended by the Phase 2.5 correction pass.** (1) The remaining route is proven before any progress,
+  the final arrival included; a destination that is still a valid tile is no evidence it can be
+  reached, so passing `arrivalTick` alone never places a contractor there. (2) Approximate distance
+  only discovers candidates; a destination is committed only when its real route, in steps, fits the
+  time and range it must fit. (3) A committed arrival is never sooner than walking the route takes;
+  a longer rebuilt route makes a journey later, never faster. (4) An ended contractor is frozen where
+  it ended. (5) The last-resort anchor search is guaranteed: seeded probes, then a deterministic scan
+  of the whole surface.
+- **Rejected.** A per-tick mover or a new job per contractor; persisting routes, corridors or
+  presence sets; WorldObjects or caravans as carriers; teleporting across impossible geography to
+  keep coordinates tidy; arriving because the clock says so.
+- **Consequences.** Idle contractors cost nothing extra; the 18-year soak adds about 127 KB to the save
+  and zero teleports, pace violations or invalid states. Spatial may lag behind a squeezed operation
+  timeline; it never catches up by moving faster.
+
+### ADR-043 · Spatial conforms to the operation timeline; the incident feeds consequences
+- **Decision.** A new operation commits a hidden plan at start: origin = the contractor's real anchor,
+  a work region scaled to the travel time the committed ETA leaves, the return point, and later the
+  incident. Departure is the Prep checkpoint, arrival the Arrive checkpoint, the return leg ends at
+  the (possibly delayed) Return checkpoint; the resolver alone decides what happened. Trouble or
+  disaster fixes the incident tile before any consequence reads it, and the Last Known Location is
+  placed near it (bounded local search, else the Phase 2 placement). Quotes and ETAs are not changed
+  by spatial in this phase. Operations loaded from a Phase 2 save keep their lifecycle and get no
+  plan. An organization's concurrent job is a detachment: the main body's anchor does not move for it.
+- **Amended by the Phase 2.5 correction pass.** Only a Troubled outcome suspends the return; an
+  incident or a Disaster band by itself does not (a Disaster with survivors comes home, its incident
+  still recorded). When Phase 2's Troubled deadline declares the group found and returned, spatial
+  is reconciled to `returnTo` (a lifecycle reconciliation, not a journey); a write-off keeps the
+  incident as the last truth. Arrive and Return are never snapped; the work region must fit the
+  tighter of the outbound and planned return windows in real route steps. Only an active contractor
+  is moved for an operation.
+- **Rejected.** Spatial movement as the authority over contract state; a separate spatial delay;
+  rewriting active Phase 2 operations on upgrade; spatial distance changing prices now (later tuning).
+- **Consequences.** The recovery site appears where the contractor was working, without revealing
+  its anchor: hidden truth → consequence → player-visible clue.
+
+### ADR-044 · The Field Log is contract-scoped and temporary
+- **Decision.** The Field Log belongs to a player-issued contract, from the accepted quote until the
+  contract closes, and is then cleared (History and letters keep the durable record). It holds a
+  bounded list of translation keys plus snapshotted words, written in the same step as the reported
+  state change; reporting language only (no tile, route or hidden number), results only once the
+  contractor reports them (ADR-037). It is shown as a compact section of the contract card, never as
+  a tab or letters.
+- **Rejected.** A permanent journal on the contractor (Phase 4 contractors will work for several
+  issuers); logging daily movement or ambient travel; copying the log into History.
+- **Consequences.** A tracking page for the player's own job, not a notification stream, with no
+  save growth after the contract ends.
+
+### ADR-045 · Abstract charter transport bridges disconnected same-layer geography
+- **Context.** A contractor may need to reach an island or another same-planet region with no
+  ground route, or only an impractically long detour. Declaring it unreachable is not always
+  believable in a high-tech setting; teleporting there is never acceptable.
+- **Decision.** An operation leg that cannot be walked in the time it has may cross by an
+  **abstract, reusable, two-way charter** from a high-tech provider ([SPATIAL § 6.1](SPATIAL.md)):
+  1. **Ground first.** Walking is always tried first; charter only for a candidate (or a leg) out of
+     reach on foot.
+  2. **Same layer only.** Never cross-layer, orbital, gravship or planet-to-planet; never for an
+     invalid, impassable or cross-layer destination.
+  3. **High-tech provider.** The port exposes one generic fact, `SettlementFacts.canProvideCharterTransport`;
+     the RimWorld adapter derives it from the faction's real `TechLevel` (Spacer or better). No
+     faction, DLC or defName is named.
+  4. **Two-way.** One committed hub and one landing: set down near the work region, picked up again
+     there, set down at the hub. Never a one-way pod. **A valid committed round trip is the return
+     mode** even when a later delay makes walking possible: the extra time does not cancel the
+     booking. Only the loss of the charter (its provider or pickup gone, and no replacement) may
+     degrade the return to foot.
+  5. **Committed truth.** The plan's hub and landing, and a leg's two crossing ends, are saved;
+     nothing about a craft is. Save/load never turns ground into charter, changes the provider or
+     rerolls the landing; a world change reconciles from current truth (another provider, on foot, or
+     `Blocked`), never by teleport. **History and the live leg are never confused:** the live leg is
+     `SpatialState.bridgeFrom/bridgeTo`; the plan records `charterUsed` (the outbound crossing
+     happened, never cleared) and `charterLost` (a used charter can no longer carry the return; hub
+     and landing kept as history), and `Charter` means only "a committed round trip in force". A
+     charter never used is dropped (hub and landing cleared, with a fallback reason).
+  6. **No surprise fee.** The charter is part of the contractor's quoted operational costs: no
+     invoice, fee, deposit, insurance, transport contract or vendor, and no hidden transport economy.
+  7. **No physical vehicle.** No shuttle, pawn, WorldObject, caravan, map icon, fuel or manifest.
+  8. **Operation travel only.** Ambient relocation stays on foot.
+  9. **Resolver unchanged.** The crossing fits the existing checkpoints; no second scheduler, no
+     pickup deadline, no missed-pickup rolls, no new outcome bands, no casualties from transport.
+- **Rejected.** Declaring every island unreachable (implausible); teleporting across water (no
+  cause); a physical shuttle or a transport economy (Phase 3+ and beyond scope); a one-way transport
+  pod (who brings them back?); charter for ambient movement (hidden background traffic);
+  hard-coding the Empire or Royalty.
+- **Consequences.** Disconnected geography has a cause the simulation knows, and the player sees at
+  most one Field Log line. The committed hub, landing and pickup make later extraction-window stories
+  possible (a crew withdrawing toward pickup, cargo abandoned, people who do not make it back); they
+  are deliberately **deferred** until the resolver can consume a pickup window. In a Core-only game the
+  settlement factions (tribes, outlanders, pirates) are expected to be below Spacer (S20 confirms), so
+  no charter exists and spatial degrades softly as before.

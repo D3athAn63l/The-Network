@@ -150,6 +150,8 @@ namespace TheNetwork.Domain.Operations
             ctx.operations.Add(op);
             c.operations.Add(op.id);
             ScheduleNext(op);
+            // Hidden geography: where they start from, and the area where the work happens (WHERE only).
+            ctx.Spatial?.BeginOperation(op, a, c, f);
             OperationEvent e = NewEvent(EventKeys.OperationStarted, Importance.Minor, op, c);
             ctx.bus.Publish(e);
             StateVersion.Bump();
@@ -205,19 +207,34 @@ namespace TheNetwork.Domain.Operations
                     if (cp.key == Checkpoint.Prep)
                     {
                         op.phase = OpPhase.Transit;
+                        ctx.Spatial?.OnCheckpoint(op);
+                        bool local = op.spatial != null && op.spatial.origin != null && op.spatial.workRegion != null && op.spatial.origin.tileId == op.spatial.workRegion.tileId;
+                        ctx.FieldLog?.Note(c, local ? FieldLogKeys.WorkingNearby : FieldLogKeys.SetOut, op.contractorName);
+                        // A chartered crossing earns one beat, never the hub, the landing or the route.
+                        if (op.spatial != null && op.spatial.Charter) ctx.FieldLog?.NoteOnce(c, FieldLogKeys.TransportArranged, op.contractorName);
                         ScheduleNext(op);
                     }
                     else
                     {
+                        ctx.Spatial?.ArriveAtWork(op);
+                        // "Reached the area" must be true. With a hidden plan it is told only if the group is
+                        // actually at its work region now; a late group is told when it gets there (Spatial),
+                        // a group that never does is never told. A Phase 2 operation (no plan) or a detachment
+                        // is told by the checkpoint, as before. Progression never waits for spatial arrival.
+                        if (op.spatial == null || op.spatial.detached || ctx.Spatial == null) ctx.FieldLog?.Note(c, FieldLogKeys.Arrived, op.contractorName);
+                        else if (ctx.Spatial.IsAtWork(op)) ctx.FieldLog?.NoteOnce(c, FieldLogKeys.Arrived, op.contractorName);
                         Engage(op, c, a);
                     }
                     break;
                 case Checkpoint.Resolve:
                     cp.done = true;
+                    ctx.Spatial?.OnCheckpoint(op);
                     ResolveNow(op, c, a);
+                    ctx.Spatial?.StartReturn(op);
                     break;
                 case Checkpoint.Return:
                     cp.done = true;
+                    ctx.Spatial?.ReturnFromWork(op);
                     ReturnHome(op, c, a);
                     break;
             }
@@ -302,12 +319,19 @@ namespace TheNetwork.Domain.Operations
                 o.troubledKey = ProcurementDevOverrides.forceTroubled;
                 ProcurementDevOverrides.forceTroubled = null;
             }
+            if (ProcurementDevOverrides.forceNotTroubled)
+            {
+                o.troubledKey = null;
+                ProcurementDevOverrides.forceNotTroubled = false;
+            }
             o.committedTick = ctx.Now;
             // Committed with the outcome (never recomputed on load): empty when nobody came back to tell it.
             o.knowledgeGains = Resolver.GainsIfReported(o, op.forces, people.Count, Valuation.Topics(f));
             if (o.secured > 0) o.securedPayload.Add(CommitPayload(c, f, o, NetHash.Combine(op.seed, "payload")));
             op.outcome = o;
             op.status = OpStatus.Resolved;
+            // Where trouble struck is fixed now, before any consequence reads it.
+            ctx.Spatial?.RecordIncident(op);
 
             // Consequences for the contractor (records only), then the published result.
             ctx.Contractors.ApplyCasualties(a, o.ToReport(), c.id, op.id, Resolver.IsSuccess(o.band));
@@ -409,6 +433,7 @@ namespace TheNetwork.Domain.Operations
             op.endedTick = ctx.Now;
             ctx.scheduler.Cancel(CheckpointJob, op.id.Value);
             ctx.scheduler.Cancel(TroubledJob, op.id.Value);
+            ctx.Spatial?.EndOperation(op);
             StateVersion.Bump();
         }
 
@@ -434,6 +459,7 @@ namespace TheNetwork.Domain.Operations
             op.endedTick = ctx.Now;
             ctx.scheduler.Cancel(CheckpointJob, op.id.Value);
             ctx.scheduler.Cancel(TroubledJob, op.id.Value);
+            ctx.Spatial?.EndOperation(op);
             StateVersion.Bump();
         }
 
@@ -450,6 +476,11 @@ namespace TheNetwork.Domain.Operations
             string key = op.outcome.troubledKey;
             float chance = key == "Stranded" ? 0.6f : (key == "Missing" ? 0.35f : 0.15f);
             bool found = new NetRng(op.seed, "op.troubled", op.rerollNonce).Chance(chance);
+            if (ProcurementDevOverrides.forceTroubledFound.HasValue)
+            {
+                found = ProcurementDevOverrides.forceTroubledFound.Value;
+                ProcurementDevOverrides.forceTroubledFound = null;
+            }
             if (found)
             {
                 // The missing come home wounded; captives stay captives (a Phase 3 rescue matter).
@@ -469,6 +500,7 @@ namespace TheNetwork.Domain.Operations
                 op.phase = OpPhase.Delivering;
                 Checkpoint ret = op.Find(Checkpoint.Return);
                 if (ret != null) ret.done = true;
+                ctx.Spatial?.OnTroubledRecovered(op);
                 if (c != null && !c.IsTerminal) ctx.Procurement.OnRecovered(c, op);
             }
             else

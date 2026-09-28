@@ -226,6 +226,7 @@ namespace TheNetwork.Domain.Contracts
             e.silver = c.renegotiation.extraSilver;
             e.delivered = c.renegotiation.reducedCount;
             ctx.bus.Publish(e);
+            ctx.FieldLog?.Note(c, FieldLogKeys.WorseThanExpected, op?.contractorName ?? ctx.actors.NameOf(c.parties.contractor), c.renegotiation.extraSilver.ToString(), c.renegotiation.reducedCount.ToString(), c.ItemLabel);
         }
 
         private void EnterDecision(Contract c, string subStatus, float graceDays)
@@ -274,12 +275,14 @@ namespace TheNetwork.Domain.Contracts
                     c.ledger.Add(Money(ask.extraSilver, MoneyDirection.PlayerPaid, MoneyPurpose.Renegotiation, "renegotiation.extra"));
                     c.terms.price += ask.extraSilver;
                     PayContractor(c, ctx.actors.Get(c.parties.contractor), ask.extraSilver);
+                    ctx.FieldLog?.Note(c, FieldLogKeys.PaidMore, ask.extraSilver.ToString());
                     break;
                 case WorseChoice.AcceptReduced:
                     int count = c.Quantity;
                     c.Acquire.count = ask.reducedCount;
                     c.terms.price = Math.Max(c.terms.deposit, (int)Math.Round(c.terms.price * ask.reducedCount / (float)Math.Max(1, count)));
                     c.terms.balance = Math.Max(0, c.terms.price - c.terms.deposit);
+                    ctx.FieldLog?.Note(c, FieldLogKeys.ReducedScope, ask.reducedCount.ToString(), c.ItemLabel);
                     break;
                 case WorseChoice.Refuse:
                     NetworkActor a = ctx.actors.Get(c.parties.contractor);
@@ -289,6 +292,7 @@ namespace TheNetwork.Domain.Contracts
                         ContractorSimulation sim = a.Get<ContractorSimulation>();
                         MoraleModel.Shock(sim, 0.05f, false, ctx.Now);
                         ctx.Contractors.MoraleShiftCheck(a, sim);
+                        ctx.FieldLog?.Note(c, FieldLogKeys.CarryOn, a.name.Display);
                         break; // they go ahead on the original terms, grudgingly
                     }
                     if (op != null) ctx.Operations.Abort(op, Causes.ContractorWalked);
@@ -320,6 +324,7 @@ namespace TheNetwork.Domain.Contracts
             e.causeKey = "Delayed";
             e.bandKey = op.outcome?.band.ToString();
             ctx.bus.Publish(e);
+            ctx.FieldLog?.Note(c, FieldLogKeys.Delayed, op.contractorName);
         }
 
         /// <summary>Missing, captured or stranded: Troubled is NOT terminal; the deadline resolves it.</summary>
@@ -342,6 +347,9 @@ namespace TheNetwork.Domain.Contracts
             e.missing = op.outcome.Missing;
             e.reasonKey = key;
             e.descriptorKey = op.outcome.secured > 0 ? "CargoSecured" : "NoCargo";
+            string logKey = key == SubStatus.Stranded ? FieldLogKeys.Stranded : FieldLogKeys.Missing;
+            if (key == SubStatus.Captured) logKey = ContractorService.IsSolo(ctx.actors.Get(op.contractor)) ? FieldLogKeys.CapturedSolo : FieldLogKeys.Captured;
+            ctx.FieldLog?.Note(c, logKey, op.contractorName);
             ctx.bus.Publish(e);
             StateVersion.Bump();
         }
@@ -352,6 +360,7 @@ namespace TheNetwork.Domain.Contracts
             c.subStatus = null;
             c.causeKey = null;
             c.decisionDueTick = -1;
+            ctx.FieldLog?.Note(c, FieldLogKeys.Recovered, op.contractorName);
             OnOperationReturned(c, op);
         }
 
@@ -373,6 +382,8 @@ namespace TheNetwork.Domain.Contracts
             }
             int secured = op.outcome?.secured ?? 0;
             c.Acquire.secured = secured;
+            if (secured >= c.Quantity) ctx.FieldLog?.Note(c, FieldLogKeys.SecuredAll, op.contractorName, c.Quantity.ToString(), c.ItemLabel);
+            else if (secured > 0) ctx.FieldLog?.Note(c, FieldLogKeys.SecuredPart, op.contractorName, secured.ToString(), c.Quantity.ToString(), c.ItemLabel);
             if (secured >= c.Quantity)
             {
                 BeginDelivery(c, secured, c.terms.balance, false, null);
@@ -443,6 +454,8 @@ namespace TheNetwork.Domain.Contracts
             c.status = ContractStatus.Active;
             c.subStatus = null;
             c.decisionDueTick = -1;
+            if (choice != PartialChoice.AcceptPartial && remaining > 0) ctx.FieldLog?.Note(c, FieldLogKeys.PartialContinued, secured.ToString(), remaining.ToString(), c.ItemLabel);
+            else ctx.FieldLog?.Note(c, FieldLogKeys.PartialAccepted, secured.ToString(), c.ItemLabel);
             if (choice != PartialChoice.AcceptPartial && remaining > 0)
             {
                 ItemFacts f = ctx.catalog.Facts(c.Acquire.DefName);
@@ -579,10 +592,12 @@ namespace TheNetwork.Domain.Contracts
             d.attempts++;
             d.lastFailureKey = failureKey;
             bool hold = failureKey == "NoHomeMap" || d.attempts >= rules.deliveryRetries;
+            if (!hold) ctx.FieldLog?.Note(c, FieldLogKeys.DeliveryRetry);
             if (hold && c.subStatus != SubStatus.Hold)
             {
                 c.subStatus = SubStatus.Hold;
                 d.holdSinceTick = ctx.Now;
+                ctx.FieldLog?.Note(c, FieldLogKeys.DeliveryHeld);
                 ContractEvent e = NewEvent(EventKeys.ContractDelayed, Importance.Minor, c);
                 e.causeKey = "DeliveryHold";
                 e.reasonKeys.Add(failureKey ?? "Unknown");
@@ -640,6 +655,7 @@ namespace TheNetwork.Domain.Contracts
             }
             c.subStatus = SubStatus.AwaitingPayment;
             c.causeKey = SubStatus.AwaitingPayment;
+            ctx.FieldLog?.Note(c, FieldLogKeys.PaymentDue, c.Deliver.balanceDue.ToString());
             c.decisionDueTick = ctx.Now + (int)(Rules(c).awaitingPaymentGraceDays * Ticks.PerDay);
             ctx.scheduler.Schedule(DecisionJob, c.decisionDueTick, c.id.Value);
             ContractEvent hold = NewEvent(EventKeys.ContractDelayed, Importance.Minor, c);
@@ -670,6 +686,7 @@ namespace TheNetwork.Domain.Contracts
             d.balanceDue = 0;
             d.balancePaid = true;
             d.partial = true;
+            ctx.FieldLog?.Note(c, FieldLogKeys.Handover, covered.ToString(), c.ItemLabel);
             d.partialCauseKey = Causes.PartialHandover;
             TryDeliverNow(c);
         }

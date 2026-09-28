@@ -134,6 +134,34 @@ summaries or edges in O(1), or knowledge books in O(64) at most.
    with synthetic items or with a sample of the running game's catalog. No per-tick contractor
    logic exists: contractors cost only their daily upkeep job, and contracts cost only their
    window, checkpoint, decision and delivery jobs.
+
+   **Phase 2.5 (spatial continuity, after the correction pass).** The same soak runs on a synthetic
+   64 × 40 **charter world** (a sea band with one land bridge, two sealed islands, 41 settlements with a
+   high-tech charter provider at every fourth, one provider settlement replaced every half year) with
+   ambient relocation, spatial operation plans, Last Known Locations placed near incidents, live Field
+   Logs, and a simulated load every 97 days that drops every route cache. Over the 1,080 days: 133
+   contractors anchored, ~137,900 catch-ups (≈ 128 a day: the upkeep calls plus checkpoints), ~5,400
+   routes built (≈ 5 a day; 12 rebuilt after simulated loads), ~2,880 ambient journeys (all on foot),
+   ~1,950 operation plans of which 95 by charter (78 chartered legs, 78 crossings; 43 charter searches
+   found no provider in reach), 46 journeys made later than committed because the contractor could
+   not walk them sooner, 4 recovered Troubled groups reconciled home, 0 blocked journeys, 0 invalid
+   destinations, 0 spatial faults, 6 Last Known Locations all placed near the incident. Daily
+   invariants all zero: contractors without a valid anchor, teleports (the longest daily move was 14
+   tiles), **route-budget violations** (a contractor farther between two observations than its own
+   speed band allows between the ticks each position was reached), ended contractors that moved,
+   recovered groups out of place, ambient charters, a live chartered leg disagreeing with its plan, a
+   used charter's return on foot, a false "reached the area", duplicated Field Log lines, Field Log
+   data on another issuer's or a closed contract. Discontinuities with a stated reason (85: crossings,
+   reconciliations, re-anchoring) are counted separately, never silently. Movement work averages ~235
+   units a day (a unit is a catch-up, a step advanced, or 1/20 of a route built). The spatial data adds
+   about 127 KB to the 18-year save (2.6 → 2.7 MB). With the synthetic graph the harness spends about
+   2.1 ms per simulated day in total (about 1.2 ms before spatial; the difference is mostly the
+   synthetic breadth-first searches).
+
+   **Archipelago stress** (`Soak.ArchipelagoCharterStress`, 360 days): the same charter world with the
+   land bridge closed, so the world's two halves have no ground connection. 34 charter plans, 24
+   crossings, all invariants zero, about 1.7 ms per simulated day. Synthetic timings are harness costs,
+   **not** RimWorld TPS; S20 measures the real world graph.
 3. **Phase 3 soak**: 150 stored pawns plus 5 concurrent deployments. Compare TPS with and
    without The Network on the same save (the prepared-removal path).
 4. **Regression gate**: the timing report (see [DEBUGGING § 5](DEBUGGING.md#5-timing-instrumentation))

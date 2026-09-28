@@ -168,6 +168,14 @@ namespace TheNetwork.UI
             return s;
         }
 
+        /// <summary>One Field Log line from its key and its snapshotted words (never a coordinate).</summary>
+        public static string FieldLogLine(FieldLogEntry e)
+        {
+            NamedArgument[] args = new NamedArgument[e.args.Count];
+            for (int i = 0; i < e.args.Count; i++) args[i] = e.args[i];
+            return ("TheNetwork_FieldLog_" + e.key).Translate(args).Resolve();
+        }
+
         public static string InsuranceLine(Insurance ins)
         {
             if (ins == null) return null;
