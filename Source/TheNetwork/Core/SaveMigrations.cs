@@ -27,18 +27,21 @@ namespace TheNetwork.Core
     }
 
     /// <summary>
-    /// Runs migrations after all stores load and before runtime caches are rebuilt. Version 1 is the
-    /// first shipped save format, so the registry is empty: it exists so version 2 is a pure addition.
+    /// Runs migrations after all stores load and before runtime caches are rebuilt. Version 1 was the
+    /// first shipped save format (Phase 1); version 2 adds the Phase 2 stores.
     /// </summary>
     public static class SaveMigrations
     {
-        /// <summary>NetworkSaveVersion.</summary>
-        public const int Current = 1;
+        /// <summary>NetworkSaveVersion. 2 = Phase 2 (contractors, contracts, operations, relations, knowledge).</summary>
+        public const int Current = 2;
 
         /// <summary>The oldest save version this build can migrate (SAVE_AND_MIGRATION § 6).</summary>
         public const int MinimumSupported = 1;
 
-        public static readonly List<INetworkMigration> Registry = new List<INetworkMigration>();
+        public static readonly List<INetworkMigration> Registry = new List<INetworkMigration>
+        {
+            new V1ToV2PhaseTwoStores()
+        };
 
         /// <summary>
         /// Brings a loaded state to <see cref="Current"/>. Returns the resulting version. A throwing
@@ -69,6 +72,26 @@ namespace TheNetwork.Core
                 v = m.To;
             }
             return Current;
+        }
+    }
+
+    /// <summary>
+    /// 1 → 2 (Phase 2). The contracts, operations, relations and knowledge slots were empty reserved
+    /// nodes in version 1, so they load as empty stores and no data changes. Contractor actors are
+    /// instantiated from the world's own cast snapshot at start-up, idempotently, for new and upgraded
+    /// worlds alike (never from the current ModSettings roster). The version bump tells a Phase 1 build
+    /// that this save is newer than it understands.
+    /// </summary>
+    public sealed class V1ToV2PhaseTwoStores : INetworkMigration
+    {
+        public int From => 1;
+        public int To => 2;
+        public string Name => "PhaseTwoStores";
+        public string Subsystem => "contracts";
+
+        public void Apply(NetworkState state, MigrationContext ctx)
+        {
+            ctx.log.Add("Phase 2 stores start empty; contractors are instantiated from the world snapshot at start-up.");
         }
     }
 }

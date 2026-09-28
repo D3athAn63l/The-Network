@@ -22,7 +22,10 @@ namespace TheNetwork.Kernel
         Compat,
         Save,
         UI,
-        Dev
+        Dev,
+        Contracts,
+        Operations,
+        Delivery
     }
 
     public enum NetLogLevel { Verbose, Info, Warning, Error }

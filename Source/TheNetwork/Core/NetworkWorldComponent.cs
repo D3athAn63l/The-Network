@@ -158,15 +158,7 @@ namespace TheNetwork
         /// <summary>IDs must stay above every id in use, even after a hand-edited or partial save.</summary>
         private void RepairIdCounters()
         {
-            int max = 0;
-            for (int i = 0; i < state.actors.actors.Count; i++) max = Math.Max(max, state.actors.actors[i].id.Value);
-            for (int i = 0; i < state.characters.characters.Count; i++) max = Math.Max(max, state.characters.characters[i].id.Value);
-            for (int i = 0; i < state.intel.requests.Count; i++) max = Math.Max(max, state.intel.requests[i].id.Value);
-            for (int i = 0; i < state.intel.leads.Count; i++) max = Math.Max(max, state.intel.leads[i].id.Value);
-            for (int i = 0; i < state.opportunities.opportunities.Count; i++) max = Math.Max(max, state.opportunities.opportunities[i].id.Value);
-            for (int i = 0; i < state.history.records.Count; i++) max = Math.Max(max, state.history.records[i].id.Value);
-            if (ids.EnsureAbove(max)) NetLog.Warn(LogCategory.Kernel, "ID counter was behind the data; raised above " + max + ".");
-            for (int i = 0; i < state.journal.entries.Count; i++) ids.EnsureEventSeqAbove(state.journal.entries[i].seq);
+            state.RepairIdCounters(ids);
         }
 
         public override void WorldComponentTick()
@@ -215,6 +207,7 @@ namespace TheNetwork
             List<string> report = new List<string>();
             ctx.Actors.ImportCast(settings?.roster, settings?.LoadedVersion ?? NetworkSettings.CurrentVersion, report);
             int fixers = ctx.Actors.InstantiateFixers();
+            int contractors = ctx.Contractors.InstantiateFromSnapshot();
 
             ScheduleSweeps();
             SystemEvent boot = EventFactory.Make<SystemEvent>(EventKeys.NetworkBootstrapped, Importance.Minor);
@@ -223,14 +216,14 @@ namespace TheNetwork
             SystemEvent cast = EventFactory.Make<SystemEvent>(EventKeys.CastImported, Importance.Minor);
             cast.count1 = state.cast.Count(Domain.Actors.CastEntryKind.Contractor);
             cast.count2 = state.cast.Count(Domain.Actors.CastEntryKind.Fixer);
-            cast.count3 = fixers;
+            cast.count3 = fixers + contractors;
             cast.note = report.Count > 0 ? report[0] : null;
             runtime.Bus.Publish(cast);
             // Only once every step above has finished: a bootstrap that failed part-way is simply run
             // again on the next load (each step is idempotent).
             bootstrapped = true;
             NetLog.Info(LogCategory.Kernel, "The Network bootstrapped (save format " + saveVersion + "): " + fixers + " Fixers, the Exchange, "
-                + state.cast.Count(Domain.Actors.CastEntryKind.Contractor) + " contractor templates held for later phases. " + NetworkBuildStamp.Stamp);
+                + contractors + " contractors from the world's cast snapshot. " + NetworkBuildStamp.Stamp);
         }
 
         private void AfterLoad()
@@ -248,6 +241,10 @@ namespace TheNetwork
                 for (int i = 0; i < migrationContext.deferred.Count; i++) migrationContext.deferred[i]();
                 migrationContext = null;
             }
+            // A world saved before Phase 2 holds contractor templates in its snapshot but no contractor
+            // actors: they are instantiated now, from the world's own snapshot (idempotent).
+            int newContractors = ctx.Contractors.InstantiateFromSnapshot();
+            if (newContractors > 0) NetLog.Info(LogCategory.Actors, "Instantiated " + newContractors + " contractors from this world's cast snapshot.");
             ValidationReport report = NetValidator.Run(runtime, ValidationMode.OnLoad);
             ScheduleSweeps();
             SystemEvent loaded = EventFactory.Make<SystemEvent>(EventKeys.NetworkLoaded, Importance.Minor);
@@ -262,6 +259,7 @@ namespace TheNetwork
         private void ScheduleSweeps()
         {
             int now = runtime.Clock.Now;
+            runtime.Ctx.Upkeep.EnsurePopulationJob();
             if (!runtime.Scheduler.Has(JobKinds.HistorySweep, 0))
             {
                 runtime.Scheduler.Schedule(JobKinds.HistorySweep, NetScheduler.StaggeredDue(now + JobKinds.SweepPeriod / 2, networkSeed, JobKinds.HistorySweep, JobKinds.SweepPeriod), 0);

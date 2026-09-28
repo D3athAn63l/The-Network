@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using RimWorld;
 using RimWorld.Planet;
 using TheNetwork.Core;
+using TheNetwork.Domain.Contracts;
 using TheNetwork.Domain.Intel;
 using TheNetwork.Domain.Opportunities;
 using TheNetwork.Kernel;
@@ -10,10 +11,12 @@ using Verse;
 namespace TheNetwork.Integration
 {
     /// <summary>
-    /// "Prepare save for removal" (SAVE_AND_MIGRATION § 10), Phase 1 scope: turn every Network site
-    /// into a plain vanilla site (comp unbound, tag removed, timeouts kept), invalidate running searches
-    /// with the technical-invalidation refund, strip remaining TheNetwork.* tags, and make the Network
-    /// inert. Afterwards the only error on removal is the missing WorldComponent class.
+    /// "Prepare save for removal" (SAVE_AND_MIGRATION § 10): turn every Network site into a plain
+    /// vanilla site (comp unbound, tag removed, timeouts kept), invalidate running searches and void
+    /// every live contract with the technical-invalidation refund (a running operation is aborted; its
+    /// people exist only as records, so nothing is left on any map), strip remaining TheNetwork.* tags,
+    /// and make the Network inert. Drop pods already launched are ordinary vanilla objects. Afterwards
+    /// the only error on removal is the missing WorldComponent class.
     /// </summary>
     public static class RemovalPreparer
     {
@@ -21,7 +24,7 @@ namespace TheNetwork.Integration
         {
             if (rt == null) return "No Network in this game.";
             if (!rt.EnsureStarted()) return "The Network failed to start this session (see the log); nothing was changed. It can be removed without preparation.";
-            int sites = 0, searches = 0, refunded = 0, tags = 0;
+            int sites = 0, searches = 0, refunded = 0, tags = 0, contracts = 0;
 
             List<IntelRequest> requests = new List<IntelRequest>(rt.State.intel.requests);
             for (int i = 0; i < requests.Count; i++)
@@ -32,6 +35,16 @@ namespace TheNetwork.Integration
                 rt.Ctx.Intel.Invalidate(r, "NetworkRemoved", false);
                 refunded += r.TotalRefunded() - before;
                 searches++;
+            }
+
+            List<Contract> live = rt.Ctx.Procurement.Live();
+            for (int i = 0; i < live.Count; i++)
+            {
+                Contract c = live[i];
+                int before = c.ExternalRefunded();
+                rt.Ctx.Procurement.Void(c, Causes.PreparingForRemoval);
+                refunded += c.ExternalRefunded() - before;
+                contracts++;
             }
 
             List<Opportunity> opps = new List<Opportunity>(rt.State.opportunities.opportunities);
@@ -62,12 +75,12 @@ namespace TheNetwork.Integration
 
             rt.Root.preparedForRemoval = true;
             StateVersion.Bump();
-            string summary = "TheNetwork_RemovalSummary".Translate(sites, searches, refunded).Resolve();
-            NetLog.Info(LogCategory.Save, "Prepared for removal: " + sites + " sites unbound, " + searches + " searches invalidated (" + refunded + " silver refunded), " + tags + " extra tags removed.");
+            string summary = "TheNetwork_RemovalSummary".Translate(sites, searches + contracts, refunded).Resolve();
+            NetLog.Info(LogCategory.Save, "Prepared for removal: " + sites + " sites unbound, " + searches + " searches invalidated, " + contracts + " contracts voided (" + refunded + " silver refunded), " + tags + " extra tags removed.");
             return summary;
         }
 
-        /// <summary>Undo: re-binds live, non-terminal sites and resumes. Invalidated searches stay invalidated.</summary>
+        /// <summary>Undo: re-binds live, non-terminal sites and resumes. Invalidated searches and voided contracts stay so.</summary>
         public static void Resume(NetworkRuntime rt)
         {
             if (rt == null || !rt.Root.preparedForRemoval || !rt.EnsureStarted()) return;

@@ -215,6 +215,27 @@ namespace TheNetwork.Kernel
             if (IsLoading) id = new HistoryRecordId(v);
         }
 
+        public static void Look(ref ContractId id, string label)
+        {
+            int v = id.Value;
+            Scribe_Values.Look(ref v, label, 0);
+            if (IsLoading) id = new ContractId(v);
+        }
+
+        public static void Look(ref OfferId id, string label)
+        {
+            int v = id.Value;
+            Scribe_Values.Look(ref v, label, 0);
+            if (IsLoading) id = new OfferId(v);
+        }
+
+        public static void Look(ref OperationId id, string label)
+        {
+            int v = id.Value;
+            Scribe_Values.Look(ref v, label, 0);
+            if (IsLoading) id = new OperationId(v);
+        }
+
         public static void Look(ref EntityRef r, string label)
         {
             string s = r.IsValid ? r.ToString() : null;

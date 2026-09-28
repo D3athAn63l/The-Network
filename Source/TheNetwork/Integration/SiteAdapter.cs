@@ -172,7 +172,7 @@ namespace TheNetwork.Integration
         /// miss, handled by invalidation); a def that throws or yields an invalid Thing is a runtime
         /// catalog failure (COMPATIBILITY § 2.3, FailedToGenerate).
         /// </summary>
-        private static bool MakeThings(ItemPayload p, int seed, List<Thing> into, out string failure)
+        internal static bool MakeThings(ItemPayload p, int seed, List<Thing> into, out string failure)
         {
             failure = null;
             ThingDef def = DefResolver<ThingDef>.Get(p.thing?.defName);

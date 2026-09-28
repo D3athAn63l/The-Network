@@ -204,6 +204,64 @@ ADR-015 already names).
 (willingness, pricing); branch-ready contracts (lineage fields populated; Troubled states
 without physical follow-ups yet, which resolve abstractly by deadline).
 
+### 5.1 Phase 2 as implemented
+
+Everything in the scope above exists in code with headless tests. Runtime spike S13 (drop pods) is
+**NOT RUN**: owner validation is required ([spikes/S13](spikes/S13-drop-pod-delivery.md)).
+
+| Area | Where |
+|---|---|
+| Contractor actors from the world snapshot; composition; upkeep; population; succession; morale | `Domain/Contractors/*` |
+| Relationships core, knowledge v1 | `Domain/Relations/Relations.cs`, `Domain/Knowledge/Knowledge.cs` |
+| Contract core, procurement kind, lineage, money ledger | `Domain/Contracts/ContractModel.cs`, `ContractKinds.cs`, `1.6/Defs/ContractKindDefs` |
+| Valuation, Fixer policies, contractor pricing | `Domain/Contracts/ProcurementPolicies.cs` |
+| Willingness | `Domain/Contracts/Willingness.cs` |
+| Bidding, quotes, award, cancel, void | `Domain/Contracts/ProcurementService.cs` |
+| Outcomes, decisions, delivery, payment, failure, replacement | `Domain/Contracts/ProcurementOutcomes.cs` |
+| Operations, frozen inputs, resolver | `Domain/Operations/*` |
+| Consequence Engine v0 | `Domain/Consequences/ConsequenceEngine.cs` |
+| Drop-pod delivery | `Integration/DeliveryAdapter.cs` |
+| UI, letters, history lines | `UI/MainTabWindow_Network.Contracts.cs`, `ContractReadModels.cs`, `ContractLetters.cs`, `ContractNarrative.cs` |
+| Dev actions, soak harness | `Diagnostics/NetworkDevActions.Phase2.cs`, `Diagnostics/SoakHarness.cs` |
+
+Tuning and deviations worth knowing (the formulas are replaceable policy; see
+[SIMULATION § 5](SIMULATION.md#5-willingness-refusal-and-bidding)):
+
+- **Deposit share.** "About half" is only a starting point. It comes from the Fixer's brokerage
+  style (Lean 0.6, Standard 0.5, Premium 0.4), adjusted for danger and the contractor's trust in
+  the client, and clamped to 0.3–0.75.
+- **Market threat.** For market procurement the threat is `0.6 + 1.2·log10(1 + goods/300) +
+  30·difficulty²`. Difficulty is built only from generic rarity signals: unique, untradeable,
+  neither craftable nor mineable, tech level, unit value and volume.
+- **"Worse than expected".** When engagement shows a danger well above the quoted one, a
+  professional contractor asks for more silver or a smaller scope. The client's answer re-freezes
+  the inputs before the resolver runs: a client choice made before resolution legitimately
+  changes them. The grace default accepts the reduced scope.
+- **Partial results.** Any band can bring back part of the cargo; a Failure can bring back up to
+  20 %. Whenever something short of the full quantity comes back, the client decides. The grace
+  default accepts the partial result.
+- **Payment default.** The Phase-2-safe subset only: the contractor holds the goods
+  (AwaitingPayment, 7-day grace) or hands over what the deposit covered. The debt option needs
+  Obligations (Phase 5) and is deferred.
+- **Delivery.** The balance is charged only once a drop plan exists. Money never moves for goods
+  that cannot land.
+- **Retention.** When a contract closes, its losing bids are dropped (the accepted quote stays).
+  Terminal contracts, with their accepted offer and operation, are archived a year after closing.
+- **Events.** `Operation.Resolved` is published as Minor. Five catalog additions are listed in
+  [EVENTS_AND_HISTORY § 2](EVENTS_AND_HISTORY.md#2-event-catalog).
+
+Headless evidence (after the final correction pass): 144 tests, 12,026 checks, 0 failures. They
+include every persistent contract state round-tripping through the real Scribe, replacement money
+across a lineage (A → B → C, void, cancel, insured failure, pro-rating, handover, save/load), named
+character exclusivity, job capacity at acceptance, Last Known Location cargo, ID and upkeep-job
+repair, the Decline comms gate and survivor-only knowledge. A soak of 1,080 simulated days (18
+in-game years, 2,160 contracts, about 100 contractors) leaves nothing stuck, holds the population and
+keeps relations and knowledge bounded. Every simulated day it also checks that no contractor runs
+more jobs than its capacity, no named person is on two live operations, no money record is empty,
+negative or duplicated, ledger charges minus refunds equal the silver that actually moved, transfers
+sum to zero, and no Last Known Location holds more than was secured: all zero. The Network save node
+is about 2.5 MB, with about 1.2 ms of work per simulated day.
+
 ---
 
 ## 6. Phase 3: Abstract ↔ physical lifecycle

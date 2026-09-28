@@ -21,7 +21,14 @@ PHASE 1 (early development build): Intel.
 - Take all of what you find, take part of it, or walk away. You never have to kill every defender.
 - The Network remembers what happened.
 
+PHASE 2 (early development build): contractors and procurement.
+- About a hundred persistent contractors live behind the scenes: lone operators and outfits, each with its own history, doctrine, morale, equipment and people who can die.
+- Ask a Fixer for an exact item and an exact quantity. Real contractors decide whether they want the job, turn it down for reasons you can read, or quote their price.
+- Accept a quote and pay the deposit. The work happens off-map. It can succeed, come back short, run late, go badly wrong, or leave people missing. The deposit pays for the attempt; insurance softens a loss but never erases it.
+- A failure may leave a place worth investigating. Successful goods arrive by drop pod.
+- Hire them again later, and what happened before matters.
+
 No Harmony. No dependencies. Safe to add to an existing save. Before removing it from a save, use "Prepare save for removal" in the mod settings.
 
-Contractors, procurement, contracts and the rest of the ecosystem arrive in later phases.</description>
+Contractors in person, the contract board and the rest of the ecosystem arrive in later phases.</description>
 </ModMetaData>

@@ -390,3 +390,111 @@
   orbital links, other mods). They may come later as additional access providers.
 - **Consequences.** A colony without a powered console cannot start or answer Network business
   until it has one again.
+
+### ADR-033 · Procurement quotes are frozen per offer; losing bids are dropped at close
+- **Decision.** Each offer stores the contractor's own components and the Fixer's components
+  (fee, coordination, market access, contingency, market-floor top-up) with their contributors,
+  the final price, deposit and balance, the insurance offer, the replacement and refund policy
+  keys, and the validity. It is never recomputed. When the contract closes, the offers that were
+  not accepted are dropped; the accepted quote stays with the contract until compaction.
+- **Rejected.** Recomputing a quote when the UI opens (it would draw randomness and drift);
+  keeping every losing bid forever (save growth for no story value).
+- **Consequences.** History and the economy can see who charged what. Save growth stays bounded
+  (about 2.5 MB after 18 in-game years of heavy procurement in the soak).
+
+### ADR-034 · Money moves only when the goods can land
+- **Decision.** Delivery plans a drop spot first, with no side effect. The balance is charged only
+  when a plan exists; then the pods launch. With no home map or no drop spot, the contract goes to
+  Hold (daily retries) and fails after the kind's limit (15 days), refunding any paid balance.
+- **Rejected.** Charging at the return checkpoint and refunding on failure (it charges players who
+  have no home at all); dropping pods on a random cell (roof punching, lost goods).
+- **Consequences.** No contract can be stuck, and no player pays for goods that never arrive.
+
+### ADR-035 · Phase-2-safe payment default
+- **Decision.** If the client cannot pay the balance, the contractor applies its doctrine and the
+  relationship. It either holds the goods (AwaitingPayment, pay later, 7-day grace) or hands over
+  what the deposit covered (partial handover, also the grace default).
+  `Payment.Defaulted` hurts the relationship.
+- **Rejected (for now).** The debt option: it needs Obligations (Phase 5). Hostile collection is
+  Phase 5+.
+- **Consequences.** A later phase adds the debt branch without changing the states.
+
+### ADR-036 · Consequence Engine v0 fires at dispatch and builds content in a job
+- **Decision.** One rule (Last Known Location). It fires when `Contract.Failed(CatastrophicLoss)`,
+  `Contractor.Missing` or `Contractor.Stranded` is dispatched, seeded by the event's sequence
+  number, with guards: one per contract, at most six active follow-ups, one per day, lineage
+  depth ≤ 4. The pending rule is persisted in the `consequences` store; a job generates the site
+  with the Phase 1 machinery from its own seed.
+- **Rejected.** Building the site inside the event consumer (world mutation inside dispatch, and
+  no persisted commit point); contractor pawns, survivors, captives or bodies (Phase 3).
+- **Consequences.** A reload between firing and generation gives the same site. The deposit is not
+  refunded because a follow-up exists.
+
+### ADR-037 · The client learns an operation's result when the contractor reports it
+- **Decision.** The resolver runs once, at the resolve checkpoint, and commits the outcome.
+  The client sees it only at the return checkpoint, through the contract (delivery, partial
+  result, failure) or earlier through a report the contractor sends (delay, Troubled, "worse
+  than expected"). `Operation.Resolved` is Minor and not shown in history.
+- **Rejected.** A Notable history record at resolution (it duplicates the contract outcome and
+  reveals it early).
+- **Consequences.** A deviation from the catalog's default importance, recorded in
+  [EVENTS_AND_HISTORY § 2](EVENTS_AND_HISTORY.md#2-event-catalog).
+
+### ADR-038 · Contract money is a typed ledger; a replacement is an internal transfer
+- **Decision.** Every contract money record has a direction and a purpose. Only `PlayerPaid` and
+  `PlayerRefunded` move real silver. A replacement (a Fixer handing a lost job to a new contractor)
+  moves the parent's whole remaining position to the child as a `TransferOut` on the parent and a
+  matching `TransferIn` on the child: same amount, same purpose (deposit, premium, insurance
+  premium, …), each naming the other contract. Policies read `Funding(purpose)` = charged + carried in
+  − carried out; a technical invalidation refunds `NetFunding()` = all funding − already returned.
+  No accounting reads a note string. The new contractor is not paid again for carried money.
+- **Invariant.** Across a lineage, external charges − external refunds = the player's real net
+  silver, and transfers sum to zero (in total and per purpose). Tests A–H and the soak check it.
+- **Rejected.** Counting transfers as payments (a parent would stay refundable for money it gave
+  away, and a void would refund twice); one `Transferred` direction on both sides (the parent's
+  record cannot be told from the child's).
+- **Consequences.** A replaced parent holds nothing refundable; the child recognises the carried
+  deposit everywhere (success balance, cancel, insurance, pro-rating, handover, void).
+
+### ADR-039 · One live job per named person; capacity is rechecked at acceptance
+- **Decision.** Which named people (KnownCharacters) are out is derived from the contractor's live
+  operation commitments, never stored: checkout skips anyone on another live operation, so one
+  person is in at most one abstract operation. `JobCapacity` counts the whole able roster (people
+  out on jobs included), and acceptance refuses a quote whose bidder has filled its capacity since
+  quoting (`BidderNowCommitted`: nothing charged, no operation, the offer stays open until it
+  expires). A quote from a contractor already working says "alongside other work"; nothing is
+  queued.
+- **Rejected.** A global assignment system or pawn references (Phase 3); a job queue.
+- **Consequences.** The soak counts zero commitments above capacity and zero people on two live
+  jobs; about one acceptance in five in the soak now falls back to another quote.
+
+### ADR-040 · A Last Known Location holds at most what was secured; only survivors report
+- **Decision.** The goods left at a Last Known Location are bounded by the committed
+  `outcome.secured` (between half and all of it; none when nothing was secured) and are the exact
+  committed payload (def, stuff, quality). Unrelated extra loot is still allowed. Knowledge gained
+  from an operation is committed only if someone came back: the killed, captured and missing carry
+  nothing home.
+- **Rejected.** Inventing goods at the site when none were secured; a Disaster that teaches a
+  contractor with nobody left to report.
+- **Consequences.** The site never contradicts the operation's result.
+
+### ADR-041 · Abstract spatial simulation is deferred (design only)
+- **Decision.** Recorded for later; nothing of it is implemented in Phase 2.
+  1. Abstract spatial truth is invisible to the player: no map marker, no route, no omniscience.
+  2. `MobilityProfile` stays a CAPABILITY (range, speed, lift, transport), never a location.
+  3. A future `SpatialState` is WORLD TRUTH: an approximate current `TileRef`, an optional
+     destination `TileRef`, a coarse travel state or purpose, and the last update and journey timing
+     it needs.
+  4. Awareness is separate: spatial truth never reveals a contractor's position to the player by
+     itself.
+  5. Movement is coarse and lazy (scheduled or computed from timestamps when asked): no per-tick
+     updates, no persistent WorldObjects, no visible routes or icons, no NPC caravan simulation.
+  6. Spatial answers WHERE; operations answer WHAT.
+  7. Last Known Locations, rescues and visits may later read it.
+  8. Timing: a dedicated PR after Phase 2 is merged and validated at runtime, before spatially
+     aware Phase 3 physicalization matters.
+- **Rejected (now).** Any `SpatialState`, spatial field on `ContractorSimulation`, spatial store,
+  save-version change, route cache, movement job, position initialization, tile occupancy index,
+  intersection check, relay behaviour, ambient visit, tracking or map icon in Phase 2.
+- **Consequences.** Phase 2's save layout is unchanged by this decision.
+

@@ -204,8 +204,9 @@ namespace TheNetwork.Domain.Actors
     }
 
     /// <summary>
-    /// An individual who matters (DATA_MODEL § 5). Phase 1 has Fixers' characters only, as records:
-    /// no pawn, custody Unmaterialized. Pawn binding (PawnRef) is Phase 3 and deliberately absent.
+    /// An individual who matters (DATA_MODEL § 5): Fixers, Solo contractors, organization leaders,
+    /// lieutenants and notable members. Records only: no pawn, custody Unmaterialized. Wounds, capture
+    /// and death are record states in Phase 2. Pawn binding (PawnRef) is Phase 3 and deliberately absent.
     /// </summary>
     public sealed class KnownCharacter : IExposable
     {
@@ -221,6 +222,19 @@ namespace TheNetwork.Domain.Actors
         public int diedTick = -1;
         public string quarantinedReason;
 
+        /// <summary>Abstract recovery: Wounded until this tick (DATA_MODEL § 5).</summary>
+        public int woundedUntilTick = -1;
+
+        public string deathCauseKey;
+
+        /// <summary>When the status last changed.</summary>
+        public int statusTick;
+
+        public bool IsAlive => status != CharacterStatus.Dead && status != CharacterStatus.Lost;
+
+        /// <summary>Can take part in work right now.</summary>
+        public bool IsAvailable => status == CharacterStatus.Active;
+
         public void ExposeData()
         {
             NetScribe.Look(ref id, "id");
@@ -234,6 +248,9 @@ namespace TheNetwork.Domain.Actors
             Scribe_Values.Look(ref createdTick, "createdTick", 0);
             Scribe_Values.Look(ref diedTick, "diedTick", -1);
             Scribe_Values.Look(ref quarantinedReason, "quarantined");
+            Scribe_Values.Look(ref woundedUntilTick, "woundedUntil", -1);
+            Scribe_Values.Look(ref deathCauseKey, "deathCause");
+            Scribe_Values.Look(ref statusTick, "statusTick", 0);
             if (Scribe.mode == LoadSaveMode.LoadingVars && name == null) name = new NameSnapshot();
         }
     }

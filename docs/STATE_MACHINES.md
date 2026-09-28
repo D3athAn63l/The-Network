@@ -316,6 +316,14 @@ half on award, half on delivery); terms may vary it. Exact percentages are tunin
 | **Technical invalidation** (item Def removed, the requested mod gone, the Network can no longer legally execute the contract, the save is prepared for removal) | `Voided`. **Full deposit refund**, because this is not an in-world failure (by drop pod to a player home map, or held as a credit obligation if no home map exists). The history record keeps the snapshot label. |
 | **Insurance** (optional, master § 62) | Offered by the brokering Fixer (premium and coverage from its insurance policy). A premium buys partial recovery of the deposit on covered failures. `coverage < 1`: it never makes a contract risk-free. |
 
+**Replacement accounting (Phase 2).** When the Fixer finds a replacement, the parent closes
+(`Failed(PreWorkLoss)`) and a NEW linked contract takes over. The parent's remaining funding moves to
+the child as a transfer, purpose by purpose (deposit, premium, insurance premium with the inherited
+insurance terms, any paid renegotiation). No silver moves and no second deposit is charged. The
+parent then holds nothing refundable; the child treats the carried funding as its own for every rule
+in this table. A chain A → B → C transfers twice and charges once
+([DATA_MODEL § 16.1](DATA_MODEL.md#161-phase-2-contract-ledger-implemented), ADR-038).
+
 ### 4.3 Player bankruptcy (cannot pay the balance)
 
 `Payment.Defaulted` → the contractor decides using doctrine (greed, loyalty, professionalism)
@@ -329,6 +337,22 @@ and the relation edge:
   Trust falls. Defaulting on the debt later becomes a Major record.
 - **Hostile** (Phase 5+, criminal doctrine only): a follow-up "debt collection" opportunity is
   created. It is never an instant raid.
+
+**Phase 2 as implemented.** Only the Hold and partial-handover branches exist. The contractor's
+professionalism, loyalty, greed and trust in the client decide: a high score hands over at once;
+otherwise it holds for a 7-day grace period (the client can pay the balance any time), then hands
+over what the deposit covered. The debt branch waits for Obligations (Phase 5).
+
+**Grace defaults (Phase 2, `NetworkContractKindDef` tuning).**
+
+| Waiting on the client | Grace | Default |
+|---|---|---|
+| `Renegotiating(WorseThanExpected)` | 3 days | accept the reduced scope |
+| `Renegotiating(PartialResult)` | 5 days | accept the partial result at a pro-rated price |
+| `AwaitingPayment` | 7 days | partial handover |
+| Delivery `Hold` | daily retries, 15 days | `Failed(UndeliverableNoHome)`, paid balance refunded |
+| `Troubled` | 10 days | the group turns up (seeded), or `Failed(ContractorLost)` |
+| `Unfilled` | 10 days | `Expired` |
 
 ### 4.4 Destination and map destruction
 
@@ -368,7 +392,12 @@ aborted and its forces are returned to the roster with no casualties. History ke
 | Proposed | issuer accepts | Accepted (other offers become Superseded) |
 | Proposed | issuer declines | Declined |
 | Proposed | bidder's state changes (overcommitted, morale collapse, relation break) | Withdrawn |
+| Proposed | issuer accepts, but the bidder has filled its job capacity since quoting | stays Proposed; acceptance refused with `BidderNowCommitted` (nothing charged, no operation) |
 | Proposed | `expiresTick` passes, or the quote's `validUntilTick` (the Fixer's quote validity) | Expired (the client may ask for a new quote) |
+
+Acceptance rechecks the bidder: a contractor never runs more jobs than its `JobCapacity` (a Solo
+one; an organization one per six able people, 1..3). A quote from a contractor that is already
+working carries the condition "running other work at the same time"; there is no queue (ADR-039).
 
 A refusal is **not** an offer. It is recorded in `Contract.refusals` with reason keys
 ([SIMULATION § 5](SIMULATION.md#5-willingness-refusal-and-bidding)). The UI shows it as flavour

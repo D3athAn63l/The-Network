@@ -1,0 +1,368 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<LanguageData>
+
+  <!-- Phase 2: contractors, procurement contracts, operations, delivery. Words, never numbers behind the scenes. -->
+
+  <!-- Tabs -->
+  <TheNetwork_Tab_Procurement>Procurement</TheNetwork_Tab_Procurement>
+  <TheNetwork_Tab_Contracts>Contracts</TheNetwork_Tab_Contracts>
+  <TheNetwork_Tab_Contractors>Contractors</TheNetwork_Tab_Contractors>
+
+  <!-- Procurement tab -->
+  <TheNetwork_Proc_ChooseItem>Choose an item from the list</TheNetwork_Proc_ChooseItem>
+  <TheNetwork_Proc_Title>Find {0}</TheNetwork_Proc_Title>
+  <TheNetwork_Proc_Quantity>Exactly</TheNetwork_Proc_Quantity>
+  <TheNetwork_Proc_Premium>Extra silver for the crew</TheNetwork_Proc_Premium>
+  <TheNetwork_Proc_PremiumTip>Optional. Paid when you accept a quote, on top of the deposit. Better-funded crews take more risks for you and are better prepared. It is not refunded if the job fails.</TheNetwork_Proc_PremiumTip>
+  <TheNetwork_Proc_Fixer>Through</TheNetwork_Proc_Fixer>
+  <TheNetwork_Proc_ChooseFixer>choose a Fixer</TheNetwork_Proc_ChooseFixer>
+  <TheNetwork_Proc_NoFixers>No Fixer can broker work right now</TheNetwork_Proc_NoFixers>
+  <TheNetwork_Proc_Mode>Who</TheNetwork_Proc_Mode>
+  <TheNetwork_Proc_OpenHint>The Fixer asks around; one to three may bid.</TheNetwork_Proc_OpenHint>
+  <TheNetwork_Proc_ChooseContractor>choose a contractor</TheNetwork_Proc_ChooseContractor>
+  <TheNetwork_Proc_WantInsurance>I will want insurance if it is offered</TheNetwork_Proc_WantInsurance>
+  <TheNetwork_Proc_Preview>At market prices, {0}x {1} would cost about {2} silver. Expect quotes above that: someone has to find them, get them and bring them to you.</TheNetwork_Proc_Preview>
+  <TheNetwork_Proc_PreviewNone>Choose what you need and how many.</TheNetwork_Proc_PreviewNone>
+  <TheNetwork_Proc_Post>Ask for quotes</TheNetwork_Proc_Post>
+  <TheNetwork_Proc_Waiting>Waiting on you</TheNetwork_Proc_Waiting>
+  <TheNetwork_Proc_NothingWaiting>Nothing is waiting on you.</TheNetwork_Proc_NothingWaiting>
+  <TheNetwork_Mode_Open>Open</TheNetwork_Mode_Open>
+  <TheNetwork_Mode_Direct>Direct</TheNetwork_Mode_Direct>
+  <TheNetwork_Message_Posted>Asked {2} to find {0}x {1}.</TheNetwork_Message_Posted>
+
+  <!-- Contract cards -->
+  <TheNetwork_ContractTitle>{0}x {1}</TheNetwork_ContractTitle>
+  <TheNetwork_Card_With>With {0}, through {1}</TheNetwork_Card_With>
+  <TheNetwork_Card_Via>Through {0} ({1})</TheNetwork_Card_Via>
+  <TheNetwork_Card_WorseAsk>They want {0} more silver to go on, or they will bring {1} of the {2}.</TheNetwork_Card_WorseAsk>
+  <TheNetwork_Card_PartialAsk>They came back with {0} of the {1}.</TheNetwork_Card_PartialAsk>
+  <TheNetwork_ContractMoney>Price {0} silver · paid so far {1}</TheNetwork_ContractMoney>
+  <TheNetwork_BalanceOnDelivery>{0} due on delivery</TheNetwork_BalanceOnDelivery>
+  <TheNetwork_BalanceOwed>you owe {0}</TheNetwork_BalanceOwed>
+  <TheNetwork_MoneyCarried>{0} of it carried over from the job this one replaced</TheNetwork_MoneyCarried>
+  <TheNetwork_MoneyMovedOn>{0} moved to the job that replaced this one</TheNetwork_MoneyMovedOn>
+  <TheNetwork_ContractResult>Delivered {0} of {1}: {2}</TheNetwork_ContractResult>
+  <TheNetwork_ContractSecured>They secured {0} of {1}</TheNetwork_ContractSecured>
+  <TheNetwork_InsuranceLine>Insured: pays back {0} of the deposit on covered losses (cost {1} silver)</TheNetwork_InsuranceLine>
+  <TheNetwork_Coverage_Some>some</TheNetwork_Coverage_Some>
+  <TheNetwork_Coverage_Half>about half</TheNetwork_Coverage_Half>
+  <TheNetwork_Coverage_TwoThirds>about two thirds</TheNetwork_Coverage_TwoThirds>
+  <TheNetwork_Eta_Days>expected in about {0} days</TheNetwork_Eta_Days>
+  <TheNetwork_Eta_Soon>expected any day now</TheNetwork_Eta_Soon>
+  <TheNetwork_Eta_Any>overdue, no word yet</TheNetwork_Eta_Any>
+  <TheNetwork_Eta_Late>running late</TheNetwork_Eta_Late>
+  <TheNetwork_Lineage_Children>{0} follow-on contracts</TheNetwork_Lineage_Children>
+  <TheNetwork_Lineage_Continuation>Picks up where {0} left off</TheNetwork_Lineage_Continuation>
+  <TheNetwork_Lineage_Replacement>Takes over from {0}</TheNetwork_Lineage_Replacement>
+  <TheNetwork_RefusalLine>{0} turned it down: {1}</TheNetwork_RefusalLine>
+  <TheNetwork_Contracts_Header>Your contracts: {0} under way, {1} closed</TheNetwork_Contracts_Header>
+  <TheNetwork_Contracts_None>You have not asked the Network for anything yet.</TheNetwork_Contracts_None>
+
+  <!-- Offers -->
+  <TheNetwork_OfferTerms>{0} silver: {1} now, {2} on delivery · {3}</TheNetwork_OfferTerms>
+  <TheNetwork_OfferEta>about {0} days</TheNetwork_OfferEta>
+  <TheNetwork_OfferInsurance>insurance {0} silver, pays back {1} of the deposit on covered losses</TheNetwork_OfferInsurance>
+  <TheNetwork_OfferValid>quote good for {0}</TheNetwork_OfferValid>
+  <TheNetwork_OfferExpired>quote expired</TheNetwork_OfferExpired>
+  <TheNetwork_Offer_Accept>Accept ({0} silver now)</TheNetwork_Offer_Accept>
+  <TheNetwork_Offer_AcceptInsured>Accept insured ({0} silver now)</TheNetwork_Offer_AcceptInsured>
+  <TheNetwork_Offer_Decline>Decline</TheNetwork_Offer_Decline>
+  <TheNetwork_Offer_Newcomer>new outfit</TheNetwork_Offer_Newcomer>
+  <TheNetwork_Offer_NoInsurance>no insurance offered</TheNetwork_Offer_NoInsurance>
+  <TheNetwork_OfferState_Proposed>offered</TheNetwork_OfferState_Proposed>
+  <TheNetwork_OfferState_Accepted>accepted</TheNetwork_OfferState_Accepted>
+  <TheNetwork_OfferState_Declined>declined</TheNetwork_OfferState_Declined>
+  <TheNetwork_OfferState_Withdrawn>withdrew</TheNetwork_OfferState_Withdrawn>
+  <TheNetwork_OfferState_Expired>quote expired</TheNetwork_OfferState_Expired>
+  <TheNetwork_OfferState_Superseded>not chosen</TheNetwork_OfferState_Superseded>
+  <TheNetwork_Condition_CashUpFront>wants more up front</TheNetwork_Condition_CashUpFront>
+  <TheNetwork_Condition_NoQuestionsAsked>no questions asked about where it comes from</TheNetwork_Condition_NoQuestionsAsked>
+  <TheNetwork_Condition_AlongsideOtherWork>they are running other work at the same time</TheNetwork_Condition_AlongsideOtherWork>
+  <TheNetwork_Condition_RiskAcknowledged>they know it is dangerous</TheNetwork_Condition_RiskAcknowledged>
+  <TheNetwork_Condition_ReplacementHonoursQuote>honours the original quote</TheNetwork_Condition_ReplacementHonoursQuote>
+
+  <!-- Actions -->
+  <TheNetwork_Act_PayMore>Pay {0} more</TheNetwork_Act_PayMore>
+  <TheNetwork_Act_Reduce>Settle for {0}</TheNetwork_Act_Reduce>
+  <TheNetwork_Act_Refuse>Refuse</TheNetwork_Act_Refuse>
+  <TheNetwork_Act_Cancel>Cancel</TheNetwork_Act_Cancel>
+  <TheNetwork_Act_AcceptPartial>Take what they have</TheNetwork_Act_AcceptPartial>
+  <TheNetwork_Act_AcceptContinue>Take it, find the rest</TheNetwork_Act_AcceptContinue>
+  <TheNetwork_Act_AskSame>Take it, ask them for the rest</TheNetwork_Act_AskSame>
+  <TheNetwork_Act_PayBalance>Pay the {0} you owe</TheNetwork_Act_PayBalance>
+  <TheNetwork_Act_Repost>Ask again</TheNetwork_Act_Repost>
+  <TheNetwork_Act_RepostOpen>Ask anyone the Fixer knows</TheNetwork_Act_RepostOpen>
+  <TheNetwork_Act_CancelConfirmFree>Call it off? Nothing has been paid yet.</TheNetwork_Act_CancelConfirmFree>
+  <TheNetwork_Act_CancelConfirmAwarded>Call it off? The work has started: the Fixer's terms decide how much of the deposit comes back, and it may be nothing.</TheNetwork_Act_CancelConfirmAwarded>
+  <TheNetwork_Act_CancelConfirmLate>Call it off now? They are already at it: nothing comes back.</TheNetwork_Act_CancelConfirmLate>
+  <TheNetwork_Act_RefusePartialConfirm>Refuse the goods they brought? They keep them, and the deposit is not returned.</TheNetwork_Act_RefusePartialConfirm>
+
+  <!-- Contract states -->
+  <TheNetwork_ContractStatus_Draft>draft</TheNetwork_ContractStatus_Draft>
+  <TheNetwork_ContractStatus_Posted>posted</TheNetwork_ContractStatus_Posted>
+  <TheNetwork_ContractStatus_Bidding>collecting quotes</TheNetwork_ContractStatus_Bidding>
+  <TheNetwork_ContractStatus_Unfilled>no takers</TheNetwork_ContractStatus_Unfilled>
+  <TheNetwork_ContractStatus_Awarded>agreed</TheNetwork_ContractStatus_Awarded>
+  <TheNetwork_ContractStatus_Active>under way</TheNetwork_ContractStatus_Active>
+  <TheNetwork_ContractStatus_Delayed>delayed</TheNetwork_ContractStatus_Delayed>
+  <TheNetwork_ContractStatus_Renegotiating>waiting for your answer</TheNetwork_ContractStatus_Renegotiating>
+  <TheNetwork_ContractStatus_Troubled>in trouble</TheNetwork_ContractStatus_Troubled>
+  <TheNetwork_ContractStatus_Fulfilled>delivered</TheNetwork_ContractStatus_Fulfilled>
+  <TheNetwork_ContractStatus_PartiallyFulfilled>partly delivered</TheNetwork_ContractStatus_PartiallyFulfilled>
+  <TheNetwork_ContractStatus_Failed>failed</TheNetwork_ContractStatus_Failed>
+  <TheNetwork_ContractStatus_Cancelled>called off</TheNetwork_ContractStatus_Cancelled>
+  <TheNetwork_ContractStatus_Expired>lapsed</TheNetwork_ContractStatus_Expired>
+  <TheNetwork_ContractStatus_Voided>void</TheNetwork_ContractStatus_Voided>
+  <TheNetwork_SubStatus_WorseThanExpected>worse than expected</TheNetwork_SubStatus_WorseThanExpected>
+  <TheNetwork_SubStatus_PartialResult>only part of it</TheNetwork_SubStatus_PartialResult>
+  <TheNetwork_SubStatus_AwaitingPayment>holding the goods until you pay</TheNetwork_SubStatus_AwaitingPayment>
+  <TheNetwork_SubStatus_Hold>delivery on hold</TheNetwork_SubStatus_Hold>
+  <TheNetwork_SubStatus_Missing>no word from them</TheNetwork_SubStatus_Missing>
+  <TheNetwork_SubStatus_Captured>some of them were taken</TheNetwork_SubStatus_Captured>
+  <TheNetwork_SubStatus_Stranded>stranded</TheNetwork_SubStatus_Stranded>
+  <TheNetwork_OpPhase_Preparing>getting ready</TheNetwork_OpPhase_Preparing>
+  <TheNetwork_OpPhase_Transit>on their way</TheNetwork_OpPhase_Transit>
+  <TheNetwork_OpPhase_Engaged>at work</TheNetwork_OpPhase_Engaged>
+  <TheNetwork_OpPhase_Returning>coming back</TheNetwork_OpPhase_Returning>
+  <TheNetwork_OpPhase_Delivering>sending it to you</TheNetwork_OpPhase_Delivering>
+  <TheNetwork_OpPhase_Done>done</TheNetwork_OpPhase_Done>
+
+  <!-- Causes -->
+  <TheNetwork_Cause_OperationFailed>they could not get it</TheNetwork_Cause_OperationFailed>
+  <TheNetwork_Cause_CatastrophicLoss>it went badly wrong</TheNetwork_Cause_CatastrophicLoss>
+  <TheNetwork_Cause_ContractorLost>they never came back</TheNetwork_Cause_ContractorLost>
+  <TheNetwork_Cause_PartialShortfall>they came back short</TheNetwork_Cause_PartialShortfall>
+  <TheNetwork_Cause_PreWorkLoss>the contractor was gone before the work began</TheNetwork_Cause_PreWorkLoss>
+  <TheNetwork_Cause_ContractorWalked>they walked away from the job</TheNetwork_Cause_ContractorWalked>
+  <TheNetwork_Cause_UndeliverableNoHome>there was nowhere to deliver it</TheNetwork_Cause_UndeliverableNoHome>
+  <TheNetwork_Cause_DefMissing>the item no longer exists in this world</TheNetwork_Cause_DefMissing>
+  <TheNetwork_Cause_ItemCannotBeProduced>the item could not be produced in this game</TheNetwork_Cause_ItemCannotBeProduced>
+  <TheNetwork_Cause_KindMissing>this kind of contract no longer exists</TheNetwork_Cause_KindMissing>
+  <TheNetwork_Cause_BrokerGone>the Fixer is gone</TheNetwork_Cause_BrokerGone>
+  <TheNetwork_Cause_PreparingForRemoval>the Network is being removed</TheNetwork_Cause_PreparingForRemoval>
+  <TheNetwork_Cause_OperationMissing>the job's record was lost</TheNetwork_Cause_OperationMissing>
+  <TheNetwork_Cause_IssuerCancelled>you called it off</TheNetwork_Cause_IssuerCancelled>
+  <TheNetwork_Cause_IssuerCancelledAfterAward>you called it off after they had started</TheNetwork_Cause_IssuerCancelledAfterAward>
+  <TheNetwork_Cause_IssuerCancelledDuringRenegotiation>you called it off instead of paying more</TheNetwork_Cause_IssuerCancelledDuringRenegotiation>
+  <TheNetwork_Cause_IssuerRefusedPartial>you refused what they brought</TheNetwork_Cause_IssuerRefusedPartial>
+  <TheNetwork_Cause_NoOffers>nobody took it</TheNetwork_Cause_NoOffers>
+  <TheNetwork_Cause_NeverAwarded>nobody took it in time</TheNetwork_Cause_NeverAwarded>
+  <TheNetwork_Cause_PartialAccepted>you accepted what they brought</TheNetwork_Cause_PartialAccepted>
+  <TheNetwork_Cause_PartialHandover>they handed over what you had paid for</TheNetwork_Cause_PartialHandover>
+  <TheNetwork_Cause_PlayerDefaulted>you could not pay</TheNetwork_Cause_PlayerDefaulted>
+  <TheNetwork_Cause_ReducedScope>you settled for less</TheNetwork_Cause_ReducedScope>
+  <TheNetwork_Cause_Delivered>delivered in full</TheNetwork_Cause_Delivered>
+  <TheNetwork_Cause_Delayed>the job is taking longer</TheNetwork_Cause_Delayed>
+  <TheNetwork_Cause_DeliveryHold>the delivery is on hold</TheNetwork_Cause_DeliveryHold>
+  <TheNetwork_Cause_AwaitingPayment>they are waiting for your payment</TheNetwork_Cause_AwaitingPayment>
+  <TheNetwork_Cause_WorseThanExpected>worse than expected</TheNetwork_Cause_WorseThanExpected>
+  <TheNetwork_Cause_PartialResult>only part of it</TheNetwork_Cause_PartialResult>
+  <TheNetwork_Cause_Missing>no word from them</TheNetwork_Cause_Missing>
+  <TheNetwork_Cause_Captured>some were taken</TheNetwork_Cause_Captured>
+  <TheNetwork_Cause_Stranded>stranded</TheNetwork_Cause_Stranded>
+  <TheNetwork_Cause_Unknown>for reasons nobody explained</TheNetwork_Cause_Unknown>
+
+  <!-- Refusals (and delivery troubles) -->
+  <TheNetwork_Refusal_TooDangerous>too dangerous for them</TheNetwork_Refusal_TooDangerous>
+  <TheNetwork_Refusal_Overcommitted>they have too much work on</TheNetwork_Refusal_Overcommitted>
+  <TheNetwork_Refusal_BadBlood>they will not work for you</TheNetwork_Refusal_BadBlood>
+  <TheNetwork_Refusal_Exhausted>they are worn out</TheNetwork_Refusal_Exhausted>
+  <TheNetwork_Refusal_AgainstDoctrine>not the kind of work they do</TheNetwork_Refusal_AgainstDoctrine>
+  <TheNetwork_Refusal_PoliticalRisk>it would cross people they answer to</TheNetwork_Refusal_PoliticalRisk>
+  <TheNetwork_Refusal_PayTooLow>not worth their while</TheNetwork_Refusal_PayTooLow>
+  <TheNetwork_Refusal_YouOweUs>you still owe them</TheNetwork_Refusal_YouOweUs>
+  <TheNetwork_Refusal_Injuries>too many of them are hurt</TheNetwork_Refusal_Injuries>
+  <TheNetwork_Refusal_Unavailable>they cannot be reached</TheNetwork_Refusal_Unavailable>
+  <TheNetwork_Refusal_NoCapability>they are not equipped for it</TheNetwork_Refusal_NoCapability>
+  <TheNetwork_Refusal_OutOfRange>too far from where they work</TheNetwork_Refusal_OutOfRange>
+  <TheNetwork_Refusal_Withdrawn>they withdrew their offer</TheNetwork_Refusal_Withdrawn>
+  <TheNetwork_Refusal_NoHomeMap>you have no home to deliver to</TheNetwork_Refusal_NoHomeMap>
+  <TheNetwork_Refusal_NoDropSpot>no clear place to land the pods</TheNetwork_Refusal_NoDropSpot>
+  <TheNetwork_Refusal_MapGone>the place they were sending it is gone</TheNetwork_Refusal_MapGone>
+  <TheNetwork_Refusal_DropFailed>the pods could not be sent</TheNetwork_Refusal_DropFailed>
+  <TheNetwork_Refusal_NoDeliveryAdapter>no way to deliver</TheNetwork_Refusal_NoDeliveryAdapter>
+  <TheNetwork_Refusal_NoPayload>nothing to deliver</TheNetwork_Refusal_NoPayload>
+  <TheNetwork_Refusal_Unknown>no reason given</TheNetwork_Refusal_Unknown>
+
+  <!-- Contractors -->
+  <TheNetwork_Kind_Contractor>contractor</TheNetwork_Kind_Contractor>
+  <TheNetwork_Kind_Solo>solo</TheNetwork_Kind_Solo>
+  <TheNetwork_Kind_Organization>outfit</TheNetwork_Kind_Organization>
+  <TheNetwork_Contractors_Header>{0} contractors the Network knows of</TheNetwork_Contractors_Header>
+  <TheNetwork_Contractors_OnlyKnown>Only those I have dealt with</TheNetwork_Contractors_OnlyKnown>
+  <TheNetwork_Contractor_IntelContact>will tell you what they know</TheNetwork_Contractor_IntelContact>
+  <TheNetwork_Contractor_NoDealings>you have not dealt with them</TheNetwork_Contractor_NoDealings>
+  <TheNetwork_ContractorRecord>jobs done {0}, part-done {1}, failed {2}; people lost {3}</TheNetwork_ContractorRecord>
+  <TheNetwork_LedBy>led by {0}</TheNetwork_LedBy>
+  <TheNetwork_Origin>came out of {0}</TheNetwork_Origin>
+  <TheNetwork_Headcount_One>one person</TheNetwork_Headcount_One>
+  <TheNetwork_Headcount_Few>{0} people</TheNetwork_Headcount_Few>
+  <TheNetwork_Headcount_Dozen>about a dozen people</TheNetwork_Headcount_Dozen>
+  <TheNetwork_Headcount_Score>a score of people</TheNetwork_Headcount_Score>
+  <TheNetwork_Headcount_Many>a large company</TheNetwork_Headcount_Many>
+  <TheNetwork_Readiness_Available>ready</TheNetwork_Readiness_Available>
+  <TheNetwork_Readiness_Committed>busy</TheNetwork_Readiness_Committed>
+  <TheNetwork_Readiness_Recovering>recovering</TheNetwork_Readiness_Recovering>
+  <TheNetwork_Readiness_Exhausted>exhausted</TheNetwork_Readiness_Exhausted>
+  <TheNetwork_Readiness_Unavailable>out of reach</TheNetwork_Readiness_Unavailable>
+  <TheNetwork_Readiness_Ended>gone</TheNetwork_Readiness_Ended>
+  <TheNetwork_Morale_Steady>steady</TheNetwork_Morale_Steady>
+  <TheNetwork_Morale_Confident>confident</TheNetwork_Morale_Confident>
+  <TheNetwork_Morale_Cautious>cautious</TheNetwork_Morale_Cautious>
+  <TheNetwork_Morale_Shaken>shaken</TheNetwork_Morale_Shaken>
+  <TheNetwork_Morale_Reckless>reckless</TheNetwork_Morale_Reckless>
+  <TheNetwork_Morale_Exhausted>exhausted</TheNetwork_Morale_Exhausted>
+  <TheNetwork_Morale_Desperate>desperate</TheNetwork_Morale_Desperate>
+  <TheNetwork_Doctrine_Aggressive>aggressive</TheNetwork_Doctrine_Aggressive>
+  <TheNetwork_Doctrine_Cautious>careful</TheNetwork_Doctrine_Cautious>
+  <TheNetwork_Doctrine_Professional>professional</TheNetwork_Doctrine_Professional>
+  <TheNetwork_Doctrine_Opportunistic>opportunistic</TheNetwork_Doctrine_Opportunistic>
+  <TheNetwork_Doctrine_Scavenger>scavengers</TheNetwork_Doctrine_Scavenger>
+  <TheNetwork_Doctrine_Explorer>explorers</TheNetwork_Doctrine_Explorer>
+  <TheNetwork_Relation_Unknown>strangers</TheNetwork_Relation_Unknown>
+  <TheNetwork_Relation_Familiar>they know you</TheNetwork_Relation_Familiar>
+  <TheNetwork_Relation_Professional>worked with you</TheNetwork_Relation_Professional>
+  <TheNetwork_Relation_Friendly>friendly to you</TheNetwork_Relation_Friendly>
+  <TheNetwork_Relation_Trusted>trust you</TheNetwork_Relation_Trusted>
+  <TheNetwork_Relation_Rival>cold toward you</TheNetwork_Relation_Rival>
+  <TheNetwork_Relation_BitterRival>resent you</TheNetwork_Relation_BitterRival>
+  <TheNetwork_Relation_Hostile>hostile to you</TheNetwork_Relation_Hostile>
+  <TheNetwork_EndedBecause_Died>they died</TheNetwork_EndedBecause_Died>
+  <TheNetwork_EndedBecause_NoSuccessor>nobody was left to lead them</TheNetwork_EndedBecause_NoSuccessor>
+  <TheNetwork_EndedBecause_LostContact>they were never heard from again</TheNetwork_EndedBecause_LostContact>
+  <TheNetwork_EndedBecause_Captured>they were taken</TheNetwork_EndedBecause_Captured>
+  <TheNetwork_EndedBecause_Dev>(ended by dev action)</TheNetwork_EndedBecause_Dev>
+  <TheNetwork_EndedBecause_Test>(ended by test)</TheNetwork_EndedBecause_Test>
+  <TheNetwork_EndedBecause_Unknown>they are gone</TheNetwork_EndedBecause_Unknown>
+
+  <!-- Fixers -->
+  <TheNetwork_Brokerage_Lean>lean terms</TheNetwork_Brokerage_Lean>
+  <TheNetwork_Brokerage_Standard>standard terms</TheNetwork_Brokerage_Standard>
+  <TheNetwork_Brokerage_Premium>premium service</TheNetwork_Brokerage_Premium>
+  <TheNetwork_Reach_Minimal>knows few crews</TheNetwork_Reach_Minimal>
+  <TheNetwork_Reach_Local>knows local crews</TheNetwork_Reach_Local>
+  <TheNetwork_Reach_Regional>knows crews across the region</TheNetwork_Reach_Regional>
+  <TheNetwork_Reach_Wide>knows many crews</TheNetwork_Reach_Wide>
+  <TheNetwork_Reach_Vast>knows everyone</TheNetwork_Reach_Vast>
+  <TheNetwork_InsuranceStyle_None>no insurance</TheNetwork_InsuranceStyle_None>
+  <TheNetwork_InsuranceStyle_Basic>basic insurance</TheNetwork_InsuranceStyle_Basic>
+  <TheNetwork_InsuranceStyle_Generous>generous insurance</TheNetwork_InsuranceStyle_Generous>
+
+  <!-- History -->
+  <TheNetwork_History_Casualties>{0} lost {1} people on a job ({2} more hurt).</TheNetwork_History_Casualties>
+  <TheNetwork_History_PersonKilled>{0} of {1} was killed.</TheNetwork_History_PersonKilled>
+  <TheNetwork_History_LeaderKilled>{0}, who led {1}, was killed.</TheNetwork_History_LeaderKilled>
+  <TheNetwork_History_Succeeded>{0} took over {1} after {2}.</TheNetwork_History_Succeeded>
+  <TheNetwork_History_Promoted>{0} stepped up in {1}.</TheNetwork_History_Promoted>
+  <TheNetwork_History_Captured>Some of {0} were taken on a job.</TheNetwork_History_Captured>
+  <TheNetwork_History_Missing>{0} went silent on a job.</TheNetwork_History_Missing>
+  <TheNetwork_History_Stranded>{0} were stranded far from home.</TheNetwork_History_Stranded>
+  <TheNetwork_History_Ended>{0} is no more: {1}.</TheNetwork_History_Ended>
+  <TheNetwork_History_OriginLost>The people {0} came from are gone.</TheNetwork_History_OriginLost>
+  <TheNetwork_History_ContractDone>{0} delivered {1}x {2}.</TheNetwork_History_ContractDone>
+  <TheNetwork_History_ContractPartial>{0} delivered {1} of {2}x {3}.</TheNetwork_History_ContractPartial>
+  <TheNetwork_History_ContractFailed>The job for {0}x {1} with {2} failed: {3}.</TheNetwork_History_ContractFailed>
+  <TheNetwork_History_Defaulted>You could not pay {0} for {1}x {2}.</TheNetwork_History_Defaulted>
+  <TheNetwork_History_LastKnown>Word came of where {0} was last heard from, chasing {1}.</TheNetwork_History_LastKnown>
+
+  <!-- Journal (minor steps, History tab) -->
+  <TheNetwork_Journal_Posted>You asked {1} to find {0}.</TheNetwork_Journal_Posted>
+  <TheNetwork_Journal_Offer>{0} quoted for {1}.</TheNetwork_Journal_Offer>
+  <TheNetwork_Journal_Refused>{0} turned down {1}: {2}.</TheNetwork_Journal_Refused>
+  <TheNetwork_Journal_Awarded>{0} took the job for {1}.</TheNetwork_Journal_Awarded>
+  <TheNetwork_Journal_Unfilled>Nobody took the job for {0}.</TheNetwork_Journal_Unfilled>
+  <TheNetwork_Journal_Delayed>{0}, {1}: {2}.</TheNetwork_Journal_Delayed>
+  <TheNetwork_Journal_Renegotiate>{0} wants to talk about {1}.</TheNetwork_Journal_Renegotiate>
+  <TheNetwork_Journal_ContractCancelled>You called off the job for {0}.</TheNetwork_Journal_ContractCancelled>
+  <TheNetwork_Journal_Voided>The job for {0} is void: {1}.</TheNetwork_Journal_Voided>
+  <TheNetwork_Journal_Expired>The request for {0} lapsed.</TheNetwork_Journal_Expired>
+  <TheNetwork_Journal_Paid>You paid {0} silver ({1}).</TheNetwork_Journal_Paid>
+  <TheNetwork_Journal_NewOutfit>A new outfit, {0}, started taking work.</TheNetwork_Journal_NewOutfit>
+  <TheNetwork_Journal_Mood>{0} seem {1}.</TheNetwork_Journal_Mood>
+  <TheNetwork_Journal_OpStarted>{0} set out after {1}.</TheNetwork_Journal_OpStarted>
+
+  <!-- Messages -->
+  <TheNetwork_Message_Offer>{0} passes on a quote from {1} for {2}.</TheNetwork_Message_Offer>
+  <TheNetwork_Message_Awarded>{0} took the job: {1}.</TheNetwork_Message_Awarded>
+  <TheNetwork_Message_Delayed>{0} sends word: {1} will take longer than planned.</TheNetwork_Message_Delayed>
+  <TheNetwork_Message_ContractCancelled>Called off: {0}. {1} silver came back.</TheNetwork_Message_ContractCancelled>
+  <TheNetwork_Message_ContractExpired>Nobody took the job for {0}; the request lapsed.</TheNetwork_Message_ContractExpired>
+  <TheNetwork_Message_NewOutfit>A new outfit, {0}, has started taking work.</TheNetwork_Message_NewOutfit>
+
+  <!-- Letters -->
+  <TheNetwork_Letter_UnfilledLabel>No takers: {0}</TheNetwork_Letter_UnfilledLabel>
+  <TheNetwork_Letter_UnfilledText>{0} asked around for {1}, but nobody took the job.\n\nWhat they heard: {2}.\n\nYou can ask again, or open the job to everyone {0} knows.</TheNetwork_Letter_UnfilledText>
+  <TheNetwork_Letter_HoldLabel>Delivery on hold: {0}</TheNetwork_Letter_HoldLabel>
+  <TheNetwork_Letter_HoldText>{0} have {1} ready, but cannot get it to you ({2}). They will keep trying, but they will not hold it forever.</TheNetwork_Letter_HoldText>
+  <TheNetwork_Letter_AwaitingLabel>Payment due: {0}</TheNetwork_Letter_AwaitingLabel>
+  <TheNetwork_Letter_AwaitingText>{0} have {1} ready for you, but your payment of {2} silver did not come through. They are holding the goods until you pay. If you do not, they will hand over only what you have already paid for.</TheNetwork_Letter_AwaitingText>
+  <TheNetwork_Letter_PartialLabel>Part of the goods: {0}</TheNetwork_Letter_PartialLabel>
+  <TheNetwork_Letter_PartialText>{0} came back with {1} of {2}. They want to know what you want to do: take what they have, have someone find the rest, or refuse it. If you do not answer, they will send what they have.</TheNetwork_Letter_PartialText>
+  <TheNetwork_Letter_WorseLabel>Worse than expected: {0}</TheNetwork_Letter_WorseLabel>
+  <TheNetwork_Letter_WorseText>{0} report that getting {1} is much harder than anyone thought. They will go on for {2} more silver, or settle for bringing {3}. You can also refuse, and they may walk away. If you do not answer, they will settle for less.</TheNetwork_Letter_WorseText>
+  <TheNetwork_Letter_DeliveredLabel>Delivered: {0}</TheNetwork_Letter_DeliveredLabel>
+  <TheNetwork_Letter_DeliveredText>Drop pods are coming down with {1}, courtesy of {0}.</TheNetwork_Letter_DeliveredText>
+  <TheNetwork_Letter_PartDeliveredLabel>Partly delivered: {0}</TheNetwork_Letter_PartDeliveredLabel>
+  <TheNetwork_Letter_PartDeliveredText>{0} sent {1} of {2} by drop pod ({3}).</TheNetwork_Letter_PartDeliveredText>
+  <TheNetwork_Letter_FailedLabel>Job failed: {0}</TheNetwork_Letter_FailedLabel>
+  <TheNetwork_Letter_Failed_Default>{0} could not get {1}: {2}.</TheNetwork_Letter_Failed_Default>
+  <TheNetwork_Letter_Failed_CatastrophicLoss>The job for {1} went badly wrong. {0} lost people and came back with nothing.</TheNetwork_Letter_Failed_CatastrophicLoss>
+  <TheNetwork_Letter_Failed_ContractorLost>{0} never came back from the job for {1}. Nobody expects them now.</TheNetwork_Letter_Failed_ContractorLost>
+  <TheNetwork_Letter_Failed_PreWorkLoss>{0} were gone before they could start on {1}.</TheNetwork_Letter_Failed_PreWorkLoss>
+  <TheNetwork_Letter_Failed_ContractorWalked>{0} walked away from the job for {1} rather than go on at the old price.</TheNetwork_Letter_Failed_ContractorWalked>
+  <TheNetwork_Letter_DepositLost>The deposit is gone: it paid for the attempt.</TheNetwork_Letter_DepositLost>
+  <TheNetwork_Letter_InsurancePaid>Your insurance paid back {0} silver.</TheNetwork_Letter_InsurancePaid>
+  <TheNetwork_Letter_Replaced>{0} found someone else to take over the job.</TheNetwork_Letter_Replaced>
+  <TheNetwork_Letter_VoidedLabel>Job void: {0}</TheNetwork_Letter_VoidedLabel>
+  <TheNetwork_Letter_VoidedText>The job for {0} cannot go ahead: {1}.</TheNetwork_Letter_VoidedText>
+  <TheNetwork_Letter_TroubledLabel_Missing>No word from {0}</TheNetwork_Letter_TroubledLabel_Missing>
+  <TheNetwork_Letter_TroubledLabel_Captured>{0}: people taken</TheNetwork_Letter_TroubledLabel_Captured>
+  <TheNetwork_Letter_TroubledLabel_Stranded>{0} stranded</TheNetwork_Letter_TroubledLabel_Stranded>
+  <TheNetwork_Letter_Troubled_Missing>Nobody has heard from {0} since they went after {1}.</TheNetwork_Letter_Troubled_Missing>
+  <TheNetwork_Letter_Troubled_Captured>Some of {0} were taken while going after {1}.</TheNetwork_Letter_Troubled_Captured>
+  <TheNetwork_Letter_Troubled_Stranded>{0} are stranded far from home after the job for {1} went wrong.</TheNetwork_Letter_Troubled_Stranded>
+  <TheNetwork_Letter_HadCargo>They had already secured part of the shipment.</TheNetwork_Letter_HadCargo>
+  <TheNetwork_Letter_NoCargo>As far as anyone knows, they had nothing yet.</TheNetwork_Letter_NoCargo>
+  <TheNetwork_Letter_TroubledWait>They may still turn up. If not, the job is lost.</TheNetwork_Letter_TroubledWait>
+  <TheNetwork_Letter_LeaderKilledLabel>{0} lose their leader</TheNetwork_Letter_LeaderKilledLabel>
+  <TheNetwork_Letter_LeaderKilledText>{0}, who led {1}, was killed on your job.</TheNetwork_Letter_LeaderKilledText>
+  <TheNetwork_Letter_LastKnownLabel>Last heard from: {0}</TheNetwork_Letter_LastKnownLabel>
+  <TheNetwork_Letter_LastKnownText>We lost contact with {0} out there. Their last word came from this place.</TheNetwork_Letter_LastKnownText>
+  <TheNetwork_Letter_LastKnownCargo>Some of the {0} they were after may still be there.</TheNetwork_Letter_LastKnownCargo>
+  <TheNetwork_Letter_LastKnownNoCargo>If they found anything, nobody knows what became of it.</TheNetwork_Letter_LastKnownNoCargo>
+  <TheNetwork_Letter_LastKnownThreat>Whatever stopped them may still be there.</TheNetwork_Letter_LastKnownThreat>
+
+  <!-- Reasons for disabled commands -->
+  <TheNetwork_Reason_AlreadyClosed>that job is already closed</TheNetwork_Reason_AlreadyClosed>
+  <TheNetwork_Reason_BadPremium>that amount of extra silver is not possible</TheNetwork_Reason_BadPremium>
+  <TheNetwork_Reason_BidderWithdrew>they withdrew their offer</TheNetwork_Reason_BidderWithdrew>
+  <TheNetwork_Reason_BidderNowCommitted>they have taken on as much work as they can since they quoted</TheNetwork_Reason_BidderNowCommitted>
+  <TheNetwork_Reason_CannotAffordDeposit>you cannot pay what is due now</TheNetwork_Reason_CannotAffordDeposit>
+  <TheNetwork_Reason_ChooseContractor>choose who to ask</TheNetwork_Reason_ChooseContractor>
+  <TheNetwork_Reason_ContractMissing>that job no longer exists</TheNetwork_Reason_ContractMissing>
+  <TheNetwork_Reason_ContractorUnavailable>that contractor cannot take work</TheNetwork_Reason_ContractorUnavailable>
+  <TheNetwork_Reason_ItemMissing>the item no longer exists in this world</TheNetwork_Reason_ItemMissing>
+  <TheNetwork_Reason_NoBroker>choose a Fixer to broker it</TheNetwork_Reason_NoBroker>
+  <TheNetwork_Reason_NoInsuranceOffered>no insurance was offered</TheNetwork_Reason_NoInsuranceOffered>
+  <TheNetwork_Reason_NoIssuer>your colony is not known to the Network yet</TheNetwork_Reason_NoIssuer>
+  <TheNetwork_Reason_NoItem>choose an item first</TheNetwork_Reason_NoItem>
+  <TheNetwork_Reason_NoPartialResult>there is nothing to decide</TheNetwork_Reason_NoPartialResult>
+  <TheNetwork_Reason_NoQuantity>say how many</TheNetwork_Reason_NoQuantity>
+  <TheNetwork_Reason_NoRenegotiation>there is nothing to decide</TheNetwork_Reason_NoRenegotiation>
+  <TheNetwork_Reason_NotBidding>that job is not taking quotes</TheNetwork_Reason_NotBidding>
+  <TheNetwork_Reason_NotUnfilled>that job is not waiting for takers</TheNetwork_Reason_NotUnfilled>
+  <TheNetwork_Reason_NothingOwed>you do not owe anything on that job</TheNetwork_Reason_NothingOwed>
+  <TheNetwork_Reason_OfferClosed>that offer is no longer open</TheNetwork_Reason_OfferClosed>
+  <TheNetwork_Reason_OfferMissing>that offer no longer exists</TheNetwork_Reason_OfferMissing>
+  <TheNetwork_Reason_ProcurementDisabled>procurement is turned off in Mod Settings</TheNetwork_Reason_ProcurementDisabled>
+  <TheNetwork_Reason_QuantityTooLarge>that is more than anyone will take on at once</TheNetwork_Reason_QuantityTooLarge>
+  <TheNetwork_Reason_QuoteExpired>that quote has expired</TheNetwork_Reason_QuoteExpired>
+  <TheNetwork_Reason_TooLateToCancel>they are already at it; it is too late to call it off</TheNetwork_Reason_TooLateToCancel>
+
+  <!-- Settings -->
+  <TheNetwork_Settings_ProcurementEnabled>Procurement contracts</TheNetwork_Settings_ProcurementEnabled>
+  <TheNetwork_Settings_ProcurementEnabledTip>Off: no new procurement contracts can be posted. Contracts already posted run to their end.</TheNetwork_Settings_ProcurementEnabledTip>
+  <TheNetwork_Settings_Population>Contractor population: about {0}</TheNetwork_Settings_Population>
+  <TheNetwork_Settings_PopulationTip>How many contractors a world keeps. In a running game, new outfits appear over time to reach it; nobody is ever removed to meet it. A newly generated cast uses it too.</TheNetwork_Settings_PopulationTip>
+
+</LanguageData>

@@ -243,7 +243,8 @@ Repeated betrayals reduce loyalty. Surviving by retreating increases caution. Th
 Tiers are Recruit → Regular → Veteran. Promotion is driven by survived operations
 (`opsSurvived` per tier cohort, aggregated), so an org's quality rises with its history.
 **Contractor learning** is separate: topic knowledge lives in `KnowledgeBook` and grows from
-operations touching those topics.
+operations touching those topics. Knowledge travels with the people who come back: an operation
+where everyone was killed, captured or missing teaches the contractor nothing (ADR-040).
 
 ### 4.5 Leadership and succession
 
@@ -292,7 +293,7 @@ Inputs, all cheap reads:
 | Relationship | edge contractor→issuer: standing, trust, betrayals, defaults; open obligations |
 | Doctrine | the kind's alignment with doctrine (cruelty for assassination, discretion for black work) |
 | Morale | the descriptor (Exhausted refuses everything, Shaken refuses combat work) |
-| Workload | `commitments.Count` against the roster's available headcount |
+| Workload | `commitments.Count` against `JobCapacity` (a Solo 1; an organization one per six able people, counting those already out, 1..3). Named people already on a live operation are not available for another (ADR-039). |
 | Relevant history | knowledge of the topics; past failures on the same kind or region |
 | Political | the issuer's or target's faction relations with the contractor's origin, and sanctions (Phase 5) |
 | Payment | the offered budget against the contractor's price floor (greed, funds, reputation premium) |

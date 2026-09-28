@@ -6,10 +6,10 @@ using Verse;
 namespace TheNetwork.Persist.Events
 {
     /// <summary>
-    /// Permanent event type keys (EVENTS_AND_HISTORY § 1.6, § 2). Only the Phase 1 events exist.
-    /// A key never changes once shipped, even if the C# class is renamed.
+    /// Permanent event type keys (EVENTS_AND_HISTORY § 1.6, § 2). Phase 1 keys are here; Phase 2 keys
+    /// are in PhaseTwoEvents.cs. A key never changes once shipped, even if the C# class is renamed.
     /// </summary>
-    public static class EventKeys
+    public static partial class EventKeys
     {
         public const string NetworkBootstrapped = "Network.Bootstrapped";
         public const string NetworkLoaded = "Network.Loaded";

@@ -48,6 +48,9 @@ namespace TheNetwork
         /// <summary>Service toggle: off refuses new Intel requests; searches already running finish normally.</summary>
         public bool intelEnabled = true;
 
+        /// <summary>Service toggle: off refuses new procurement contracts; contracts already posted run to their end.</summary>
+        public bool procurementEnabled = true;
+
         // Runtime only.
         public int LoadedVersion { get; private set; } = -1;
         public bool LoadedFromNewerVersion => LoadedVersion > CurrentVersion;
@@ -74,6 +77,7 @@ namespace TheNetwork
             Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
             Scribe_Values.Look(ref profiling, "profiling", false);
             Scribe_Values.Look(ref intelEnabled, "intelEnabled", true);
+            Scribe_Values.Look(ref procurementEnabled, "procurementEnabled", true);
 
             if (Scribe.mode == LoadSaveMode.PostLoadInit || Scribe.mode == LoadSaveMode.LoadingVars)
             {
@@ -111,6 +115,7 @@ namespace TheNetwork
             NetLog.VerboseEnabled = verboseLogging;
             NetProfiler.Enabled = profiling;
             Domain.ServiceToggles.IntelEnabled = intelEnabled;
+            Domain.ServiceToggles.ProcurementEnabled = procurementEnabled;
         }
 
         public ItemOverride GetOverride(string defName)

@@ -12,13 +12,13 @@ using Verse;
 namespace TheNetwork.UI
 {
     /// <summary>
-    /// The Network main tab (MainButtonDef TheNetwork_MainButton). Phase 1 shows exactly two tabs:
-    /// Intel and History; later tabs appear with their phases. Reading never needs a Comms Console;
-    /// every outgoing command is gated and its button says why when disabled.
+    /// The Network main tab (MainButtonDef TheNetwork_MainButton). Phase 2 shows Intel, Procurement,
+    /// Contracts, Contractors and History; later tabs appear with their phases. Reading never needs a
+    /// Comms Console; every outgoing command is gated and its button says why when disabled.
     /// </summary>
-    public class MainTabWindow_Network : MainTabWindow
+    public partial class MainTabWindow_Network : MainTabWindow
     {
-        private enum Tab { Intel, History }
+        private enum Tab { Intel, Procurement, Contracts, Contractors, History }
 
         private enum CatalogSort { Name, Value, Mod }
 
@@ -45,6 +45,9 @@ namespace TheNetwork.UI
             List<TabRecord> tabs = new List<TabRecord>
             {
                 new TabRecord("TheNetwork_Tab_Intel".Translate(), () => tab = Tab.Intel, tab == Tab.Intel),
+                new TabRecord("TheNetwork_Tab_Procurement".Translate(), () => tab = Tab.Procurement, tab == Tab.Procurement),
+                new TabRecord("TheNetwork_Tab_Contracts".Translate(), () => tab = Tab.Contracts, tab == Tab.Contracts),
+                new TabRecord("TheNetwork_Tab_Contractors".Translate(), () => tab = Tab.Contractors, tab == Tab.Contractors),
                 new TabRecord("TheNetwork_Tab_History".Translate(), () => tab = Tab.History, tab == Tab.History)
             };
             Rect body = new Rect(inRect.x, inRect.y + 36f, inRect.width, inRect.height - 36f);
@@ -66,8 +69,14 @@ namespace TheNetwork.UI
                 GUI.color = Color.white;
                 content.yMin += 26f;
             }
-            if (tab == Tab.Intel) DrawIntel(content, rt);
-            else DrawHistory(content, rt);
+            switch (tab)
+            {
+                case Tab.Intel: DrawIntel(content, rt); break;
+                case Tab.Procurement: DrawProcurement(content, rt); break;
+                case Tab.Contracts: DrawContracts(content, rt); break;
+                case Tab.Contractors: DrawContractors(content, rt); break;
+                default: DrawHistory(content, rt); break;
+            }
         }
 
         // ================================================================== Intel tab

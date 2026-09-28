@@ -166,6 +166,13 @@ node at the old version, plus a headless test that loads it through the migratio
 invariants ([DEBUGGING § 6](DEBUGGING.md#6-headless-tests)). Fixture files live in
 `Tests/Fixtures/vN/`.
 
+### 4.7 Save format history
+
+| Version | Phase | Change |
+|---|---|---|
+| 1 | 1 | First format. The `contracts`, `operations` and `consequences` slots are reserved, empty nodes. |
+| 2 | 2 | The reserved slots now hold `ContractStore` (contracts and offers), `OperationStore` and `ConsequenceStore`. `knowledge` and `relations` hold real stores. The migration `V1ToV2PhaseTwoStores` is a logged no-op: a reserved node loads as an empty store, and contractor actors are instantiated from the world's own cast snapshot on the first load (idempotently). Global settings are never read to decide who exists. Additive fields (the money record's `purpose` and `linked` contract, which default to `Unspecified` and 0; the directions `TransferIn`/`TransferOut`; `ItemFacts` valuation signals, `ActorStore.worldGenerated` and `lastNewcomerBidder`) take their defaults when absent. |
+
 ## 5. Load pipeline
 
 | Step | Scribe mode / hook | Network work |
@@ -249,7 +256,11 @@ Grandmaster21 uninstall pattern):
    and ignored after removal. Timeouts stay.
 5. Refund the deposits of active contracts through drop pods. This is technical invalidation
    (the Network can no longer carry the contracts out), the one case with a full refund
-   ([STATE_MACHINES § 4.2](STATE_MACHINES.md#42-money-rules)).
+   ([STATE_MACHINES § 4.2](STATE_MACHINES.md#42-money-rules)). **Phase 2 as implemented:** every
+   live contract is Voided (`PreparingForRemoval`) and every silver paid is refunded (pending and
+   retried if it cannot be delivered now). Running operations are aborted. Their people are
+   records only, so nothing is left on any map. Drop pods already launched are ordinary vanilla
+   objects.
 6. Show a summary. The player then saves, disables the mod and reloads.
 
 **Expected errors after the prepared removal:** 1 (the missing WorldComponent class). Without

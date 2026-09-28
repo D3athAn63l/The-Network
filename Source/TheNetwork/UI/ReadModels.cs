@@ -167,6 +167,7 @@ namespace TheNetwork.UI
 
         private static string KindLabel(NetworkActor a)
         {
+            if (a.Has<ContractorProfile>() && !a.Has<FixerProfile>()) return "TheNetwork_Kind_Contractor".Translate().Resolve();
             switch (a.kind)
             {
                 case ActorKind.Individual: return "TheNetwork_Kind_Fixer".Translate().Resolve();

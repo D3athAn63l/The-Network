@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Defs>
+
+  <!--
+    Contract kinds (DATA_MODEL § 9). Phase 2 has exactly one: Procurement, an exact item and
+    quantity delivered by drop pod, brokered by a Fixer. Contracts persist the kind as a string; the
+    values below are tuning, read once when the Network starts.
+  -->
+  <TheNetwork.NetworkContractKindDef>
+    <defName>TheNetwork_Procurement</defName>
+    <label>procurement</label>
+    <description>Find, buy or take an exact item and quantity, then deliver it by drop pod.</description>
+    <kindKey>Procurement</kindKey>
+    <objectives>
+      <li>Acquire</li>
+      <li>Deliver</li>
+    </objectives>
+    <biddingWindowDaysOpen>1.5</biddingWindowDaysOpen>
+    <biddingWindowDaysDirect>0.75</biddingWindowDaysDirect>
+    <unfilledExpiryDays>10</unfilledExpiryDays>
+    <worseThanExpectedGraceDays>3</worseThanExpectedGraceDays>
+    <partialResultGraceDays>5</partialResultGraceDays>
+    <awaitingPaymentGraceDays>7</awaitingPaymentGraceDays>
+    <deliveryHoldMaxDays>15</deliveryHoldMaxDays>
+    <deliveryRetries>3</deliveryRetries>
+    <troubledDeadlineDays>10</troubledDeadlineDays>
+    <maxOffers>3</maxOffers>
+    <maxQuantityStacks>40</maxQuantityStacks>
+  </TheNetwork.NetworkContractKindDef>
+
+</Defs>

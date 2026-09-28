@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using TheNetwork.Kernel;
+using TheNetwork.Persist;
 
 namespace TheNetwork.Domain.Ports
 {
@@ -65,6 +66,12 @@ namespace TheNetwork.Domain.Ports
         public bool tradeable;
         public bool unique;
         public bool mineable;
+
+        /// <summary>Median market value of the item's top category (a sanity signal); 0 when unknown.</summary>
+        public float categoryMedian;
+
+        /// <summary>Cheapest known recipe input value per unit (a sanity signal); -1 when unknown.</summary>
+        public float recipeInputValue = -1f;
     }
 
     public interface ICommsAccess
@@ -156,5 +163,48 @@ namespace TheNetwork.Domain.Ports
 
         /// <summary>Destroys (or leaves for vanilla) a site no longer needed. Never touches a site with a map.</summary>
         void ReleaseSite(Opportunities.Opportunity opp, bool destroyIfNoMap);
+    }
+
+    /// <summary>Where a delivery would land right now, found without side effects.</summary>
+    public sealed class DeliveryPlan
+    {
+        public bool ok;
+        public int mapId = -1;
+        public string mapLabel;
+        public int cellX = -1;
+        public int cellZ = -1;
+
+        /// <summary>The preferred map was gone or unusable and another home map was chosen.</summary>
+        public bool rerouted;
+
+        /// <summary>NoHomeMap, NoDropSpot, … when not ok.</summary>
+        public string failureKey;
+    }
+
+    public sealed class DeliveryResult
+    {
+        public bool ok;
+        public int mapId = -1;
+        public string mapLabel;
+        public int delivered;
+        public string failureKey;
+        public bool thingCreationFailed;
+        public string failedDefName;
+    }
+
+    /// <summary>
+    /// Phase 2 delivery (STATE_MACHINES § 4.4): vanilla drop pods to a player home map. The payload is the
+    /// committed one (def, stuff, count, quality); the Things are created only when the pods launch.
+    /// </summary>
+    public interface IDelivery
+    {
+        /// <summary>The preferred map if it is still a player home with a valid drop spot, else another home map.</summary>
+        DeliveryPlan Plan(int preferredMapId, int seed);
+
+        /// <summary>Drops the payload on the planned map. Nothing is created when it fails.</summary>
+        DeliveryResult Deliver(DeliveryPlan plan, List<ItemPayload> payload, int seed);
+
+        /// <summary>The home map a new order is addressed to by default; -1 when the player has none.</summary>
+        int DefaultHomeMapId(out string label);
     }
 }
