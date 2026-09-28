@@ -253,9 +253,13 @@ namespace TheNetwork.UI
             return lines;
         }
 
+        /// <summary>The Field Log shows the latest few reports; the rest stay in the contract (bounded).</summary>
+        private const int FieldLogShown = 6;
+
         private static float CardHeight(ContractRowView row, float width)
         {
             float h = 30f + CardLines(row).Count * 18f;
+            if (row.fieldLog.Count > 0) h += 20f + Math.Min(FieldLogShown, row.fieldLog.Count) * 16f;
             for (int i = 0; i < row.offers.Count; i++) h += row.offers[i].open ? 96f : 22f;
             h += row.refusals.Count * 18f;
             if (HasActions(row)) h += 34f;
@@ -282,6 +286,19 @@ namespace TheNetwork.UI
             {
                 Widgets.Label(new Rect(inner.x, y, inner.width, 18f), line);
                 y += 18f;
+            }
+            if (row.fieldLog.Count > 0)
+            {
+                GUI.color = new Color(0.75f, 0.85f, 0.95f);
+                Widgets.Label(new Rect(inner.x, y + 2f, inner.width, 18f), Tr("TheNetwork_FieldLog_Header"));
+                GUI.color = new Color(0.85f, 0.85f, 0.85f);
+                y += 20f;
+                for (int i = Math.Max(0, row.fieldLog.Count - FieldLogShown); i < row.fieldLog.Count; i++)
+                {
+                    Widgets.Label(new Rect(inner.x + 8f, y, inner.width - 8f, 16f), row.fieldLog[i]);
+                    y += 16f;
+                }
+                GUI.color = Color.white;
             }
             Text.Font = GameFont.Small;
             for (int i = 0; i < row.offers.Count; i++) y = DrawOffer(new Rect(inner.x + 6f, y + 2f, inner.width - 6f, 0f), rt, row.offers[i]);

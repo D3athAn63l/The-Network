@@ -68,6 +68,9 @@ namespace TheNetwork.UI
         public string mode;
         public List<OfferView> offers = new List<OfferView>();
         public List<string> refusals = new List<string>();
+
+        /// <summary>The live Field Log of the player's running job (dated report lines, oldest first); empty otherwise.</summary>
+        public List<string> fieldLog = new List<string>();
         public int askExtra;
         public int askReduced;
         public int balanceDue;
@@ -235,6 +238,11 @@ namespace TheNetwork.UI
             else if (c.status == ContractStatus.Renegotiating && c.subStatus == SubStatus.PartialResult)
             {
                 row.result = "TheNetwork_ContractSecured".Translate(c.Acquire.secured, c.Quantity).Resolve();
+            }
+            List<FieldLogEntry> log = Ctx.FieldLog != null ? Ctx.FieldLog.Visible(c) : null;
+            if (log != null)
+            {
+                for (int i = 0; i < log.Count; i++) row.fieldLog.Add(Narrative.Date(log[i].tick) + " — " + ContractNarrative.FieldLogLine(log[i]));
             }
             if (c.IsSeeking || c.status == ContractStatus.Bidding)
             {
