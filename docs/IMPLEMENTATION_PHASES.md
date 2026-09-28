@@ -270,7 +270,8 @@ is about 2.5 MB, with about 1.2 ms of work per simulated day.
 
 Inserted after Phase 2 was merged and runtime-tested by the owner, and before Phase 3, which needs
 contractors to be *somewhere* before they can be materialized. Phase 3 keeps its number and scope.
-Normative spec: [SPATIAL](SPATIAL.md); decisions ADR-041 (implemented), ADR-042, ADR-043, ADR-044.
+Normative spec: [SPATIAL](SPATIAL.md); decisions ADR-041 (implemented), ADR-042, ADR-043, ADR-044,
+ADR-045 (abstract charter transport, added by the correction pass).
 
 **Scope (as implemented)**
 
@@ -291,15 +292,33 @@ Normative spec: [SPATIAL](SPATIAL.md); decisions ADR-041 (implemented), ADR-042,
 - Save format 3; Phase 2 contractors are anchored at load, running Phase 2 operations are untouched.
 - Dev actions, soak counters and invariants, spike S20.
 
+**Correction pass (on the same PR)**
+
+- A journey is never completed without proving its remaining route (no arrival by the clock alone),
+  never faster than the contractor can walk (real route steps, not approximate distance, decide what
+  fits; a longer rebuilt route makes it later), and an ended contractor never moves again.
+- Returns follow the Phase 2 lifecycle: only Troubled keeps a group out (a Disaster with survivors
+  comes home, its incident kept); Phase 2's "found" reconciles the group home; a write-off keeps the
+  incident truth.
+- A guaranteed last-resort anchor search; anchors around settlements, never on them; a Solo is
+  "captured" in its Field Log.
+- **Abstract charter transport** (ADR-045): an operation leg that cannot be walked in time may cross
+  same-layer geography by a reusable two-way charter from a high-tech provider (derived from the
+  game's `TechLevel`); ground first, never ambient, never cross-layer, no craft, no money, one Field
+  Log beat.
+
 **Not in Phase 2.5:** pawns, custody, deployments, in-person delivery, rescues (Phase 3); visits,
 relay stopovers, encounters, intersections, corridors, tracking (later phases); cross-layer or
-orbital travel; spatial pricing (later tuning).
+orbital travel; physical shuttles, extraction windows, missed-pickup consequences (deferred story
+hooks); spatial pricing (later tuning).
 
-Headless evidence: 181 tests, 13,139 checks, 0 failures (37 new: spatial, migration and the Field Log
-matrix). The 1,080-day soak adds daily spatial invariants: every active contractor has a valid
-anchor, nobody teleports, Field Logs exist only on the player's live contracts and never repeat a
-line. Zero violations; the spatial data adds about 108 KB to the 18-year save. S20 (runtime) is
-**not run**.
+Headless evidence: 208 tests, 15,079 checks, 0 failures (64 new in Phase 2.5: spatial, migration,
+the Field Log matrix, the correction regressions and the charter matrix A–N). The soaks add daily
+spatial invariants: every active contractor has a valid anchor; nobody teleports or walks faster than
+its own pace; ended contractors never move; recovered groups are where Phase 2 says; ambient movement
+never charters; Field Logs exist only on the player's live contracts and never repeat a line. Zero
+violations in the 18-year soak (a charter world) and the archipelago stress soak; the spatial data
+adds about 127 KB to the 18-year save. S20 (runtime) is **not run**.
 
 ---
 

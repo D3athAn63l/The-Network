@@ -50,15 +50,18 @@ hidden, approximate place in the world ([docs/SPATIAL.md](docs/SPATIAL.md)):
   work, no icons, no caravans, no pawns) and occasionally relocates when idle. The player never sees
   where anyone is.
 - **Operations with a place.** A job starts from where the contractor really is and happens in a
-  hidden work region that fits the quoted timeline; the resolver still decides what happens. A Last
-  Known Location appears near where the contractor actually was.
+  hidden work region that fits the quoted timeline, measured in real route steps; the resolver still
+  decides what happens. A Last Known Location appears near where the contractor actually was.
+- **Charter across water.** A job on an island (or across an impractically long detour) may be
+  reached by an abstract, reusable two-way charter from a high-tech settlement: no shuttle object, no
+  extra silver, one line in the Field Log.
 - **Field Log.** While a contractor works a player's contract, the contract card shows short reports
   ("has set out", "running behind schedule", "499 of 500 secured"). It ends with the contract.
 
 Contractor pawns, the contract board, the player as contractor and the social layer are later
 phases ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
 
-The headless tests pass (181 tests, including an 18-in-game-year procurement soak with daily money,
+The headless tests pass (208 tests, including an 18-in-game-year procurement soak with daily money,
 capacity and spatial invariant checks). The owner has run the Phase 2 procurement loop in game,
 normal drop-pod delivery included. The other runtime spikes, including S20 for spatial continuity,
 have **not** been run yet. Their records and owner test steps are in [docs/spikes/](docs/spikes/README.md).

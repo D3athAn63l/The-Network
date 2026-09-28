@@ -3,8 +3,8 @@
 > Every contractor has a lightweight, hidden geographical continuity, but the player is not managing
 > dots on a map. Spatial answers **WHERE**; operations still answer **WHAT HAPPENED**.
 > Decisions: [ADR-041](DECISIONS.md) (philosophy), ADR-042 (movement and routing), ADR-043
-> (operations and consequences), ADR-044 (the Field Log). Runtime check: spike
-> [S20](spikes/S20-abstract-spatial-routing.md).
+> (operations and consequences), ADR-044 (the Field Log), ADR-045 (abstract charter transport).
+> Runtime check: spike [S20](spikes/S20-abstract-spatial-routing.md).
 
 ## Contents
 
@@ -41,7 +41,8 @@ It is supporting infrastructure, never the point of the mod:
   history record, letter, relationship change or social event;
 - no social intersections (meetings, gossip, fights, rivalries), player-caravan encounters, relay
   stopovers or visits; no route-intersection corridors (see § 12);
-- no cross-layer, orbital, gravship or shuttle travel.
+- no cross-layer, orbital, gravship or planet-to-planet travel, and no physical vehicle of any kind:
+  the only non-ground mode is the **abstract same-layer charter** of § 6.1, for operation travel only.
 
 ## 2. Spatial truth and ownership
 
@@ -67,6 +68,8 @@ SpatialState {
   nextAmbientTick:  int          // when an idle contractor next considers moving (committed)
   journeys:         int          // seeds the next ambient choice
   initializedTick, blockedReason
+  bridgeFrom, bridgeTo: TileRef? // a chartered leg: the two committed ends of the crossing (§ 6.1)
+  bridged:          bool         // the crossing of the current leg is done
 }
 ```
 
@@ -87,9 +90,14 @@ contractor's seed and the world only), happens when world data exists, is commit
 depends on the camera, the UI or ModSettings. Evidence, in order:
 
 1. a settlement of its **live origin faction**: a passable tile 1–3 tiles *around* it (never on it:
-   no home base, no ownership);
+   no home base, no ownership); a settlement with no free tile around it is passed over for the next
+   of a short list;
 2. otherwise another non-player settlement, the same way;
-3. otherwise any passable tile of the main surface.
+3. otherwise any passable tile of the main surface: a few seeded probes, then a guaranteed
+   deterministic scan of every tile from a seeded offset (`SpatialSearch.FirstPassable`), so a
+   contractor is never left `Uninitialized` just because the probes missed sparse land. This last
+   fallback is an abstract area anchor only; if it happens to fall next to (or, on a tiny world, on) a
+   settlement, that implies no ownership or home base.
 
 The player's colonies are never used. New world-generated contractors are anchored when created.
 A contractor created before world data exists stays `Uninitialized` and is anchored at the next
@@ -108,10 +116,15 @@ routes (`TryRoute`, returning the step tile ids or a reason key: `InvalidTile`, 
   the layer's `WorldPathing.FindPath` with no caravan; the path is copied and returned to the pool;
 - local search: `TileFinder.TryFindPassableTileWithTraversalDistance` under `Rand.PushState(seed)`;
 - validity: `TileRef.IsValidNow` (layer id **and** layer def), impassability from `World.Impassable`;
-- settlements: `Find.WorldObjects.Settlements`, non-space layers, cached for an in-game hour.
+- settlements: `Find.WorldObjects.Settlements`, non-space layers, cached for an in-game hour, each with
+  one generic fact for charter transport: `canProvideCharterTransport`, derived from the settlement's
+  faction's real `TechLevel` (Spacer or better, never the player). The Domain never names a faction
+  or a tech level;
+- last-resort tile: the guaranteed search of § 3 over the surface layer.
 
 It is read-only: it creates no world object, caravan, pawn or lasting path. Headless tests and the
-soak harness use `Diagnostics/GridWorldGraph`, a synthetic grid with a sea band and settlements.
+soak harness use `Diagnostics/GridWorldGraph`, a synthetic grid with a sea band and settlements (and,
+for the charter world, sealed islands and high-tech providers).
 
 A Last Known Location near a tile uses a separate site-port method, `ISiteAdapter.TryFindTileNear`
 (`TileFinder.TryFindNewSiteTile` with a near tile, never a space layer).
@@ -131,16 +144,38 @@ needs it:
 A catch-up of an idle contractor costs a few comparisons. A travelling contractor advances along its
 route in proportion to the time elapsed since the last update toward the committed arrival:
 `steps = remaining × (now − lastUpdate) / (arrival − lastUpdate)`, with the fractional remainder kept
-(`lastUpdateTick` is set to the moment the last whole step was reached). At or after the arrival tick
-it is at the destination. Daily updates may advance several tiles; that is intended. It never moves
-backward and never skips geography: every intermediate anchor is a tile of the route.
+(`lastUpdateTick` is set to the moment the last whole step was reached). Daily updates may advance
+several tiles; that is intended. It never moves backward and never skips geography: every
+intermediate anchor is a tile of the route.
+
+Three rules keep it honest:
+
+- **Proof before arrival.** The remaining journey is proven before any progress, the final arrival
+  included: the route cached this session, or one rebuilt from the persisted anchor. A destination
+  that is still a valid tile is no evidence it can still be reached (a cache lost at load, a world
+  that changed). Without a route there is no arrival: an operation leg is first planned again from
+  current truth (on foot, else by charter, § 6.1); otherwise the contractor stays at its last valid
+  anchor, `Blocked`. It is never snapped to the destination because the clock passed `arrivalTick`.
+- **Never faster than it can walk.** A committed arrival is never sooner than walking the route takes
+  at the contractor's speed band; if a rebuilt route is longer (a changed world), the journey becomes
+  later (`lateArrivals`), never quicker. Spatial may lag behind a squeezed operation timeline; it
+  never catches up by moving faster.
+- **An ended contractor never moves.** A contractor that died or dissolved is caught up to the moment
+  it ended, then frozen there (§ 6).
 
 ### 5.2 Routing and the route cache
 
 A route is computed only when a journey needs one: when it starts, when the destination changes, or
 when the runtime cache has none (after a load, or when dropped). The cache (actor → steps from a
 start tile to the destination, and how many are consumed) is runtime-only and disposable. A missing
-or stale cache is rebuilt **from the persisted anchor** to the persisted destination.
+or stale cache is rebuilt **from the persisted anchor** to the persisted destination (for a chartered
+leg not yet crossed: anchor → hub, the crossing, landing → destination; a pending crossing also
+re-checks that its ends and its provider are still there).
+
+**Approximate distance only discovers.** `ApproxDistance` is used to find candidates cheaply; a
+destination is committed only when its **real route, in steps,** fits: for an operation, what the
+contractor can walk in the travel window and within its range band; for ambient movement, the ambient
+range. A short hop across a bay can be a fifty-step detour on land.
 
 The exact path is **softer truth** than a committed operation outcome: if the world's topology or the
 installed mods change, a rebuilt route may differ. That is acceptable as long as the persisted anchor
@@ -155,10 +190,12 @@ VeryHigh 16; range VeryLow 6, Low 10, Medium 16, High 26, VeryHigh 40 tiles. Rou
 
 An **idle** contractor (no destination, no operation, no commitments, not recovering or ended) may,
 when its committed `nextAmbientTick` comes, relocate its operating area: with a 55 % chance it picks a
-destination within about 60 % of its range band (a non-player settlement area, weighted ×3 toward its
-origin faction, else a passable tile), otherwise it stays and decides again in 10–30 days. After an
-ambient arrival it rests 10–40 days; after an operation, 3–10. The choice is seeded by the contractor,
-its journey count and the day, and committed once made. Ambient relocation publishes nothing.
+destination within about 60 % of its range band (around a non-player settlement, never on it, weighted
+×3 toward its origin faction; else a passable tile in that ring), otherwise it stays and decides again
+in 10–30 days. The destination is committed only if its real route is no longer than that ambient
+range in steps. Ambient movement is **ground-only**: it never charters (§ 6.1). After an ambient
+arrival it rests 10–40 days; after an operation, 3–10. The choice is seeded by the contractor, its
+journey count and the day, and committed once made. Ambient relocation publishes nothing.
 
 ### 5.4 Failure and invalid tiles
 
@@ -166,7 +203,11 @@ Spatial failure never corrupts or bricks a contract:
 
 - a destination that no longer resolves (mod removal, a layer change) or lies on another layer: the
   journey is dropped, the contractor stays at its last valid anchor (`Blocked`, reason recorded);
-- no route: the same (an ambient journey is simply not started or dropped);
+- no route: the same (an ambient journey is simply not started or dropped), including a route that
+  disappears after the journey was committed, even when its arrival tick has already passed;
+- an operation leg that can no longer be proven (its route, a charter end or its provider gone) is
+  first planned again from the contractor's current truth, on foot or by charter; only if neither
+  works is it `Blocked`;
 - an anchor that no longer resolves: the contractor is anchored again deterministically (no
   contractor is deleted);
 - for an operation, the operation's timeline continues unchanged and the plan records
@@ -183,7 +224,8 @@ Spatial failure never corrupts or bricks a contract:
 New procurement operations (created after Phase 2.5) get an `OperationSpatialPlan`:
 
 ```
-OperationSpatialPlan { origin, workRegion, returnTo, incident: TileRef; detached: bool; fallbackKey }
+OperationSpatialPlan { origin, workRegion, returnTo, incident: TileRef; detached: bool; fallbackKey;
+                       hub, landing: TileRef?   // a committed two-way charter (§ 6.1), else null }
 ```
 
 The existing checkpoints stay the only timeline; spatial conforms to them:
@@ -192,18 +234,23 @@ The existing checkpoints stay the only timeline; spatial conforms to them:
 |---|---|
 | Award / operation start | catch up; the contractor's **real anchor** becomes `origin`; a hidden work region is committed from the operation's seed; the main body is bound to the operation |
 | Preparing (start → Prep) | at the origin; the journey is committed but has not set out |
-| Transit (Prep → Arrive) | travelling toward the work region; departure at Prep, arrival at Arrive |
-| Arrive | at the work region (snapped if the timeline says they are there) |
+| Transit (Prep → Arrive) | travelling toward the work region (on foot, or on foot + charter + on foot); departure at Prep, arrival at Arrive |
+| Arrive | normally at the work region (the leg was committed to arrive now); never snapped there: a longer route or a checkpoint run early from the dev menu leaves them still travelling |
 | Engaged / Resolve | the resolver decides WHAT; spatial records nothing but WHERE |
-| after Resolve | trouble or disaster: `incident` = where they are, and they stay; otherwise they head for `returnTo` (the origin), arriving when the **Return checkpoint** is due |
-| Return | back where they were heading |
-| Delivering / Done | Phase 2 drop-pod delivery is unchanged (nobody walks into the colony); on finish or abort the contractor is released where it is and becomes idle |
+| after Resolve | a Troubled or Disaster outcome records `incident` = where they are; **only a Troubled outcome keeps them out**. Everyone else, a Disaster with survivors included, heads for `returnTo` (the origin), arriving when the **Return checkpoint** is due or later if they cannot walk that fast (never sooner) |
+| Return | caught up on the way back (a late group keeps walking; never snapped home) |
+| Troubled deadline | Phase 2 finds the group: spatial is **reconciled** to `returnTo` (Phase 2 declared the return done; no new journey). Phase 2 writes it off: the last truth stays at the incident |
+| Delivering / Done | Phase 2 drop-pod delivery is unchanged (nobody walks into the colony); on finish or abort the contractor is released where it is and becomes idle (a group still walking home keeps going) |
 
 **Work region.** An approximate area where the abstract work happens, not a shop, stash, site or
-world object. Its distance is scaled by the travel time the committed ETA leaves
-(`(Arrive − Prep) / ticksPerTile × (0.5 + 0.5 × sourcing difficulty)`), capped by the range band;
-70 % of the time it is next to a non-player settlement in that band, otherwise any reachable
-passable tile. The quote, ETA and economics are **not** changed by spatial in this phase.
+world object. Its intended distance is scaled by the travel time the committed ETA leaves (the
+tighter of Prep → Arrive and the planned Resolve → Return, divided by ticks per tile, × (0.5 + 0.5 ×
+sourcing difficulty)), capped by the range band. 70 % of the time it is around a non-player
+settlement in that band (a short list of up to three, found by approximate distance), otherwise a
+passable tile in the ring. Each candidate is weighed in turn: **on foot** if its real route fits what
+the contractor can walk in the window and its range; else **by charter** for that same candidate
+(§ 6.1); else the next candidate. Nothing fits: the work happens where they are (`NoWorkRegion`). The
+quote, ETA and economics are **not** changed by spatial in this phase.
 
 **Delays.** Phase 2's delay moves the Return checkpoint; the return journey's arrival is that
 checkpoint. There is no separate spatial delay and no reroll.
@@ -215,8 +262,56 @@ plan (origin, work region) but the main body's anchor does not move for it; its 
 region.
 
 **Troubled.** Missing, stranded or captured groups stay at the incident; the contractor's last truth
-remains there (never reset to an arbitrary idle place). A contractor that dies or dissolves keeps its
-last anchor.
+remains there (never reset to an arbitrary idle place) until Phase 2's Troubled deadline decides:
+found (reconciled to `returnTo`) or written off (it stays at the incident).
+
+**Ended contractors.** A contractor that dies or dissolves (a Solo killed during Resolve included) is
+caught up to that moment and frozen: last anchor kept, no destination, no purpose, no route. Only an
+active contractor is ever moved for an operation, so no later checkpoint, return or upkeep moves it;
+the operation itself still ends however Phase 2 decides.
+
+### 6.1 Abstract charter transport (ADR-045)
+
+A contractor may need to reach a same-layer region with no ground route (an island, a sealed-off
+landmass) or with only an impractically long detour. In a high-tech world it can travel to a
+high-tech settlement, charter a reusable transport craft, cross, work, and be picked up again. The
+charter is **abstract**: a causal explanation for disconnected geography, not a vehicle.
+
+- **When.** Only for **operation** legs, only after walking was tried: a work-region candidate out of
+  reach on foot in the travel window, the return of a chartered plan when walking home does not fit
+  its window, and the reconciliation of a leg that can no longer be proven. Never for ambient
+  movement. Never for an invalid, impassable or cross-layer destination (no charter ever "fixes" a
+  bad tile or another layer).
+- **Provider.** A settlement whose faction `canProvideCharterTransport` (Spacer technology or better,
+  from the game's own `TechLevel`; vanilla's Empire, modded high-tech factions), on the same layer,
+  reachable **on foot** from the contractor's side within its range and the window. The committed hub
+  is preferred; otherwise only a short list of the nearest providers (by approximate distance) is
+  proven with real routes. No provider in reach: no charter is invented; the plan degrades softly.
+- **Landing and pickup.** A valid, passable, same-layer tile within `LandingRadius` (2) of the work
+  region, reachable on foot to it (no settlement needed there: a reusable craft sets down in the
+  field). The **same** landing is the pickup for the way back, and the same hub the drop-off: one
+  two-way charter, never a one-way pod.
+- **Journey.** Out: walk to the hub → cross → walk from the landing to the work region. Back: walk to
+  the pickup → cross → walk from the hub home. `SpatialState` saves only the two ends of the current
+  leg's crossing (`bridgeFrom`, `bridgeTo`) and whether it is done (`bridged`); the crossing is one
+  step between them, so a route rebuilt after a load is exactly the journey that was left. No craft,
+  flight path, fuel, passengers or air tiles are stored.
+- **Timing.** The existing checkpoints stay the timeline: walking plus the crossing
+  (`CharterTicks` = a quarter day to arrange and fly) must fit the travel window when the plan is
+  made. There is no second scheduler, no pickup deadline and no new outcome: a promised pickup window
+  is a deferred story hook, not a mechanic.
+- **Reconciliation.** A provider or charter end that disappears (a destroyed settlement, a removed
+  mod) before the crossing: the leg is planned again from where they are (another provider, or on foot
+  if a route now exists), else `Blocked`; never a teleport, and the operation goes on.
+- **Money.** None. The charter is part of the contractor's operational expenses, already in its
+  quote: no invoice, fee, deposit, insurance, transport contract or vendor (a source scan and a test
+  check it). Quotes may account for difficult geography in later tuning, not now.
+- **Player view.** One Field Log beat on the player's own contract ("… has arranged charter
+  transport for the part of the journey that cannot be made overland"), told once; no hub, landing,
+  island, route or provider details, no letter.
+- **Future (not implemented).** The committed hub, landing and pickup make later stories possible
+  (a crew withdrawing toward extraction as the pickup approaches, cargo abandoned, people who do not
+  make it back). They need the resolver to consume a pickup window; nothing like it exists yet.
 
 ## 7. Consequence integration (Last Known Location)
 
@@ -241,7 +336,9 @@ A temporary activity journal for work a contractor is doing **for the player** (
 - **Content.** Meaningful beats only, in reporting language: accepted or taken over, set out (or
   working nearby), reached the area, worse than expected and the answer, running late, missing /
   stranded / captured, turned up, secured all or part (with the quantities), the partial-result
-  choice, delivery retried or held, payment due, handover. Never a tile, a route, a distance, a
+  choice, delivery retried or held, payment due, handover; one "arranged charter transport" beat when a
+  chartered crossing is part of the job; a Solo is "captured", an organization's "people have been
+  taken". Never a tile, a route, a distance, a
   hidden number, a daily "nothing happened" or off-contract travel. A result is reported only when
   the contractor reports it (ADR-037).
 - **Storage.** `FieldLogEntry { tick, key, args }`: a translation key and the snapshotted words,
@@ -253,8 +350,10 @@ A temporary activity journal for work a contractor is doing **for the player** (
 
 ## 9. Persistence, migration and load reconciliation
 
-Persisted: each contractor's `SpatialState`, each new operation's `OperationSpatialPlan`, the pending
-follow-up's `near`, and the live Field Log entries. Not persisted: routes, caches, presence areas.
+Persisted: each contractor's `SpatialState` (with the ends of a chartered leg), each new operation's
+`OperationSpatialPlan` (with a committed charter's hub and landing), the pending follow-up's `near`,
+and the live Field Log entries. Not persisted: routes, caches, presence areas, anything about a craft.
+The charter fields are additive with null/false defaults inside save format 3.
 
 Save format **3** (`V2ToV3SpatialContinuity`, a logged no-op):
 
@@ -267,7 +366,8 @@ Save format **3** (`V2ToV3SpatialContinuity`, a logged no-op):
 
 On every load the validator: anchors Uninitialized contractors, anchors again those whose anchor no
 longer resolves, drops invalid or cross-layer destinations where they stand, and releases a binding
-to an operation that has ended. Ended and quarantined contractors are left alone.
+to an operation that has ended. A charter whose ends or provider no longer resolve is reconciled at the
+next catch-up (§ 6.1). Ended and quarantined contractors are left alone.
 
 Removing The Network leaves nothing spatial behind: no contractor world objects, markers, routes or
 icons ever existed.
@@ -283,12 +383,17 @@ visits may reveal approximate information through their own rules; nothing does 
 
 Idle per tick: nothing beyond the scheduler's due-job comparison. Daily: the ~100 existing upkeep
 calls each add a tiny catch-up. Routing happens only when a journey starts, a cache is rebuilt, or a
-destination changes; never for stationary contractors. The soak (1,080 simulated days, ~100
-contractors, 2,160 procurement contracts, ambient relocation, simulated loads dropping every route
-cache) measured about 5,200 routes built, ~2,800 ambient journeys and ~1,900 operation plans, zero
-blocked journeys, zero spatial faults, zero teleports, zero invalid states, Field Logs only on live
-player contracts, and about 108 KB of added save data after 18 in-game years
-([PERFORMANCE](PERFORMANCE.md)).
+destination changes; never for stationary contractors. Charter planning happens only when an
+operation plan is made, a committed leg needs reconciling, or a dev action asks, and proves at most a
+short list of providers with real routes (never an all-settlement search, never daily). The soak
+(1,080 simulated days, ~100 contractors, a charter world with two sealed islands and provider
+settlements that come and go, ambient relocation, simulated loads dropping every route cache)
+measured about 5,400 routes built, ~2,900 ambient journeys, ~1,950 operation plans of which 95 by
+charter (75 chartered legs, 75 crossings), zero blocked journeys, zero spatial faults, and zero
+correctness violations (teleports, walking faster than a contractor's own pace, ended contractors
+moving, recovered groups out of place, ambient charters, invalid states, Field Log leaks), with about
+127 KB of added save data after 18 in-game years. A separate archipelago soak (the world's halves with
+no ground connection) stresses the charter paths ([PERFORMANCE](PERFORMANCE.md)).
 
 ## 12. Phase 3 handoff and future consumers
 
@@ -309,7 +414,11 @@ Future invariants recorded now:
 ## 13. Diagnostics
 
 Dev actions under "The Network (Phase 2.5)" ([DEBUGGING](DEBUGGING.md)): inspect or dump spatial
-states (exact tiles), initialize, send somewhere, force ambient relocation, catch up, invalidate a
-destination, drop route caches, move a work region, force Missing at the contractor's position,
+states (exact tiles, the current segment of a chartered leg), initialize, send somewhere, force
+ambient relocation, catch up, invalidate a destination, drop route caches, move a work region, inspect
+an operation's plan (ground or charter, hub, landing), send a running operation across water (a
+charter test), invalidate a charter hub and reconcile, force a Disaster that is not Troubled, force
+the next Troubled deadline to find or write off the group, force Missing at the contractor's position,
 create a Last Known Location near an operation's contractor, inspect a Field Log, performance
-counters. Logs go to the `[TheNetwork][Spatial]` category.
+counters (including charter plans, crossings, replans and failures). Logs go to the
+`[TheNetwork][Spatial]` category.

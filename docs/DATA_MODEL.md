@@ -397,6 +397,8 @@ SpatialState                          // part of ContractorSimulation; world tru
   operation: OperationId              // the operation the main body is on
   journeyStartTick, lastUpdateTick, arrivalTick: int
   nextAmbientTick: int, journeys: int, initializedTick: int, blockedReason: string?
+  bridgeFrom, bridgeTo: TileRef?      // a chartered leg: the two committed ends of the crossing (ADR-045)
+  bridged: bool                       // the crossing of the current leg is done
 ```
 
 - Separate from `MobilityProfile`: mobility says what the contractor *can* do, spatial state says
@@ -745,6 +747,8 @@ Operation
     origin, workRegion, returnTo, incident: TileRef?
     detached: bool                      // an organization's concurrent job: the main body did not move
     fallbackKey: string?                // why the plan degraded (NoRoute, DestinationInvalid, …)
+    hub, landing: TileRef?              // a committed two-way charter: the provider's settlement, and the
+                                        // set-down / pickup area near the work region (ADR-045)
 ```
 
 The spatial plan is hidden geography committed at start ([SPATIAL § 6](SPATIAL.md#6-operation-integration)):

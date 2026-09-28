@@ -31,6 +31,7 @@
 | R-22 | Source-context misattribution (source-mod evidence overweighted, or stance forced) | Medium | Medium | Phase 1 (A11), playtests |
 | R-23 | Global cast settings lost, corrupted or leaking into saves | Medium | Medium | Phase 1 (A15) |
 | R-24 | Hidden spatial continuity costs, misleads or leaks | Medium | Medium | Phase 2.5 (S20) |
+| R-25 | Abstract charter transport becomes a teleport, a hidden economy or a crutch | Low | Medium | Phase 2.5 (S20) |
 
 ---
 
@@ -251,13 +252,37 @@
 - **Failure modes.** World pathing is slow on large or heavily modded worlds; a route cannot be
   found and a contractor teleports or an operation stalls; a changed world (a removed layer, new
   impassable terrain) leaves invalid anchors; hidden positions leak into the UI and turn the mod into
-  a tracking map; ambient movement starts producing events, history or an invisible economy.
+  a tracking map; ambient movement starts producing events, history or an invisible economy. Found
+  and fixed in the correction pass: an overdue journey arriving after load without a route; a short
+  approximate distance hiding a long real route (hidden super-speed); a Disaster with survivors never
+  coming home; a recovered group left at the incident; a dead Solo walking home; sparse land never
+  found by seeded probes.
 - **Mitigation.** No per-tick work: catch-up only on the existing daily upkeep and at checkpoints;
   routes only when a journey starts or a cache is rebuilt, never for stationary contractors;
   reachability checked before pathing; soft failure (last valid anchor kept, `Blocked`) and the
   operation timeline stays authoritative; load reconciliation re-anchors or drops invalid tiles;
   read models carry no location field and the Field Log speaks in reports; ambient movement publishes
-  nothing (ADR-041 to ADR-044; [SPATIAL](SPATIAL.md)).
-- **Proven by.** Headless `Spatial.*`, `Migration.*` and `FieldLog.*` tests; the 18-year soak's daily
-  spatial invariants (no teleport, no invalid anchor, no Field Log leak or duplicate, nothing stuck);
-  spike S20 in game (not run yet).
+  nothing; the remaining route is proven before arrival; real route steps, never approximate
+  distance, decide what fits; arrivals are never sooner than walking takes; only a Troubled outcome
+  keeps a group out; recovery reconciles; ended contractors are frozen; a guaranteed last-resort
+  search (ADR-041 to ADR-045; [SPATIAL](SPATIAL.md)).
+- **Proven by.** Headless `Spatial.*`, `Migration.*`, `FieldLog.*` and `Charter.*` tests (each
+  correction's regression fails with its defect re-introduced); the soaks' daily spatial invariants
+  (no teleport, no contractor faster than its own pace, no ended contractor moving, no recovered group
+  out of place, no invalid anchor, no Field Log leak or duplicate, nothing stuck); spike S20 in game
+  (not run yet).
+
+## R-25 · Abstract charter transport becomes a teleport, a hidden economy or a crutch (Phase 2.5)
+- **Failure modes.** Charter "fixes" an invalid or cross-layer tile; a one-way crossing leaves a
+  group unable to come back; a charter quietly costs the player silver or spawns a craft; ambient
+  contractors hop between islands in the background; charter replaces walking everywhere; a reload
+  changes the provider or the landing; a destroyed provider strands a leg forever or causes a jump.
+- **Mitigation.** Same-layer, valid, passable destinations only; ground always tried first, per
+  candidate; operation travel only; one committed two-way plan (hub + landing, reused for the pickup);
+  only the two crossing ends are saved and the crossing is a single step, so a rebuilt route is the
+  journey that was left; provider loss reconciles from current truth (another provider, on foot, or
+  `Blocked`); a source scan forbids spawning and money calls in spatial code; the provider fact is
+  derived from the game's `TechLevel`, never a named faction (ADR-045, [SPATIAL § 6.1](SPATIAL.md)).
+- **Proven by.** `Charter.A`–`N`, `Spatial.CharterBridgesDisconnectedGeography`, the charter soak world
+  and `Soak.ArchipelagoCharterStress` (charters under every invariant, provider settlements coming and
+  going); spike S20 in game (not run yet).

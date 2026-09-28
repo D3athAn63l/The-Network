@@ -184,9 +184,16 @@ error for invalid or cross-layer input and a warning when it runs out of tiles);
 `ReleaseToPool()`; `TileFinder.TryFindPassableTileWithTraversalDistance` (a flood fill) under
 `Rand.PushState(seed)` for local searches; `World.Impassable`, `WorldGrid.ApproxDistanceInTiles`,
 `Find.WorldObjects.Settlements` (read only). A Last Known Location near a tile uses
-`TileFinder.TryFindNewSiteTile(out tile, nearTile, minDist, maxDist, …, canBeSpace: false)`.
-Nothing creates a world object, caravan or pawn (a source scan in `run-tests.sh` checks). Runtime
-verification: spike [S20](spikes/S20-abstract-spatial-routing.md).
+`TileFinder.TryFindNewSiteTile(out tile, nearTile, minDist, maxDist, …, canBeSpace: false)`. The
+last-resort anchor is found by seeded probes and then a deterministic scan of every surface tile
+(`World.Impassable`, `WorldGrid[t].WaterCovered`), so sparse land is always found. Abstract charter
+transport (ADR-045) reads one fact per settlement: its faction's `FactionDef.techLevel >=
+TechLevel.Spacer` (`TechLevel` is `Undefined, Animal, Neolithic, Medieval, Industrial, Spacer, Ultra,
+Archotech`; Royalty's Empire qualifies, while Core's tribal, outlander and pirate settlements are
+expected not to: to be confirmed in S20), never a named faction; the charter
+itself uses no vanilla transport API (no shuttle, `TransportShip` or pod). Nothing creates a world
+object, caravan, pawn or craft, and spatial code moves no money (source scans in `run-tests.sh`
+check). Runtime verification: spike [S20](spikes/S20-abstract-spatial-routing.md).
 
 ### 2.9 Transport pods and shuttles — **ADAPTER**
 

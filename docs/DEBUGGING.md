@@ -86,7 +86,8 @@ appear in these readouts only, never in normal UI; nothing is drawn on the world
 |---|---|
 | Spatial truth | Inspect contractor spatial state… · Dump all spatial states (with counts by status and the counters) · Initialize spatial state (all Uninitialized) · Catch up one contractor now… |
 | Movement | Send contractor somewhere nearby now… · Force ambient relocation now… · Invalidate a contractor's destination… (the next catch-up recovers) · Rebuild route caches (as a load does) |
-| Operations and consequences | Move a running operation's work region… (timeline unchanged) · Force Missing at the contractor's position on next resolution · Create a Last Known Location near an operation's contractor… |
+| Operations and consequences | Move a running operation's work region… (timeline unchanged) · Force Missing at the contractor's position on next resolution · Create a Last Known Location near an operation's contractor… · Force Disaster, not Troubled, on next resolution · Force the next Troubled deadline: group found / written off |
+| Charter (ADR-045) | Inspect an operation's spatial plan (ground or charter)… (hub, landing, fallback; the contractor's current segment) · Send a running operation across water (charter test)… (retargets to a tile with no ground route) · Invalidate an operation's charter hub… (reconciles from current truth) |
 | Field Log and performance | Inspect a contract's Field Log… (keys, words, ticks) · Spatial performance counters |
 
 Spatial log lines use the `[TheNetwork][Spatial]` category ([SPATIAL § 13](SPATIAL.md#13-diagnostics)).
