@@ -381,6 +381,7 @@
   <TheNetwork_FieldLog_Missing>Contact with {0} has been lost.</TheNetwork_FieldLog_Missing>
   <TheNetwork_FieldLog_Stranded>{0} is stranded and cannot come back yet.</TheNetwork_FieldLog_Stranded>
   <TheNetwork_FieldLog_Captured>Word is that {0}'s people have been taken.</TheNetwork_FieldLog_Captured>
+  <TheNetwork_FieldLog_CapturedSolo>Word is that {0} has been captured.</TheNetwork_FieldLog_CapturedSolo>
   <TheNetwork_FieldLog_Recovered>{0} has turned up again.</TheNetwork_FieldLog_Recovered>
   <TheNetwork_FieldLog_SecuredAll>{0} reports that all {1} {2} have been secured.</TheNetwork_FieldLog_SecuredAll>
   <TheNetwork_FieldLog_SecuredPart>{0} reports that {1} of {2} {3} have been secured.</TheNetwork_FieldLog_SecuredPart>

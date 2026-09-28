@@ -19,6 +19,7 @@ namespace TheNetwork.Domain.Contracts
         public const string Missing = "Missing";
         public const string Stranded = "Stranded";
         public const string Captured = "Captured";
+        public const string CapturedSolo = "CapturedSolo";
         public const string Recovered = "Recovered";
         public const string SecuredAll = "SecuredAll";
         public const string SecuredPart = "SecuredPart";

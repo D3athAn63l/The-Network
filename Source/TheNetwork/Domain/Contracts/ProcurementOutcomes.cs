@@ -347,7 +347,9 @@ namespace TheNetwork.Domain.Contracts
             e.missing = op.outcome.Missing;
             e.reasonKey = key;
             e.descriptorKey = op.outcome.secured > 0 ? "CargoSecured" : "NoCargo";
-            ctx.FieldLog?.Note(c, key == SubStatus.Captured ? FieldLogKeys.Captured : (key == SubStatus.Stranded ? FieldLogKeys.Stranded : FieldLogKeys.Missing), op.contractorName);
+            string logKey = key == SubStatus.Stranded ? FieldLogKeys.Stranded : FieldLogKeys.Missing;
+            if (key == SubStatus.Captured) logKey = ContractorService.IsSolo(ctx.actors.Get(op.contractor)) ? FieldLogKeys.CapturedSolo : FieldLogKeys.Captured;
+            ctx.FieldLog?.Note(c, logKey, op.contractorName);
             ctx.bus.Publish(e);
             StateVersion.Bump();
         }
