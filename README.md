@@ -61,7 +61,7 @@ hidden, approximate place in the world ([docs/SPATIAL.md](docs/SPATIAL.md)):
 Contractor pawns, the contract board, the player as contractor and the social layer are later
 phases ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
 
-The headless tests pass (208 tests, including an 18-in-game-year procurement soak with daily money,
+The headless tests pass (213 tests, including an 18-in-game-year procurement soak with daily money,
 capacity and spatial invariant checks). The owner has run the Phase 2 procurement loop in game,
 normal drop-pod delivery included. The other runtime spikes, including S20 for spatial continuity,
 have **not** been run yet. Their records and owner test steps are in [docs/spikes/](docs/spikes/README.md).

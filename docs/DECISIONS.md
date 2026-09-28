@@ -572,11 +572,18 @@
      the RimWorld adapter derives it from the faction's real `TechLevel` (Spacer or better). No
      faction, DLC or defName is named.
   4. **Two-way.** One committed hub and one landing: set down near the work region, picked up again
-     there, set down at the hub. Never a one-way pod.
+     there, set down at the hub. Never a one-way pod. **A valid committed round trip is the return
+     mode** even when a later delay makes walking possible: the extra time does not cancel the
+     booking. Only the loss of the charter (its provider or pickup gone, and no replacement) may
+     degrade the return to foot.
   5. **Committed truth.** The plan's hub and landing, and a leg's two crossing ends, are saved;
      nothing about a craft is. Save/load never turns ground into charter, changes the provider or
      rerolls the landing; a world change reconciles from current truth (another provider, on foot, or
-     `Blocked`), never by teleport.
+     `Blocked`), never by teleport. **History and the live leg are never confused:** the live leg is
+     `SpatialState.bridgeFrom/bridgeTo`; the plan records `charterUsed` (the outbound crossing
+     happened, never cleared) and `charterLost` (a used charter can no longer carry the return; hub
+     and landing kept as history), and `Charter` means only "a committed round trip in force". A
+     charter never used is dropped (hub and landing cleared, with a fallback reason).
   6. **No surprise fee.** The charter is part of the contractor's quoted operational costs: no
      invoice, fee, deposit, insurance, transport contract or vendor, and no hidden transport economy.
   7. **No physical vehicle.** No shuttle, pawn, WorldObject, caravan, map icon, fuel or manifest.

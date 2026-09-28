@@ -276,13 +276,21 @@
 - **Failure modes.** Charter "fixes" an invalid or cross-layer tile; a one-way crossing leaves a
   group unable to come back; a charter quietly costs the player silver or spawns a craft; ambient
   contractors hop between islands in the background; charter replaces walking everywhere; a reload
-  changes the provider or the landing; a destroyed provider strands a leg forever or causes a jump.
+  changes the provider or the landing; a destroyed provider strands a leg forever or causes a jump; a
+  delay makes a group walk home and ignore the pickup it booked; a plan keeps claiming a charter the
+  live journey no longer uses; the Field Log says "reached the area" for a group still travelling or
+  Blocked (all three found and fixed in the final pass).
 - **Mitigation.** Same-layer, valid, passable destinations only; ground always tried first, per
   candidate; operation travel only; one committed two-way plan (hub + landing, reused for the pickup);
   only the two crossing ends are saved and the crossing is a single step, so a rebuilt route is the
   journey that was left; provider loss reconciles from current truth (another provider, on foot, or
-  `Blocked`); a source scan forbids spawning and money calls in spatial code; the provider fact is
-  derived from the game's `TechLevel`, never a named faction (ADR-045, [SPATIAL § 6.1](SPATIAL.md)).
-- **Proven by.** `Charter.A`–`N`, `Spatial.CharterBridgesDisconnectedGeography`, the charter soak world
+  `Blocked`); a used charter is the way back until it is genuinely lost; `charterUsed` / `charterLost`
+  keep history and current truth apart; "reached the area" follows spatial arrival; a source scan
+  forbids spawning and money calls in spatial code; the provider fact is derived from the game's
+  `TechLevel`, never a named faction (ADR-045, [SPATIAL § 6.1](SPATIAL.md)).
+- **Proven by.** `Charter.A`–`N`, `Charter.CommittedRoundTripStillUsesPickupAfterDelay`,
+  `Charter.ReplanToGroundDoesNotLeaveStaleLiveCharterState`, `Charter.ReturnProviderLossCanDegradeSafely`,
+  `FieldLog.BlockedSpatialDoesNotClaimArrived`, `FieldLog.LateSpatialArrivalLogsWhenActuallyReached`,
+  `Spatial.CharterBridgesDisconnectedGeography`, the soaks' plan/leg and arrival invariants, the charter soak world
   and `Soak.ArchipelagoCharterStress` (charters under every invariant, provider settlements coming and
   going); spike S20 in game (not run yet).

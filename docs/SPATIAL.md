@@ -235,7 +235,7 @@ The existing checkpoints stay the only timeline; spatial conforms to them:
 | Award / operation start | catch up; the contractor's **real anchor** becomes `origin`; a hidden work region is committed from the operation's seed; the main body is bound to the operation |
 | Preparing (start → Prep) | at the origin; the journey is committed but has not set out |
 | Transit (Prep → Arrive) | travelling toward the work region (on foot, or on foot + charter + on foot); departure at Prep, arrival at Arrive |
-| Arrive | normally at the work region (the leg was committed to arrive now); never snapped there: a longer route or a checkpoint run early from the dev menu leaves them still travelling |
+| Arrive | normally at the work region (the leg was committed to arrive now); never snapped there: a longer route or a checkpoint run early from the dev menu leaves them still travelling. The Field Log's "reached the area" is told only if they really are there (a late group is told when it gets there; a Blocked one never) |
 | Engaged / Resolve | the resolver decides WHAT; spatial records nothing but WHERE |
 | after Resolve | a Troubled or Disaster outcome records `incident` = where they are; **only a Troubled outcome keeps them out**. Everyone else, a Disaster with survivors included, heads for `returnTo` (the origin), arriving when the **Return checkpoint** is due or later if they cannot walk that fast (never sooner) |
 | Return | caught up on the way back (a late group keeps walking; never snapped home) |
@@ -292,7 +292,9 @@ charter is **abstract**: a causal explanation for disconnected geography, not a 
   field). The **same** landing is the pickup for the way back, and the same hub the drop-off: one
   two-way charter, never a one-way pod.
 - **Journey.** Out: walk to the hub → cross → walk from the landing to the work region. Back: walk to
-  the pickup → cross → walk from the hub home. `SpatialState` saves only the two ends of the current
+  the pickup → cross → walk from the hub home. **A committed round trip returns by charter**: once
+  the charter has carried them out, the way back uses the same pickup and hub even if a delay later
+  leaves enough time to walk (the extra time does not cancel the booking). `SpatialState` saves only the two ends of the current
   leg's crossing (`bridgeFrom`, `bridgeTo`) and whether it is done (`bridged`); the crossing is one
   step between them, so a route rebuilt after a load is exactly the journey that was left. No craft,
   flight path, fuel, passengers or air tiles are stored.
@@ -301,8 +303,17 @@ charter is **abstract**: a causal explanation for disconnected geography, not a 
   made. There is no second scheduler, no pickup deadline and no new outcome: a promised pickup window
   is a deferred story hook, not a mechanic.
 - **Reconciliation.** A provider or charter end that disappears (a destroyed settlement, a removed
-  mod) before the crossing: the leg is planned again from where they are (another provider, or on foot
-  if a route now exists), else `Blocked`; never a teleport, and the operation goes on.
+  mod) before the outbound crossing: the leg is planned again from where they are (on foot if a route
+  now exists, else another provider), else `Blocked`; never a teleport, and the operation goes on. For
+  the return of a charter already used: the committed pickup first, then a replacement charter from
+  where they are, and only when no charter can exist any more a return on foot.
+- **History versus the live leg.** The live leg is always `SpatialState.bridgeFrom`/`bridgeTo`. The
+  plan keeps what was committed and what happened: `hub` and `landing`; `charterUsed` (the outbound
+  crossing happened, never cleared); `charterLost` (why a used charter can no longer carry the return:
+  hub and landing kept as history, the return on foot). `Charter` means "a committed round trip is in
+  force". A charter that was **never used** (the outbound leg went on foot before the crossing, or they
+  never got across) is **dropped**: hub and landing cleared, `fallbackKey` `CharterDropped` or
+  `CharterUnused`. So the plan never claims a charter the live journey is not using or cannot use.
 - **Money.** None. The charter is part of the contractor's operational expenses, already in its
   quote: no invoice, fee, deposit, insurance, transport contract or vendor (a source scan and a test
   check it). Quotes may account for difficult geography in later tuning, not now.
@@ -338,7 +349,10 @@ A temporary activity journal for work a contractor is doing **for the player** (
   stranded / captured, turned up, secured all or part (with the quantities), the partial-result
   choice, delivery retried or held, payment due, handover; one "arranged charter transport" beat when a
   chartered crossing is part of the job; a Solo is "captured", an organization's "people have been
-  taken". Never a tile, a route, a distance, a
+  taken". "Reached the area" is told only when the group really is at its work region (on time at the
+  Arrive checkpoint, or late when it gets there; never while it is still travelling or Blocked
+  elsewhere; Phase 2 operations without a plan and detachments are told by the checkpoint as before).
+  Never a tile, a route, a distance, a
   hidden number, a daily "nothing happened" or off-contract travel. A result is reported only when
   the contractor reports it (ADR-037).
 - **Storage.** `FieldLogEntry { tick, key, args }`: a translation key and the snapshotted words,
@@ -389,9 +403,10 @@ short list of providers with real routes (never an all-settlement search, never 
 (1,080 simulated days, ~100 contractors, a charter world with two sealed islands and provider
 settlements that come and go, ambient relocation, simulated loads dropping every route cache)
 measured about 5,400 routes built, ~2,900 ambient journeys, ~1,950 operation plans of which 95 by
-charter (75 chartered legs, 75 crossings), zero blocked journeys, zero spatial faults, and zero
+charter (78 chartered legs, 78 crossings), zero blocked journeys, zero spatial faults, and zero
 correctness violations (teleports, walking faster than a contractor's own pace, ended contractors
-moving, recovered groups out of place, ambient charters, invalid states, Field Log leaks), with about
+moving, recovered groups out of place, ambient charters, a live leg disagreeing with its plan, a used
+charter's return on foot, a false "reached the area", invalid states, Field Log leaks), with about
 127 KB of added save data after 18 in-game years. A separate archipelago soak (the world's halves with
 no ground connection) stresses the charter paths ([PERFORMANCE](PERFORMANCE.md)).
 

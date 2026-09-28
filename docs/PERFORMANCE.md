@@ -142,15 +142,16 @@ summaries or edges in O(1), or knowledge books in O(64) at most.
    Logs, and a simulated load every 97 days that drops every route cache. Over the 1,080 days: 133
    contractors anchored, ~137,900 catch-ups (≈ 128 a day: the upkeep calls plus checkpoints), ~5,400
    routes built (≈ 5 a day; 12 rebuilt after simulated loads), ~2,880 ambient journeys (all on foot),
-   ~1,950 operation plans of which 95 by charter (75 chartered legs, 75 crossings; 43 charter searches
+   ~1,950 operation plans of which 95 by charter (78 chartered legs, 78 crossings; 43 charter searches
    found no provider in reach), 46 journeys made later than committed because the contractor could
    not walk them sooner, 4 recovered Troubled groups reconciled home, 0 blocked journeys, 0 invalid
    destinations, 0 spatial faults, 6 Last Known Locations all placed near the incident. Daily
    invariants all zero: contractors without a valid anchor, teleports (the longest daily move was 14
    tiles), **route-budget violations** (a contractor farther between two observations than its own
    speed band allows between the ticks each position was reached), ended contractors that moved,
-   recovered groups out of place, ambient charters, duplicated Field Log lines, Field Log data on
-   another issuer's or a closed contract. Discontinuities with a stated reason (82: crossings,
+   recovered groups out of place, ambient charters, a live chartered leg disagreeing with its plan, a
+   used charter's return on foot, a false "reached the area", duplicated Field Log lines, Field Log
+   data on another issuer's or a closed contract. Discontinuities with a stated reason (85: crossings,
    reconciliations, re-anchoring) are counted separately, never silently. Movement work averages ~235
    units a day (a unit is a catch-up, a step advanced, or 1/20 of a route built). The spatial data adds
    about 127 KB to the 18-year save (2.6 → 2.7 MB). With the synthetic graph the harness spends about

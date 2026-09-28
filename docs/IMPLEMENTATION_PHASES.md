@@ -306,14 +306,17 @@ ADR-045 (abstract charter transport, added by the correction pass).
   same-layer geography by a reusable two-way charter from a high-tech provider (derived from the
   game's `TechLevel`); ground first, never ambient, never cross-layer, no craft, no money, one Field
   Log beat.
+- Final pass: a used charter is the way back (a delay does not cancel the booking); the plan keeps
+  history (`charterUsed`, `charterLost`) apart from the live leg; "reached the area" only when true.
 
 **Not in Phase 2.5:** pawns, custody, deployments, in-person delivery, rescues (Phase 3); visits,
 relay stopovers, encounters, intersections, corridors, tracking (later phases); cross-layer or
 orbital travel; physical shuttles, extraction windows, missed-pickup consequences (deferred story
 hooks); spatial pricing (later tuning).
 
-Headless evidence: 208 tests, 15,079 checks, 0 failures (64 new in Phase 2.5: spatial, migration,
-the Field Log matrix, the correction regressions and the charter matrix A–N). The soaks add daily
+Headless evidence: 213 tests, 15,169 checks, 0 failures (69 new in Phase 2.5: spatial, migration,
+the Field Log matrix, the correction regressions, the charter matrix A–N and the final pass's
+round-trip, plan-truth and arrival-narration regressions). The soaks add daily
 spatial invariants: every active contractor has a valid anchor; nobody teleports or walks faster than
 its own pace; ended contractors never move; recovered groups are where Phase 2 says; ambient movement
 never charters; Field Logs exist only on the player's live contracts and never repeat a line. Zero

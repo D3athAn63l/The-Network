@@ -137,6 +137,22 @@ charter at all and soft degradation (still a pass for Core-only).
     destination…" (ground), then "Catch up one contractor now…": it replans from where it is or stays
     `Blocked` there; it never appears at the destination.
 
+### Final-pass checks
+
+13. **Delayed charter return** (final pass A). If practical, create a long-detour charter (a work region
+    across a bay: "Send a running operation across water…" works when the far shore has no ground
+    route; a real long detour is better). After the outbound crossing, "Force 3-day delay on next
+    resolution" (or longer) and let it resolve: "Inspect contractor spatial state…" shows the return
+    **via charter** (segment "on foot to the pickup" / crossing), the plan still `CHARTER (round trip
+    in force; used on the way out)`, even though walking home would now fit.
+14. **Provider lost after the outbound charter** (final pass B). After the outbound crossing, "Invalidate
+    an operation's charter hub…": expect a replacement charter, or `ground now (charter used on the
+    way out; return degraded to foot: …)` in "Inspect an operation's spatial plan…"; never a live
+    `CHARTER` claim without a live crossing, and no teleport.
+15. **Blocked arrival narration** (final pass C). Before the Arrive checkpoint, "Invalidate a
+    contractor's destination…" (or send the operation somewhere unreachable), let the checkpoint
+    run: the contract continues, and its Field Log does **not** say "has reached the area".
+
 Also check: a save from Phase 2 (format 2) with a contract under way loads without errors, the
 contractors get anchored ("Anchored N contractors" in the log), and the running contract completes
 unchanged.
