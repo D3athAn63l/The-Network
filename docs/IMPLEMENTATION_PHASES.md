@@ -295,7 +295,7 @@ Normative spec: [SPATIAL](SPATIAL.md); decisions ADR-041 (implemented), ADR-042,
 relay stopovers, encounters, intersections, corridors, tracking (later phases); cross-layer or
 orbital travel; spatial pricing (later tuning).
 
-Headless evidence: 180 tests, 13,106 checks, 0 failures (36 new: spatial, migration and the Field Log
+Headless evidence: 180 tests, 13,122 checks, 0 failures (36 new: spatial, migration and the Field Log
 matrix). The 1,080-day soak adds daily spatial invariants: every active contractor has a valid
 anchor, nobody teleports, Field Logs exist only on the player's live contracts and never repeat a
 line. Zero violations; the spatial data adds about 108 KB to the 18-year save. S20 (runtime) is
