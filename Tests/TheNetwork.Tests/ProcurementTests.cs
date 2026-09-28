@@ -166,6 +166,9 @@ namespace TheNetwork.Tests
             T.Eq(0, r.endedMoved, label + ": an ended contractor never moved again");
             T.Eq(0, r.recoveredMismatches, label + ": every recovered Troubled group is where Phase 2 says it returned");
             T.Eq(0, r.ambientCharters, label + ": ambient movement never charters");
+            T.Eq(0, r.charterPlanMismatches, label + ": the live leg and the committed charter plan never disagree");
+            T.Eq(0, r.charterReturnWalks, label + ": a charter still in force is always the way back");
+            T.Eq(0, r.falseArrived, label + ": the Field Log never says \"reached the area\" for a group that is not there");
         }
 
         /// <summary>Two ledgers hold the same records, in order: direction, purpose, amount, counterpart, pending.</summary>

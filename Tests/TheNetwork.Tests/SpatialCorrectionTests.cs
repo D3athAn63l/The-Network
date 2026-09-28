@@ -35,6 +35,8 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Spatial.SparseLandInitializationIsGuaranteed", SparseLand));
             t.Add(new KeyValuePair<string, Action>("Spatial.AnchorsAroundSettlementsNotOnThem", AroundNotOn));
             t.Add(new KeyValuePair<string, Action>("FieldLog.CapturedWordingFitsForm", CapturedWording));
+            t.Add(new KeyValuePair<string, Action>("FieldLog.BlockedSpatialDoesNotClaimArrived", BlockedNoArrived));
+            t.Add(new KeyValuePair<string, Action>("FieldLog.LateSpatialArrivalLogsWhenActuallyReached", LateArrived));
         }
 
         private static SpatialState S(NetworkActor a) => SpatialTests.S(a);
@@ -379,6 +381,100 @@ namespace TheNetwork.Tests
                 T.Check(has, form + ": the capture is told as " + expected);
                 foreach (FieldLogEntry e in c.fieldLog) T.Check(form != ContractorForm.Solo || e.key != FieldLogKeys.Captured, "a Solo is never told as \"people have been taken\"");
             }
+        }
+
+        // ================================================================== the Field Log tells only what is true
+
+        private static int Beats(Contract c, string key)
+        {
+            int n = 0;
+            foreach (FieldLogEntry e in c.fieldLog) if (e.key == key) n++;
+            return n;
+        }
+
+        /// <summary>An accepted contract whose group really has to travel (the work region is not where it stands).</summary>
+        private static Operation Travelling(out TestNet n, out NetworkActor team, out Contract c)
+        {
+            for (int seed = 1; seed <= 12; seed++)
+            {
+                n = ProcurementTests.World(0, seed);
+                team = SpatialTests.Still(n);
+                c = ProcurementTests.Awarded(n, ProcurementTests.Fixer(n), team);
+                Operation op = ProcurementTests.Op(n, c);
+                if (op?.spatial != null && !Same(op.spatial.workRegion, op.spatial.origin)) return op;
+            }
+            T.Check(false, "some world has a work region to travel to");
+            n = null;
+            team = null;
+            c = null;
+            return null;
+        }
+
+        private static void BlockedNoArrived()
+        {
+            TestNet n;
+            NetworkActor team;
+            Contract c;
+            Operation op = Travelling(out n, out team, out c);
+            if (op == null) return;
+            TileRef work = op.spatial.workRegion.Copy();
+            n.AdvanceTo(op.Find(Checkpoint.Prep).dueTick + Ticks.PerHour);
+            n.ctx.Spatial.CatchUp(team);
+            n.ctx.Spatial.ClearRouteCache();
+            Seal(n, work);
+            ProcurementDevOverrides.forceBand = OutcomeBand.Success;
+            ProcurementTests.RunUntil(n, () => op.Find(Checkpoint.Arrive).done || c.IsTerminal);
+            T.Check(op.Find(Checkpoint.Arrive).done, "the Arrive checkpoint ran (fail-soft)");
+            T.Check(S(team).status == SpatialStatus.Blocked && !Same(S(team).anchor, work), "the group is Blocked short of the work region");
+            T.Eq(0, Beats(c, FieldLogKeys.Arrived), "so the Field Log does NOT say they reached the area");
+            ProcurementTests.RunUntil(n, () => op.Find(Checkpoint.Resolve).done || c.IsTerminal);
+            T.Eq(0, Beats(c, FieldLogKeys.Arrived), "not later either");
+            ProcurementTests.RunUntil(n, () => c.IsTerminal);
+            T.Check(c.IsTerminal, "the contract lifecycle went on to its end (" + c.status + ")");
+        }
+
+        private static void LateArrived()
+        {
+            TestNet n;
+            NetworkActor team;
+            Contract c;
+            Operation op = Travelling(out n, out team, out c);
+            if (op == null) return;
+            n.AdvanceTo(op.Find(Checkpoint.Prep).dueTick + Ticks.PerHour);
+            n.ctx.Spatial.CatchUp(team);
+            // The route becomes longer than the committed timing allows: a farther work region on the same timeline.
+            int tpt = SpatialPolicy.TicksPerTile(team.Get<ContractorSimulation>().mobility.speedBand);
+            int window = op.Find(Checkpoint.Arrive).dueTick - n.clock.Now, slack = op.Find(Checkpoint.Resolve).dueTick - op.Find(Checkpoint.Arrive).dueTick;
+            TileRef far = null;
+            for (int d = window / tpt + 2; d < window / tpt + 40 && far == null; d++)
+            {
+                TileRef t;
+                if (!n.graph.TryFindPassableNear(S(team).anchor, d, d, 31 + d, out t)) continue;
+                int steps = Walk(n, S(team).anchor, t);
+                if (steps * tpt > window + tpt && steps * tpt < window + slack / 2) far = t;
+            }
+            T.Check(far != null, "a work region just beyond what the committed timing allows");
+            if (far == null) return;
+            n.ctx.Spatial.DevRetarget(op, far);
+            ProcurementDevOverrides.forceBand = OutcomeBand.Success;
+            ProcurementTests.RunUntil(n, () => op.Find(Checkpoint.Arrive).done || c.IsTerminal);
+            T.Check(S(team).status == SpatialStatus.Travelling && !Same(S(team).anchor, far), "the Arrive checkpoint came first; they are still on the way");
+            T.Eq(0, Beats(c, FieldLogKeys.Arrived), "no \"reached the area\" yet");
+            // Position is caught up lazily; look hourly, as any catch-up (upkeep, a checkpoint) would.
+            int limit = op.Find(Checkpoint.Resolve).dueTick;
+            while (S(team).destination != null && !op.Find(Checkpoint.Resolve).done && n.clock.Now < limit)
+            {
+                n.Advance(Ticks.PerHour);
+                n.ctx.Spatial.CatchUp(team);
+            }
+            T.Check(Same(S(team).anchor, far) && !op.Find(Checkpoint.Resolve).done, "they got there, late, before the work was resolved");
+            T.Eq(1, Beats(c, FieldLogKeys.Arrived), "exactly one \"reached the area\", when it became true");
+            TheNetwork.Core.NetworkState loaded = CorrectionTests.SaveLoad(n);
+            CorrectionTests.Swap(n, loaded);
+            Contract lc = n.ctx.contracts.Get(c.id);
+            T.Eq(1, Beats(lc, FieldLogKeys.Arrived), "one after a reload");
+            ProcurementTests.RunUntil(n, () => n.ctx.operations.Get(op.id).Find(Checkpoint.Resolve).done || lc.IsTerminal);
+            T.Eq(1, Beats(lc, FieldLogKeys.Arrived), "and never repeated");
         }
     }
 }

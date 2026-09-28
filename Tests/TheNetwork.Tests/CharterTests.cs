@@ -40,6 +40,9 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Charter.L_NoHiddenEconomy", L));
             t.Add(new KeyValuePair<string, Action>("Charter.M_OneFieldLogBeat", M));
             t.Add(new KeyValuePair<string, Action>("Charter.N_NoPhysicalThings", N));
+            t.Add(new KeyValuePair<string, Action>("Charter.CommittedRoundTripStillUsesPickupAfterDelay", DelayedPickup));
+            t.Add(new KeyValuePair<string, Action>("Charter.ReplanToGroundDoesNotLeaveStaleLiveCharterState", ReplanToGround));
+            t.Add(new KeyValuePair<string, Action>("Charter.ReturnProviderLossCanDegradeSafely", ReturnDegrades));
         }
 
         private static SpatialState S(NetworkActor a) => SpatialTests.S(a);
@@ -486,6 +489,116 @@ namespace TheNetwork.Tests
                         T.Check(tn.IndexOf(w, StringComparison.Ordinal) < 0, t.Name + "." + f.Name + ": no " + w);
                 }
             }
+        }
+
+        // ================================================================== final pass: committed round trips and truthful plans
+
+        private static int Beats(Contract c, string key)
+        {
+            int n = 0;
+            foreach (FieldLogEntry e in c.fieldLog) if (e.key == key) n++;
+            return n;
+        }
+
+        /// <summary>Opens a causeway across the island's sea ring at y 8: the island becomes reachable on foot.</summary>
+        private static void Causeway(TestNet n)
+        {
+            n.graph.Open(43, 8, 46, 8);
+        }
+
+        private static void DelayedPickup()
+        {
+            // A bay makes the ground route a fifty-step detour; the short outbound window needs the charter.
+            TestNet n = null;
+            NetworkActor team = null;
+            Contract c = null;
+            Operation op = null;
+            for (int seed = 1; seed <= 20 && op == null; seed++)
+            {
+                n = SpatialCorrectionTests.DetourWorld(seed, true, out team);
+                c = ProcurementTests.Awarded(n, ProcurementTests.Fixer(n), team);
+                Operation candidate = ProcurementTests.Op(n, c);
+                if (candidate?.spatial != null && candidate.spatial.Charter) op = candidate;
+            }
+            T.Check(op != null, "a detour world plans a charter");
+            if (op == null) return;
+            T.Check(SpatialCorrectionTests.Walk(n, op.spatial.origin, op.spatial.workRegion) > 40, "a ground route exists, but it is a long detour");
+            TileRef hub = op.spatial.hub.Copy(), landing = op.spatial.landing.Copy(), home = op.spatial.returnTo.Copy();
+            ProcurementDevOverrides.forceBand = OutcomeBand.Success;
+            ProcurementDevOverrides.forceDelayTicks = 12 * Ticks.PerDay;
+            ProcurementTests.RunUntil(n, () => op.Find(Checkpoint.Resolve).done || c.IsTerminal);
+            T.Check(op.spatial.charterUsed && n.ctx.Spatial.counters.charterCrossings == 1, "they crossed out by the committed charter");
+            int tpt = SpatialPolicy.TicksPerTile(team.Get<ContractorSimulation>().mobility.speedBand);
+            int walkHome = SpatialCorrectionTests.Walk(n, S(team).anchor, home);
+            T.Check(walkHome >= 0 && walkHome * tpt <= op.Find(Checkpoint.Return).dueTick - n.clock.Now, "the delay left enough time to walk home (" + walkHome + " steps)");
+            T.Check(S(team).purpose == SpatialPurpose.Return && Same(S(team).bridgeFrom, landing) && Same(S(team).bridgeTo, hub) && Same(S(team).destination, home),
+                "the return still uses the committed pickup (landing → hub): the extra time does not cancel the booking");
+            T.Check(op.spatial.Charter && Same(op.spatial.hub, hub) && Same(op.spatial.landing, landing) && op.spatial.charterLost == null, "the same charter plan remains in force");
+            ProcurementTests.RunUntil(n, () => op.Find(Checkpoint.Return).done || c.IsTerminal);
+            T.Eq(2, n.ctx.Spatial.counters.charterCrossings, "they were flown back: no walk-home substitution");
+            T.Check(Same(S(team).anchor, home), "home");
+            ProcurementTests.RunUntil(n, () => c.IsTerminal);
+            T.Check(c.IsTerminal && c.status != ContractStatus.Failed, "the contract completes normally (" + c.status + ")");
+        }
+
+        private static void ReplanToGround()
+        {
+            TestNet n;
+            NetworkActor team;
+            Contract c;
+            Operation op = CharterOp(out n, out team, out c);
+            if (op == null) return;
+            n.AdvanceTo(op.Find(Checkpoint.Prep).dueTick + 1);
+            n.ctx.Spatial.CatchUp(team);
+            T.Check(Same(S(team).bridgeFrom, op.spatial.hub) && !S(team).bridged, "walking to the hub, not yet across");
+            T.Eq(1, Beats(c, FieldLogKeys.TransportArranged), "the charter was reported once");
+            // Before the crossing the provider goes, and a causeway now joins the island: walking works.
+            n.graph.settlements.RemoveAll(f => f.canProvideCharterTransport);
+            Causeway(n);
+            n.Advance(Ticks.PerHour);
+            n.ctx.Spatial.CatchUp(team);
+            T.Check(S(team).bridgeFrom == null && S(team).bridgeTo == null && !S(team).bridged && S(team).purpose == SpatialPurpose.Outbound && Same(S(team).destination, op.spatial.workRegion),
+                "the live leg is plainly on foot (no stale charter ends)");
+            T.Check(!op.spatial.Charter && op.spatial.hub == null && op.spatial.landing == null && !op.spatial.charterUsed, "the plan no longer claims a charter it never used");
+            T.Eq("CharterDropped", op.spatial.fallbackKey, "and says why");
+            T.Check(n.ctx.Spatial.DevDescribePlan(op).StartsWith("ground", StringComparison.Ordinal), "the dev readout tells the truth (" + n.ctx.Spatial.DevDescribePlan(op) + ")");
+            ProcurementDevOverrides.forceBand = OutcomeBand.Success;
+            ProcurementTests.RunUntil(n, () => op.Find(Checkpoint.Resolve).done || c.IsTerminal);
+            T.Eq(0, n.ctx.Spatial.counters.charterCrossings, "nobody was flown anywhere");
+            T.Eq(1, Beats(c, FieldLogKeys.TransportArranged), "no duplicate transport beat");
+            T.Check(S(team).bridgeFrom == null, "the way back is on foot too (no charter resurrected)");
+            ProcurementTests.RunUntil(n, () => c.IsTerminal);
+            T.Check(c.IsTerminal, "the contract completes (" + c.status + ")");
+        }
+
+        private static void ReturnDegrades()
+        {
+            TestNet n;
+            NetworkActor team;
+            Contract c;
+            Operation op = CharterOp(out n, out team, out c);
+            if (op == null) return;
+            ProcurementDevOverrides.forceBand = OutcomeBand.Success;
+            ProcurementTests.RunUntil(n, () => op.Find(Checkpoint.Arrive).done || c.IsTerminal);
+            T.Check(op.spatial.charterUsed && Same(S(team).anchor, op.spatial.workRegion), "the outbound charter was used; they are at the island work region");
+            TileRef hub = op.spatial.hub.Copy(), landing = op.spatial.landing.Copy();
+            // Before the return, the provider is gone for good (no replacement anywhere), but a causeway exists.
+            n.graph.settlements.RemoveAll(f => f.canProvideCharterTransport);
+            Causeway(n);
+            ProcurementTests.RunUntil(n, () => op.Find(Checkpoint.Resolve).done || c.IsTerminal);
+            T.Check(op.spatial.charterUsed, "history is not falsified: the outbound charter happened");
+            T.Check(Same(op.spatial.hub, hub) && Same(op.spatial.landing, landing), "its hub and landing are kept as history");
+            T.Check(!op.spatial.Charter && op.spatial.charterLost != null, "the plan says the charter is lost for the return (" + op.spatial.charterLost + "), not that it still exists");
+            T.Check(S(team).purpose == SpatialPurpose.Return && S(team).bridgeFrom == null && Same(S(team).destination, op.spatial.returnTo), "the return degraded to foot");
+            string plan = n.ctx.Spatial.DevDescribePlan(op);
+            T.Check(plan.StartsWith("ground now", StringComparison.Ordinal) && plan.IndexOf("degraded", StringComparison.Ordinal) >= 0, "the dev readout says so (" + plan + ")");
+            TileRef before = S(team).anchor.Copy();
+            ProcurementTests.RunUntil(n, () => op.Find(Checkpoint.Return).done || c.IsTerminal);
+            n.ctx.Spatial.CatchUp(team);
+            T.Eq(1, n.ctx.Spatial.counters.charterCrossings, "no second flight");
+            T.Check(SpatialCorrectionTests.Walk(n, before, S(team).anchor) >= 0, "no teleport: still somewhere they could walk to");
+            ProcurementTests.RunUntil(n, () => c.IsTerminal);
+            T.Check(c.IsTerminal, "not stuck (" + c.status + ")");
         }
     }
 }
