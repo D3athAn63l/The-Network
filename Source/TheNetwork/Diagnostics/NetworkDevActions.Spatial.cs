@@ -155,6 +155,72 @@ namespace TheNetwork.Diagnostics
             });
         }
 
+        [DebugAction(CatSpatial, "Inspect an operation's spatial plan (ground or charter)…", allowedGameStates = AllowedGameStates.Playing)]
+        public static void InspectPlan()
+        {
+            NetworkRuntime rt = Rt;
+            if (rt == null) return;
+            PickContract(rt, c => rt.Ctx.Procurement.CurrentOperation(c) != null, c =>
+            {
+                Operation op = rt.Ctx.Procurement.CurrentOperation(c);
+                NetworkActor a = rt.Ctx.actors.Get(op.contractor);
+                Out(op + ": " + rt.Ctx.Spatial.DevDescribePlan(op) + (a != null ? "\n  " + rt.Ctx.Spatial.DevDescribe(a) : ""));
+            });
+        }
+
+        [DebugAction(CatSpatial, "Send a running operation across water (charter test)…", allowedGameStates = AllowedGameStates.Playing)]
+        public static void ForceDisconnected()
+        {
+            NetworkRuntime rt = Live;
+            if (rt == null) return;
+            PickContract(rt, c => !c.IsTerminal && rt.Ctx.Procurement.CurrentOperation(c)?.spatial != null, c =>
+            {
+                Operation op = rt.Ctx.Procurement.CurrentOperation(c);
+                TileRef t = rt.Ctx.Spatial.DevRetargetAcrossWater(op);
+                StateVersion.Bump();
+                if (t == null) Out(op + ": no tile without a ground route was found near a settlement (no disconnected land in this world, or the contractor is not travelling for this operation).");
+                else Out(op + ": work region now " + t + ", which has no ground route. " + rt.Ctx.Spatial.DevDescribePlan(op));
+            });
+        }
+
+        [DebugAction(CatSpatial, "Invalidate an operation's charter hub…", allowedGameStates = AllowedGameStates.Playing)]
+        public static void InvalidateCharterHub()
+        {
+            NetworkRuntime rt = Live;
+            if (rt == null) return;
+            PickContract(rt, c => !c.IsTerminal && rt.Ctx.Procurement.CurrentOperation(c)?.spatial?.hub != null, c =>
+            {
+                Operation op = rt.Ctx.Procurement.CurrentOperation(c);
+                rt.Ctx.Spatial.DevInvalidateCharter(op);
+                NetworkActor a = rt.Ctx.actors.Get(op.contractor);
+                if (a != null) rt.Ctx.Spatial.CatchUp(a);
+                StateVersion.Bump();
+                Out(op + ": charter hub invalidated and reconciled from current truth. " + rt.Ctx.Spatial.DevDescribePlan(op) + (a != null ? "\n  " + rt.Ctx.Spatial.DevDescribe(a) : ""));
+            });
+        }
+
+        [DebugAction(CatSpatial, "Force Disaster, not Troubled, on next resolution", allowedGameStates = AllowedGameStates.Playing)]
+        public static void ForceDisasterNotTroubled()
+        {
+            ProcurementDevOverrides.forceBand = OutcomeBand.Disaster;
+            ProcurementDevOverrides.forceNotTroubled = true;
+            Out("The next operation to resolve is a Disaster that is not Troubled: survivors head back and the incident stays recorded.");
+        }
+
+        [DebugAction(CatSpatial, "Force the next Troubled deadline: group found", allowedGameStates = AllowedGameStates.Playing)]
+        public static void ForceTroubledFound()
+        {
+            ProcurementDevOverrides.forceTroubledFound = true;
+            Out("The next Troubled deadline finds the group (run it with \"Run next operation checkpoint now…\").");
+        }
+
+        [DebugAction(CatSpatial, "Force the next Troubled deadline: written off", allowedGameStates = AllowedGameStates.Playing)]
+        public static void ForceTroubledWrittenOff()
+        {
+            ProcurementDevOverrides.forceTroubledFound = false;
+            Out("The next Troubled deadline writes the group off (run it with \"Run next operation checkpoint now…\").");
+        }
+
         [DebugAction(CatSpatial, "Force Missing at the contractor's position on next resolution", allowedGameStates = AllowedGameStates.Playing)]
         public static void ForceMissingHere()
         {

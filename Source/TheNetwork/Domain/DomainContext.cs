@@ -146,6 +146,12 @@ namespace TheNetwork.Domain
         public static bool forceFollowUp;
         public static bool forceNewcomer;
 
+        /// <summary>The next resolution is not Troubled (its band and casualties stand).</summary>
+        public static bool forceNotTroubled;
+
+        /// <summary>The next Troubled deadline finds the group (true) or writes it off (false) instead of drawing.</summary>
+        public static bool? forceTroubledFound;
+
         public static void Clear()
         {
             forceBand = null;
@@ -156,6 +162,8 @@ namespace TheNetwork.Domain
             forceWorseThanExpected = false;
             forceFollowUp = false;
             forceNewcomer = false;
+            forceNotTroubled = false;
+            forceTroubledFound = null;
         }
     }
 

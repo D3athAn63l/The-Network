@@ -314,6 +314,11 @@ namespace TheNetwork.Domain.Operations
                 o.troubledKey = ProcurementDevOverrides.forceTroubled;
                 ProcurementDevOverrides.forceTroubled = null;
             }
+            if (ProcurementDevOverrides.forceNotTroubled)
+            {
+                o.troubledKey = null;
+                ProcurementDevOverrides.forceNotTroubled = false;
+            }
             o.committedTick = ctx.Now;
             // Committed with the outcome (never recomputed on load): empty when nobody came back to tell it.
             o.knowledgeGains = Resolver.GainsIfReported(o, op.forces, people.Count, Valuation.Topics(f));
@@ -466,6 +471,11 @@ namespace TheNetwork.Domain.Operations
             string key = op.outcome.troubledKey;
             float chance = key == "Stranded" ? 0.6f : (key == "Missing" ? 0.35f : 0.15f);
             bool found = new NetRng(op.seed, "op.troubled", op.rerollNonce).Chance(chance);
+            if (ProcurementDevOverrides.forceTroubledFound.HasValue)
+            {
+                found = ProcurementDevOverrides.forceTroubledFound.Value;
+                ProcurementDevOverrides.forceTroubledFound = null;
+            }
             if (found)
             {
                 // The missing come home wounded; captives stay captives (a Phase 3 rescue matter).
