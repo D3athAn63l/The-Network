@@ -170,7 +170,13 @@ Spatial failure never corrupts or bricks a contract:
 - an anchor that no longer resolves: the contractor is anchored again deterministically (no
   contractor is deleted);
 - for an operation, the operation's timeline continues unchanged and the plan records
-  `fallbackKey`; a diagnostic is logged.
+  `fallbackKey`; a diagnostic is logged;
+- a fault (an exception from the adapter or the spatial layer itself): every entry point that Phase 2
+  code, start-up or the load validator calls (`EnsureInitialized`, `InitializeAll`, `Upkeep`, the
+  operation hooks, `IncidentTile`, `Validate`) catches it, logs it once, counts it (`faults`) and
+  returns. The calling upkeep, checkpoint, consequence or load carries on without spatial (a Last
+  Known Location falls back to the Phase 2 placement); whatever was left half-updated is repaired by
+  the load validator. Spatial logic can therefore never stall a Phase 2 contract.
 
 ## 6. Operation integration
 
@@ -279,9 +285,10 @@ Idle per tick: nothing beyond the scheduler's due-job comparison. Daily: the ~10
 calls each add a tiny catch-up. Routing happens only when a journey starts, a cache is rebuilt, or a
 destination changes; never for stationary contractors. The soak (1,080 simulated days, ~100
 contractors, 2,160 procurement contracts, ambient relocation, simulated loads dropping every route
-cache) measured about 5,200 routes built, ~2,900 ambient journeys and ~1,900 operation plans, zero
-blocked journeys, zero teleports, zero invalid states, Field Logs only on live player contracts, and
-about 108 KB of added save data after 18 in-game years ([PERFORMANCE](PERFORMANCE.md)).
+cache) measured about 5,200 routes built, ~2,800 ambient journeys and ~1,900 operation plans, zero
+blocked journeys, zero spatial faults, zero teleports, zero invalid states, Field Logs only on live
+player contracts, and about 108 KB of added save data after 18 in-game years
+([PERFORMANCE](PERFORMANCE.md)).
 
 ## 12. Phase 3 handoff and future consumers
 
