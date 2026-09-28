@@ -1053,6 +1053,8 @@ namespace TheNetwork.Domain.Spatial
         private bool ReplanLeg(NetworkActor a, ContractorSimulation sim)
         {
             SpatialState s = sim.spatial;
+            // An ended contractor is only caught up to the moment it ended, never given a new leg.
+            if (a.status != ActorStatus.Active) return false;
             if (s.purpose != SpatialPurpose.Outbound && s.purpose != SpatialPurpose.Return) return false;
             Operation op = s.operation.IsValid ? ctx.operations.Get(s.operation) : null;
             if (op?.spatial == null || op.IsFinished || s.destination == null) return false;
