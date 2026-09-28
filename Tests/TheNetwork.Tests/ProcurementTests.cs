@@ -160,6 +160,7 @@ namespace TheNetwork.Tests
             T.Eq(0, r.fieldLogLeaks, label + ": no Field Log on another issuer's or a closed contract");
             T.Check(r.spatial != null && r.spatial.ambientJourneys > 0 && r.spatial.operationPlans > 0, label + ": contractors travelled on their own and for operations");
             T.Eq(0, r.spatial.initFailed, label + ": no failed initialization");
+            T.Eq(0, r.spatial.faults, label + ": no spatial faults");
         }
 
         /// <summary>Two ledgers hold the same records, in order: direction, purpose, amount, counterpart, pending.</summary>

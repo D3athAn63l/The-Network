@@ -50,6 +50,7 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Spatial.NoCrossLayerTravel", NoCrossLayer));
             t.Add(new KeyValuePair<string, Action>("Spatial.AmbientIsNotHistory", AmbientSilent));
             t.Add(new KeyValuePair<string, Action>("Spatial.NoPawnNoWorldObjectNoUiLeak", Boundaries));
+            t.Add(new KeyValuePair<string, Action>("Spatial.FaultNeverStallsAContract", FaultNeverStalls));
             t.Add(new KeyValuePair<string, Action>("Migration.PhaseTwoContractorAnchored", MigrationAnchor));
             t.Add(new KeyValuePair<string, Action>("Migration.EndedAndQuarantinedSafe", MigrationEnded));
             t.Add(new KeyValuePair<string, Action>("Migration.LegacyOperationUnchanged", MigrationLegacyOp));
@@ -545,6 +546,54 @@ namespace TheNetwork.Tests
         }
 
         // ================================================================== migration (Phase 2 → 2.5)
+
+        /// <summary>A world graph whose every answer throws: a broken adapter, or a bug in the spatial layer.</summary>
+        private sealed class FaultyGraph : ISpatialWorld
+        {
+            private static Exception Boom() => new InvalidOperationException("test: spatial fault");
+            public bool Ready => true;
+            public bool IsValid(TileRef t) { throw Boom(); }
+            public bool IsPassable(TileRef t) { throw Boom(); }
+            public List<SettlementFacts> Settlements() { throw Boom(); }
+            public bool TryFindPassableNear(TileRef center, int minDist, int maxDist, int seed, out TileRef tile) { throw Boom(); }
+            public bool TryFindAnyPassable(int seed, out TileRef tile) { throw Boom(); }
+            public bool TryRoute(TileRef from, TileRef to, int maxSteps, List<int> steps, out string failureKey) { throw Boom(); }
+            public TileRef OnLayerOf(TileRef sameLayer, int tileId) { throw Boom(); }
+            public int ApproxDistance(TileRef a, TileRef b) { throw Boom(); }
+        }
+
+        private static void FaultNeverStalls()
+        {
+            TestNet n = ProcurementTests.World(0);
+            NetworkActor team = Still(n);
+            Contract c = ProcurementTests.Awarded(n, ProcurementTests.Fixer(n), team);
+            Operation op = ProcurementTests.Op(n, c);
+            T.Check(op.spatial != null && S(team).operation == op.id, "planned and bound before the fault");
+            n.ctx.graph = new FaultyGraph();
+            ProcurementDevOverrides.forceBand = OutcomeBand.Triumph;
+            ProcurementTests.RunUntil(n, () => c.IsTerminal);
+            T.Eq(ContractStatus.Fulfilled, c.status, "every checkpoint still ran: the contract completed on its Phase 2 timeline");
+            T.Check(op.Find(Checkpoint.Return).done, "through the Return checkpoint");
+            T.Check(n.ctx.Spatial.counters.faults > 0, "the faults were caught and counted (" + n.ctx.Spatial.counters.faults + ")");
+            T.Check(c.fieldLog.Count == 0, "the Field Log was closed with the contract as usual");
+            n.ctx.graph = n.graph;
+            n.ctx.Spatial.Validate(null);
+            T.Check(!S(team).operation.IsValid && n.graph.IsValid(S(team).anchor), "the load validator repairs what the fault left (binding released, anchor valid)");
+
+            // A Missing outcome whose incident cannot be read: the ordinary placement still makes the site.
+            TestNet m = ProcurementTests.World(0);
+            m.world.factions.Add(FakeWorld.Faction(21, "Blood Hawks", "ludeon.rimworld", 4, true, true, true));
+            NetworkActor lost = Still(m);
+            Contract c2 = ProcurementTests.Awarded(m, ProcurementTests.Fixer(m), lost, "TestSteel", 150);
+            m.ctx.graph = new FaultyGraph();
+            ProcurementDevOverrides.forceBand = OutcomeBand.Failure;
+            ProcurementDevOverrides.forceSecured = 0;
+            ProcurementDevOverrides.forceTroubled = SubStatus.Missing;
+            ProcurementDevOverrides.forceFollowUp = true;
+            ProcurementTests.RunUntil(m, () => FollowUp(m, c2) != null || c2.IsTerminal);
+            T.Eq(ContractStatus.Troubled, c2.status, "the resolver's Missing outcome stands");
+            T.Check(FollowUp(m, c2) != null && m.sites.tileSeeds.Count > 0, "the Last Known Location was placed the Phase 2 way");
+        }
 
         private static void MigrationAnchor()
         {
