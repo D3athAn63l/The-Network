@@ -153,6 +153,13 @@ namespace TheNetwork.Tests
             T.Eq(0, r.lklAboveSecured, label + ": no Last Known Location holds more than was secured");
             T.Eq(0L, r.moneyDrift, label + ": charges − refunds at the port = charges − refunds in the ledgers");
             T.Eq(0L, r.transferDrift, label + ": transfers sum to zero");
+            // Phase 2.5 spatial continuity.
+            T.Eq(0, r.spatialInvalid, label + ": every active contractor always has a valid hidden anchor");
+            T.Eq(0, r.teleports, label + ": no contractor teleports (longest daily move " + r.maxDailyMove + " tiles)");
+            T.Eq(0, r.fieldLogDuplicates, label + ": no duplicated Field Log entry");
+            T.Eq(0, r.fieldLogLeaks, label + ": no Field Log on another issuer's or a closed contract");
+            T.Check(r.spatial != null && r.spatial.ambientJourneys > 0 && r.spatial.operationPlans > 0, label + ": contractors travelled on their own and for operations");
+            T.Eq(0, r.spatial.initFailed, label + ": no failed initialization");
         }
 
         /// <summary>Two ledgers hold the same records, in order: direction, purpose, amount, counterpart, pending.</summary>
@@ -971,6 +978,34 @@ namespace TheNetwork.Tests
             System.IO.File.Delete(path);
             Console.WriteLine("  save size of the Network node after 18 in-game years: " + (bytes / 1024) + " KB (" + string.Join(", ", sizes.ToArray()) + ")");
             T.Check(bytes < 3500L * 1024, "save growth stays under the 3.5 MB ceiling (" + (bytes / 1024) + " KB)");
+            T.Check(r.spatial.routesRebuilt > 0 && r.simulatedLoads > 0, "route caches dropped by simulated loads were rebuilt (" + r.spatial.routesRebuilt + ")");
+            T.Check(r.spatial.lklNear > 0 && r.spatial.lklFallback == 0, "Last Known Locations used spatial truth (" + r.spatial.lklNear + ")");
+            T.Check(r.avgMoveWork < 1000, "movement work stays small per simulated day (avg " + r.avgMoveWork.ToString("0") + ")");
+
+            // What spatial continuity adds to the save: the same state with the spatial data stripped.
+            List<TheNetwork.Persist.SpatialState> kept = new List<TheNetwork.Persist.SpatialState>();
+            List<TheNetwork.Persist.ContractorSimulation> sims = new List<TheNetwork.Persist.ContractorSimulation>();
+            foreach (TheNetwork.Domain.Actors.NetworkActor a in r.state.actors.actors)
+            {
+                TheNetwork.Persist.ContractorSimulation sim = a.Get<TheNetwork.Persist.ContractorSimulation>();
+                if (sim == null) continue;
+                sims.Add(sim);
+                kept.Add(sim.spatial);
+                sim.spatial = null;
+            }
+            List<OperationSpatialPlan> plans = new List<OperationSpatialPlan>();
+            foreach (Operation op in r.state.operations.operations)
+            {
+                plans.Add(op.spatial);
+                op.spatial = null;
+            }
+            string bare = PersistenceTests.SaveState(r.state, 2);
+            long without = new System.IO.FileInfo(bare).Length;
+            System.IO.File.Delete(bare);
+            for (int i = 0; i < sims.Count; i++) sims[i].spatial = kept[i];
+            for (int i = 0; i < plans.Count; i++) r.state.operations.operations[i].spatial = plans[i];
+            Console.WriteLine("  spatial continuity adds " + ((bytes - without) / 1024) + " KB to that save (" + sims.Count + " contractor states, " + plans.Count + " operation plans)");
+            T.Check(bytes - without < 400L * 1024, "the spatial data stays small (" + ((bytes - without) / 1024) + " KB)");
         }
 
         private static void CapturedMissingRecords()

@@ -24,6 +24,12 @@ if grep -rn "HarmonyLib\|0Harmony" Source/ ; then
 fi
 echo "ok"
 
+echo "### Source scan: spatial continuity creates no pawn, caravan or world object (SPATIAL § 10)"
+if grep -rnE "PawnGenerator|CaravanMaker|WorldObjectMaker|MakeWorldObject|GeneratePawn|WorldObjects\.Add|SpawnSetup" Source/TheNetwork/Domain/Spatial Source/TheNetwork/Integration/SpatialWorldAdapter.cs ; then
+  echo "FAIL: spatial code creates world things" >&2; exit 1
+fi
+echo "ok"
+
 OUT="${TEST_OUT:-$(mktemp -d)}"
 EXTRA=()
 if [ ! -f "$MANAGED/netstandard.dll" ]; then

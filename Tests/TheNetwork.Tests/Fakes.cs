@@ -152,6 +152,19 @@ namespace TheNetwork.Tests
         public readonly List<int> tileSeeds = new List<int>();
         public bool noTile;
 
+        /// <summary>The synthetic world a Last Known Location is placed in, near the incident (Phase 2.5).</summary>
+        public TheNetwork.Diagnostics.GridWorldGraph graph;
+        public bool noNearTile;
+        public readonly List<TileRef> nearRequests = new List<TileRef>();
+
+        public bool TryFindTileNear(TileRef near, int minDist, int maxDist, int seed, out TileRef tile)
+        {
+            nearRequests.Add(near);
+            tile = null;
+            if (noNearTile || graph == null) return false;
+            return graph.TryFindPassableNear(near, minDist, maxDist, seed, out tile);
+        }
+
         public bool TryFindTile(int seed, int minDist, int maxDist, out TileRef tile)
         {
             tileSeeds.Add(seed);
@@ -267,9 +280,12 @@ namespace TheNetwork.Tests
         public NetworkEventBus bus;
         public DomainContext ctx;
         public HistoryService history;
+        public readonly TheNetwork.Diagnostics.GridWorldGraph graph;
 
         public TestNet(int seed = 424242)
         {
+            graph = TheNetwork.Diagnostics.GridWorldGraph.Default(null, seed);
+            sites.graph = graph;
             IntelDevOverrides.Clear();
             ProcurementDevOverrides.Clear();
             ServiceToggles.ProcurementEnabled = true;
@@ -285,7 +301,7 @@ namespace TheNetwork.Tests
                 relations = new TheNetwork.Domain.Relations.RelationStore(), knowledge = new TheNetwork.Domain.Knowledge.KnowledgeStore(),
                 contracts = new TheNetwork.Domain.Contracts.ContractStore(), operations = new TheNetwork.Domain.Operations.OperationStore(),
                 consequences = new TheNetwork.Domain.Consequences.ConsequenceStore(),
-                catalog = cat, comms = comms, payment = pay, world = world, sites = sites, delivery = delivery
+                catalog = cat, comms = comms, payment = pay, world = world, sites = sites, delivery = delivery, graph = graph
             };
             ctx.Actors = new ActorService(ctx);
             ctx.Intel = new IntelService(ctx);
@@ -297,6 +313,8 @@ namespace TheNetwork.Tests
             ctx.Procurement = new TheNetwork.Domain.Contracts.ProcurementService(ctx);
             ctx.Operations = new TheNetwork.Domain.Operations.OperationService(ctx);
             ctx.Consequences = new TheNetwork.Domain.Consequences.ConsequenceEngine(ctx);
+            ctx.Spatial = new TheNetwork.Domain.Spatial.SpatialService(ctx);
+            ctx.FieldLog = new TheNetwork.Domain.Contracts.FieldLogService(ctx);
             history = new HistoryService(ledger, summaries, ctx.actors, ids, clock, seed);
             scheduler.RegisterKind(JobKinds.IntelRound, ctx.Intel.RunRound, true, true);
             scheduler.RegisterKind(JobKinds.IntelClose, ctx.Intel.CloseJob, true, true);
