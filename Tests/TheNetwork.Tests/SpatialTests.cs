@@ -59,12 +59,12 @@ namespace TheNetwork.Tests
 
         // ================================================================== helpers
 
-        private static SpatialState S(NetworkActor a) => a.Get<ContractorSimulation>().spatial;
+        internal static SpatialState S(NetworkActor a) => a.Get<ContractorSimulation>().spatial;
 
-        private static bool Same(TileRef a, TileRef b) => a != null && b != null && a.tileId == b.tileId && a.layerId == b.layerId;
+        internal static bool Same(TileRef a, TileRef b) => a != null && b != null && a.tileId == b.tileId && a.layerId == b.layerId;
 
         /// <summary>An idle contractor that will not relocate on its own during the test.</summary>
-        private static NetworkActor Still(TestNet n, ContractorForm form = ContractorForm.Team)
+        internal static NetworkActor Still(TestNet n, ContractorForm form = ContractorForm.Team)
         {
             NetworkActor a = ProcurementTests.Reliable(n, form);
             S(a).nextAmbientTick = int.MaxValue / 2;
@@ -72,7 +72,7 @@ namespace TheNetwork.Tests
             return a;
         }
 
-        private static TileRef Away(TestNet n, TileRef from, int min, int max)
+        internal static TileRef Away(TestNet n, TileRef from, int min, int max)
         {
             TileRef t;
             T.Check(n.graph.TryFindPassableNear(from, min, max, 777, out t), "a destination " + min + "–" + max + " tiles away");
@@ -403,7 +403,7 @@ namespace TheNetwork.Tests
             T.Check(Same(orgAt, S(org).anchor), "dissolution keeps the last anchor");
         }
 
-        private static Contract MissingAt(TestNet n, NetworkActor team)
+        internal static Contract MissingAt(TestNet n, NetworkActor team)
         {
             Contract c = ProcurementTests.Awarded(n, ProcurementTests.Fixer(n), team, "TestSteel", 150);
             ProcurementDevOverrides.forceBand = OutcomeBand.Failure;
@@ -414,7 +414,7 @@ namespace TheNetwork.Tests
             return c;
         }
 
-        private static Opportunity FollowUp(TestNet n, Contract c)
+        internal static Opportunity FollowUp(TestNet n, Contract c)
         {
             foreach (Opportunity o in n.ctx.opportunities.opportunities) if (o.origin == OpportunityOrigin.ConsequenceRule && o.originRef.Equals(c.id.Ref)) return o;
             return null;

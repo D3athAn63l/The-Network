@@ -53,6 +53,7 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Compaction.TerminalContractsArchived", Compaction));
             t.Add(new KeyValuePair<string, Action>("Soak.ThreeGameYearsHundredContractors", Soak));
             t.Add(new KeyValuePair<string, Action>("Soak.EighteenGameYearsRetentionAndSaveSize", SoakYears));
+            t.Add(new KeyValuePair<string, Action>("Soak.ArchipelagoCharterStress", SoakArchipelago));
             t.Add(new KeyValuePair<string, Action>("Operations.CapturedMissingAreRecords", CapturedMissingRecords));
             t.Add(new KeyValuePair<string, Action>("Removal.OriginFactionGoneContractorSurvives", OriginGone));
             t.Add(new KeyValuePair<string, Action>("Intel.KnownCapableContractorsBecomeContacts", ContractorContacts));
@@ -161,6 +162,10 @@ namespace TheNetwork.Tests
             T.Check(r.spatial != null && r.spatial.ambientJourneys > 0 && r.spatial.operationPlans > 0, label + ": contractors travelled on their own and for operations");
             T.Eq(0, r.spatial.initFailed, label + ": no failed initialization");
             T.Eq(0, r.spatial.faults, label + ": no spatial faults");
+            T.Eq(0, r.routeBudgetViolations, label + ": nobody ever outpaced its own speed (" + r.explainedJumps + " explained discontinuities)");
+            T.Eq(0, r.endedMoved, label + ": an ended contractor never moved again");
+            T.Eq(0, r.recoveredMismatches, label + ": every recovered Troubled group is where Phase 2 says it returned");
+            T.Eq(0, r.ambientCharters, label + ": ambient movement never charters");
         }
 
         /// <summary>Two ledgers hold the same records, in order: direction, purpose, amount, counterpart, pending.</summary>
@@ -960,6 +965,22 @@ namespace TheNetwork.Tests
             T.Check(r.avgDayMs < 50.0, "cheap per simulated day (" + r.avgDayMs.ToString("0.00") + " ms)");
         }
 
+        /// <summary>
+        /// A year on a world whose halves have no ground connection (plus two islands, and provider
+        /// settlements that come and go): charter planning, crossings, pickups, failures and replans under
+        /// every soak invariant.
+        /// </summary>
+        private static void SoakArchipelago()
+        {
+            TheNetwork.Diagnostics.SoakHarness.Result r = TheNetwork.Diagnostics.SoakHarness.Run(100, 14, 360, 97531, null, true);
+            Console.WriteLine(r.text);
+            T.Eq(0, r.stuck, "a year on a split world: nothing stuck");
+            SoakInvariants(r, "archipelago, 360 days");
+            T.Check(r.spatial.charterPlans >= 20 && r.spatial.charterCrossings >= 20, "charters are used heavily (" + r.spatial.charterPlans + " plans, " + r.spatial.charterCrossings + " crossings)");
+            T.Check(r.spatial.charterFailures > 0, "and sometimes no provider is in reach (" + r.spatial.charterFailures + ")");
+            T.Check(r.providersChurned > 0, "provider settlements came and went (" + r.providersChurned + ")");
+        }
+
         private static void SoakYears()
         {
             TheNetwork.Diagnostics.SoakHarness.Result r = TheNetwork.Diagnostics.SoakHarness.Run(100, 14, 3 * 360, 1357);
@@ -982,6 +1003,8 @@ namespace TheNetwork.Tests
             T.Check(r.spatial.routesRebuilt > 0 && r.simulatedLoads > 0, "route caches dropped by simulated loads were rebuilt (" + r.spatial.routesRebuilt + ")");
             T.Check(r.spatial.lklNear > 0 && r.spatial.lklFallback == 0, "Last Known Locations used spatial truth (" + r.spatial.lklNear + ")");
             T.Check(r.avgMoveWork < 1000, "movement work stays small per simulated day (avg " + r.avgMoveWork.ToString("0") + ")");
+            T.Check(r.spatial.groundJourneys > 0 && r.spatial.charterJourneys > 0 && r.spatial.charterCrossings > 0 && r.spatial.charterPlans > 0,
+                "the charter world exercised both ground and chartered journeys (" + r.spatial.groundJourneys + " on foot, " + r.spatial.charterJourneys + " chartered, " + r.spatial.charterCrossings + " crossings)");
 
             // What spatial continuity adds to the save: the same state with the spatial data stripped.
             List<TheNetwork.Persist.SpatialState> kept = new List<TheNetwork.Persist.SpatialState>();

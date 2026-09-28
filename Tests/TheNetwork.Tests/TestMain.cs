@@ -122,6 +122,8 @@ namespace TheNetwork.Tests
             CorrectionTests.Register(tests);
             SpatialTests.Register(tests);
             FieldLogTests.Register(tests);
+            SpatialCorrectionTests.Register(tests);
+            CharterTests.Register(tests);
             StartupTests.Register(tests);
 
             int ran = 0;
