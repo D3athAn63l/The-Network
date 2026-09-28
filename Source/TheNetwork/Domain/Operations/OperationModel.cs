@@ -222,8 +222,26 @@ namespace TheNetwork.Domain.Operations
         /// </summary>
         public TileRef landing;
 
-        /// <summary>The plan crosses otherwise disconnected (or impractically long) same-layer geography by charter.</summary>
-        public bool Charter => hub != null && landing != null;
+        /// <summary>
+        /// History: the outbound crossing by this charter actually happened (the group was flown to the
+        /// landing). Never cleared: a later degraded return does not rewrite it.
+        /// </summary>
+        public bool charterUsed;
+
+        /// <summary>
+        /// Why the committed charter, already used on the way out, can no longer carry the rest of the
+        /// round trip (its provider or pickup gone, no replacement): the return degraded to foot. Null
+        /// while the charter is in force. <see cref="hub"/> and <see cref="landing"/> are kept as history.
+        /// </summary>
+        public string charterLost;
+
+        /// <summary>
+        /// A committed round-trip charter is IN FORCE for this operation: out via the hub and the landing,
+        /// back from the same landing to the same hub. False for a ground plan, a charter dropped before it
+        /// was used (hub and landing cleared), and a charter lost after use (<see cref="charterLost"/>).
+        /// What the CURRENT leg does is the contractor's live <c>SpatialState.bridgeFrom/bridgeTo</c>.
+        /// </summary>
+        public bool Charter => hub != null && landing != null && charterLost == null;
 
         public void ExposeData()
         {
@@ -235,6 +253,8 @@ namespace TheNetwork.Domain.Operations
             Scribe_Values.Look(ref fallbackKey, "fallback");
             Scribe_Deep.Look(ref hub, "hub");
             Scribe_Deep.Look(ref landing, "landing");
+            Scribe_Values.Look(ref charterUsed, "charterUsed", false);
+            Scribe_Values.Look(ref charterLost, "charterLost");
         }
     }
 

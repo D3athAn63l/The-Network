@@ -147,6 +147,10 @@ namespace TheNetwork.Domain.Spatial
         /// <summary>Operation legs that could no longer be proven and were planned again from current truth (on foot or by charter).</summary>
         public int replans;
 
+        /// <summary>Charters dropped before they were used (the plan went on foot), and used charters lost for the return (it degraded to foot).</summary>
+        public int chartersDropped;
+        public int chartersLost;
+
         /// <summary>A unit of movement work: a catch-up, plus the steps it advanced and the routes it built.</summary>
         public long Work => catchUps + stepsAdvanced + routesBuilt * 20L;
 
@@ -157,7 +161,7 @@ namespace TheNetwork.Domain.Spatial
                 + ", ambient journeys " + ambientJourneys + ", operation plans " + operationPlans + " (work-region fallbacks " + workRegionFallbacks + "), arrivals " + arrivals
                 + " (late " + lateArrivals + "), recovered and reconciled " + reconciled + ", journeys on foot " + groundJourneys + ", chartered " + charterJourneys
                 + " (plans " + charterPlans + ", crossings " + charterCrossings + ", charter replans " + charterReplans + ", no provider or landing " + charterFailures + ")"
-                + ", legs replanned " + replans + ", LKL near incident " + lklNear + " (fallback " + lklFallback + "), faults " + faults;
+                + ", legs replanned " + replans + ", charters dropped before use " + chartersDropped + ", returns degraded to foot " + chartersLost + ", LKL near incident " + lklNear + " (fallback " + lklFallback + "), faults " + faults;
         }
     }
 
@@ -619,6 +623,9 @@ namespace TheNetwork.Domain.Spatial
             s.bridged = true;
             counters.charterCrossings++;
             MarkExplainedJump(a);
+            // History: the committed charter carried them out. A later degraded return never rewrites this.
+            Operation op = s.purpose == SpatialPurpose.Outbound && s.operation.IsValid ? ctx.operations.Get(s.operation) : null;
+            if (op?.spatial != null) op.spatial.charterUsed = true;
         }
 
         /// <summary>Ends the committed journey truth of the current leg (never the position).</summary>
@@ -1063,22 +1070,83 @@ namespace TheNetwork.Domain.Spatial
             int now = ctx.Now, arrival = s.arrivalTick;
             SpatialPurpose purpose = s.purpose;
             bool outbound = purpose == SpatialPurpose.Outbound;
+            OperationSpatialPlan p = op.spatial;
+            // The return of a charter used on the way out: the committed pickup (or a replacement) first;
+            // on foot only once no charter can exist any more (then it is recorded as lost).
+            if (!outbound && p.Charter && p.charterUsed)
+            {
+                if (ReturnByCommittedCharter(op, a, sim, dest, now, arrival))
+                {
+                    counters.replans++;
+                    return true;
+                }
+            }
             if (GroundSteps(s.anchor, dest, SpatialPolicy.MaxRouteSteps) >= 0 && StartJourney(a, sim, dest, purpose, now, arrival, null))
             {
+                // A charter not used yet is dropped when the leg goes on foot: the plan never keeps claiming it.
+                if (outbound && p.Charter && !p.charterUsed) DropCharter(p, "CharterDropped");
                 counters.replans++;
                 return true;
             }
+            if (p.charterLost != null) return false;
             TileRef hub, landing;
             int seed = NetHash.Combine(op.seed, "spatial.replan." + s.journeys);
-            if (!PlanCharter(s.anchor, dest, outbound, op.spatial.hub, op.spatial.landing, int.MaxValue, sim.mobility.speedBand, SpatialPolicy.RangeTiles(sim.mobility.rangeBand), seed, out hub, out landing)) return false;
+            if (!PlanCharter(s.anchor, dest, outbound, p.hub, p.landing, int.MaxValue, sim.mobility.speedBand, SpatialPolicy.RangeTiles(sim.mobility.rangeBand), seed, out hub, out landing)) return false;
             if (!StartJourney(a, sim, dest, purpose, now, arrival, null, SpatialPolicy.MaxRouteSteps, outbound ? hub : landing, outbound ? landing : hub)) return false;
-            bool wasCharter = op.spatial.Charter;
-            op.spatial.hub = hub;
-            op.spatial.landing = landing;
+            bool wasCharter = p.Charter;
+            p.hub = hub;
+            p.landing = landing;
             counters.replans++;
             counters.charterReplans++;
             if (outbound && !wasCharter) NoteTransport(op);
             return true;
+        }
+
+        /// <summary>
+        /// The return of a committed round-trip charter used on the way out: the same reusable charter picks
+        /// the group up at the landing and sets it down at the hub. A delay that left time to walk does NOT
+        /// cancel the booking. If the pickup or the hub is gone, a replacement charter is planned from where
+        /// they are; only when no charter can exist any more is the charter recorded as lost (the caller then
+        /// walks, fail-soft). True when a chartered return leg was started.
+        /// </summary>
+        private bool ReturnByCommittedCharter(Operation op, NetworkActor a, ContractorSimulation sim, TileRef home, int now, int due)
+        {
+            OperationSpatialPlan p = op.spatial;
+            TileRef hub, landing;
+            int seed = NetHash.Combine(op.seed, "spatial.pickup." + sim.spatial.journeys);
+            if (PlanCharter(sim.spatial.anchor, home, false, p.hub, p.landing, int.MaxValue, sim.mobility.speedBand, SpatialPolicy.RangeTiles(sim.mobility.rangeBand), seed, out hub, out landing)
+                && StartJourney(a, sim, home, SpatialPurpose.Return, now, due, null, SpatialPolicy.MaxRouteSteps, landing, hub))
+            {
+                if (!SameTile(hub, p.hub) || !SameTile(landing, p.landing))
+                {
+                    p.hub = hub;
+                    p.landing = landing;
+                    counters.charterReplans++;
+                }
+                return true;
+            }
+            LoseCharter(p, IsCharterHub(p.hub) ? "PickupUnreachable" : "CharterProviderGone");
+            return false;
+        }
+
+        /// <summary>A committed charter never used (they did not get across) is dropped: the plan is on foot and no longer claims one.</summary>
+        private void DropCharter(OperationSpatialPlan p, string reason)
+        {
+            p.hub = null;
+            p.landing = null;
+            if (p.fallbackKey == null) p.fallbackKey = reason;
+            counters.chartersDropped++;
+        }
+
+        /// <summary>
+        /// A charter already used on the way out can no longer carry the return: kept as history (hub,
+        /// landing, <c>charterUsed</c>), marked lost; the return degrades to foot.
+        /// </summary>
+        private void LoseCharter(OperationSpatialPlan p, string reason)
+        {
+            if (p.charterLost != null) return;
+            p.charterLost = reason;
+            counters.chartersLost++;
         }
 
         /// <summary>The one Field Log beat a charter earns, on the player's own contract (no hub, no landing, no route).</summary>
@@ -1163,24 +1231,11 @@ namespace TheNetwork.Domain.Spatial
                 return;
             }
             int now = ctx.Now, due = Math.Max(now + 1, arrival);
-            bool started = false;
-            if (op.spatial.Charter && GroundSteps(s.anchor, home, (due - now) / SpatialPolicy.TicksPerTile(sim.mobility.speedBand)) < 0)
-            {
-                // The same reusable charter picks them up again at the landing and sets them down at the
-                // hub; if either end is gone, the pickup is planned again from where they are.
-                TileRef hub, landing;
-                int seed = NetHash.Combine(op.seed, "spatial.pickup");
-                if (PlanCharter(s.anchor, home, false, op.spatial.hub, op.spatial.landing, int.MaxValue, sim.mobility.speedBand, SpatialPolicy.RangeTiles(sim.mobility.rangeBand), seed, out hub, out landing))
-                {
-                    started = StartJourney(a, sim, home, SpatialPurpose.Return, now, due, null, SpatialPolicy.MaxRouteSteps, landing, hub);
-                    if (started && (!SameTile(hub, op.spatial.hub) || !SameTile(landing, op.spatial.landing)))
-                    {
-                        op.spatial.hub = hub;
-                        op.spatial.landing = landing;
-                        counters.charterReplans++;
-                    }
-                }
-            }
+            OperationSpatialPlan p = op.spatial;
+            // A charter that never carried them out (they never got across) has nothing to pick up from.
+            if (p.Charter && !p.charterUsed) DropCharter(p, "CharterUnused");
+            // A committed round trip returns by the same charter, even if a delay left time to walk.
+            bool started = p.Charter && ReturnByCommittedCharter(op, a, sim, home, now, due);
             if (!started && !StartJourney(a, sim, home, SpatialPurpose.Return, now, due, null))
             {
                 // They stay near the work area; the operation's own timeline is unaffected.
@@ -1422,8 +1477,12 @@ namespace TheNetwork.Domain.Spatial
         {
             OperationSpatialPlan p = op?.spatial;
             if (p == null) return "(no spatial plan: a legacy operation, or no world data when it started)";
-            return (p.Charter ? "CHARTER" : "ground") + (p.detached ? " (detachment)" : "") + ": origin " + p.origin + ", work region " + p.workRegion + ", return to " + p.returnTo
-                + (p.Charter ? ", hub " + p.hub + ", landing and pickup " + p.landing : "") + (p.incident != null ? ", incident " + p.incident : "") + (p.fallbackKey != null ? ", fallback " + p.fallbackKey : "");
+            string mode = p.Charter ? "CHARTER (round trip in force" + (p.charterUsed ? "; used on the way out)" : "; not used yet)")
+                : p.hub != null ? "ground now (charter used on the way out; return degraded to foot: " + p.charterLost + ")"
+                : "ground";
+            return mode + (p.detached ? " (detachment)" : "") + ": origin " + p.origin + ", work region " + p.workRegion + ", return to " + p.returnTo
+                + (p.hub != null ? ", hub " + p.hub + ", landing and pickup " + p.landing + (p.Charter ? "" : " (history)") : "")
+                + (p.incident != null ? ", incident " + p.incident : "") + (p.fallbackKey != null ? ", fallback " + p.fallbackKey : "");
         }
 
         public string DevDescribe(NetworkActor a)
