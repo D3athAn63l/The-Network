@@ -231,6 +231,8 @@ namespace TheNetwork.Domain.Contractors
             ctx.actors.Add(a);
             for (int i = 0; i < people.Count; i++) ctx.characters.Add(people[i]);
             ScheduleFirstUpkeep(a, sim);
+            // Hidden spatial truth as soon as world data allows (otherwise at the next start-up or upkeep).
+            ctx.Spatial?.EnsureInitialized(a);
             StateVersion.Bump();
             return a;
         }
@@ -954,6 +956,7 @@ namespace TheNetwork.Domain.Contractors
             ContractorProfile p = a.Get<ContractorProfile>();
             if (p != null) p.suspended = true;
             ctx.scheduler.Cancel(UpkeepJob, a.id.Value);
+            ctx.Spatial?.OnActorEnded(a);
             ContractorEvent e = EventFactory.Make<ContractorEvent>(EventKeys.ContractorEnded, Importance.Major, a.id.Ref);
             e.actor = a.id;
             e.actorName = a.name.Display;

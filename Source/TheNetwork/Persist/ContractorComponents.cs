@@ -158,6 +158,102 @@ namespace TheNetwork.Persist
         }
     }
 
+    public enum SpatialStatus : byte
+    {
+        /// <summary>No anchor yet (a new actor before world data, or a contractor from a pre-Phase-2.5 save).</summary>
+        Uninitialized = 0,
+
+        /// <summary>Somewhere around its anchor, not travelling.</summary>
+        Idle = 1,
+
+        /// <summary>On a journey from its anchor toward its destination (it may not have set out yet).</summary>
+        Travelling = 2,
+
+        /// <summary>At the area of a Network operation, doing the work.</summary>
+        OnAssignment = 3,
+
+        /// <summary>A journey could not be represented (no route): it stays at its last valid anchor.</summary>
+        Blocked = 4
+    }
+
+    public enum SpatialPurpose : byte
+    {
+        None = 0,
+
+        /// <summary>Ordinary off-screen movement (work elsewhere, looking for work). Never history, letters or logs.</summary>
+        Ambient = 1,
+
+        /// <summary>Toward the hidden work region of a Network operation.</summary>
+        Outbound = 2,
+
+        /// <summary>Away from the work region after the work.</summary>
+        Return = 3
+    }
+
+    /// <summary>
+    /// Hidden world truth (SPATIAL § 2, ADR-041): approximately where this contractor is, and where it is
+    /// travelling. One anchor tile means "approximately around here"; nothing player-visible reads it. The
+    /// route itself is never persisted: it is rebuilt at runtime from the anchor and the destination, and
+    /// progress is caught up lazily from the timing below (daily upkeep and operation checkpoints).
+    /// </summary>
+    public sealed class SpatialState : IExposable
+    {
+        public SpatialStatus status = SpatialStatus.Uninitialized;
+        public TileRef anchor;
+        public TileRef destination;
+
+        /// <summary>Where the current journey began (diagnostics and the return leg).</summary>
+        public TileRef journeyOrigin;
+
+        public SpatialPurpose purpose = SpatialPurpose.None;
+
+        /// <summary>The operation the main body is travelling or working for (none when idle or detached).</summary>
+        public OperationId operation;
+
+        /// <summary>Departure: before it, the journey has not started (an operation's preparation).</summary>
+        public int journeyStartTick = -1;
+
+        /// <summary>Progress was last caught up to this tick.</summary>
+        public int lastUpdateTick = -1;
+
+        /// <summary>Committed arrival. At or after it the contractor is at the destination.</summary>
+        public int arrivalTick = -1;
+
+        /// <summary>When an idle contractor next considers ambient relocation (committed, never rerolled).</summary>
+        public int nextAmbientTick = -1;
+
+        /// <summary>Journeys begun so far; seeds the next ambient choice.</summary>
+        public int journeys;
+
+        public int initializedTick = -1;
+        public string blockedReason;
+
+        public bool IsInitialized => status != SpatialStatus.Uninitialized && anchor != null;
+
+        public void ExposeData()
+        {
+            NetScribe.LookEnum(ref status, "status", SpatialStatus.Uninitialized);
+            Scribe_Deep.Look(ref anchor, "anchor");
+            Scribe_Deep.Look(ref destination, "destination");
+            Scribe_Deep.Look(ref journeyOrigin, "origin");
+            NetScribe.LookEnum(ref purpose, "purpose", SpatialPurpose.None);
+            NetScribe.Look(ref operation, "operation");
+            Scribe_Values.Look(ref journeyStartTick, "start", -1);
+            Scribe_Values.Look(ref lastUpdateTick, "updated", -1);
+            Scribe_Values.Look(ref arrivalTick, "arrival", -1);
+            Scribe_Values.Look(ref nextAmbientTick, "nextAmbient", -1);
+            Scribe_Values.Look(ref journeys, "journeys", 0);
+            Scribe_Values.Look(ref initializedTick, "initialized", -1);
+            Scribe_Values.Look(ref blockedReason, "blocked");
+            if (Scribe.mode == LoadSaveMode.LoadingVars && status != SpatialStatus.Uninitialized && anchor == null) status = SpatialStatus.Uninitialized;
+        }
+
+        public override string ToString()
+        {
+            return status + " at " + (anchor?.ToString() ?? "-") + (destination != null ? " → " + destination + " (" + purpose + ", arrives " + arrivalTick + ")" : "");
+        }
+    }
+
     /// <summary>
     /// The abstract off-map state of an NPC contractor, Solo or organization (DATA_MODEL § 6.2). It
     /// never exists on the PlayerProxy.
@@ -178,6 +274,10 @@ namespace TheNetwork.Persist
         public CareerStage careerStage = CareerStage.Rising;
         public float retirementPressure;
         public MobilityProfile mobility = new MobilityProfile();
+
+        /// <summary>Hidden world truth: where the contractor is (Phase 2.5). Capability stays in <see cref="mobility"/>.</summary>
+        public SpatialState spatial = new SpatialState();
+
         public int nextUpkeepTick = -1;
         public int lastUpkeepTick = -1;
 
@@ -216,6 +316,7 @@ namespace TheNetwork.Persist
             NetScribe.LookEnum(ref careerStage, "career", CareerStage.Rising);
             Scribe_Values.Look(ref retirementPressure, "retirementPressure", 0f);
             Scribe_Deep.Look(ref mobility, "mobility");
+            Scribe_Deep.Look(ref spatial, "spatial");
             Scribe_Values.Look(ref nextUpkeepTick, "nextUpkeepTick", -1);
             Scribe_Values.Look(ref lastUpkeepTick, "lastUpkeepTick", -1);
             Scribe_Values.Look(ref skill, "skill", 0.3f);
@@ -227,6 +328,9 @@ namespace TheNetwork.Persist
                 if (doctrine == null) doctrine = new Doctrine();
                 if (morale == null) morale = new OrgMorale();
                 if (mobility == null) mobility = new MobilityProfile();
+                // A pre-Phase-2.5 save has no spatial node: the contractor starts Uninitialized and gets
+                // its anchor once world data is available. No past journey is invented.
+                if (spatial == null) spatial = new SpatialState();
                 if (commitments == null) commitments = new List<OperationId>();
             }
             cachedStrength = -1f;

@@ -69,7 +69,28 @@ namespace TheNetwork.Diagnostics
             /// <summary>Acceptances refused because the bidder had filled its capacity since quoting (not a violation).</summary>
             public int staleRefused;
 
-            public int Violations => overCapacity + doubleBooked + moneyViolations + duplicateRefunds + lklAboveSecured + (moneyDrift != 0 ? 1 : 0) + (transferDrift != 0 ? 1 : 0);
+            // Phase 2.5 spatial continuity (every violation count must be 0).
+            public Domain.Spatial.SpatialCounters spatial;
+            /// <summary>Active contractors found without a valid anchor on a daily check (summed over days).</summary>
+            public int spatialInvalid;
+            /// <summary>Daily moves longer than any speed band allows (a teleport).</summary>
+            public int teleports;
+            /// <summary>The longest single-day move seen, in world tiles.</summary>
+            public int maxDailyMove;
+            /// <summary>Field Log entries equal to the one before them, on any contract.</summary>
+            public int fieldLogDuplicates;
+            /// <summary>Field Log entries on a contract the player did not issue, or on a closed contract.</summary>
+            public int fieldLogLeaks;
+            /// <summary>Live player contracts holding a Field Log at the end, and their entries.</summary>
+            public int fieldLogsLive;
+            public int fieldLogEntriesLive;
+            /// <summary>Simulated loads (the runtime route cache dropped) and the routes rebuilt afterwards.</summary>
+            public int simulatedLoads;
+            public double avgMoveWork;
+            public long maxMoveWork;
+
+            public int Violations => overCapacity + doubleBooked + moneyViolations + duplicateRefunds + lklAboveSecured + (moneyDrift != 0 ? 1 : 0) + (transferDrift != 0 ? 1 : 0)
+                + spatialInvalid + teleports + fieldLogDuplicates + fieldLogLeaks;
             public double totalMs;
             public double maxDayMs;
 
@@ -125,7 +146,9 @@ namespace TheNetwork.Diagnostics
         private sealed class Sites : ISiteAdapter
         {
             private int next = 1;
-            public bool TryFindTile(int seed, int minDist, int maxDist, out TileRef tile) { tile = new TileRef { tileId = Math.Abs(seed % 50000), layerDef = "Surface" }; return true; }
+            public GridWorldGraph graph;
+            public bool TryFindTile(int seed, int minDist, int maxDist, out TileRef tile) { tile = graph.OnLayerOf(graph.Tile(0, 1), Math.Abs(seed % graph.Count)); return true; }
+            public bool TryFindTileNear(TileRef near, int minDist, int maxDist, int seed, out TileRef tile) { return graph.TryFindPassableNear(near, minDist, maxDist, seed, out tile); }
             public MaterializeResult Materialize(Opportunity opp) { return new MaterializeResult { ok = true, site = new WorldObjectRef { id = next++, defName = "Site" }, threatProfileUsed = opp.threat.profileKey }; }
             public bool SiteExists(WorldObjectRef site) { return site != null; }
             public bool SiteHasMap(WorldObjectRef site) { return false; }
@@ -170,6 +193,42 @@ namespace TheNetwork.Diagnostics
         }
 
         // ------------------------------------------------------------------ run
+
+        /// <summary>
+        /// The daily spatial pass: every active contractor has a valid anchor, nobody moved farther in a
+        /// day than any speed band allows (no teleport), and Field Logs exist only on the player's live
+        /// contracts, without repeated lines.
+        /// </summary>
+        private static void CheckSpatial(DomainContext ctx, Result res, Dictionary<int, KeyValuePair<int, TileRef>> lastAnchor)
+        {
+            int limitPerDay = Domain.Spatial.SpatialPolicy.TilesPerDay(Band.VeryHigh) * 2 + 2;
+            foreach (NetworkActor a in ctx.actors.actors)
+            {
+                if (!ContractorService.IsNpcContractor(a) || a.status != ActorStatus.Active) continue;
+                SpatialState s = a.Get<ContractorSimulation>().spatial;
+                if (!s.IsInitialized || !ctx.graph.IsValid(s.anchor))
+                {
+                    res.spatialInvalid++;
+                    continue;
+                }
+                KeyValuePair<int, TileRef> last;
+                if (lastAnchor.TryGetValue(a.id.Value, out last))
+                {
+                    int d = ctx.graph.ApproxDistance(last.Value, s.anchor);
+                    int days = Math.Max(1, (ctx.Now - last.Key + Ticks.PerDay - 1) / Ticks.PerDay);
+                    if (d != int.MaxValue && d / days > res.maxDailyMove) res.maxDailyMove = d / days;
+                    if (d == int.MaxValue || d > limitPerDay * days) res.teleports++;
+                }
+                lastAnchor[a.id.Value] = new KeyValuePair<int, TileRef>(ctx.Now, s.anchor.Copy());
+            }
+            ActorId player = ctx.actors.PlayerProxyId;
+            foreach (Contract c in ctx.contracts.contracts)
+            {
+                if (c.fieldLog.Count == 0) continue;
+                if (c.parties.issuer != player || c.IsTerminal) res.fieldLogLeaks += c.fieldLog.Count;
+                for (int i = 1; i < c.fieldLog.Count; i++) if (c.fieldLog[i].SameAs(c.fieldLog[i - 1])) res.fieldLogDuplicates++;
+            }
+        }
 
         /// <summary>The daily invariant pass: capacity, exclusivity, money and Last Known Location cargo.</summary>
         private static void CheckInvariants(DomainContext ctx, Result res, Dictionary<int, long[]> money)
@@ -220,6 +279,7 @@ namespace TheNetwork.Diagnostics
             EventJournal journal = new EventJournal();
             DiagnosticsState diag = new DiagnosticsState();
             NetworkEventBus bus = new NetworkEventBus(ids, clock, journal, diag);
+            GridWorldGraph graph = GridWorldGraph.Default(new[] { 10, 11 }, seed);
             Catalog catalog = new Catalog();
             foreach (ItemFacts f in items ?? SyntheticItems()) catalog.Add(f);
             World world = new World();
@@ -234,7 +294,8 @@ namespace TheNetwork.Diagnostics
                 cast = new WorldCastSnapshot(), actors = new ActorStore(), characters = new CharacterStore(), intel = new IntelStore(),
                 opportunities = new OpportunityStore(), summaries = summaries, ledger = ledger, relations = new RelationStore(), knowledge = new KnowledgeStore(),
                 contracts = new ContractStore(), operations = new OperationStore(), consequences = new ConsequenceStore(),
-                catalog = catalog, comms = new Comms(), payment = payment, world = world, sites = new Sites(), delivery = new Delivery()
+                catalog = catalog, comms = new Comms(), payment = payment, world = world, sites = new Sites { graph = graph }, delivery = new Delivery(),
+                graph = graph
             };
             ctx.tuning.targetContractorCount = contractors;
             ctx.Actors = new ActorService(ctx);
@@ -247,6 +308,8 @@ namespace TheNetwork.Diagnostics
             ctx.Procurement = new ProcurementService(ctx);
             ctx.Operations = new OperationService(ctx);
             ctx.Consequences = new ConsequenceEngine(ctx);
+            ctx.Spatial = new Domain.Spatial.SpatialService(ctx);
+            ctx.FieldLog = new FieldLogService(ctx);
             HistoryService history = new HistoryService(ledger, summaries, ctx.actors, ids, clock, seed);
             scheduler.RegisterKind(JobKinds.ContractorUpkeep, ctx.Upkeep.UpkeepJob, true, true);
             scheduler.RegisterKind(JobKinds.PopulationWeekly, ctx.Upkeep.PopulationJobRun, true, true);
@@ -287,6 +350,9 @@ namespace TheNetwork.Diagnostics
             NetRng rng = new NetRng(seed, "soak");
             // Last seen (charged, refunded, transfers in, transfers out) per contract, kept after compaction.
             Dictionary<int, long[]> money = new Dictionary<int, long[]>();
+            Dictionary<int, KeyValuePair<int, TileRef>> lastAnchor = new Dictionary<int, KeyValuePair<int, TileRef>>();
+            List<long> moveWork = new List<long>();
+            long workBefore = ctx.Spatial.counters.Work;
             List<double> dayMs = new List<double>();
             HashSet<int> reposted = new HashSet<int>();
             long all0 = Stopwatch.GetTimestamp();
@@ -341,6 +407,16 @@ namespace TheNetwork.Diagnostics
                 }
                 dayMs.Add((Stopwatch.GetTimestamp() - t0) * 1000.0 / Stopwatch.Frequency);
                 CheckInvariants(ctx, res, money);
+                CheckSpatial(ctx, res, lastAnchor);
+                long work = ctx.Spatial.counters.Work;
+                moveWork.Add(work - workBefore);
+                workBefore = work;
+                // A load drops every runtime route cache; journeys continue from the saved anchors.
+                if (day % 97 == 96)
+                {
+                    ctx.Spatial.ClearRouteCache();
+                    res.simulatedLoads++;
+                }
             }
             res.totalMs = (Stopwatch.GetTimestamp() - all0) * 1000.0 / Stopwatch.Frequency;
             long charged = 0, refunded = 0, transfers = 0;
@@ -353,6 +429,20 @@ namespace TheNetwork.Diagnostics
             res.moneyDrift = Math.Abs((payment.spent - payment.refunded) - (charged - refunded));
             res.transferDrift = transfers;
             res.overCapacity = ctx.Contractors.overCapacityCheckouts;
+            res.spatial = ctx.Spatial.counters;
+            long moveSum = 0;
+            foreach (long w in moveWork)
+            {
+                moveSum += w;
+                if (w > res.maxMoveWork) res.maxMoveWork = w;
+            }
+            res.avgMoveWork = moveWork.Count == 0 ? 0 : moveSum / (double)moveWork.Count;
+            foreach (Contract c in ctx.contracts.contracts)
+            {
+                if (c.IsTerminal || c.fieldLog.Count == 0) continue;
+                res.fieldLogsLive++;
+                res.fieldLogEntriesLive += c.fieldLog.Count;
+            }
 
             ActorId player = ctx.actors.PlayerProxyId;
             int stuckAfter = clock.Now - 60 * Ticks.PerDay;
@@ -405,6 +495,10 @@ namespace TheNetwork.Diagnostics
                 + ", bad money records " + res.moneyViolations + ", duplicate refunds/payouts " + res.duplicateRefunds + ", LKL cargo above secured " + res.lklAboveSecured
                 + ", money drift " + res.moneyDrift + ", transfer drift " + res.transferDrift);
             sb.AppendLine("  stale quotes refused at acceptance (bidder at capacity since quoting; another quote was tried): " + res.staleRefused);
+            sb.AppendLine("  spatial: " + res.spatial);
+            sb.AppendLine("  spatial invariants (all must be 0): contractors without a valid anchor " + res.spatialInvalid + ", teleports " + res.teleports + " (longest daily move " + res.maxDailyMove + " tiles)"
+                + ", Field Log duplicates " + res.fieldLogDuplicates + ", Field Log leaks " + res.fieldLogLeaks);
+            sb.AppendLine("  movement work per day: avg " + res.avgMoveWork.ToString("0.0") + ", max " + res.maxMoveWork + " units; " + res.simulatedLoads + " simulated loads (route caches dropped); live Field Logs " + res.fieldLogsLive + " with " + res.fieldLogEntriesLive + " entries");
             sb.AppendLine("  time per simulated day: avg " + res.avgDayMs.ToString("0.00") + " ms, p95 " + p95.ToString("0.00") + " ms, max " + res.maxDayMs.ToString("0.00") + " ms (total " + res.totalMs.ToString("0") + " ms)");
             res.text = sb.ToString();
             res.state = state;

@@ -27,6 +27,12 @@ namespace TheNetwork.Domain.Consequences
         public int depth;
         public string flavorKey;
 
+        /// <summary>
+        /// Where the contractor actually was when things went wrong (Phase 2.5): the site is placed near
+        /// it. Committed at firing, so a reload never moves it. Null for operations without spatial truth.
+        /// </summary>
+        public TileRef near;
+
         public void ExposeData()
         {
             Scribe_Values.Look(ref ruleKey, "rule");
@@ -41,6 +47,7 @@ namespace TheNetwork.Domain.Consequences
             Scribe_Values.Look(ref lostCount, "lost", 0);
             Scribe_Values.Look(ref depth, "depth", 0);
             Scribe_Values.Look(ref flavorKey, "flavor");
+            Scribe_Deep.Look(ref near, "near");
         }
     }
 
@@ -143,7 +150,8 @@ namespace TheNetwork.Domain.Consequences
                 dueTick = ctx.Now + Ticks.PerHour * 2,
                 lostCount = lost,
                 depth = depth,
-                flavorKey = op.outcome.flavorKey
+                flavorKey = op.outcome.flavorKey,
+                near = ctx.Spatial?.IncidentTile(op)?.Copy()
             });
             Store.lastFiredTick = ctx.Now;
             Store.firedTotal++;
@@ -165,7 +173,7 @@ namespace TheNetwork.Domain.Consequences
             Operation op = ctx.operations.Get(p.operation);
             if (op?.outcome != null && op.outcome.securedPayload.Count > 0) lost = op.outcome.securedPayload[0];
             string failure;
-            Opportunity opp = ctx.Opportunities.GenerateFollowUp(f, p.lostCount, lost, p.seed, c.id.Ref, p.depth, ThreatFor(p.flavorKey), out failure);
+            Opportunity opp = ctx.Opportunities.GenerateFollowUp(f, p.lostCount, lost, p.seed, c.id.Ref, p.depth, ThreatFor(p.flavorKey), p.near, out failure);
             if (opp == null)
             {
                 NetLog.Info(LogCategory.Opportunities, "Last known location for " + c.id + " not created: " + failure + ".");

@@ -113,6 +113,54 @@ namespace TheNetwork.Domain.Ports
         FactionFacts PlayerFaction();
     }
 
+    /// <summary>A settlement on the world map, as spatial evidence (never ownership).</summary>
+    public sealed class SettlementFacts
+    {
+        public TileRef tile;
+        public int factionLoadId;
+        public bool player;
+    }
+
+    /// <summary>
+    /// The world graph as the spatial layer sees it (SPATIAL § 4): tile validity and passability,
+    /// settlements, bounded local searches and same-layer routes. Deterministic for a seed; never
+    /// creates anything in the world. The RimWorld implementation wraps the world grid and pathing; the
+    /// headless tests and the soak harness use a synthetic grid.
+    /// </summary>
+    public interface ISpatialWorld
+    {
+        /// <summary>World data is available (a world with a surface exists).</summary>
+        bool Ready { get; }
+
+        /// <summary>The reference still resolves to a tile of the same layer.</summary>
+        bool IsValid(TileRef tile);
+
+        /// <summary>Valid, and land a traveller can stand on.</summary>
+        bool IsPassable(TileRef tile);
+
+        /// <summary>Settlements on travellable layers (players' included, flagged).</summary>
+        List<SettlementFacts> Settlements();
+
+        /// <summary>A passable tile reachable from <paramref name="center"/> within [minDist, maxDist] steps.</summary>
+        bool TryFindPassableNear(TileRef center, int minDist, int maxDist, int seed, out TileRef tile);
+
+        /// <summary>Any passable tile of the main surface (the last-resort anchor).</summary>
+        bool TryFindAnyPassable(int seed, out TileRef tile);
+
+        /// <summary>
+        /// A same-layer route: the tile ids after <paramref name="from"/> up to and including
+        /// <paramref name="to"/>. False with a reason key when the layers differ, a tile is invalid, the
+        /// destination is unreachable or farther than <paramref name="maxSteps"/>.
+        /// </summary>
+        bool TryRoute(TileRef from, TileRef to, int maxSteps, List<int> steps, out string failureKey);
+
+        /// <summary>A reference to another tile id on the layer of <paramref name="sameLayer"/>.</summary>
+        TileRef OnLayerOf(TileRef sameLayer, int tileId);
+
+        /// <summary>Approximate distance in world tiles (int.MaxValue across layers or for invalid tiles).</summary>
+        int ApproxDistance(TileRef a, TileRef b);
+    }
+
     public interface ICatalog
     {
         /// <summary>Is this def requestable right now (verdict + override + runtime failures)?</summary>
@@ -144,6 +192,13 @@ namespace TheNetwork.Domain.Ports
     {
         /// <summary>Finds a new site tile near the player under a pushed vanilla seed. Committed by the caller.</summary>
         bool TryFindTile(int seed, int minDist, int maxDist, out TileRef tile);
+
+        /// <summary>
+        /// A new-site tile within [minDist, maxDist] world tiles of <paramref name="near"/>, on its layer
+        /// (Phase 2.5: a Last Known Location where the contractor actually was). Deterministic for a seed;
+        /// false when none is found (the caller falls back to <see cref="TryFindTile"/>).
+        /// </summary>
+        bool TryFindTileNear(TileRef near, int minDist, int maxDist, int seed, out TileRef tile);
 
         /// <summary>Creates the vanilla Site for an opportunity (ItemStash + threat part + timeout + comp binding + tag).</summary>
         MaterializeResult Materialize(Opportunities.Opportunity opp);

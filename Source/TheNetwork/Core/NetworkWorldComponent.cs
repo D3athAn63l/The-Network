@@ -208,6 +208,7 @@ namespace TheNetwork
             ctx.Actors.ImportCast(settings?.roster, settings?.LoadedVersion ?? NetworkSettings.CurrentVersion, report);
             int fixers = ctx.Actors.InstantiateFixers();
             int contractors = ctx.Contractors.InstantiateFromSnapshot();
+            ctx.Spatial.InitializeAll();
 
             ScheduleSweeps();
             SystemEvent boot = EventFactory.Make<SystemEvent>(EventKeys.NetworkBootstrapped, Importance.Minor);
@@ -245,6 +246,9 @@ namespace TheNetwork
             // actors: they are instantiated now, from the world's own snapshot (idempotent).
             int newContractors = ctx.Contractors.InstantiateFromSnapshot();
             if (newContractors > 0) NetLog.Info(LogCategory.Actors, "Instantiated " + newContractors + " contractors from this world's cast snapshot.");
+            // A save from before Phase 2.5 (or a contractor made before world data existed): anchor them now.
+            int anchored = ctx.Spatial.InitializeAll();
+            if (anchored > 0) NetLog.Info(LogCategory.Spatial, "Anchored " + anchored + " contractors in the world (hidden spatial state).");
             ValidationReport report = NetValidator.Run(runtime, ValidationMode.OnLoad);
             ScheduleSweeps();
             SystemEvent loaded = EventFactory.Make<SystemEvent>(EventKeys.NetworkLoaded, Importance.Minor);

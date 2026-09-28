@@ -522,7 +522,7 @@ namespace TheNetwork.Domain.Opportunities
         /// quality when known), possibly nothing; extra cargo and the threat come from the generator, with
         /// the threat profile optionally taken from what stopped them. No lead: the letter reports it.
         /// </summary>
-        public Opportunity GenerateFollowUp(ItemFacts facts, int lostCount, ItemPayload lostCargo, int seed, EntityRef originRef, int depth, string threatProfile, out string failure)
+        public Opportunity GenerateFollowUp(ItemFacts facts, int lostCount, ItemPayload lostCargo, int seed, EntityRef originRef, int depth, string threatProfile, TileRef near, out string failure)
         {
             failure = null;
             GenerationInput input = new GenerationInput
@@ -542,11 +542,19 @@ namespace TheNetwork.Domain.Opportunities
             }
             // Never more of the goods than the operation committed as secured; none without a committed payload.
             draft.targetCount = lostCargo == null ? 0 : Math.Min(Math.Max(0, lostCount), Math.Max(0, lostCargo.count));
-            TileRef tile;
-            if (!ctx.sites.TryFindTile(NetHash.Combine(seed, "tile"), TileMinDist, TileMaxDist, out tile))
+            // Where it actually happened when the Network knows it (a bounded local search around the
+            // incident); otherwise the ordinary placement. Cargo truth is unchanged either way.
+            TileRef tile = null;
+            bool placedNear = near != null && ctx.sites.TryFindTileNear(near, 0, Spatial.SpatialPolicy.IncidentSiteRadius, NetHash.Combine(seed, "tile.near"), out tile);
+            if (placedNear) { if (ctx.Spatial != null) ctx.Spatial.counters.lklNear++; }
+            else
             {
-                failure = "NoSiteTile";
-                return null;
+                if (near != null && ctx.Spatial != null) ctx.Spatial.counters.lklFallback++;
+                if (!ctx.sites.TryFindTile(NetHash.Combine(seed, "tile"), TileMinDist, TileMaxDist, out tile))
+                {
+                    failure = "NoSiteTile";
+                    return null;
+                }
             }
             Opportunity opp = Commit(draft, facts, tile, seed, OpportunityOrigin.ConsequenceRule, originRef);
             opp.lineageDepth = depth;

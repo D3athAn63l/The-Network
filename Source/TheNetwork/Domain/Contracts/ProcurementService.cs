@@ -611,6 +611,8 @@ namespace TheNetwork.Domain.Contracts
             ctx.scheduler.Cancel(OffersJob, c.id.Value);
             c.status = ContractStatus.Awarded;
             c.awardedTick = ctx.Now;
+            // The player's Field Log starts here, with the contract (never before a quote is accepted).
+            ctx.FieldLog?.Note(c, transferred ? FieldLogKeys.TookOver : FieldLogKeys.Accepted, a.name.Display);
             // Carried-over funding was paid to the contractor that was lost: no new money exists to pay out.
             if (!transferred) PayContractor(c, a, q.deposit + c.request.premiumContribution);
 
@@ -809,6 +811,7 @@ namespace TheNetwork.Domain.Contracts
             if (op != null && !op.IsFinished && op.outcome != null && op.status != OpStatus.Troubled) ctx.Operations.Finish(op);
             ContractEvent e = NewEvent(eventKey, importance, c);
             PruneClosed(c);
+            ctx.FieldLog?.Close(c);
             e.causeKey = causeKey;
             e.silver = silver;
             e.insuranceSilver = insurance;

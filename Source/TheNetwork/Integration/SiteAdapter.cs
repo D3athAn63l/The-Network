@@ -54,6 +54,31 @@ namespace TheNetwork.Integration
             return tile != null;
         }
 
+        public bool TryFindTileNear(TileRef near, int minDist, int maxDist, int seed, out TileRef tile)
+        {
+            tile = null;
+            if (near == null || !near.IsValidNow) return false;
+            PlanetTile found;
+            Rand.PushState(seed);
+            try
+            {
+                // Same rules as any new site (valid for a settlement-sized site, no world object there),
+                // searched around the given tile on its own layer. Never a space layer (canBeSpace false).
+                if (!TileFinder.TryFindNewSiteTile(out found, near.Tile, minDist, maxDist, false, null, 0f, true, TileFinderMode.Near, false, false, null, null)) return false;
+            }
+            catch (Exception ex)
+            {
+                NetLog.WarnOnce(LogCategory.Sites, "tilefinder.near", "Local site tile search failed: " + ex.Message);
+                return false;
+            }
+            finally
+            {
+                Rand.PopState();
+            }
+            tile = TileRef.Of(found);
+            return tile != null;
+        }
+
         // ------------------------------------------------------------------ materialization
 
         public MaterializeResult Materialize(Opportunity opp)

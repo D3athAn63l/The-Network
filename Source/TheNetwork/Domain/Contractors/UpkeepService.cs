@@ -33,6 +33,8 @@ namespace TheNetwork.Domain.Contractors
             if (!ContractorService.IsNpcContractor(a) || a.status != ActorStatus.Active || a.quarantinedReason != null) return;
             ContractorSimulation sim = a.Get<ContractorSimulation>();
             RunUpkeep(a, sim);
+            // Spatial continuity rides this existing staggered job: no extra job, nothing per tick.
+            if (a.status == ActorStatus.Active) ctx.Spatial?.Upkeep(a);
             int next = Math.Max(ctx.Now + Ticks.PerHour, NextDue(a, sim));
             sim.nextUpkeepTick = next;
             ctx.scheduler.Schedule(ContractorService.UpkeepJob, next, a.id.Value);
