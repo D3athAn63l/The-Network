@@ -217,7 +217,12 @@ namespace TheNetwork.Domain.Operations
                     else
                     {
                         ctx.Spatial?.ArriveAtWork(op);
-                        ctx.FieldLog?.Note(c, FieldLogKeys.Arrived, op.contractorName);
+                        // "Reached the area" must be true. With a hidden plan it is told only if the group is
+                        // actually at its work region now; a late group is told when it gets there (Spatial),
+                        // a group that never does is never told. A Phase 2 operation (no plan) or a detachment
+                        // is told by the checkpoint, as before. Progression never waits for spatial arrival.
+                        if (op.spatial == null || op.spatial.detached || ctx.Spatial == null) ctx.FieldLog?.Note(c, FieldLogKeys.Arrived, op.contractorName);
+                        else if (ctx.Spatial.IsAtWork(op)) ctx.FieldLog?.NoteOnce(c, FieldLogKeys.Arrived, op.contractorName);
                         Engage(op, c, a);
                     }
                     break;

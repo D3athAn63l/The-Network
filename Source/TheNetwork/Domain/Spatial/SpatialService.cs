@@ -339,6 +339,20 @@ namespace TheNetwork.Domain.Spatial
             catch (Exception ex) { Fault("actorEnded", a?.id.Value ?? 0, ex, 0); }
         }
 
+        /// <summary>
+        /// The operation's main body is at its committed work region right now (not travelling, not Blocked
+        /// elsewhere): the truth behind the Field Log's "reached the area" beat. False on a fault.
+        /// </summary>
+        public bool IsAtWork(Operation op)
+        {
+            try
+            {
+                SpatialState s = TrackedActor(op)?.Get<ContractorSimulation>()?.spatial;
+                return s != null && s.destination == null && SameTile(s.anchor, op.spatial.workRegion);
+            }
+            catch (Exception ex) { return Fault("atWork", OpKey(op), ex, false); }
+        }
+
         /// <summary>Where a Last Known Location should be; null (the old placement is used) on a fault.</summary>
         public TileRef IncidentTile(Operation op)
         {
@@ -654,6 +668,7 @@ namespace TheNetwork.Domain.Spatial
             {
                 case SpatialPurpose.Outbound:
                     s.status = SpatialStatus.OnAssignment;
+                    NoteLateArrival(a, s);
                     break;
                 case SpatialPurpose.Return:
                     s.status = SpatialStatus.Idle;
@@ -664,6 +679,23 @@ namespace TheNetwork.Domain.Spatial
                     s.nextAmbientTick = now + new NetRng(a.seed, "spatial.rest", s.journeys).RangeInclusive(10, 40) * Ticks.PerDay;
                     break;
             }
+        }
+
+        /// <summary>
+        /// The group has actually reached its operation's work region AFTER the Arrive checkpoint passed
+        /// (it was late): the Field Log's "reached the area" beat is told now, once. On time, the
+        /// checkpoint tells it (it checks <see cref="IsAtWork"/>); never for a group still travelling,
+        /// Blocked elsewhere, or ended.
+        /// </summary>
+        private void NoteLateArrival(NetworkActor a, SpatialState s)
+        {
+            if (a.status != ActorStatus.Active || !s.operation.IsValid) return;
+            Operation op = ctx.operations.Get(s.operation);
+            OperationSpatialPlan p = op?.spatial;
+            if (p == null || p.detached || op.IsFinished || op.outcome != null || !SameTile(s.anchor, p.workRegion)) return;
+            if (op.Find(Checkpoint.Arrive)?.done != true) return;
+            Contract c = ctx.contracts.Get(op.contract);
+            if (c != null) ctx.FieldLog?.NoteOnce(c, FieldLogKeys.Arrived, op.contractorName);
         }
 
         /// <summary>
