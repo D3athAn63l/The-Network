@@ -478,8 +478,10 @@
   contractor with nobody left to report.
 - **Consequences.** The site never contradicts the operation's result.
 
-### ADR-041 · Abstract spatial simulation is deferred (design only)
-- **Decision.** Recorded for later; nothing of it is implemented in Phase 2.
+### ADR-041 · Abstract spatial continuity (implemented by Phase 2.5)
+- **Status.** Recorded as a deferred design during Phase 2; **implemented by Phase 2.5**
+  ([SPATIAL](SPATIAL.md)) with its philosophy unchanged. Concrete choices: ADR-042 to ADR-044.
+- **Decision.**
   1. Abstract spatial truth is invisible to the player: no map marker, no route, no omniscience.
   2. `MobilityProfile` stays a CAPABILITY (range, speed, lift, transport), never a location.
   3. A future `SpatialState` is WORLD TRUTH: an approximate current `TileRef`, an optional
@@ -493,8 +495,50 @@
   7. Last Known Locations, rescues and visits may later read it.
   8. Timing: a dedicated PR after Phase 2 is merged and validated at runtime, before spatially
      aware Phase 3 physicalization matters.
-- **Rejected (now).** Any `SpatialState`, spatial field on `ContractorSimulation`, spatial store,
-  save-version change, route cache, movement job, position initialization, tile occupancy index,
-  intersection check, relay behaviour, ambient visit, tracking or map icon in Phase 2.
-- **Consequences.** Phase 2's save layout is unchanged by this decision.
+- **Rejected (still).** Tile occupancy indexes, intersection checks and travel corridors, relay
+  behaviour, ambient visits, tracking, map icons, world objects, caravans, pawns, cross-layer travel.
+- **Consequences.** Phase 2 shipped without spatial data. Phase 2.5 added it as save format 3, with a
+  migration that invents no past and leaves running Phase 2 operations untouched.
+
+### ADR-042 · Spatial movement is lazy catch-up over a rebuildable route
+- **Decision.** Persist only world truth that cannot be reconstructed: one anchor tile, an optional
+  committed destination, the journey's timing (start, last update, arrival) and the next ambient
+  decision. Position is caught up proportionally to elapsed time toward the committed arrival, only
+  when something needs it: the contractor's existing staggered daily upkeep, operation checkpoints,
+  consequences, load. The route is a runtime cache rebuilt from the saved anchor to the saved
+  destination; the exact path is softer truth than a committed outcome (a changed world may give a
+  different path, never a teleport or a reroll). Failure is soft: the last valid anchor is kept and
+  the journey is dropped (`Blocked`); contracts are never touched. World access goes through the
+  `ISpatialWorld` port (RimWorld adapter; a synthetic grid for tests and the soak).
+- **Rejected.** A per-tick mover or a new job per contractor; persisting routes, corridors or
+  presence sets; WorldObjects or caravans as carriers; teleporting across impossible geography to
+  keep coordinates tidy.
+- **Consequences.** Idle contractors cost nothing extra; the 18-year soak adds about 108 KB to the save
+  and zero teleports or invalid states.
+
+### ADR-043 · Spatial conforms to the operation timeline; the incident feeds consequences
+- **Decision.** A new operation commits a hidden plan at start: origin = the contractor's real anchor,
+  a work region scaled to the travel time the committed ETA leaves, the return point, and later the
+  incident. Departure is the Prep checkpoint, arrival the Arrive checkpoint, the return leg ends at
+  the (possibly delayed) Return checkpoint; the resolver alone decides what happened. Trouble or
+  disaster fixes the incident tile before any consequence reads it, and the Last Known Location is
+  placed near it (bounded local search, else the Phase 2 placement). Quotes and ETAs are not changed
+  by spatial in this phase. Operations loaded from a Phase 2 save keep their lifecycle and get no
+  plan. An organization's concurrent job is a detachment: the main body's anchor does not move for it.
+- **Rejected.** Spatial movement as the authority over contract state; a separate spatial delay;
+  rewriting active Phase 2 operations on upgrade; spatial distance changing prices now (later tuning).
+- **Consequences.** The recovery site appears where the contractor was working, without revealing
+  its anchor: hidden truth → consequence → player-visible clue.
+
+### ADR-044 · The Field Log is contract-scoped and temporary
+- **Decision.** The Field Log belongs to a player-issued contract, from the accepted quote until the
+  contract closes, and is then cleared (History and letters keep the durable record). It holds a
+  bounded list of translation keys plus snapshotted words, written in the same step as the reported
+  state change; reporting language only (no tile, route or hidden number), results only once the
+  contractor reports them (ADR-037). It is shown as a compact section of the contract card, never as
+  a tab or letters.
+- **Rejected.** A permanent journal on the contractor (Phase 4 contractors will work for several
+  issuers); logging daily movement or ambient travel; copying the log into History.
+- **Consequences.** A tracking page for the player's own job, not a notification stream, with no
+  save growth after the contract ends.
 

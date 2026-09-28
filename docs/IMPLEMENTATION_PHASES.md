@@ -12,6 +12,7 @@
 3. [Rules for every phase](#3-rules-for-every-phase)
 4. [Phase 1: Foundation + Intel](#4-phase-1-foundation--intel)
 5. [Phase 2: Contractors (abstract) + Procurement](#5-phase-2-contractors-abstract--procurement)
+   - [Phase 2.5: Abstract spatial continuity + player-contract Field Log](#5a-phase-25-abstract-spatial-continuity--player-contract-field-log)
 6. [Phase 3: Abstract ↔ physical lifecycle](#6-phase-3-abstract--physical-lifecycle)
 7. [Phase 4: Player as contractor, contract board, bidding](#7-phase-4-player-as-contractor-contract-board-bidding)
 8. [Phase 5: Social layer](#8-phase-5-social-layer)
@@ -28,6 +29,7 @@
 | **0** | Architecture (this branch) | the design | — |
 | **1** | Foundation + Intel + Fixer foundation | global cast in ModSettings → world snapshot → Fixers → Comms Console gate → catalog → persistence → scheduling → multi-lead Intel → source/context resolution → opportunity → vanilla site → physical loot, taken in part or in full → cleanup → history | S1, S2, S5, S6, S8, S19 |
 | **2** | Contractors (abstract) + Procurement | about 100 contractor identities (Solos to companies) from the world's cast, capability split from NPC simulation, Open and Direct contracts with the offer path, Fixer-mediated quotes, deposits and insurance, deterministic resolver, drop-pod delivery, willingness/refusal, relationships core, history changing behaviour, failures that leave a last known location | S13 |
+| **2.5** | Abstract spatial continuity + player-contract Field Log | every contractor has hidden approximate geography (one anchor, coarse lazy journeys, no icons, no caravans, no per-tick work); operations start from the real anchor and work in a hidden region on their committed timeline; Last Known Locations appear where the contractor actually was; the player's running job has a short Field Log | S20 |
 | **3** | Abstract ↔ physical lifecycle | Known Characters as pawns, custody, deployments, encounter factions, in-person delivery, rescue follow-ups, contract inheritance | **S9**, S10, S11, S12, S14 |
 | **4** | Player as contractor + NPC contract board + full bidding | player registration (same faction), NPC-issued contracts, competing offers, competitors at opportunities, public reputation epithets | — |
 | **5** | Social layer | rumors and beliefs, gossip, favors and debts, introductions, perceived reputation, sanctions and blacklists, morale v2 | — |
@@ -261,6 +263,43 @@ more jobs than its capacity, no named person is on two live operations, no money
 negative or duplicated, ledger charges minus refunds equal the silver that actually moved, transfers
 sum to zero, and no Last Known Location holds more than was secured: all zero. The Network save node
 is about 2.5 MB, with about 1.2 ms of work per simulated day.
+
+---
+
+## 5A. Phase 2.5: Abstract spatial continuity + player-contract Field Log
+
+Inserted after Phase 2 was merged and runtime-tested by the owner, and before Phase 3, which needs
+contractors to be *somewhere* before they can be materialized. Phase 3 keeps its number and scope.
+Normative spec: [SPATIAL](SPATIAL.md); decisions ADR-041 (implemented), ADR-042, ADR-043, ADR-044.
+
+**Scope (as implemented)**
+
+- `SpatialState` on `ContractorSimulation` (world truth: anchor, destination, journey timing);
+  `MobilityProfile` stays capability. Deterministic initialization near the origin faction's
+  settlements, never at the player's colony.
+- Movement is lazy catch-up from committed timing on the existing daily upkeep and at operation
+  checkpoints; routes are a runtime cache over the `ISpatialWorld` port (RimWorld world grid and
+  pathing; a synthetic grid headlessly). Occasional ambient relocation, silent (no events, history,
+  letters, relations, money or hidden contracts).
+- New operations commit a hidden plan (origin = real anchor, work region scaled to the committed
+  ETA, return point, incident). Checkpoints stay the timeline; the resolver still decides the
+  outcome; delays move the return leg; aborts stop where they are.
+- The Last Known Location rule places its site near the recorded incident (fallback: Phase 2
+  placement); cargo truth unchanged.
+- The Field Log: short reports for the player's own running contract, shown on its card, cleared
+  when it closes.
+- Save format 3; Phase 2 contractors are anchored at load, running Phase 2 operations are untouched.
+- Dev actions, soak counters and invariants, spike S20.
+
+**Not in Phase 2.5:** pawns, custody, deployments, in-person delivery, rescues (Phase 3); visits,
+relay stopovers, encounters, intersections, corridors, tracking (later phases); cross-layer or
+orbital travel; spatial pricing (later tuning).
+
+Headless evidence: 180 tests, 13,106 checks, 0 failures (36 new: spatial, migration and the Field Log
+matrix). The 1,080-day soak adds daily spatial invariants: every active contractor has a valid
+anchor, nobody teleports, Field Logs exist only on the player's live contracts and never repeat a
+line. Zero violations; the spatial data adds about 108 KB to the 18-year save. S20 (runtime) is
+**not run**.
 
 ---
 

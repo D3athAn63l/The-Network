@@ -249,6 +249,11 @@ Rules:
   shuttle with Royalty, passenger transport with Odyssey, walk-in or drop pods otherwise) is a
   later, optional Compat concern and is not designed yet.
 - **Removing a DLC mid-save** is handled like a removed mod (§ 3).
+- **Spatial continuity (Phase 2.5)** is surface travel on one layer only. A contractor anchor,
+  destination or work region on a layer that disappears (a removed DLC or mod layer) fails
+  `TileRef` validation: the journey is dropped where it stands or the contractor is anchored again,
+  deterministically; nothing is deleted and no contract changes. Cross-layer, orbital, gravship and
+  shuttle journeys are not represented ([SPATIAL § 5.4](SPATIAL.md#54-failure-and-invalid-tiles)).
 
 ---
 

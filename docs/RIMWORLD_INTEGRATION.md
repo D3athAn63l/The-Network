@@ -175,6 +175,19 @@ payload. NPC contractors **do not** travel as world-map caravans. Their movement
 A later, optional "operation marker" world object is deferred. It would need a Network
 WorldObjectDef, which has a removal cost.
 
+**Phase 2.5 (hidden spatial continuity, [SPATIAL](SPATIAL.md)).** Contractors have an abstract
+position on the real world grid, read through `Integration/SpatialWorldAdapter` only:
+`WorldReachability.CanReach(start, end)` before any route (vanilla `WorldPathing.FindPath` logs an
+error for invalid or cross-layer input and a warning when it runs out of tiles); then
+`PlanetLayer.Pather.FindPath(start, end, null)` (no caravan: 3,300 ticks per move), whose
+`NodesReversed` runs from the destination back to the start and which is returned with
+`ReleaseToPool()`; `TileFinder.TryFindPassableTileWithTraversalDistance` (a flood fill) under
+`Rand.PushState(seed)` for local searches; `World.Impassable`, `WorldGrid.ApproxDistanceInTiles`,
+`Find.WorldObjects.Settlements` (read only). A Last Known Location near a tile uses
+`TileFinder.TryFindNewSiteTile(out tile, nearTile, minDist, maxDist, …, canBeSpace: false)`.
+Nothing creates a world object, caravan or pawn (a source scan in `run-tests.sh` checks). Runtime
+verification: spike [S20](spikes/S20-abstract-spatial-routing.md).
+
 ### 2.9 Transport pods and shuttles — **ADAPTER**
 
 - `DropPodUtility.DropThingsNear(IntVec3, Map, IEnumerable<Thing>, …)` (Core) is the baseline

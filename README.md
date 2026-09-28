@@ -1,6 +1,6 @@
 # The Network
 
-**RimWorld 1.6 · standalone · status: Phase 2 implemented (abstract contractors and procurement) — in-game runtime validation pending**
+**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 implemented (hidden spatial continuity and the Field Log) — its in-game runtime validation (S20) pending**
 
 The Network is a persistent, procedural contractor ecosystem that runs behind the normal RimWorld
 game. The player hires outsiders to find and fetch things they cannot easily get themselves. The
@@ -44,12 +44,24 @@ Network tab (Intel, History), letters, dev actions and prepare-for-removal. No H
   charge.
 - **UI.** The tabs are Intel, Procurement, Contracts, Contractors and History.
 
+**Phase 2.5 (abstract spatial continuity + player-contract Field Log)** gives every contractor a
+hidden, approximate place in the world ([docs/SPATIAL.md](docs/SPATIAL.md)):
+- **Hidden geography.** Each contractor has one anchor tile, travels coarsely and lazily (no per-tick
+  work, no icons, no caravans, no pawns) and occasionally relocates when idle. The player never sees
+  where anyone is.
+- **Operations with a place.** A job starts from where the contractor really is and happens in a
+  hidden work region that fits the quoted timeline; the resolver still decides what happens. A Last
+  Known Location appears near where the contractor actually was.
+- **Field Log.** While a contractor works a player's contract, the contract card shows short reports
+  ("has set out", "running behind schedule", "499 of 500 secured"). It ends with the contract.
+
 Contractor pawns, the contract board, the player as contractor and the social layer are later
 phases ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
 
-The headless tests pass (144 tests, including an 18-in-game-year procurement soak with daily invariant checks). The in-game
-runtime spikes (sites, maps, caravans, silver, drop pods, removal) have **not** been run yet. Their
-records and owner test steps are in [docs/spikes/](docs/spikes/README.md).
+The headless tests pass (180 tests, including an 18-in-game-year procurement soak with daily money,
+capacity and spatial invariant checks). The owner has run the Phase 2 procurement loop in game,
+normal drop-pod delivery included. The other runtime spikes, including S20 for spatial continuity,
+have **not** been run yet. Their records and owner test steps are in [docs/spikes/](docs/spikes/README.md).
 
 ### Build
 

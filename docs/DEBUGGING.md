@@ -79,6 +79,18 @@ ordinary code path sooner or with a forced draw. None skips a state's bookkeepin
 | Relations and knowledge | Dump relationships (strongest 40) · Dump knowledge… |
 | Simulate | Simulate procurement (soak harness: 100 contractors, 360 days, synthetic items) · Simulate procurement with this game's catalog. Both run in a scratch in-memory world and never touch the save. |
 
+**Phase 2.5 as implemented** (debug menu category **"The Network (Phase 2.5)"**). Exact tile ids
+appear in these readouts only, never in normal UI; nothing is drawn on the world map.
+
+| Group | Action |
+|---|---|
+| Spatial truth | Inspect contractor spatial state… · Dump all spatial states (with counts by status and the counters) · Initialize spatial state (all Uninitialized) · Catch up one contractor now… |
+| Movement | Send contractor somewhere nearby now… · Force ambient relocation now… · Invalidate a contractor's destination… (the next catch-up recovers) · Rebuild route caches (as a load does) |
+| Operations and consequences | Move a running operation's work region… (timeline unchanged) · Force Missing at the contractor's position on next resolution · Create a Last Known Location near an operation's contractor… |
+| Field Log and performance | Inspect a contract's Field Log… (keys, words, ticks) · Spatial performance counters |
+
+Spatial log lines use the `[TheNetwork][Spatial]` category ([SPATIAL § 13](SPATIAL.md#13-diagnostics)).
+
 The forced draws live in `ProcurementDevOverrides` (runtime only, never saved) and are consumed by
 the next matching decision. The headless tests use the same overrides.
 

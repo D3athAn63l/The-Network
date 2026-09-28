@@ -1,9 +1,10 @@
 # S13 — Drop-pod delivery
 
-**Verdict: NOT RUN — OWNER RUNTIME VALIDATION REQUIRED**
+**Verdict: PARTIAL — the normal home-map delivery PASSED in the owner's runtime test; the edge cases
+(steps 3–9 below) are NOT RUN — OWNER RUNTIME VALIDATION REQUIRED**
 
-The environment that built Phase 2 cannot launch RimWorld. Nothing below is a runtime result. Compiling, the
-decompiled-source reading and the headless tests are **not** a runtime pass.
+The environment that built Phase 2 cannot launch RimWorld. Compiling, the decompiled-source reading and the
+headless tests are **not** a runtime pass. The one runtime result below comes from the owner's own test.
 
 ## Question
 
@@ -91,7 +92,17 @@ override" only if you have no console. Leave the fee waiver off, so the balance 
 
 ## Result
 
-Not run.
+**Owner runtime test (Phase 2 vertical slice, before the merge of PR #3): the normal path PASSED.**
+Three contractors bid on an exact request for 500 of a modded crystal item. The contract was paid from
+beacon-accessible silver, insured, ran late (a contractor delay), and came back with a partial result of 499 of
+500 (the contractor was a Solo). The player accepted the partial fulfilment, the money was adjusted and refunded
+correctly, and 499 items arrived by vanilla transport pod on the home map.
+
+Covered by that run: step 1 (normal home, a real balance charge from beacon silver) and the partial-result
+delivery path. **Not yet verified in game:** step 2 (quality and stuff on a crafted item), step 3 (roofed or
+crowded drop area), step 4 (no drop spot → retries → Hold), step 5 (preferred map missing), step 6 (no home at
+all), step 7 (map removed while pods are in flight), step 8 (payment default and handover) and step 9 (reload in
+those states).
 
 ## Logs
 

@@ -30,6 +30,7 @@
 | R-21 | Vanilla site composition forces extermination before loot can leave | High | Medium | Phase 1 (S19) |
 | R-22 | Source-context misattribution (source-mod evidence overweighted, or stance forced) | Medium | Medium | Phase 1 (A11), playtests |
 | R-23 | Global cast settings lost, corrupted or leaking into saves | Medium | Medium | Phase 1 (A15) |
+| R-24 | Hidden spatial continuity costs, misleads or leaks | Medium | Medium | Phase 2.5 (S20) |
 
 ---
 
@@ -245,3 +246,18 @@
   never writes settings (ADR-030; [SAVE_AND_MIGRATION § 11](SAVE_AND_MIGRATION.md#11-global-cast-settings-networksettingsversion)).
 - **Proven by.** Phase 1 A15 and settings-migration fixture tests (a malformed template and
   custom entries that must survive).
+
+## R-24 · Hidden spatial continuity costs, misleads or leaks (Phase 2.5)
+- **Failure modes.** World pathing is slow on large or heavily modded worlds; a route cannot be
+  found and a contractor teleports or an operation stalls; a changed world (a removed layer, new
+  impassable terrain) leaves invalid anchors; hidden positions leak into the UI and turn the mod into
+  a tracking map; ambient movement starts producing events, history or an invisible economy.
+- **Mitigation.** No per-tick work: catch-up only on the existing daily upkeep and at checkpoints;
+  routes only when a journey starts or a cache is rebuilt, never for stationary contractors;
+  reachability checked before pathing; soft failure (last valid anchor kept, `Blocked`) and the
+  operation timeline stays authoritative; load reconciliation re-anchors or drops invalid tiles;
+  read models carry no location field and the Field Log speaks in reports; ambient movement publishes
+  nothing (ADR-041 to ADR-044; [SPATIAL](SPATIAL.md)).
+- **Proven by.** Headless `Spatial.*`, `Migration.*` and `FieldLog.*` tests; the 18-year soak's daily
+  spatial invariants (no teleport, no invalid anchor, no Field Log leak or duplicate, nothing stuck);
+  spike S20 in game (not run yet).

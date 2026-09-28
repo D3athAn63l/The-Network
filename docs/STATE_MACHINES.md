@@ -434,6 +434,15 @@ stateDiagram-v2
   delivery). They never re-resolve.
 - **Aborted** returns the checked-out forces unharmed and releases leases.
 - **Physical**: see [ABSTRACT_PHYSICAL_LIFECYCLE](ABSTRACT_PHYSICAL_LIFECYCLE.md).
+- **Spatial (Phase 2.5).** The states above stay authoritative. A new operation's hidden plan follows
+  them: at the origin while Preparing, travelling to the work region during Transit (departure at the
+  prep checkpoint, arrival at the arrival checkpoint), at the work region while Engaged, heading back
+  after the resolve checkpoint (arriving at the return checkpoint, delayed with it), and stopping where
+  it is on Aborted. Troubled keeps the group at the incident tile, which a Last Known Location then uses.
+  Spatial failure never changes a state here ([SPATIAL § 6](SPATIAL.md#6-operation-integration)).
+- **Field Log (Phase 2.5).** On a player-issued contract, the meaningful transitions of this machine
+  and of the contract (§ 3, § 4) write one short report each to the contract's live Field Log; it is
+  cleared when the contract closes ([SPATIAL § 8](SPATIAL.md#8-the-field-log)).
 
 ---
 

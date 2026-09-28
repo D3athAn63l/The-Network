@@ -134,6 +134,20 @@ summaries or edges in O(1), or knowledge books in O(64) at most.
    with synthetic items or with a sample of the running game's catalog. No per-tick contractor
    logic exists: contractors cost only their daily upkeep job, and contracts cost only their
    window, checkpoint, decision and delivery jobs.
+
+   **Phase 2.5 (spatial continuity).** The same soak runs on a synthetic 64 × 40 world graph (a sea
+   band, one land bridge, 37 settlements) with ambient relocation, spatial operation plans, Last Known
+   Locations placed near incidents, live Field Logs, and a simulated load every 97 days that drops
+   every route cache. Over the 1,080 days: about 131 contractors anchored, ~137,800 catch-ups
+   (≈ 128 a day: the upkeep calls plus checkpoints), ~5,200 routes built (≈ 5 a day; 14 rebuilt after
+   simulated loads), ~2,860 ambient journeys, ~1,920 operation plans, 0 blocked journeys, 0 invalid
+   destinations, 0 work-region fallbacks, 6 Last Known Locations all placed near the incident. Daily
+   invariants all zero: contractors without a valid anchor, teleports (the longest daily move was 19
+   tiles), duplicated Field Log lines, Field Log data on another issuer's or a closed contract.
+   Movement work averages ~237 units a day (a unit is a catch-up, a step advanced, or 1/20 of a route
+   built). The spatial data adds about 108 KB to the 18-year save (2.5 → 2.6 MB). With the synthetic
+   graph the harness spends about 2.5 ms per simulated day in total (1.2 ms before spatial; the
+   difference is mostly the synthetic breadth-first searches). S20 measures the real world graph.
 3. **Phase 3 soak**: 150 stored pawns plus 5 concurrent deployments. Compare TPS with and
    without The Network on the same save (the prepared-removal path).
 4. **Regression gate**: the timing report (see [DEBUGGING § 5](DEBUGGING.md#5-timing-instrumentation))
