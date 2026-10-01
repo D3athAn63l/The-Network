@@ -120,6 +120,7 @@ namespace TheNetwork.Core
             Ctx.Consequences = new Domain.Consequences.ConsequenceEngine(Ctx);
             Ctx.Spatial = new Domain.Spatial.SpatialService(Ctx);
             Ctx.FieldLog = new Domain.Contracts.FieldLogService(Ctx);
+            Ctx.Career = new Domain.Contractors.CareerService(Ctx);
             RegisterContractKinds();
             Ctx.tuning.targetProvider = () => NetworkMod.Settings?.targetContractorCount ?? 100;
 

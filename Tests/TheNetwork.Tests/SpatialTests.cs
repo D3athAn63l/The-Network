@@ -676,11 +676,12 @@ namespace TheNetwork.Tests
 
         private static void MigrationVersion()
         {
-            T.Eq(3, SaveMigrations.Current, "save format 3");
+            T.Eq(4, SaveMigrations.Current, "save format 4 (Phase 2.75)");
             NetworkState state = new NetworkState();
             MigrationContext mc = new MigrationContext();
-            T.Eq(3, SaveMigrations.Run(state, 2, mc, 0), "2 → 3 runs");
+            T.Eq(4, SaveMigrations.Run(state, 2, mc, 0), "2 → 3 → 4 runs the chain");
             T.Check(mc.log.Exists(l => l.Contains("SpatialContinuity")), "the spatial migration is logged");
+            T.Check(mc.log.Exists(l => l.Contains("ContractorCareers")), "and so is the career migration");
             T.Eq(0, state.diagnostics.failedMigrations.Count, "and does not fail");
 
             // A Phase 2 ContractorSimulation has no spatial node: it loads Uninitialized.

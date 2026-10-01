@@ -272,9 +272,10 @@ namespace TheNetwork.Domain.Contracts
                         ApplyWorse(c, WorseChoice.AcceptReduced);
                         return;
                     }
-                    c.ledger.Add(Money(ask.extraSilver, MoneyDirection.PlayerPaid, MoneyPurpose.Renegotiation, "renegotiation.extra"));
+                    MoneyRecord extra = Money(ask.extraSilver, MoneyDirection.PlayerPaid, MoneyPurpose.Renegotiation, "renegotiation.extra");
+                    c.ledger.Add(extra);
                     c.terms.price += ask.extraSilver;
-                    PayContractor(c, ctx.actors.Get(c.parties.contractor), ask.extraSilver);
+                    PayContractor(c, ctx.actors.Get(c.parties.contractor), extra);
                     ctx.FieldLog?.Note(c, FieldLogKeys.PaidMore, ask.extraSilver.ToString());
                     break;
                 case WorseChoice.AcceptReduced:
@@ -554,8 +555,9 @@ namespace TheNetwork.Domain.Contracts
                     return;
                 }
                 d.balancePaid = true;
-                c.ledger.Add(Money(d.balanceDue, MoneyDirection.PlayerPaid, MoneyPurpose.Balance, "balance"));
-                PayContractor(c, ctx.actors.Get(c.parties.contractor), d.balanceDue);
+                MoneyRecord balance = Money(d.balanceDue, MoneyDirection.PlayerPaid, MoneyPurpose.Balance, "balance");
+                c.ledger.Add(balance);
+                PayContractor(c, ctx.actors.Get(c.parties.contractor), balance);
                 ContractEvent paid = NewEvent(EventKeys.PaymentReceived, Importance.Minor, c);
                 paid.silver = d.balanceDue;
                 paid.causeKey = "Balance";

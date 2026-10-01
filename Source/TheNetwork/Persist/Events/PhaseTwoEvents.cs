@@ -26,6 +26,10 @@ namespace TheNetwork.Persist.Events
         public const string LeaderSucceeded = "Leader.Succeeded";
         public const string MoraleShifted = "Organization.MoraleShifted";
 
+        // Phase 2.75 (careers): published only for meaningful transitions, never for hidden score drift.
+        public const string ContractorFameChanged = "Contractor.FameChanged";
+        public const string ContractorAdvanced = "Contractor.Advanced";
+
         public const string ContractPosted = "Contract.Posted";
         public const string ContractOfferReceived = "Contract.OfferReceived";
         public const string ContractQuoted = "Contract.Quoted";

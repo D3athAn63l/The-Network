@@ -136,7 +136,9 @@ namespace TheNetwork.Domain.Operations
                 contractor = a.id,
                 contractorName = a.name.Display,
                 startedTick = ctx.Now,
-                plannedTicks = Math.Max(Ticks.PerDay, c.terms?.etaTicks ?? Ticks.PerDay * 5)
+                plannedTicks = Math.Max(Ticks.PerDay, c.terms?.etaTicks ?? Ticks.PerDay * 5),
+                // Started by a Phase 2.75 build: its result counts toward the contractor's career.
+                careerEligible = true
             };
             op.seed = NetHash.Combine(NetHash.Combine(ctx.networkSeed, op.id.Value), "operation");
             op.danger = Resolver.Danger(Resolver.Edge(Estimate(a, c, f)));
@@ -434,6 +436,8 @@ namespace TheNetwork.Domain.Operations
             ctx.scheduler.Cancel(CheckpointJob, op.id.Value);
             ctx.scheduler.Cancel(TroubledJob, op.id.Value);
             ctx.Spatial?.EndOperation(op);
+            // The authoritative end of an operation with a committed outcome: its career result, exactly once.
+            ctx.Career?.CommitOutcome(op);
             StateVersion.Bump();
         }
 
@@ -445,6 +449,7 @@ namespace TheNetwork.Domain.Operations
         {
             if (op == null || op.IsFinished) return;
             NetworkActor a = ctx.actors.Get(op.contractor);
+            bool wasTroubled = op.status == OpStatus.Troubled;
             if (op.outcome == null)
             {
                 if (a != null) ctx.Contractors.Return(a, op.id, op.Commitment(), null);
@@ -460,6 +465,9 @@ namespace TheNetwork.Domain.Operations
             ctx.scheduler.Cancel(CheckpointJob, op.id.Value);
             ctx.scheduler.Cancel(TroubledJob, op.id.Value);
             ctx.Spatial?.EndOperation(op);
+            // Aborted BEFORE an outcome: no career result. After it: the committed result stands (a group
+            // still Troubled when the contract ended never came home, so it counts as written off).
+            if (op.outcome != null) ctx.Career?.CommitOutcome(op, wasTroubled);
             StateVersion.Bump();
         }
 
@@ -507,6 +515,8 @@ namespace TheNetwork.Domain.Operations
             {
                 ReturnForces(op, a, false);
                 op.status = OpStatus.Resolved;
+                // Written off: the group never came home with the work (the career result is told so).
+                ctx.Career?.CommitOutcome(op, true);
                 Finish(op);
                 if (a != null && ContractorService.IsSolo(a) && !ContractorCanWork(a)) ctx.Contractors.EndActor(a, key == "Captured" ? "Captured" : "LostContact");
                 if (c != null && !c.IsTerminal) ctx.Procurement.OnWrittenOff(c, op);

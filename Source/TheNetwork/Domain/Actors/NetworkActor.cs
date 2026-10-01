@@ -78,14 +78,40 @@ namespace TheNetwork.Domain.Actors
         }
     }
 
-    /// <summary>Public reputation (EVENTS_AND_HISTORY § 6). Phase 1 keeps the fame tier only.</summary>
+    /// <summary>
+    /// Public reputation (EVENTS_AND_HISTORY § 6). The score is the truth (Phase 2.75, ADR-046); the
+    /// fame band is DERIVED from it through <see cref="CareerPolicy"/> and can only be changed by changing
+    /// the score (or by starting an actor at a band's floor), so the two can never disagree. Fame is public
+    /// standing, never capability: nothing here reads or sets the experience band.
+    /// </summary>
     public sealed class PublicReputation : IExposable
     {
-        public FameBand fame = FameBand.Unknown;
+        private FameBand band = FameBand.Unknown;
+        private int points;
+
+        /// <summary>The derived public tier. Read-only: use <see cref="SetScore"/> or <see cref="SetBand"/>.</summary>
+        public FameBand fame => band;
+
+        /// <summary>The numeric reputation beneath the tier (0 .. <see cref="CareerPolicy.ScoreCap"/>).</summary>
+        public int score => points;
+
+        /// <summary>Sets the score (clamped) and re-derives the band.</summary>
+        public void SetScore(int value)
+        {
+            points = CareerPolicy.ClampScore(value);
+            band = CareerPolicy.FameFor(points);
+        }
+
+        /// <summary>Starts at a band's floor: the one mapping a template's starting fame and a migration use.</summary>
+        public void SetBand(FameBand value)
+        {
+            SetScore(CareerPolicy.FloorOf(value));
+        }
 
         public void ExposeData()
         {
-            NetScribe.LookEnum(ref fame, "fame", FameBand.Unknown);
+            NetScribe.LookEnum(ref band, "fame", FameBand.Unknown);
+            Scribe_Values.Look(ref points, "score", 0);
         }
     }
 

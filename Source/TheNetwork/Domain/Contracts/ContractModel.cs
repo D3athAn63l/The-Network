@@ -460,6 +460,33 @@ namespace TheNetwork.Domain.Contracts
             return s;
         }
 
+        /// <summary>
+        /// What this contract's contractor currently holds of the silver it was paid here: every credit less
+        /// every clawback written on the ledger. Never negative, never above what the player paid in.
+        /// </summary>
+        public int ContractorHeld()
+        {
+            long s = 0;
+            for (int i = 0; i < ledger.Count; i++) s += ledger[i].contractorSilver;
+            return s < 0 ? 0 : (s > int.MaxValue ? int.MaxValue : (int)s);
+        }
+
+        /// <summary>
+        /// The funding a contractor's share is proportional to: deposit, premium, renegotiation and balance
+        /// attributable here (carried-in included), less refunds the player has had back. An insurance premium
+        /// and insurance payouts are not the contractor's money and are not in it.
+        /// </summary>
+        public int ContractorBearingFunding()
+        {
+            long f = (long)Funding(MoneyPurpose.Deposit) + Funding(MoneyPurpose.Premium) + Funding(MoneyPurpose.Renegotiation) + Funding(MoneyPurpose.Balance);
+            for (int i = 0; i < ledger.Count; i++)
+            {
+                MoneyRecord m = ledger[i];
+                if (m.direction == MoneyDirection.PlayerRefunded && m.purpose == MoneyPurpose.Refund) f -= m.silver;
+            }
+            return f < 0 ? 0 : (f > int.MaxValue ? int.MaxValue : (int)f);
+        }
+
         public bool HasPendingRefund()
         {
             for (int i = 0; i < ledger.Count; i++) if (ledger[i].pending) return true;

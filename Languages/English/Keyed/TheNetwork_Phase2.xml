@@ -259,6 +259,8 @@
   <TheNetwork_History_Stranded>{0} were stranded far from home.</TheNetwork_History_Stranded>
   <TheNetwork_History_Ended>{0} is no more: {1}.</TheNetwork_History_Ended>
   <TheNetwork_History_OriginLost>The people {0} came from are gone.</TheNetwork_History_OriginLost>
+  <TheNetwork_History_FameChanged>{0} is now {1}.</TheNetwork_History_FameChanged>
+  <TheNetwork_History_Advanced>{0} has bought better kit and now works at a higher standard.</TheNetwork_History_Advanced>
   <TheNetwork_History_ContractDone>{0} delivered {1}x {2}.</TheNetwork_History_ContractDone>
   <TheNetwork_History_ContractPartial>{0} delivered {1} of {2}x {3}.</TheNetwork_History_ContractPartial>
   <TheNetwork_History_ContractFailed>The job for {0}x {1} with {2} failed: {3}.</TheNetwork_History_ContractFailed>

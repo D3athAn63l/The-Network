@@ -315,6 +315,7 @@ namespace TheNetwork.Tests
             ctx.Consequences = new TheNetwork.Domain.Consequences.ConsequenceEngine(ctx);
             ctx.Spatial = new TheNetwork.Domain.Spatial.SpatialService(ctx);
             ctx.FieldLog = new TheNetwork.Domain.Contracts.FieldLogService(ctx);
+            ctx.Career = new TheNetwork.Domain.Contractors.CareerService(ctx);
             history = new HistoryService(ledger, summaries, ctx.actors, ids, clock, seed);
             scheduler.RegisterKind(JobKinds.IntelRound, ctx.Intel.RunRound, true, true);
             scheduler.RegisterKind(JobKinds.IntelClose, ctx.Intel.CloseJob, true, true);

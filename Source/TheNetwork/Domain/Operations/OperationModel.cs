@@ -289,6 +289,16 @@ namespace TheNetwork.Domain.Operations
         public bool outcomeApplied;
         public string quarantinedReason;
 
+        /// <summary>
+        /// Phase 2.75: this operation's result counts toward the contractor's career (reputation and
+        /// record). True for an operation started by a 2.75 build; false for one loaded from an older
+        /// save, which never receives invented career credit even if it finishes later.
+        /// </summary>
+        public bool careerEligible;
+
+        /// <summary>The career result was applied (exactly once, at the authoritative end: finish, a post-outcome abort or a written-off Troubled group).</summary>
+        public bool careerOutcomeApplied;
+
         /// <summary>Hidden geography (Phase 2.5); null for operations from an older save.</summary>
         public OperationSpatialPlan spatial;
 
@@ -331,6 +341,8 @@ namespace TheNetwork.Domain.Operations
             Scribe_Values.Look(ref abortReasonKey, "abortReason");
             Scribe_Values.Look(ref outcomeApplied, "applied", false);
             Scribe_Values.Look(ref quarantinedReason, "quarantined");
+            Scribe_Values.Look(ref careerEligible, "careerEligible", false);
+            Scribe_Values.Look(ref careerOutcomeApplied, "careerApplied", false);
             Scribe_Deep.Look(ref spatial, "spatial");
             if (Scribe.mode == LoadSaveMode.LoadingVars && (badPhase || badStatus) && quarantinedReason == null)
             {

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using TheNetwork.Domain;
 using TheNetwork.Domain.Actors;
@@ -51,6 +52,10 @@ namespace TheNetwork.UI
                     return "TheNetwork_History_Ended".Translate(actor, EndReason(r.outcomeKey)).Resolve();
                 case EventKeys.ContractorOriginLost:
                     return "TheNetwork_History_OriginLost".Translate(actor).Resolve();
+                case EventKeys.ContractorFameChanged:
+                    return "TheNetwork_History_FameChanged".Translate(actor, Fame(ParseFame(r.Note("descriptor")))).Resolve();
+                case EventKeys.ContractorAdvanced:
+                    return "TheNetwork_History_Advanced".Translate(actor).Resolve();
                 case EventKeys.ContractCompleted:
                     return "TheNetwork_History_ContractDone".Translate(actor, r.magnitudes.count, item).Resolve();
                 case EventKeys.ContractPartiallyCompleted:
@@ -110,6 +115,12 @@ namespace TheNetwork.UI
         public static string Refusal(string key) => ("TheNetwork_Refusal_" + (key ?? "Unknown")).Translate().Resolve();
         public static string Morale(string key) => ("TheNetwork_Morale_" + (key ?? "Steady")).Translate().Resolve();
         public static string Experience(ExperienceBand b) => ("TheNetwork_Experience_" + b).Translate().Resolve();
+        private static FameBand ParseFame(string key)
+        {
+            FameBand b;
+            return key != null && Enum.TryParse(key, out b) ? b : FameBand.Local;
+        }
+
         public static string Fame(FameBand b) => ("TheNetwork_Fame_" + b).Translate().Resolve();
         public static string Doctrine(string key) => ("TheNetwork_Doctrine_" + (key ?? "Professional")).Translate().Resolve();
         public static string EndReason(string key) => ("TheNetwork_EndedBecause_" + (key ?? "Unknown")).Translate().Resolve();

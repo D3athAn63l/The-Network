@@ -63,6 +63,7 @@ namespace TheNetwork.Core
             CheckOrphansAndStates(rt, report);
             CheckScheduler(rt, report);
             CheckSpatial(rt, report);
+            CheckCareers(rt, report);
             int endedProxies = ctx.Actors.ReconcileFactionProxies();
             if (endedProxies > 0) report.Add(endedProxies + " faction proxies ended (FactionVanished).", true);
             CheckCaps(rt, report);
@@ -314,6 +315,15 @@ namespace TheNetwork.Core
             if (rt.Ctx.Spatial == null) return;
             List<string> findings = new List<string>();
             rt.Ctx.Spatial.Validate(findings);
+            for (int i = 0; i < findings.Count; i++) report.Add(findings[i], true);
+        }
+
+        /// <summary>Career reconciliation (ADR-046): score and band agree, bounds hold, no finished operation missed its career result.</summary>
+        private static void CheckCareers(NetworkRuntime rt, ValidationReport report)
+        {
+            if (rt.Ctx.Career == null) return;
+            List<string> findings = new List<string>();
+            rt.Ctx.Career.Validate(findings);
             for (int i = 0; i < findings.Count; i++) report.Add(findings[i], true);
         }
 

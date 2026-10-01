@@ -975,10 +975,10 @@ namespace TheNetwork.Tests
         /// </summary>
         private static void SoakArchipelago()
         {
-            TheNetwork.Diagnostics.SoakHarness.Result r = TheNetwork.Diagnostics.SoakHarness.Run(100, 14, 360, 97531, null, true);
+            TheNetwork.Diagnostics.SoakHarness.Result r = TheNetwork.Diagnostics.SoakHarness.Run(100, 14, 480, 97531, null, true);
             Console.WriteLine(r.text);
-            T.Eq(0, r.stuck, "a year on a split world: nothing stuck");
-            SoakInvariants(r, "archipelago, 360 days");
+            T.Eq(0, r.stuck, "eight years on a split world: nothing stuck");
+            SoakInvariants(r, "archipelago, 480 days");
             T.Check(r.spatial.charterPlans >= 20 && r.spatial.charterCrossings >= 20, "charters are used heavily (" + r.spatial.charterPlans + " plans, " + r.spatial.charterCrossings + " crossings)");
             T.Check(r.spatial.charterFailures > 0, "and sometimes no provider is in reach (" + r.spatial.charterFailures + ")");
             T.Check(r.providersChurned > 0, "provider settlements came and went (" + r.providersChurned + ")");

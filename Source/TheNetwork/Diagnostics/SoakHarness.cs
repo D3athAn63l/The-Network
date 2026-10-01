@@ -432,6 +432,7 @@ namespace TheNetwork.Diagnostics
             ctx.Consequences = new ConsequenceEngine(ctx);
             ctx.Spatial = new Domain.Spatial.SpatialService(ctx);
             ctx.FieldLog = new FieldLogService(ctx);
+            ctx.Career = new CareerService(ctx);
             HistoryService history = new HistoryService(ledger, summaries, ctx.actors, ids, clock, seed);
             scheduler.RegisterKind(JobKinds.ContractorUpkeep, ctx.Upkeep.UpkeepJob, true, true);
             scheduler.RegisterKind(JobKinds.PopulationWeekly, ctx.Upkeep.PopulationJobRun, true, true);

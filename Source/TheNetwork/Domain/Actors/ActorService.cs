@@ -75,7 +75,7 @@ namespace TheNetwork.Domain.Actors
                 provenance = new Provenance { source = ProvenanceSource.Content, templateId = ExchangeKey, importedTick = ctx.Now }
             };
             e.seed = SeedFor(e.id);
-            e.reputation.fame = FameBand.Established;
+            e.reputation.SetBand(FameBand.Established);
             e.Add(SourcePolicies.ForExchange());
             ctx.actors.Add(e);
             return e;
@@ -145,7 +145,7 @@ namespace TheNetwork.Domain.Actors
                 provenance = new Provenance { source = ProvenanceSource.GlobalCast, templateId = t.templateId, importedTick = ctx.Now }
             };
             a.seed = SeedFor(a.id);
-            a.reputation.fame = t.startingFame;
+            a.reputation.SetBand(t.startingFame);
 
             FixerProfile fp = new FixerProfile
             {

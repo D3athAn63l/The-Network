@@ -82,6 +82,14 @@ namespace TheNetwork.Domain.Intel
         /// <summary>A refund that could not be delivered yet (no home map); retried by a job.</summary>
         public bool pending;
 
+        /// <summary>
+        /// Phase 2.75, contract ledgers only: the silver of THIS movement that reached (positive) or was
+        /// taken back from (negative) the contractor's own funds, written in the same step as the
+        /// movement. The Fixer's part, an insurance premium, an insurance payout and a transfer are 0.
+        /// Never rescanned on load: the funds already hold it.
+        /// </summary>
+        public int contractorSilver;
+
         public bool IsExternal => direction == MoneyDirection.PlayerPaid || direction == MoneyDirection.PlayerRefunded;
 
         public void ExposeData()
@@ -94,6 +102,7 @@ namespace TheNetwork.Domain.Intel
             Scribe_Values.Look(ref noteKey, "note");
             Scribe_Values.Look(ref round, "round", 0);
             Scribe_Values.Look(ref pending, "pending", false);
+            Scribe_Values.Look(ref contractorSilver, "contractorSilver", 0);
         }
     }
 

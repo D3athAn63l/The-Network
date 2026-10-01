@@ -86,6 +86,7 @@ namespace TheNetwork.History
             EventKeys.ContractorCreated, EventKeys.ContractorEnded, EventKeys.ContractorOriginLost, EventKeys.ContractorCasualties,
             EventKeys.ContractorCaptured, EventKeys.ContractorMissing, EventKeys.ContractorStranded, EventKeys.CharacterKilled,
             EventKeys.CharacterPromoted, EventKeys.LeaderKilled, EventKeys.LeaderSucceeded, EventKeys.MoraleShifted,
+            EventKeys.ContractorFameChanged, EventKeys.ContractorAdvanced,
             EventKeys.ContractPosted, EventKeys.ContractRefused, EventKeys.ContractAwarded, EventKeys.ContractCompleted,
             EventKeys.ContractPartiallyCompleted, EventKeys.ContractFailed, EventKeys.ContractCancelled, EventKeys.ContractVoided,
             EventKeys.ContractExpired, EventKeys.ContractUnfilled, EventKeys.PaymentDefaulted, EventKeys.OpportunityFollowUpCreated
@@ -280,6 +281,18 @@ namespace TheNetwork.History
                 case EventKeys.ContractorOriginLost:
                     r = NewRecord(e, Importance.Notable);
                     break;
+                case EventKeys.ContractorFameChanged:
+                    // Every change is a counter; only a name that has become Established or better is remembered.
+                    s?.Add("fame.changed", 1, now);
+                    if (e.importance < Importance.Notable && e.descriptorKey != FameBand.Established.ToString()) return;
+                    r = NewRecord(e, Importance.Notable);
+                    break;
+                case EventKeys.ContractorAdvanced:
+                    // Routine advancement is a counter; the top rungs of the ladder are remembered.
+                    s?.Add("career.advanced", 1, now);
+                    if (e.importance < Importance.Notable) return;
+                    r = NewRecord(e, Importance.Notable);
+                    break;
             }
             if (r == null) return;
             AddActor(r, e.actor, "contractor", true);
@@ -289,6 +302,7 @@ namespace TheNetwork.History
             r.awareness.scope = AwarenessScope.Public;
             r.outcomeKey = e.reasonKey;
             r.SetNote("actor", e.actorName);
+            if (e.descriptorKey != null) r.SetNote("descriptor", e.descriptorKey);
             if (e.characterName != null) r.SetNote("person", e.characterName);
             if (e.successorName != null) r.SetNote("successor", e.successorName);
             Commit(r);
