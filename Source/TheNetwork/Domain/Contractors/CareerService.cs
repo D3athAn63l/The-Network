@@ -170,19 +170,22 @@ namespace TheNetwork.Domain.Contractors
         }
 
         /// <summary>
-        /// Silver the player has had refunded is taken back from what this contractor was paid on THIS
-        /// contract, in proportion: the contractor keeps exactly the part of its pay that was not refunded.
-        /// Never more than it was paid here; never for an insurance payout (the insurer paid it) nor for
-        /// carried-over funding (another contractor received that). Returns the amount taken back.
+        /// Takes back, from what this contractor was paid on THIS contract, the proportion that corresponds to the
+        /// part of a refund drawn from the player's OWN payments on this contract (<paramref name="fromOwn"/>, the
+        /// refund's typed provenance): the contractor keeps exactly the part of its pay that was not refunded.
+        /// Funding a replacement carried in was paid to a previous contractor: it is neither in the numerator nor in
+        /// the denominator, so it can neither dilute nor enlarge the clawback. Never more than the contractor holds
+        /// here; never for an insurance payout (the insurer paid it). Call it BEFORE the refund record is added to
+        /// the ledger. Returns the amount taken back.
         /// </summary>
-        public int ClawBack(NetworkActor a, Contract c, int refunded)
+        public int ClawBack(NetworkActor a, Contract c, int fromOwn)
         {
             ContractorSimulation sim = a?.Get<ContractorSimulation>();
-            if (sim == null || c == null || refunded <= 0) return 0;
+            if (sim == null || c == null || fromOwn <= 0) return 0;
             long held = c.ContractorHeld();
-            long basis = c.ContractorBearingFunding();
+            long basis = c.OwnBearingRemaining();
             if (held <= 0 || basis <= 0) return 0;
-            long claw = held * Math.Min((long)refunded, basis) / basis;
+            long claw = held * Math.Min((long)fromOwn, basis) / basis;
             claw = Math.Min(claw, held);
             if (claw <= 0) return 0;
             int applied = -MoveFunds(sim, -claw, FundsFlow.ClawBack);
@@ -234,72 +237,148 @@ namespace TheNetwork.Domain.Contractors
         }
 
         /// <summary>
+        /// A written-off group, derived from the operation itself: its outcome was Troubled and it never came home (the
+        /// Return checkpoint was never done). The live call sites know this directly; a retry from the validator
+        /// derives it from this.
+        /// </summary>
+        public static bool WasWrittenOff(Operation op)
+        {
+            return op?.outcome != null && op.outcome.troubledKey != null && op.Find(Checkpoint.Return)?.done != true;
+        }
+
+        /// <summary>The career result of one operation, computed without touching any state (the plan of one small commit).</summary>
+        private sealed class CareerOutcomeDelta
+        {
+            public NetworkActor actor;
+            public ContractorSimulation sim;
+            public CareerRecord next;
+            public int newScore;
+            public FameBand fameBefore;
+            public FameBand fameAfter;
+            public float danger;
+            public int gain;
+        }
+
+        /// <summary>
         /// Applies an operation's result to its contractor's career, exactly once. Called from the end of the
         /// lifecycle only: Finish, an Abort after the outcome was committed, and a Troubled group written
         /// off. Never at the first resolution while the group is still Troubled; never for an operation
         /// from before Phase 2.75 (<c>careerEligible</c> false) nor one aborted before it had an outcome.
-        /// The flag is set first and persisted with the operation, so a repeat, a reload, a retry or a
-        /// recovery cannot apply it again. Fail-soft: a problem here never breaks the lifecycle.
+        ///
+        /// <c>careerOutcomeApplied</c> means the durable career mutation really committed. So the result is PLANNED
+        /// first, as a pure delta that reads state and changes none (anything that can throw happens here); the small
+        /// durable commit (the record's fields and the reputation score) follows, with a snapshot restored if it
+        /// somehow fails; only then is the flag set; and the fame event is published AFTER the commit, in its own
+        /// guard, so a failing consumer can never cause a retry or a duplicate. A failure anywhere leaves the flag
+        /// false and the career state exactly as it was (it is retried by the next validation), and never breaks the
+        /// operation's lifecycle. Returns true only when the result was applied by THIS call.
         /// </summary>
         public bool CommitOutcome(Operation op, bool writtenOff = false)
         {
             if (op == null || !op.careerEligible || op.careerOutcomeApplied || op.outcome == null) return false;
-            op.careerOutcomeApplied = true;
+            CareerOutcomeDelta delta;
             try
             {
-                Apply(op, writtenOff);
-                counters.outcomesApplied++;
+                delta = Plan(op, writtenOff);
             }
             catch (Exception ex)
             {
-                counters.failures++;
-                NetLog.WarnOnce(LogCategory.Operations, "career.commit." + op.id.Value, "Career result of operation " + op.id + " could not be applied: " + ex.Message);
+                return CommitFailed(op, ex);
+            }
+            if (delta == null)
+            {
+                // No contractor (or no simulation) exists to receive a career: nothing can ever be applied.
+                op.careerOutcomeApplied = true;
+                return true;
+            }
+            CareerRecord snapshot = delta.sim.career.Clone();
+            int scoreBefore = delta.actor.reputation.score;
+            try
+            {
+                delta.sim.career.CopyFrom(delta.next);
+                delta.actor.reputation.SetScore(delta.newScore);
+            }
+            catch (Exception ex)
+            {
+                delta.sim.career.CopyFrom(snapshot);
+                delta.actor.reputation.SetScore(scoreBefore);
+                return CommitFailed(op, ex);
+            }
+            op.careerOutcomeApplied = true;
+            counters.outcomesApplied++;
+            int tenth = (int)Math.Min(10, Math.Max(0, Math.Floor(delta.danger * 10f)));
+            counters.dangerTenths[tenth]++;
+            counters.gainByTenth[tenth] += delta.gain;
+            if (delta.gain == 0) counters.zeroGainOutcomes++;
+            if (delta.fameAfter != delta.fameBefore)
+            {
+                counters.fameChanges++;
+                if (delta.actor.status == ActorStatus.Active)
+                {
+                    try
+                    {
+                        PublishFame(delta.actor, delta.fameBefore, delta.fameAfter);
+                    }
+                    catch (Exception ex)
+                    {
+                        NetLog.WarnOnce(LogCategory.Operations, "career.fame." + op.id.Value, "The fame event for operation " + op.id + " could not be published (the career result stands): " + ex.Message);
+                    }
+                }
             }
             return true;
         }
 
-        private void Apply(Operation op, bool writtenOff)
+        private bool CommitFailed(Operation op, Exception ex)
+        {
+            counters.failures++;
+            NetLog.WarnOnce(LogCategory.Operations, "career.commit." + op.id.Value, "Career result of operation " + op.id + " could not be applied (nothing was changed; it will be retried): " + ex.Message);
+            return false;
+        }
+
+        /// <summary>
+        /// The pure plan: what this operation does to its contractor's career. Reads the operation, the actor, its
+        /// record and its score; changes nothing. Null when there is no contractor simulation to apply it to.
+        /// </summary>
+        private CareerOutcomeDelta Plan(Operation op, bool writtenOff)
         {
             NetworkActor a = ctx.actors.Get(op.contractor);
             ContractorSimulation sim = a?.Get<ContractorSimulation>();
-            if (sim == null) return;
-            CareerRecord rec = sim.career;
+            if (sim == null) return null;
             OperationOutcome o = op.outcome;
-            // A group written off never brought the work home: whatever the band said, nothing was secured.
-            OutcomeBand band = o.band;
-            int secured = o.secured;
-            if (writtenOff)
-            {
-                secured = 0;
-                if (band < OutcomeBand.Failure) band = OutcomeBand.Failure;
-            }
+            // A group written off never brought the work home: whatever the resolver rolled (even a Disaster), the
+            // career records ONE ultimate meaning, a Failure with nothing secured. The committed OperationOutcome
+            // keeps its original band: only the career classification differs.
+            OutcomeBand band = writtenOff ? OutcomeBand.Failure : o.band;
+            int secured = writtenOff ? 0 : o.secured;
+            float danger = DangerOf(op);
+            CareerRecord next = sim.career.Clone();
             switch (band)
             {
-                case OutcomeBand.Triumph: rec.triumphs = CareerPolicy.AddSaturating(rec.triumphs, 1); break;
+                case OutcomeBand.Triumph: next.triumphs = CareerPolicy.AddSaturating(next.triumphs, 1); break;
                 case OutcomeBand.Success:
-                case OutcomeBand.CostlySuccess: rec.successes = CareerPolicy.AddSaturating(rec.successes, 1); break;
-                case OutcomeBand.Partial: rec.partials = CareerPolicy.AddSaturating(rec.partials, 1); break;
-                case OutcomeBand.Failure: rec.failures = CareerPolicy.AddSaturating(rec.failures, 1); break;
-                default: rec.disasters = CareerPolicy.AddSaturating(rec.disasters, 1); break;
+                case OutcomeBand.CostlySuccess: next.successes = CareerPolicy.AddSaturating(next.successes, 1); break;
+                case OutcomeBand.Partial: next.partials = CareerPolicy.AddSaturating(next.partials, 1); break;
+                case OutcomeBand.Failure: next.failures = CareerPolicy.AddSaturating(next.failures, 1); break;
+                default: next.disasters = CareerPolicy.AddSaturating(next.disasters, 1); break;
             }
-            rec.casualtiesTaken = CareerPolicy.AddSaturating(rec.casualtiesTaken, (long)o.Killed + o.Wounded + o.Captured + o.Missing);
-            rec.peopleLost = CareerPolicy.AddSaturating(rec.peopleLost, o.Killed);
-            rec.captured = CareerPolicy.AddSaturating(rec.captured, o.Captured);
-            rec.missing = CareerPolicy.AddSaturating(rec.missing, o.Missing);
-            rec.lastOutcomeTick = ctx.Now;
-            float danger = DangerOf(op);
-            int gain = CareerPolicy.ReputationGain(danger, band, secured, o.requested, a.reputation.score);
-            int tenth = (int)Math.Min(10, Math.Max(0, Math.Floor(danger * 10f)));
-            counters.dangerTenths[tenth]++;
-            counters.gainByTenth[tenth] += gain;
-            if (gain == 0) counters.zeroGainOutcomes++;
+            next.casualtiesTaken = CareerPolicy.AddSaturating(next.casualtiesTaken, (long)o.Killed + o.Wounded + o.Captured + o.Missing);
+            next.peopleLost = CareerPolicy.AddSaturating(next.peopleLost, o.Killed);
+            next.captured = CareerPolicy.AddSaturating(next.captured, o.Captured);
+            next.missing = CareerPolicy.AddSaturating(next.missing, o.Missing);
+            next.lastOutcomeTick = ctx.Now;
             // The most dangerous work at least partly done, whether or not it still earned reputation.
             if (CareerPolicy.OutcomeMultiplier(band, secured, o.requested) > 0f)
             {
                 int scaled = CareerPolicy.ScaledDanger(danger);
-                if (scaled > rec.highestDanger) rec.highestDanger = scaled;
+                if (scaled > next.highestDanger) next.highestDanger = scaled;
             }
-            if (gain > 0) AddReputation(a, gain, true);
+            PublicReputation rep = a.reputation;
+            int oldScore = rep.score;
+            FameBand before = rep.fame;
+            int gain = CareerPolicy.ReputationGain(danger, band, secured, o.requested, oldScore);
+            int newScore = CareerPolicy.ClampScore((long)oldScore + gain);
+            if (gain > 0) next.reputationEarned = CareerPolicy.AddSaturating(next.reputationEarned, newScore - oldScore);
+            return new CareerOutcomeDelta { actor = a, sim = sim, next = next, newScore = newScore, fameBefore = before, fameAfter = CareerPolicy.FameFor(newScore), danger = danger, gain = gain };
         }
 
         // ================================================================== views of state that already exists
@@ -496,11 +575,11 @@ namespace TheNetwork.Domain.Contractors
                     if (findings != null) findings.Add("Operation " + op.id + ": carries a career result although it predates careers (reported, not changed).");
                     continue;
                 }
-                // Finished with a committed outcome but its career result never applied: apply it now (idempotent).
+                // Finished with a committed outcome but its career result never committed (it failed, or it was missed):
+                // apply it now. Idempotent: the flag means the durable career mutation really committed.
                 if (op.IsFinished && op.careerEligible && !op.careerOutcomeApplied && op.outcome != null)
                 {
-                    bool writtenOff = op.status == OpStatus.Aborted && op.outcome.troubledKey != null;
-                    if (CommitOutcome(op, writtenOff))
+                    if (CommitOutcome(op, WasWrittenOff(op)))
                     {
                         if (findings != null) findings.Add("Operation " + op.id + ": finished without its career result; applied now.");
                         repaired++;

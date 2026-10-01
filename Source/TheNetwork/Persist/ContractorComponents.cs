@@ -318,6 +318,35 @@ namespace TheNetwork.Persist
         /// <summary>Equipment advances so far.</summary>
         public int advancementCount;
 
+        /// <summary>A copy of every field: the career result is planned on a copy and committed as a whole.</summary>
+        public CareerRecord Clone()
+        {
+            CareerRecord r = new CareerRecord();
+            r.CopyFrom(this);
+            return r;
+        }
+
+        /// <summary>Overwrites every field from <paramref name="o"/> (primitive assignments only: it cannot fail half-way).</summary>
+        public void CopyFrom(CareerRecord o)
+        {
+            legacyResolved = o.legacyResolved;
+            triumphs = o.triumphs;
+            successes = o.successes;
+            partials = o.partials;
+            failures = o.failures;
+            disasters = o.disasters;
+            highestDanger = o.highestDanger;
+            careerEarnings = o.careerEarnings;
+            casualtiesTaken = o.casualtiesTaken;
+            peopleLost = o.peopleLost;
+            captured = o.captured;
+            missing = o.missing;
+            reputationEarned = o.reputationEarned;
+            lastOutcomeTick = o.lastOutcomeTick;
+            lastAdvancementTick = o.lastAdvancementTick;
+            advancementCount = o.advancementCount;
+        }
+
         /// <summary>Jobs this record classified.</summary>
         public long Classified => (long)triumphs + successes + partials + failures + disasters;
 

@@ -90,6 +90,14 @@ namespace TheNetwork.Domain.Intel
         /// </summary>
         public int contractorSilver;
 
+        /// <summary>
+        /// Phase 2.75, a contract ledger's <c>Refund</c> record only: how much of THIS refund was drawn from
+        /// funding the player paid on THIS contract (never carried-in funding, which was paid to a previous
+        /// contractor). The contractor's clawback is proportional to this and to nothing else. 0 on every other
+        /// record, and on a refund written before this field existed.
+        /// </summary>
+        public int fromOwnFunding;
+
         public bool IsExternal => direction == MoneyDirection.PlayerPaid || direction == MoneyDirection.PlayerRefunded;
 
         public void ExposeData()
@@ -103,6 +111,7 @@ namespace TheNetwork.Domain.Intel
             Scribe_Values.Look(ref round, "round", 0);
             Scribe_Values.Look(ref pending, "pending", false);
             Scribe_Values.Look(ref contractorSilver, "contractorSilver", 0);
+            Scribe_Values.Look(ref fromOwnFunding, "fromOwn", 0);
         }
     }
 

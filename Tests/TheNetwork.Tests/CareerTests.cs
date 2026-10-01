@@ -50,6 +50,9 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Career.Record_AbortBeforeOutcomeGivesNothing", RecordAbortBefore));
             t.Add(new KeyValuePair<string, Action>("Career.Record_TroubledAppliesOnlyAtTheEnd", RecordTroubled));
             t.Add(new KeyValuePair<string, Action>("Career.Record_RepeatedTerminalCallsRetriesAndDevAdvanceDoNotDuplicate", RecordRepeats));
+            t.Add(new KeyValuePair<string, Action>("Career.Record_WrittenOffDisasterCountsAsFailure", RecordWrittenOffDisaster));
+            t.Add(new KeyValuePair<string, Action>("Career.Record_FailedCareerCommitRemainsRetryable", RecordFailedCommitRetryable));
+            t.Add(new KeyValuePair<string, Action>("Career.Record_FailedCommitPublishesNoDuplicateFameEvent", RecordFailedCommitNoDuplicateEvent));
 
             // C. Money
             t.Add(new KeyValuePair<string, Action>("Career.Wealth_NormalContractCreditsContractor", WealthNormal));
@@ -61,6 +64,9 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Career.Wealth_SaveLoadNoDuplicateCredit", WealthSaveLoad));
             t.Add(new KeyValuePair<string, Action>("Career.Wealth_SaturatingArithmeticNoOverflow", WealthSaturating));
             t.Add(new KeyValuePair<string, Action>("Career.Wealth_RenegotiationAndBalanceCreditOnce", WealthRenegotiation));
+            t.Add(new KeyValuePair<string, Action>("Career.Wealth_ReplacementBalanceRefundClawsReplacementExactly", WealthReplacementBalanceRefund));
+            t.Add(new KeyValuePair<string, Action>("Career.Wealth_ReplacementVoidClawsOnlyReplacementOwnedMoney", WealthReplacementVoid));
+            t.Add(new KeyValuePair<string, Action>("Career.Wealth_PurposeScopedRefundDoesNotUseInheritedFunding", WealthPurposeScoped));
 
             // D. Advancement
             t.Add(new KeyValuePair<string, Action>("Career.Advancement_RequiresReputation", AdvanceReputation));
@@ -606,6 +612,198 @@ namespace TheNetwork.Tests
             T.Eq(score, team.reputation.score, "and nothing moved afterwards");
         }
 
+        /// <summary>A Troubled Disaster that is written off: the committed outcome stays a Disaster, the career says Failure.</summary>
+        private static void RecordWrittenOffDisaster()
+        {
+            TestNet n = ProcurementTests.World(0);
+            NetworkActor fixer = ProcurementTests.Fixer(n);
+            NetworkActor team = ProcurementTests.Reliable(n);
+            team.reputation.SetScore(0);
+            ProcurementDevOverrides.forceBand = OutcomeBand.Disaster;
+            ProcurementDevOverrides.forceTroubled = "Missing";
+            Contract c = ProcurementTests.Awarded(n, fixer, team);
+            Operation op = ProcurementTests.Op(n, c);
+            ProcurementTests.RunUntil(n, () => op.status == OpStatus.Troubled || c.IsTerminal);
+            T.Eq(OpStatus.Troubled, op.status, "a Disaster, and Troubled");
+            T.Eq(OutcomeBand.Disaster, op.outcome.band, "the resolver rolled a Disaster");
+            T.Eq(0L, Sim(team).career.Classified, "nothing on the record while it is still Troubled");
+            ProcurementDevOverrides.forceTroubledFound = false;
+            n.ctx.Operations.DevAdvance(op);
+            ProcurementDevOverrides.Clear();
+            CareerRecord r = Sim(team).career;
+            T.Check(op.IsFinished && op.careerOutcomeApplied, "written off: the career result is applied");
+            T.Eq(1, r.failures, "the written-off job counts as a Failure");
+            T.Eq(0, r.disasters, "and NOT as a Disaster");
+            T.Eq(0, r.triumphs + r.successes + r.partials, "nothing else");
+            T.Eq(1L, r.Classified, "exactly one classified job");
+            T.Eq(0, team.reputation.score, "no reputation");
+            T.Eq(0, r.reputationEarned, "none earned");
+            T.Eq(0, r.highestDanger, "no danger counted: nothing was done");
+            T.Eq(OutcomeBand.Disaster, op.outcome.band, "the committed OperationOutcome is historical truth and still says Disaster");
+            OperationOutcome o = op.outcome;
+            T.Eq(o.Killed + o.Wounded + o.Captured + o.Missing, r.casualtiesTaken, "its casualties are counted once, from the committed outcome");
+            // Exactly once.
+            T.Check(!n.ctx.Career.CommitOutcome(op, true) && !n.ctx.Career.CommitOutcome(op, false), "no second application, whatever the flag");
+            n.ctx.Operations.DevAdvance(op);
+            n.ctx.Operations.Finish(op);
+            n.ctx.Career.Validate(new List<string>());
+            T.Check(r.failures == 1 && r.disasters == 0 && r.Classified == 1, "repeats, a validation and a dev advance change nothing");
+            NetworkState loaded = CorrectionTests.SaveLoad(n);
+            CorrectionTests.Swap(n, loaded);
+            CareerRecord again = Sim(n.ctx.actors.Get(team.id)).career;
+            T.Check(again.failures == 1 && again.disasters == 0, "and so does a reload");
+            T.Check(WrittenOffDerivation(n, loaded), "a retry derives 'written off' from the operation itself");
+        }
+
+        private static bool WrittenOffDerivation(TestNet n, NetworkState s)
+        {
+            foreach (Operation op in s.operations.operations) if (op.outcome != null && op.outcome.troubledKey != null) return CareerService.WasWrittenOff(op);
+            return false;
+        }
+
+        private static bool SameRecord(CareerRecord a, CareerRecord b)
+        {
+            return a.legacyResolved == b.legacyResolved && a.triumphs == b.triumphs && a.successes == b.successes && a.partials == b.partials && a.failures == b.failures && a.disasters == b.disasters
+                && a.highestDanger == b.highestDanger && a.careerEarnings == b.careerEarnings && a.casualtiesTaken == b.casualtiesTaken && a.peopleLost == b.peopleLost && a.captured == b.captured
+                && a.missing == b.missing && a.reputationEarned == b.reputationEarned && a.lastOutcomeTick == b.lastOutcomeTick && a.lastAdvancementTick == b.lastAdvancementTick && a.advancementCount == b.advancementCount;
+        }
+
+        /// <summary>A finished operation whose career result was never applied (as if the lifecycle commit had been missed or failed).</summary>
+        private static Operation FinishedWithoutCareerResult(TestNet n, NetworkActor fixer, NetworkActor who, OutcomeBand band, bool troubledWrittenOff)
+        {
+            ProcurementDevOverrides.forceBand = band;
+            if (troubledWrittenOff) ProcurementDevOverrides.forceTroubled = "Missing";
+            else ProcurementDevOverrides.forceNotTroubled = true;
+            Contract c = ProcurementTests.Awarded(n, fixer, who);
+            Operation op = ProcurementTests.Op(n, c);
+            op.careerEligible = false; // the lifecycle's commit is skipped, exactly as for an old operation
+            if (troubledWrittenOff)
+            {
+                ProcurementTests.RunUntil(n, () => op.status == OpStatus.Troubled || c.IsTerminal);
+                ProcurementDevOverrides.forceTroubledFound = false;
+                n.ctx.Operations.DevAdvance(op);
+            }
+            else ProcurementTests.RunUntil(n, () => c.IsTerminal);
+            ProcurementDevOverrides.Clear();
+            T.Check(op.IsFinished && !op.careerOutcomeApplied && op.outcome != null, "the operation finished and no career result was applied");
+            op.careerEligible = true;
+            return op;
+        }
+
+        /// <summary>
+        /// "Applied" means applied: a commit that cannot complete changes NOTHING (no counter, no score, no event), leaves the
+        /// flag false, and is applied exactly once when the fault is repaired (the next validation, or any retry).
+        /// </summary>
+        private static void RecordFailedCommitRetryable()
+        {
+            TestNet n = ProcurementTests.World(0);
+            NetworkActor fixer = ProcurementTests.Fixer(n);
+            NetworkActor team = ProcurementTests.Reliable(n);
+            team.reputation.SetScore(98);
+            Operation op = FinishedWithoutCareerResult(n, fixer, team, OutcomeBand.Triumph, false);
+            ContractorSimulation sim = Sim(team);
+            PublicReputation rep = team.reputation;
+            CareerRecord realRecord = sim.career;
+            CareerRecord before = realRecord.Clone();
+            int fameEvents = n.recorder.Count(EventKeys.ContractorFameChanged), failures0 = n.ctx.Career.counters.failures, applied0 = n.ctx.Career.counters.outcomesApplied;
+
+            // Fault 1: the reputation is missing (corrupt state). The record would have been changed first by a commit that marks itself done early.
+            team.reputation = null;
+            T.Check(!n.ctx.Career.CommitOutcome(op), "the commit fails and says so");
+            team.reputation = rep;
+            T.Check(!op.careerOutcomeApplied, "the flag is NOT set");
+            T.Check(SameRecord(before, sim.career), "no counter of the record changed (no partial state)");
+            T.Eq(98, rep.score, "the reputation is untouched");
+            T.Eq(fameEvents, n.recorder.Count(EventKeys.ContractorFameChanged), "no fame event was published");
+            T.Eq(failures0 + 1, n.ctx.Career.counters.failures, "the failure was counted");
+            T.Eq(applied0, n.ctx.Career.counters.outcomesApplied, "and nothing counted as applied");
+
+            // Fault 2: the career record is missing.
+            sim.career = null;
+            T.Check(!n.ctx.Career.CommitOutcome(op), "a second fault fails too");
+            sim.career = realRecord;
+            T.Check(!op.careerOutcomeApplied && SameRecord(before, sim.career) && rep.score == 98, "and again nothing changed and nothing is marked applied");
+
+            // The fault is repaired: validation applies it, exactly once.
+            List<string> findings = new List<string>();
+            n.ctx.Career.Validate(findings);
+            T.Check(findings.Exists(f => f.Contains("career result")), "the validation found and applied it (" + string.Join("; ", findings.ToArray()) + ")");
+            T.Check(op.careerOutcomeApplied, "now it is applied");
+            T.Eq(1L, sim.career.Classified, "exactly one result");
+            T.Eq(1, sim.career.triumphs, "a triumph");
+            int expected = CareerPolicy.ReputationGain(CareerService.DangerOf(op), OutcomeBand.Triumph, op.outcome.secured, op.outcome.requested, 98);
+            T.Check(expected > 0, "it earns reputation (" + expected + ")");
+            T.Eq(98 + expected, rep.score, "exactly the policy's figure, once");
+            T.Eq(fameEvents + 1, n.recorder.Count(EventKeys.ContractorFameChanged), "and one fame event for the band it crossed (Unknown to Local)");
+            T.Eq(applied0 + 1, n.ctx.Career.counters.outcomesApplied, "counted once");
+
+            // Nothing repeats: another retry, another validation, a reload.
+            T.Check(!n.ctx.Career.CommitOutcome(op), "no retry applies it again");
+            List<string> second = new List<string>();
+            n.ctx.Career.Validate(second);
+            T.Check(!second.Exists(f => f.Contains("career result")), "a second validation finds nothing to do");
+            NetworkState loaded = CorrectionTests.SaveLoad(n);
+            CorrectionTests.Swap(n, loaded);
+            NetworkActor again = n.ctx.actors.Get(team.id);
+            n.ctx.Career.Validate(new List<string>());
+            T.Check(Sim(again).career.Classified == 1 && again.reputation.score == 98 + expected, "and a reload followed by a validation changes nothing");
+            T.Eq(fameEvents + 1, n.recorder.Count(EventKeys.ContractorFameChanged), "still exactly one fame event");
+
+            // A written-off Disaster whose commit was missed is retried as what it is: a Failure.
+            TestNet w = ProcurementTests.World(0);
+            NetworkActor f2 = ProcurementTests.Fixer(w);
+            NetworkActor t2 = ProcurementTests.Reliable(w);
+            Operation op2 = FinishedWithoutCareerResult(w, f2, t2, OutcomeBand.Disaster, true);
+            T.Check(CareerService.WasWrittenOff(op2) && op2.outcome.band == OutcomeBand.Disaster, "a written-off Disaster");
+            w.ctx.Career.Validate(new List<string>());
+            T.Check(Sim(t2).career.failures == 1 && Sim(t2).career.disasters == 0 && op2.careerOutcomeApplied, "the retry classifies it as a Failure, once");
+        }
+
+        private sealed class ThrowingConsumer : IEventConsumer
+        {
+            public int calls;
+            public string Name => "ThrowingConsumer";
+
+            public void Handle(NetworkEvent evt)
+            {
+                calls++;
+                throw new InvalidOperationException("a consumer of the fame event failed");
+            }
+        }
+
+        /// <summary>The fame event is published AFTER the durable commit: a failing consumer cannot undo, retry or duplicate the result.</summary>
+        private static void RecordFailedCommitNoDuplicateEvent()
+        {
+            TestNet n = ProcurementTests.World(0);
+            NetworkActor fixer = ProcurementTests.Fixer(n);
+            NetworkActor team = ProcurementTests.Reliable(n);
+            team.reputation.SetScore(98);
+            ThrowingConsumer thrower = new ThrowingConsumer();
+            n.bus.Register(ConsumerOrder.Presentation, thrower, EventKeys.ContractorFameChanged);
+            Operation op = FinishedWithoutCareerResult(n, fixer, team, OutcomeBand.Triumph, false);
+
+            // A failed commit publishes nothing.
+            PublicReputation rep = team.reputation;
+            team.reputation = null;
+            n.ctx.Career.CommitOutcome(op);
+            team.reputation = rep;
+            T.Eq(0, thrower.calls, "the failed commit published no fame event");
+            T.Eq(0, n.recorder.Count(EventKeys.ContractorFameChanged), "to nobody");
+
+            // The repaired commit publishes one, whose consumer throws: the result still stands, once.
+            T.Check(n.ctx.Career.CommitOutcome(op), "the repaired commit applies");
+            T.Check(op.careerOutcomeApplied, "applied");
+            T.Eq(1, thrower.calls, "the event reached the (throwing) consumer once");
+            T.Eq(1, n.recorder.Count(EventKeys.ContractorFameChanged), "and every other consumer once");
+            T.Check(rep.score > 98 && rep.fame == FameBand.Local, "the reputation stands (" + rep.score + ")");
+            T.Eq(1L, Sim(team).career.Classified, "the record holds one result");
+            T.Check(n.diag.failedConsumers.Count >= 1, "the bus contained the consumer's exception");
+            int score = rep.score;
+            T.Check(!n.ctx.Career.CommitOutcome(op), "a failing consumer does not make the commit retry");
+            n.ctx.Career.Validate(new List<string>());
+            T.Check(Sim(team).career.Classified == 1 && rep.score == score && thrower.calls == 1 && n.recorder.Count(EventKeys.ContractorFameChanged) == 1, "nothing is duplicated: not the result, not the event");
+        }
+
         // ================================================================== C. money
 
         private static void WealthNormal()
@@ -698,7 +896,7 @@ namespace TheNetwork.Tests
             NetworkActor team = ProcurementTests.Reliable(n);
             Contract c = ProcurementTests.Awarded(n, fixer, team, "TestSteel", 150, false);
             int held = c.ContractorHeld();
-            int basis = c.ContractorBearingFunding();
+            int basis = c.OwnBearingRemaining();
             T.Check(held > 0 && basis > 0, "paid at award");
             T.Check(n.ctx.Procurement.Cancel(c.id).ok, "cancelled while preparing");
             MoneyRecord refund = c.ledger.Find(m => m.direction == MoneyDirection.PlayerRefunded);
@@ -843,6 +1041,222 @@ namespace TheNetwork.Tests
             T.Eq(ContractStatus.Fulfilled, c.status, "delivered");
             T.Eq(CreditOf(c), c.ContractorHeld(), "nothing taken back");
             Books(n, "renegotiation");
+        }
+
+        /// <summary>
+        /// Contractor A takes a job (deposit, and a premium contribution), is lost before the work, and the Fixer hands it
+        /// to replacement B on a NEW linked contract whose funding is carried over by TransferOut / TransferIn.
+        /// </summary>
+        private static Contract ReplacedJob(TestNet n, NetworkActor fixer, NetworkActor a, out Contract parent, int premium = 300)
+        {
+            Contract first = ProcurementTests.Post(n, fixer, "TestSteel", 150, a, premium);
+            parent = first;
+            Offer o = ProcurementTests.Bid(n, first);
+            T.Check(o != null && n.ctx.Procurement.Accept(o.id, false).ok, "A's quote is accepted");
+            n.ctx.Contractors.EndActor(a, "Test");
+            ProcurementTests.RunUntil(n, () => first.IsTerminal, 20);
+            T.Eq(1, first.lineage.children.Count, "A was replaced");
+            return first.lineage.children.Count == 0 ? null : n.ctx.contracts.Get(first.lineage.children[0]);
+        }
+
+        private static MoneyRecord OnLedger(Contract c, MoneyDirection dir, MoneyPurpose purpose)
+        {
+            return c.ledger.Find(m => m.direction == dir && m.purpose == purpose);
+        }
+
+        /// <summary>
+        /// A is paid the original deposit and lost; B inherits only the funding POSITION (credits B nothing), is later paid a real
+        /// balance, and that balance is refunded in full: B gives back exactly its share of that balance, however large the
+        /// inherited deposit was, and A's money is not touched.
+        /// </summary>
+        private static void WealthReplacementBalanceRefund()
+        {
+            for (int pending = 0; pending < 2; pending++)
+            {
+                TestNet n = ProcurementTests.World(0);
+                NetworkActor fixer = ProcurementTests.Fixer(n, "Premium");
+                NetworkActor a = ProcurementTests.Reliable(n);
+                NetworkActor b = ProcurementTests.Reliable(n);
+                int charged0 = n.pay.charged, refunded0 = n.pay.refunded;
+                Contract parent;
+                Contract child = ReplacedJob(n, fixer, a, out parent);
+                if (child == null) return;
+                int aHeld = parent.ContractorHeld();
+                T.Check(aHeld > 0, "A was paid the original deposit share");
+                foreach (MoneyRecord m in child.ledger) if (m.direction == MoneyDirection.TransferIn) T.Eq(0, m.contractorSilver, "the inherited TransferIn credits B with zero");
+                NetworkActor who = n.ctx.actors.Get(ProcurementTests.Op(n, child).contractor);
+                T.Check(who.id != a.id, "another contractor took over");
+                T.Eq(0, child.ContractorHeld(), "B holds nothing from the carried-over deposit");
+                T.Eq(0, child.OwnBearingRemaining(), "and the player has paid nothing on B's contract yet");
+                T.Check(child.TotalFunding() > 0, "although the contract inherited a funding position of " + child.TotalFunding());
+
+                // B delivers; the balance is paid; the pods never land and the Hold runs out: the balance is refunded in full.
+                ProcurementDevOverrides.forceBand = OutcomeBand.Triumph;
+                ProcurementDevOverrides.forceNotTroubled = true;
+                n.delivery.failNextDeliveries = int.MaxValue;
+                if (pending == 1) n.pay.canRefund = false;
+                ProcurementTests.RunUntil(n, () => child.IsTerminal, 80);
+                ProcurementDevOverrides.Clear();
+                T.Eq(ContractStatus.Failed, child.status, "undeliverable: the contract fails");
+                MoneyRecord balance = OnLedger(child, MoneyDirection.PlayerPaid, MoneyPurpose.Balance);
+                MoneyRecord refund = OnLedger(child, MoneyDirection.PlayerRefunded, MoneyPurpose.Refund);
+                T.Check(balance != null && refund != null, "a real balance was paid, then refunded");
+                if (balance == null || refund == null) return;
+                int credited = balance.contractorSilver;
+                T.Check(credited > 0 && credited < balance.silver, "B was credited its share of the balance (" + credited + " of " + balance.silver + ")");
+                T.Eq(balance.silver, refund.silver, "the balance is refunded in full: the player's amount is unchanged");
+                T.Eq(balance.silver, refund.fromOwnFunding, "the whole refund was drawn from funding the player paid ON THIS contract");
+                T.Eq(-credited, refund.contractorSilver, "B loses exactly the contractor share of the refunded balance, not a diluted fraction of it");
+                T.Check(child.TotalFunding() > balance.silver, "(the inherited deposit would have diluted it: the funding position was " + child.TotalFunding() + ")");
+                T.Eq(0, child.ContractorHeld(), "B ends with nothing from this contract");
+                T.Eq(0, Sim(who).career.careerEarnings, "no career earnings");
+                T.Eq(aHeld, parent.ContractorHeld(), "A's original contractor-owned money is untouched");
+                T.Eq(-credited, (int)n.ctx.Career.counters.Flow(FundsFlow.ClawBack), "the only clawback in the world is B's");
+                T.Eq(pending == 1, refund.pending, "pending exactly as the port said");
+                T.Eq(pending == 1 ? 0 : balance.silver, n.pay.refunded - refunded0, "the port has delivered the refund, or not yet");
+                if (pending == 0) MoneyLineageTests.AssertLineage(n, parent, charged0, refunded0, "delivered");
+                Books(n, "replacement balance refund");
+
+                // A pending refund retried, and a reload, never claw twice.
+                long claw = n.ctx.Career.counters.Flow(FundsFlow.ClawBack);
+                int heldNow = child.ContractorHeld(), fundsB = Sim(who).funds;
+                n.pay.canRefund = true;
+                n.AdvanceTo(n.clock.Now + 3 * Ticks.PerDay);
+                T.Check(!child.HasPendingRefund(), "no refund is pending any more");
+                T.Eq(balance.silver, n.pay.refunded - refunded0, "the player received exactly the balance back, once");
+                MoneyLineageTests.AssertLineage(n, parent, charged0, refunded0, "after the retry");
+                T.Eq(claw, n.ctx.Career.counters.Flow(FundsFlow.ClawBack), "the retry clawed nothing more");
+                NetworkState loaded = CorrectionTests.SaveLoad(n);
+                CorrectionTests.Swap(n, loaded);
+                Contract childAgain = n.ctx.contracts.Get(child.id);
+                T.Eq(-credited, OnLedger(childAgain, MoneyDirection.PlayerRefunded, MoneyPurpose.Refund).contractorSilver, "the attribution survives the reload");
+                T.Eq(balance.silver, OnLedger(childAgain, MoneyDirection.PlayerRefunded, MoneyPurpose.Refund).fromOwnFunding, "and so does its provenance");
+                List<string> findings = new List<string>();
+                n.ctx.Career.Validate(findings);
+                T.Eq(0, findings.Count, "a validation changes nothing (" + string.Join("; ", findings.ToArray()) + ")");
+                n.AdvanceTo(n.clock.Now + 5 * Ticks.PerDay);
+                T.Check(Sim(n.ctx.actors.Get(who.id)).funds <= fundsB + 1000000 && childAgain.ContractorHeld() == heldNow, "later days claw nothing either");
+                T.Eq(claw, n.ctx.Career.counters.Flow(FundsFlow.ClawBack), "the clawback total never moved");
+            }
+        }
+
+        /// <summary>A technical invalidation takes back only what the REPLACEMENT was paid: never the lost contractor's pay, never anything for carried-in funding.</summary>
+        private static void WealthReplacementVoid()
+        {
+            // (a) After B was paid a balance: everything B owns on this contract is taken back, nothing of A's.
+            TestNet n = ProcurementTests.World(0);
+            NetworkActor fixer = ProcurementTests.Fixer(n, "Premium", "Basic");
+            NetworkActor a = ProcurementTests.Reliable(n);
+            NetworkActor b = ProcurementTests.Reliable(n);
+            int charged0 = n.pay.charged, refunded0 = n.pay.refunded;
+            Contract parent;
+            Contract child = ReplacedJob(n, fixer, a, out parent);
+            if (child == null) return;
+            int aHeld = parent.ContractorHeld();
+            ProcurementDevOverrides.forceBand = OutcomeBand.Triumph;
+            ProcurementDevOverrides.forceNotTroubled = true;
+            n.delivery.failCreation = true; // after the balance is charged the item cannot be made: a technical void
+            ProcurementTests.RunUntil(n, () => child.IsTerminal, 40);
+            ProcurementDevOverrides.Clear();
+            T.Eq(ContractStatus.Voided, child.status, "voided technically");
+            MoneyRecord balance = OnLedger(child, MoneyDirection.PlayerPaid, MoneyPurpose.Balance);
+            MoneyRecord refund = OnLedger(child, MoneyDirection.PlayerRefunded, MoneyPurpose.Refund);
+            T.Check(balance != null && refund != null && balance.contractorSilver > 0, "B was paid a balance, then everything was refunded");
+            if (balance == null || refund == null) return;
+            T.Eq(child.TransferredIn() + balance.silver, refund.silver, "the player gets back the carried-in funding and the balance (what it held)");
+            T.Eq(balance.silver, refund.fromOwnFunding, "only the balance is B's own funding on this contract");
+            T.Eq(-balance.contractorSilver, refund.contractorSilver, "B returns exactly what it was paid here");
+            T.Eq(0, child.ContractorHeld(), "a full void leaves B nothing: no windfall");
+            T.Eq(aHeld, parent.ContractorHeld(), "A keeps what it was paid on the parent contract (frozen replacement semantics)");
+            T.Eq(-balance.contractorSilver, (int)n.ctx.Career.counters.Flow(FundsFlow.ClawBack), "and nothing of A's was taken back");
+            T.Eq(child.ExternalCharged() + child.TransferredIn(), child.ExternalRefunded(), "everything the contract held went back to the player");
+            MoneyLineageTests.AssertLineage(n, parent, charged0, refunded0, "replacement void");
+            Books(n, "replacement void");
+
+            // (b) Voided before B was paid anything: B owns nothing here, so nothing is taken from B or A.
+            TestNet m = ProcurementTests.World(0);
+            NetworkActor f2 = ProcurementTests.Fixer(m, "Premium", "Basic");
+            NetworkActor a2 = ProcurementTests.Reliable(m);
+            NetworkActor b2 = ProcurementTests.Reliable(m);
+            Contract p2;
+            Contract c2 = ReplacedJob(m, f2, a2, out p2);
+            if (c2 == null) return;
+            int a2Held = p2.ContractorHeld();
+            long credit0 = m.ctx.Career.counters.Flow(FundsFlow.Credit);
+            m.ctx.Procurement.Void(c2, Causes.DefMissing);
+            MoneyRecord r2 = OnLedger(c2, MoneyDirection.PlayerRefunded, MoneyPurpose.Refund);
+            T.Check(r2 != null && r2.silver > 0, "the carried-in funding went back to the player");
+            T.Eq(0, r2.fromOwnFunding, "none of it was funding the player paid on this contract");
+            T.Eq(0, r2.contractorSilver, "so nothing was taken from the replacement");
+            T.Eq(0L, m.ctx.Career.counters.Flow(FundsFlow.ClawBack), "nothing was clawed back anywhere");
+            T.Eq(a2Held, p2.ContractorHeld(), "and A's pay is untouched");
+            T.Eq(credit0, m.ctx.Career.counters.Flow(FundsFlow.Credit), "nobody was credited");
+            Books(m, "replacement void before balance");
+        }
+
+        /// <summary>The clawback follows the funding actually refunded: carried-in funding is neither in the numerator nor in the denominator.</summary>
+        private static void WealthPurposeScoped()
+        {
+            // A synthetic contract: a deposit inherited from a replaced contract (paid to someone else) and a balance the
+            // player paid here, of which this contractor kept 300 of 800.
+            TestNet n = ProcurementTests.World(0);
+            NetworkActor who = Solo(n);
+            SetFunds(n, who, 10000);
+            Contract c = new Contract();
+            c.ledger.Add(new MoneyRecord { silver = 1000, direction = MoneyDirection.TransferIn, purpose = MoneyPurpose.Deposit });
+            c.ledger.Add(new MoneyRecord { silver = 200, direction = MoneyDirection.TransferIn, purpose = MoneyPurpose.Premium });
+            c.ledger.Add(new MoneyRecord { silver = 800, direction = MoneyDirection.PlayerPaid, purpose = MoneyPurpose.Balance, contractorSilver = 300 });
+            T.Eq(800, c.OwnBearingRemaining(), "only what the player paid HERE is the contractor-bearing funding");
+            T.Eq(2000, c.TotalFunding(), "(the funding position is far larger)");
+            T.Eq(0, c.OwnDrawnBy(RefundScope.Of(deposit: 1000)), "a refund of the inherited deposit draws nothing of the contractor's");
+            T.Eq(0, c.OwnDrawnBy(RefundScope.Of(deposit: 500, premium: 200)), "nor does any share of the inherited deposit and premium");
+            T.Eq(800, c.OwnDrawnBy(RefundScope.Of(balance: 800)), "a refund of the balance draws exactly the balance");
+            T.Eq(400, c.OwnDrawnBy(RefundScope.Of(deposit: 700, balance: 400)), "a mixed refund draws only its balance part");
+            T.Eq(800, c.OwnDrawnBy(RefundScope.Everything), "a full void draws all the player's own payments here");
+            T.Eq(0, c.OwnDrawnBy(RefundScope.None), "an insurance payout draws nothing");
+            T.Eq(0, c.OwnDrawnBy(null), "no scope, no draw");
+            int funds = Sim(who).funds;
+            T.Eq(0, n.ctx.Career.ClawBack(who, c, c.OwnDrawnBy(RefundScope.Of(deposit: 1000))), "refunding the inherited deposit takes nothing from the contractor");
+            T.Eq(funds, Sim(who).funds, "its funds did not move");
+            int claw = n.ctx.Career.ClawBack(who, c, c.OwnDrawnBy(RefundScope.Of(balance: 400)));
+            T.Eq(150, claw, "refunding half the balance takes back half of the 300 it kept (the 1,200 inherited does not dilute it)");
+            T.Eq(funds - 150, Sim(who).funds, "from its funds");
+
+            // Through the real flows: a replacement that is cancelled while preparing gets back inherited funding only.
+            TestNet m = ProcurementTests.World(0);
+            NetworkActor fixer = ProcurementTests.Fixer(m, "Premium");
+            NetworkActor a = ProcurementTests.Reliable(m);
+            NetworkActor b = ProcurementTests.Reliable(m);
+            Contract parent;
+            Contract child = ReplacedJob(m, fixer, a, out parent);
+            if (child == null) return;
+            int aHeld = parent.ContractorHeld();
+            int dep = child.Funding(MoneyPurpose.Deposit), prem = child.Funding(MoneyPurpose.Premium);
+            T.Check(dep > 0 && prem > 0, "the replacement inherited a deposit and a premium");
+            T.Check(m.ctx.Procurement.Cancel(child.id).ok, "the client cancels the replacement while it prepares");
+            MoneyRecord refund = OnLedger(child, MoneyDirection.PlayerRefunded, MoneyPurpose.Refund);
+            T.Check(refund != null, "a partial refund by the Fixer's policy");
+            T.Eq((int)Math.Round((dep + prem) * 0.4f), refund.silver, "the player's amount is the policy's, unchanged by any attribution");
+            T.Eq(0, refund.fromOwnFunding, "none of it was the replacement's own funding");
+            T.Eq(0, refund.contractorSilver, "so none of it is clawed from the replacement");
+            T.Eq(0L, m.ctx.Career.counters.Flow(FundsFlow.ClawBack), "nothing anywhere");
+            T.Eq(aHeld, parent.ContractorHeld(), "and A's pay is untouched");
+            Books(m, "replacement cancel");
+
+            // A first-generation cancel (deposit and premium are the player's own payments here) is still proportional.
+            TestNet k = ProcurementTests.World(0);
+            NetworkActor fx = ProcurementTests.Fixer(k, "Premium");
+            NetworkActor team = ProcurementTests.Reliable(k);
+            Contract own = ProcurementTests.Post(k, fx, "TestSteel", 150, team, 400);
+            Offer q = ProcurementTests.Bid(k, own);
+            T.Check(q != null && k.ctx.Procurement.Accept(q.id, false).ok, "accepted");
+            int held = own.ContractorHeld(), remaining = own.OwnBearingRemaining();
+            T.Check(held > 0 && remaining == own.Funding(MoneyPurpose.Deposit) + own.Funding(MoneyPurpose.Premium), "all of its funding is the player's own payment");
+            k.ctx.Procurement.Cancel(own.id);
+            MoneyRecord ownRefund = OnLedger(own, MoneyDirection.PlayerRefunded, MoneyPurpose.Refund);
+            T.Eq(ownRefund.silver, ownRefund.fromOwnFunding, "all of the refund is drawn from its own payments");
+            T.Eq(-(int)((long)held * ownRefund.silver / remaining), ownRefund.contractorSilver, "and the contractor gives back that same proportion of what it holds");
+            Books(k, "own cancel");
         }
 
         // ================================================================== D. advancement

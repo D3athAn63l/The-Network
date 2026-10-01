@@ -296,7 +296,11 @@ namespace TheNetwork.Domain.Operations
         /// </summary>
         public bool careerEligible;
 
-        /// <summary>The career result was applied (exactly once, at the authoritative end: finish, a post-outcome abort or a written-off Troubled group).</summary>
+        /// <summary>
+        /// The career result was applied: the durable career mutation (the record and the reputation score) really
+        /// committed, exactly once, at the authoritative end (finish, a post-outcome abort or a written-off Troubled
+        /// group). A commit that failed leaves it false and the career state untouched, so it can be retried.
+        /// </summary>
         public bool careerOutcomeApplied;
 
         /// <summary>Hidden geography (Phase 2.5); null for operations from an older save.</summary>

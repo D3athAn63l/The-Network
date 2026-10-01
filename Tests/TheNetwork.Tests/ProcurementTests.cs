@@ -187,6 +187,7 @@ namespace TheNetwork.Tests
             T.Eq(0, r.careerTagContradictions, label + ": every derived Tag agrees with the state it is read from");
             T.Eq(0, r.careerAugmented, label + ": never Augmented without augmentation truth");
             T.Eq(0, r.careerFailures, label + ": no career result failed to apply");
+            T.Eq(0, r.careerRefundAttribution, label + ": every refund follows the funding it drew from (carried-in funding never claws or dilutes; no own money left held after all of it was refunded)");
         }
 
         /// <summary>Two ledgers hold the same records, in order: direction, purpose, amount, counterpart, pending.</summary>

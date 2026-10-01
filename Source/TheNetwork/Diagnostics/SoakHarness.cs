@@ -139,6 +139,8 @@ namespace TheNetwork.Diagnostics
             public int careerTagContradictions;
             public int careerAugmented;
             public int careerFailures;
+            /// <summary>A refund whose provenance or clawback disagrees with the funding it drew from (carried-in funding clawed or diluting, a clawback above the own funding refunded, own money left held after all of it was refunded).</summary>
+            public int careerRefundAttribution;
             public int legacyOperations;
             public int clientCancels, clientVoids;
             public int careerOutcomesApplied;
@@ -148,7 +150,7 @@ namespace TheNetwork.Diagnostics
             public string careerWork;
 
             public int CareerViolations => careerDuplicateOutcomes + careerStuck + careerIneligibleAwarded + (careerFundsDrift != 0 ? 1 : 0) + careerMoneyViolations + careerBadFame + careerNegativeScores
-                + careerOverflow + careerTierOutOfBounds + careerAdvancedWhileCommitted + careerAdvancementBreaks + careerTagContradictions + careerAugmented + careerFailures;
+                + careerOverflow + careerTierOutOfBounds + careerAdvancedWhileCommitted + careerAdvancementBreaks + careerTagContradictions + careerAugmented + careerFailures + careerRefundAttribution;
 
             public int Violations => overCapacity + doubleBooked + moneyViolations + duplicateRefunds + lklAboveSecured + (moneyDrift != 0 ? 1 : 0) + (transferDrift != 0 ? 1 : 0)
                 + spatialInvalid + teleports + fieldLogDuplicates + fieldLogLeaks + CareerViolations;
@@ -468,6 +470,16 @@ namespace TheNetwork.Diagnostics
                     if (!ok) res.careerMoneyViolations++;
                 }
                 if (held < 0 || held > c.ExternalCharged()) res.careerMoneyViolations++;
+                // Refund provenance: a refund draws from the player's own payments here (never from funding a replacement
+                // carried in, which was paid to a previous contractor), and the clawback never exceeds that draw. Once
+                // none of the player's own payments here is left, the contractor holds none of what it was paid here: a
+                // carried-in funding position can leave neither a windfall nor a debt.
+                foreach (MoneyRecord m in c.ledger)
+                {
+                    bool isRefund = m.direction == MoneyDirection.PlayerRefunded && m.purpose == MoneyPurpose.Refund;
+                    if (isRefund ? (m.fromOwnFunding < 0 || m.fromOwnFunding > m.silver || -m.contractorSilver > m.fromOwnFunding) : m.fromOwnFunding != 0) res.careerRefundAttribution++;
+                }
+                if (c.OwnBearingRemaining() == 0 && held != 0) res.careerRefundAttribution++;
                 // A technical invalidation refunds every silver: the contractor can keep none of it.
                 if (c.status == ContractStatus.Voided && held != 0) res.careerMoneyViolations++;
                 w.heldByContract[c.id.Value] = held;
@@ -834,7 +846,7 @@ namespace TheNetwork.Diagnostics
             sb.AppendLine("  career invariants (all must be 0): duplicate outcomes " + res.careerDuplicateOutcomes + ", stuck/missing results " + res.careerStuck + ", legacy operations awarded " + res.careerIneligibleAwarded
                 + ", funds drift " + res.careerFundsDrift + ", bad money attribution " + res.careerMoneyViolations + ", fame/score mismatches " + res.careerBadFame + ", negative scores " + res.careerNegativeScores
                 + ", overflow " + res.careerOverflow + ", tier out of bounds " + res.careerTierOutOfBounds + ", advancement while committed " + res.careerAdvancedWhileCommitted + ", advancement breaks " + res.careerAdvancementBreaks
-                + ", Tag contradictions " + res.careerTagContradictions + ", Augmented without truth " + res.careerAugmented + ", career failures " + res.careerFailures);
+                + ", Tag contradictions " + res.careerTagContradictions + ", Augmented without truth " + res.careerAugmented + ", career failures " + res.careerFailures + ", refund attribution " + res.careerRefundAttribution);
             sb.AppendLine("  careers: " + res.careerOutcomesApplied + " results applied (" + res.legacyOperations + " operations made legacy-ineligible mid-run stayed unawarded); contractor money: credited " + res.careerCredits + ", taken back " + res.careerClawbacks
                 + ", upkeep " + res.careerUpkeep + ", equipment spend " + res.careerAdvancementSpend);
             sb.AppendLine("  work by frozen danger:" + res.careerWork);
