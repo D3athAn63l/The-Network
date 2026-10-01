@@ -293,12 +293,13 @@ namespace TheNetwork.Domain.Contractors
             counters.dangerTenths[tenth]++;
             counters.gainByTenth[tenth] += gain;
             if (gain == 0) counters.zeroGainOutcomes++;
-            if (gain > 0)
+            // The most dangerous work at least partly done, whether or not it still earned reputation.
+            if (CareerPolicy.OutcomeMultiplier(band, secured, o.requested) > 0f)
             {
                 int scaled = CareerPolicy.ScaledDanger(danger);
                 if (scaled > rec.highestDanger) rec.highestDanger = scaled;
-                AddReputation(a, gain, true);
             }
+            if (gain > 0) AddReputation(a, gain, true);
         }
 
         // ================================================================== views of state that already exists
