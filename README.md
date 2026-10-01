@@ -78,7 +78,7 @@ wealth or stat system:
 Contractor pawns, the contract board, the player as contractor and the social layer are later
 phases ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
 
-The headless tests pass (271 tests, including an 18-in-game-year procurement soak and three 20-in-game-year
+The headless tests pass (279 tests, including an 18-in-game-year procurement soak and three 20-in-game-year
 career soaks with daily money, capacity, spatial and career invariant checks). The owner has run the Phase 2 procurement loop in game,
 normal drop-pod delivery included. The other runtime spikes, including S20 for spatial continuity,
 have **not** been run yet. Their records and owner test steps are in [docs/spikes/](docs/spikes/README.md).

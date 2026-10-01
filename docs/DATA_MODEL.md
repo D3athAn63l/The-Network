@@ -1003,7 +1003,11 @@ purpose:   Unspecified | Deposit | Premium | InsurancePremium | Balance | Renego
   premium contribution, renegotiation extra or balance credits the contractor's share of the quote; a
   `Refund` takes back the proportional part of what it holds on this contract; an insurance premium, an
   insurance payout and every transfer are 0. `ContractorHeld()` = Σ over the ledger (never negative, never
-  above what the player paid). Never rescanned on load: the funds already hold it. See
+  above what the player paid). Never rescanned on load: the funds already hold it. `fromOwnFunding`
+  (additive, default 0; a `Refund` record only): how much of THIS refund was drawn from funding the player paid ON THIS
+  contract (never funding a replacement carried in, which was paid to a previous contractor); the clawback is
+  proportional to it alone. `OwnBearingRemaining()` = the contractor-bearing silver the player paid here less what earlier
+  refunds drew from it. See
   [CAREERS § 5](CAREERS.md#5-contractor-wealth-is-contractorsimulationfunds).
 - Invariant, per lineage: Σ external charges − Σ external refunds = the player's real net silver;
   Σ transfers = 0 (in total and per purpose). See [DECISIONS ADR-038](DECISIONS.md).

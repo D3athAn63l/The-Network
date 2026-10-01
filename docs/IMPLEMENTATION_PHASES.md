@@ -354,7 +354,7 @@ generation, augmentations, legends) will read. Normative spec: [CAREERS](CAREERS
 loadouts, exact weapon ownership, retirement, mergers, NPC-issued contracts, player contractor mode,
 direct hiring, alternative compensation, player Loyalty, rivalries. Mobility advancement is future work.
 
-Headless evidence: 271 tests, 17,018 checks, 0 failures (58 new: the reputation, record, money,
+Headless evidence: 279 tests, 17,390 checks, 0 failures (66 new: the reputation, record, money,
 advancement, Tag, need and migration matrix, the exactly-once paths, the farming loop, and three career
 soaks). The soaks add career invariants, all zero over 20 in-game years at 100 and 300 contractors:
 duplicate outcomes, stuck results, legacy operations awarded, funds drift, ledger attribution, fame/score

@@ -635,10 +635,16 @@
   * Reputation gain is `round(difficultyValue × outcomeMultiplier × taper)`, with the operation's own
     **frozen** danger; a work-ceiling taper (never below Local) is the anti-farming rule, so contract
     count alone cannot make a Legendary name. No reputation is ever lost.
-  * A refund takes back the proportional part of the contractor's pay on that contract; an insurance
-    payout, a carried-over replacement deposit and the Fixer's fee never touch the contractor's funds; a
-    technical invalidation leaves the contractor nothing (no windfall).
-  * Exactly-once is a persisted flag on the operation, set before the result is applied.
+  * A refund takes back the proportional part of the contractor's pay on that contract, **following the
+    funding actually refunded and who was paid it** (a typed `RefundScope`, recorded as
+    `MoneyRecord.fromOwnFunding`); an insurance payout, a carried-over replacement deposit and the Fixer's fee
+    never touch the contractor's funds, and carried-in funding can neither dilute nor enlarge a replacement's
+    clawback; a technical invalidation leaves the contractor nothing of what it was paid there (no windfall).
+  * Exactly-once is a persisted flag on the operation meaning the durable career mutation really committed:
+    the result is planned as a pure delta, committed as one small durable step, flagged, and only then
+    announced; a commit that cannot complete changes nothing and is retried by the next validation.
+  * A written-off Troubled group is a Failure in the career record whatever band the resolver rolled; the
+    committed outcome keeps its band.
 - **Rejected.** A separate career score, wealth score or equipment-power value (two truths); Tags that
   grant bonuses (a hidden second stat system that would double the resolver's own effects); a row per
   finished job on the contractor (save growth; History already holds detail); reputation that can fall

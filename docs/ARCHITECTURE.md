@@ -402,7 +402,7 @@ hold **who may exist in new worlds**; each world holds **what happened to them i
   `Credit` / `ClawBack` (the one saturating money path), `AddReputation`, `RunAdvancement`, `BlockedBy`,
   `CurrentNeed`, `Tags`, `Validate`. Every number lives in `CareerPolicy`.
 - **Hooks (no new scheduler job, nothing per tick).** `OperationService.Finish` / post-outcome `Abort` /
-  written-off Troubled apply the career result once; `UpkeepService.UpkeepJob` runs the advancement
+  written-off Troubled apply the career result once (planned as a pure delta, committed as one small durable step, flagged, then announced); `UpkeepService.UpkeepJob` runs the advancement
   check; `ProcurementService` mirrors contractor-owned money at the ledger commit point.
 - **Derived, never stored.** `CareerNeed` and Tags (`CareerTags`). Nothing that decides outcomes
   (resolver, pricing, willingness, upkeep) reads them; a source scan in the test run holds that.

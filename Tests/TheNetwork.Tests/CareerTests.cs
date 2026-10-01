@@ -67,6 +67,8 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Career.Wealth_ReplacementBalanceRefundClawsReplacementExactly", WealthReplacementBalanceRefund));
             t.Add(new KeyValuePair<string, Action>("Career.Wealth_ReplacementVoidClawsOnlyReplacementOwnedMoney", WealthReplacementVoid));
             t.Add(new KeyValuePair<string, Action>("Career.Wealth_PurposeScopedRefundDoesNotUseInheritedFunding", WealthPurposeScoped));
+            t.Add(new KeyValuePair<string, Action>("Career.Audit_RefundPathsFollowTheirFunding", AuditRefundPaths));
+            t.Add(new KeyValuePair<string, Action>("Career.Audit_SaveLoadAroundTheTerminalTransition", AuditSaveLoadAroundTerminal));
 
             // D. Advancement
             t.Add(new KeyValuePair<string, Action>("Career.Advancement_RequiresReputation", AdvanceReputation));
@@ -1257,6 +1259,136 @@ namespace TheNetwork.Tests
             T.Eq(ownRefund.silver, ownRefund.fromOwnFunding, "all of the refund is drawn from its own payments");
             T.Eq(-(int)((long)held * ownRefund.silver / remaining), ownRefund.contractorSilver, "and the contractor gives back that same proportion of what it holds");
             Books(k, "own cancel");
+        }
+
+        /// <summary>Weakens a team's doctrine so that, asked for new terms and refused, it walks away instead of carrying on.</summary>
+        private static void MakeQuitter(NetworkActor who)
+        {
+            ContractorSimulation s = Sim(who);
+            s.doctrine.professionalism = 0.3f;
+            s.doctrine.loyalty = 0.2f;
+        }
+
+        /// <summary>
+        /// The nearby seams of the correction: cancel during a renegotiation, a contractor that walks (own funding, and a
+        /// replacement's inherited funding), a contractor lost before the work with no replacement. Each follows the funding
+        /// it actually refunds, and none produces a career result for work that never happened.
+        /// </summary>
+        private static void AuditRefundPaths()
+        {
+            // Cancel during a renegotiation: nothing is refunded, the contractor keeps what it was paid, no career result.
+            TestNet n = ProcurementTests.World(0);
+            NetworkActor fixer = ProcurementTests.Fixer(n, "Premium");
+            NetworkActor team = ProcurementTests.Reliable(n);
+            ProcurementDevOverrides.forceWorseThanExpected = true;
+            Contract c = ProcurementTests.Awarded(n, fixer, team);
+            Operation op = ProcurementTests.Op(n, c);
+            ProcurementTests.RunUntil(n, () => c.status == ContractStatus.Renegotiating || c.IsTerminal);
+            ProcurementDevOverrides.Clear();
+            T.Eq(SubStatus.WorseThanExpected, c.subStatus, "renegotiating");
+            int held = c.ContractorHeld(), refunded = n.pay.refunded;
+            T.Check(n.ctx.Procurement.Cancel(c.id).ok, "the client cancels during the renegotiation");
+            T.Eq(refunded, n.pay.refunded, "nothing is refunded");
+            T.Eq(held, c.ContractorHeld(), "so nothing is taken back from the contractor");
+            T.Check(!op.careerOutcomeApplied && Sim(team).career.Classified == 0, "an operation aborted before any outcome gives no career result");
+            Books(n, "cancel in renegotiation");
+
+            // A contractor that walks (first generation): half the deposit and the premium come back, drawn from the player's own payments.
+            TestNet w = ProcurementTests.World(0);
+            NetworkActor wf = ProcurementTests.Fixer(w, "Premium");
+            NetworkActor quitter = ProcurementTests.Reliable(w);
+            Contract wc = ProcurementTests.Post(w, wf, "TestSteel", 150, quitter, 400);
+            Offer wo = ProcurementTests.Bid(w, wc);
+            T.Check(wo != null && w.ctx.Procurement.Accept(wo.id, false).ok, "accepted");
+            Operation wop = ProcurementTests.Op(w, wc);
+            MakeQuitter(quitter);
+            ProcurementDevOverrides.forceWorseThanExpected = true;
+            ProcurementTests.RunUntil(w, () => wc.status == ContractStatus.Renegotiating || wc.IsTerminal);
+            ProcurementDevOverrides.Clear();
+            int wHeld = wc.ContractorHeld(), wRemaining = wc.OwnBearingRemaining();
+            T.Check(w.ctx.Procurement.RespondWorse(wc.id, WorseChoice.Refuse).ok, "the client refuses the new terms");
+            T.Eq(Causes.ContractorWalked, wc.outcome?.causeKey, "the contractor walked");
+            MoneyRecord wr = OnLedger(wc, MoneyDirection.PlayerRefunded, MoneyPurpose.Refund);
+            T.Check(wr != null && wr.fromOwnFunding == wr.silver, "the whole refund came out of the player's own payments here");
+            T.Eq(-(int)((long)wHeld * wr.silver / wRemaining), wr.contractorSilver, "the contractor returns that proportion of its pay");
+            T.Check(!wop.careerOutcomeApplied && Sim(quitter).career.Classified == 0, "it walked before any outcome: no career result");
+            Books(w, "walked");
+
+            // A replacement that walks: the refund is of inherited funding (paid to the lost contractor), so it claws nothing.
+            TestNet r = ProcurementTests.World(0);
+            NetworkActor rf = ProcurementTests.Fixer(r, "Premium");
+            NetworkActor a = ProcurementTests.Reliable(r);
+            NetworkActor b = ProcurementTests.Reliable(r);
+            Contract parent;
+            Contract child = ReplacedJob(r, rf, a, out parent);
+            if (child == null) return;
+            int aHeld = parent.ContractorHeld();
+            NetworkActor who = r.ctx.actors.Get(ProcurementTests.Op(r, child).contractor);
+            MakeQuitter(who);
+            ProcurementDevOverrides.forceWorseThanExpected = true;
+            ProcurementTests.RunUntil(r, () => child.status == ContractStatus.Renegotiating || child.IsTerminal);
+            ProcurementDevOverrides.Clear();
+            r.ctx.Procurement.RespondWorse(child.id, WorseChoice.Refuse);
+            MoneyRecord rr = OnLedger(child, MoneyDirection.PlayerRefunded, MoneyPurpose.Refund);
+            T.Check(rr != null && rr.silver > 0, "a replacement that walks gives the inherited funding back");
+            T.Eq(0, rr.fromOwnFunding, "none of it was the replacement's own funding");
+            T.Eq(0, rr.contractorSilver, "so nothing is clawed from it");
+            T.Eq(aHeld, parent.ContractorHeld(), "and the lost contractor keeps what it was paid");
+            T.Eq(0L, r.ctx.Career.counters.Flow(FundsFlow.ClawBack), "no clawback anywhere");
+            Books(r, "replacement walked");
+
+            // Lost before the work, no replacement (a lean Fixer refunds a quarter of the deposit): drawn from the lost contractor's own pay.
+            TestNet l = ProcurementTests.World(0);
+            NetworkActor lf = ProcurementTests.Fixer(l, "Lean");
+            NetworkActor lost = ProcurementTests.Reliable(l);
+            Contract lc = ProcurementTests.Post(l, lf, "TestSteel", 150, lost, 200);
+            Offer lo = ProcurementTests.Bid(l, lc);
+            T.Check(lo != null && l.ctx.Procurement.Accept(lo.id, false).ok, "accepted");
+            Operation lop = ProcurementTests.Op(l, lc);
+            int lHeld = lc.ContractorHeld(), lRemaining = lc.OwnBearingRemaining();
+            l.ctx.Contractors.EndActor(lost, "Test");
+            ProcurementTests.RunUntil(l, () => lc.IsTerminal, 20);
+            MoneyRecord lr = OnLedger(lc, MoneyDirection.PlayerRefunded, MoneyPurpose.Refund);
+            T.Check(lr != null && lr.silver > 0 && lr.fromOwnFunding == lr.silver, "the policy's refund is drawn from the player's own payments");
+            T.Eq(-(int)((long)lHeld * lr.silver / lRemaining), lr.contractorSilver, "proportionally from the lost contractor's pay");
+            T.Check(!lop.careerOutcomeApplied, "no career result for an operation lost before the work");
+            Books(l, "lost before the work");
+        }
+
+        /// <summary>A save/load on either side of the operation's terminal transition applies the career result exactly once.</summary>
+        private static void AuditSaveLoadAroundTerminal()
+        {
+            TestNet n = ProcurementTests.World(0);
+            NetworkActor fixer = ProcurementTests.Fixer(n);
+            NetworkActor team = ProcurementTests.Reliable(n);
+            team.reputation.SetScore(0);
+            ProcurementDevOverrides.forceBand = OutcomeBand.Triumph;
+            ProcurementDevOverrides.forceNotTroubled = true;
+            Contract c = ProcurementTests.Awarded(n, fixer, team);
+            Operation op = ProcurementTests.Op(n, c);
+            // Resolved, still on the way home, not yet finished: the result has not been applied.
+            ProcurementTests.RunUntil(n, () => op.outcome != null && !op.Find(Checkpoint.Return).done || c.IsTerminal);
+            ProcurementDevOverrides.Clear();
+            T.Check(op.outcome != null && !op.careerOutcomeApplied, "resolved and not applied yet (" + op.phase + "/" + op.status + ")");
+            NetworkState before = CorrectionTests.SaveLoad(n);
+            CorrectionTests.Swap(n, before);
+            NetworkActor again = n.ctx.actors.Get(team.id);
+            Contract c2 = n.ctx.contracts.Get(c.id);
+            Operation op2 = n.ctx.operations.Get(op.id);
+            T.Check(op2.careerEligible && !op2.careerOutcomeApplied && Sim(again).career.Classified == 0, "the reload kept it eligible and unapplied");
+            ProcurementTests.RunUntil(n, () => c2.IsTerminal);
+            T.Eq(ContractStatus.Fulfilled, c2.status, "it finishes");
+            T.Check(op2.careerOutcomeApplied && Sim(again).career.Classified == 1, "applied once");
+            int score = again.reputation.score;
+            // And again on the far side of the transition.
+            NetworkState after = CorrectionTests.SaveLoad(n);
+            CorrectionTests.Swap(n, after);
+            NetworkActor third = n.ctx.actors.Get(team.id);
+            Operation op3 = n.ctx.operations.Get(op.id);
+            n.ctx.Career.Validate(new List<string>());
+            n.ctx.Operations.Finish(op3);
+            n.ctx.Operations.Abort(op3, "Late");
+            T.Check(op3.careerOutcomeApplied && Sim(third).career.Classified == 1 && third.reputation.score == score, "a reload after the terminal transition, a validation and repeated terminal calls change nothing");
         }
 
         // ================================================================== D. advancement
