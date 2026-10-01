@@ -90,6 +90,12 @@ appear in these readouts only, never in normal UI; nothing is drawn on the world
 | Charter (ADR-045) | Inspect an operation's spatial plan (ground or charter)… (hub, landing, fallback; the contractor's current segment) · Send a running operation across water (charter test)… (retargets to a tile with no ground route) · Invalidate an operation's charter hub… (reconciles from current truth) |
 | Field Log and performance | Inspect a contract's Field Log… (keys, words, ticks) · Spatial performance counters |
 
+**Phase 2.75 as implemented** (debug menu category **"The Network (Phase 2.75)"**, development mode only).
+
+| Group | Action |
+|---|---|
+| Careers | Inspect contractor career… (fame, reputation score and the next band, experience, career stage, `opsCompleted`, `legacyResolved`, the detailed career record, funds, operating reserve, equipment tier and condition, `CareerNeed`, derived Tags, last advancement, advancement count, and why it can or cannot advance now) · Grant reputation to contractor… (same path as real play: the band re-derives) · Add test funds to contractor… (saturating) · Run career advancement now… (the same rules: committed, cooldown, reputation, funds + reserve, recovery) · Dump career distribution… (fame, experience, tiers, needs, Tags, funds and reputation min/median/max, upgrades, this session's career tallies) |
+
 Spatial log lines use the `[TheNetwork][Spatial]` category ([SPATIAL § 13](SPATIAL.md#13-diagnostics)).
 
 The forced draws live in `ProcurementDevOverrides` (runtime only, never saved) and are consumed by

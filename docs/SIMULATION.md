@@ -9,7 +9,7 @@
 1. [Scheduler](#1-scheduler)
 2. [Background cadence](#2-background-cadence)
 3. [Abstract resolver](#3-abstract-resolver)
-4. [Organizations: upkeep, morale, doctrine](#4-organizations-upkeep-morale-doctrine)
+4. [Organizations: upkeep, morale, doctrine](#4-organizations-upkeep-morale-doctrine) (4.7 careers)
 5. [Willingness, refusal and bidding](#5-willingness-refusal-and-bidding)
 6. [Determinism and RNG](#6-determinism-and-rng)
 7. [Population management](#7-population-management)
@@ -195,14 +195,17 @@ real colony ([ARCHITECTURE § 6.6.1](ARCHITECTURE.md#661-contractor-actors-capab
 
 1. Heal wounded: recovery buckets whose `dueTick` has passed move from wounded to healthy.
 2. Drift morale toward baseline. The baseline is set by doctrine and by the `recent` summary.
-3. Funds: add the abstract income from completed contracts. Pay upkeep. Equipment condition
-   recovers if funds allow.
+3. Funds: pay upkeep; equipment condition recovers if funds allow. Income is not added here: a
+   contractor's pay lands in its funds when the client pays (a contract ledger transition, § 4.7), and
+   every funds movement goes through one saturating path (`CareerService.MoveFunds`).
 4. Recruitment: if below capacity and funds allow, recruit (Recruits tier). Promote from Recruit
    to Regular to Veteran based on survived operations (counters).
 5. Update retirement pressure (from career age, leader age, losses, prosperity).
 6. Invalidate cached strength.
 7. (Phase 2.5) Catch the hidden spatial state up to now and, if the contractor is idle and its
    committed ambient time has come, maybe relocate its operating area ([SPATIAL § 5](SPATIAL.md#5-movement)).
+8. (Phase 2.75) Equipment advancement check ([§ 4.7](#47-careers-phase-275)): at most one tier per
+   thirty days, never during a commitment. Cheap checks first; most days nothing qualifies.
 
 The job is O(1) per NPC contractor and small. It never touches pawns.
 
@@ -277,6 +280,23 @@ with a reduced, decaying copy of its predecessor's public epithets and fame (a r
 *prior* that fades unless its own record confirms it), plus legacy text ("successors of Dead
 Red"). Its summaries are its own. Successor organizations should stay rare enough to be
 meaningful.
+
+### 4.7 Careers (Phase 2.75)
+
+Normative spec: [CAREERS](CAREERS.md); decision ADR-046. In short:
+
+- **Reputation from finished work.** When an eligible operation reaches the end of its lifecycle its
+  frozen danger and outcome earn `round(difficultyValue × outcomeMultiplier × taper)` points
+  (4–40 × 1.25 / 1.0 / 0.9 / 0.45–0.9 / 0 …), tapering above a danger-dependent ceiling so easy work
+  cannot make a famous name. The `FameBand` is derived from the score. No reputation is ever lost.
+- **Contractor money.** The contractor's share of each payment is credited at the ledger commit point
+  and recorded on the ledger record; a refund takes back its proportional part; insurance, the Fixer's
+  fee and carried-over replacement funding never touch the contractor's funds.
+- **Equipment.** Rises one tier per cooldown from the daily upkeep when reputation, funds
+  (`cost + operating reserve`) and health allow, and the contractor has no live commitment.
+- **Derived views.** `CareerNeed` and Tags are read from state that already exists; they grant nothing.
+- **Determinism.** No randomness anywhere in careers: the same state gives the same result before and
+  after a reload, and a committed result never rerolls.
 
 ---
 

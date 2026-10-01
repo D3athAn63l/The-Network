@@ -56,6 +56,10 @@ It is supporting infrastructure, never the point of the mod:
 `SpatialState` belongs to the contractor **actor**, the stable identity; never to a Known
 Character, a Fixer, a faction, a world object, a pawn or a contract.
 
+`Idle` is the technical state, not a statement that nothing is happening: in the fiction an available
+contractor is maintaining contacts, looking for work, relocating occasionally and preparing for
+commissions. There are no hidden NPC contracts or fake jobs behind it (NPC-issued work is Phase 4).
+
 ```
 SpatialState {
   status:           Uninitialized | Idle | Travelling | OnAssignment | Blocked

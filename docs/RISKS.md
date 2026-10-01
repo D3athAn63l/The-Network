@@ -294,3 +294,42 @@
   `Spatial.CharterBridgesDisconnectedGeography`, the soaks' plan/leg and arrival invariants, the charter soak world
   and `Soak.ArchipelagoCharterStress` (charters under every invariant, provider settlements coming and
   going); spike S20 in game (not run yet).
+
+## R-26 · Contractor careers run away, double-credit, contradict themselves or bloat the save (Phase 2.75)
+- **Failure modes.** Reputation **runs away** (safe hauls or sheer contract count make everyone Famous);
+  **everyone converges to Legendary** or tier 5; **wealth inflation** (the rich get richer with nothing to
+  spend on, or everyone is broke); contractor money is **double-credited** (a retry, a reload, a ledger
+  rescan, an award that credits twice); a **replacement contractor is mis-credited** (the carried-over deposit
+  paid to the contractor that was lost lands in the replacement's funds, or vice versa); a technical
+  invalidation leaves a **windfall**; an **equipment upgrade runs away** (during a job, every day, without
+  reputation or reserve); a derived **Tag contradicts** the state it is read from, or quietly becomes a second
+  stat system that stacks with the resolver; the career result is applied **twice** (a recovery, a retry, a
+  reload) or **to an old operation** (invented credit); the **save grows** because history is copied onto the
+  contractor.
+- **Mitigation.** Reputation gain uses the operation's own frozen danger and tapers above a danger-dependent
+  ceiling, so easy work stops counting (twenty thousand trivial triumphs make a local name and no more); no
+  reputation is ever added by count alone and none is ever lost. Equipment advances at most one tier per thirty
+  days, only with reputation, `cost + reserve`, health and no live commitment, from the existing upkeep; the
+  ladder is capped at 5. All funds movement goes through one saturating path; the contractor's share is written
+  on the ledger record in the same step as the movement, a refund takes back exactly the proportion that was
+  refunded, an insurance payout and a replacement transfer move nothing, and a load never rescans the ledger.
+  The career result is a persisted flag on the operation, set before it is applied, applied from the lifecycle's
+  end only, and never for an operation from a pre-2.75 save. Tags and `CareerNeed` are computed on demand and a
+  source scan keeps the resolver, pricing, willingness and upkeep from ever reading them. `CareerRecord` is a
+  fixed set of counters (about 1.6 % of the save); History keeps the detail.
+- **Observed, not asserted (soak, 100 and 300 contractors, 20 in-game years).** Nothing runs away: Legendary
+  stays at the starting handful (3 of 125, 8 of 375), tier 5 at the starting few, and the fame distribution is
+  flat from the first quarter of the run to the last. The opposite is the finding: because Phase 2's market is
+  player-driven, the median contractor finishes **2 jobs in 20 years** (a few finish hundreds), so most careers
+  barely move, and **wealth is concentrated and mostly negative** (funds −107 k / −5.9 k / +715 k, min / median /
+  max; 92 of 125 contractors need `Capital`) because upkeep is flat per head with no floor and the only income is
+  the player's jobs. That is a Phase 2 economy trait that the career spine now makes visible, not a regression;
+  it is also what Phase 4 (NPC-issued work) and Phase 4B (alternative compensation, which consumes
+  `CareerNeed`) are for. Treat a future change that makes everyone Legendary, or that gives funds a floor, as a
+  tuning decision with the soak report in hand.
+- **Proven by.** `Career.*` and `Migration.V3ToV4_*` tests (matrix A–G, each exactly-once path, the farming
+  loop, the money cases); the soaks' career invariants, all zero: duplicate outcomes, stuck results, legacy
+  operations awarded, funds drift (funds = the sum of every tallied flow), ledger attribution (bounded; equals
+  credits less clawbacks; a voided contract holds nothing), fame/score mapping, negative score, overflow, tier
+  bounds, advancement while committed, tier moved other than by advancement, Tag contradictions, Augmented.
+
