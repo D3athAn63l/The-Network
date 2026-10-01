@@ -96,6 +96,11 @@ namespace TheNetwork.Domain.Contractors
         public int failures;
         public int advancementRuns;
 
+        /// <summary>Applied outcomes by frozen danger (tenths) and the reputation they earned (diagnostics: how the work is distributed).</summary>
+        public readonly int[] dangerTenths = new int[11];
+        public readonly long[] gainByTenth = new long[11];
+        public int zeroGainOutcomes;
+
         public long Flow(FundsFlow f) => flows[(int)f];
 
         /// <summary>The net of every flow: what the contractors' funds must have changed by.</summary>
@@ -284,6 +289,10 @@ namespace TheNetwork.Domain.Contractors
             rec.lastOutcomeTick = ctx.Now;
             float danger = DangerOf(op);
             int gain = CareerPolicy.ReputationGain(danger, band, secured, o.requested, a.reputation.score);
+            int tenth = (int)Math.Min(10, Math.Max(0, Math.Floor(danger * 10f)));
+            counters.dangerTenths[tenth]++;
+            counters.gainByTenth[tenth] += gain;
+            if (gain == 0) counters.zeroGainOutcomes++;
             if (gain > 0)
             {
                 int scaled = CareerPolicy.ScaledDanger(danger);
@@ -376,12 +385,14 @@ namespace TheNetwork.Domain.Contractors
             int tier = sim.equipment.tier;
             if (tier >= CareerPolicy.MaxTier) return AdvancementBlock.TopTier;
             cost = CareerPolicy.UpgradeCost(tier);
-            reserve = OperatingReserve(a);
-            if (CurrentNeed(a) == CareerNeed.Recovery) return AdvancementBlock.Recovering;
+            // The cheap checks first: this runs once per contractor per day, and most days nothing qualifies.
             int last = sim.career.lastAdvancementTick;
             if (last >= 0 && ctx.Now - last < CareerPolicy.AdvancementCooldownTicks) return AdvancementBlock.Cooldown;
             if (a.reputation.fame < CareerPolicy.RequiredFame(tier + 1)) return AdvancementBlock.NeedsReputation;
+            reserve = OperatingReserve(a);
             if ((long)sim.funds < (long)cost + reserve) return AdvancementBlock.NeedsFunds;
+            // A contractor that is hurt, or whose kit is wrecked, mends first: no luxury purchase while recovering.
+            if (CurrentNeed(a) == CareerNeed.Recovery) return AdvancementBlock.Recovering;
             return AdvancementBlock.None;
         }
 

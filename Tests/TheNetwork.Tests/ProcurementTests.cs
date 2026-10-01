@@ -54,6 +54,9 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Soak.ThreeGameYearsHundredContractors", Soak));
             t.Add(new KeyValuePair<string, Action>("Soak.EighteenGameYearsRetentionAndSaveSize", SoakYears));
             t.Add(new KeyValuePair<string, Action>("Soak.ArchipelagoCharterStress", SoakArchipelago));
+            t.Add(new KeyValuePair<string, Action>("Soak.Career_TwentyGameYearsHundredContractors", SoakCareerDefault));
+            t.Add(new KeyValuePair<string, Action>("Soak.Career_TwentyGameYearsThreeHundredContractors", SoakCareerStress));
+            t.Add(new KeyValuePair<string, Action>("Soak.Career_CheapestQuoteClientConcentratesWork", SoakCareerCheapest));
             t.Add(new KeyValuePair<string, Action>("Operations.CapturedMissingAreRecords", CapturedMissingRecords));
             t.Add(new KeyValuePair<string, Action>("Removal.OriginFactionGoneContractorSurvives", OriginGone));
             t.Add(new KeyValuePair<string, Action>("Intel.KnownCapableContractorsBecomeContacts", ContractorContacts));
@@ -169,6 +172,21 @@ namespace TheNetwork.Tests
             T.Eq(0, r.charterPlanMismatches, label + ": the live leg and the committed charter plan never disagree");
             T.Eq(0, r.charterReturnWalks, label + ": a charter still in force is always the way back");
             T.Eq(0, r.falseArrived, label + ": the Field Log never says \"reached the area\" for a group that is not there");
+            // Phase 2.75 careers.
+            T.Eq(0, r.careerDuplicateOutcomes, label + ": no career outcome applied twice");
+            T.Eq(0, r.careerStuck, label + ": no finished operation left without its career result");
+            T.Eq(0, r.careerIneligibleAwarded, label + ": no legacy (career-ineligible) operation was ever awarded, and no applied flag reverted");
+            T.Eq(0L, r.careerFundsDrift, label + ": contractor funds equal the sum of every tallied flow (no duplicate or off-the-books credit)");
+            T.Eq(0, r.careerMoneyViolations, label + ": contractor money on the ledgers is bounded and equals credits less clawbacks");
+            T.Eq(0, r.careerBadFame, label + ": every fame band is the one its score derives");
+            T.Eq(0, r.careerNegativeScores, label + ": no negative reputation");
+            T.Eq(0, r.careerOverflow, label + ": no funds, counter or score out of its bounds");
+            T.Eq(0, r.careerTierOutOfBounds, label + ": no equipment tier off the ladder");
+            T.Eq(0, r.careerAdvancedWhileCommitted, label + ": no equipment advanced during a commitment");
+            T.Eq(0, r.careerAdvancementBreaks, label + ": the tier only moves by advancement, one rung at a time, a cooldown apart");
+            T.Eq(0, r.careerTagContradictions, label + ": every derived Tag agrees with the state it is read from");
+            T.Eq(0, r.careerAugmented, label + ": never Augmented without augmentation truth");
+            T.Eq(0, r.careerFailures, label + ": no career result failed to apply");
         }
 
         /// <summary>Two ledgers hold the same records, in order: direction, purpose, amount, counterpart, pending.</summary>
@@ -982,6 +1000,64 @@ namespace TheNetwork.Tests
             T.Check(r.spatial.charterPlans >= 20 && r.spatial.charterCrossings >= 20, "charters are used heavily (" + r.spatial.charterPlans + " plans, " + r.spatial.charterCrossings + " crossings)");
             T.Check(r.spatial.charterFailures > 0, "and sometimes no provider is in reach (" + r.spatial.charterFailures + ")");
             T.Check(r.providersChurned > 0, "provider settlements came and went (" + r.providersChurned + ")");
+        }
+
+        /// <summary>
+        /// Twenty in-game years (a game year is 60 days: 1,200 days) of careers at the default population: every
+        /// soak invariant plus every career invariant, and a look at how fame, equipment and wealth spread. No
+        /// share of Legendary is asserted: it is reported, and a runaway is a tuning fix, not a test.
+        /// </summary>
+        private static void SoakCareerDefault()
+        {
+            TheNetwork.Diagnostics.SoakHarness.Result r = TheNetwork.Diagnostics.SoakHarness.Run(100, 14, 20 * 60, 20750, null, false, true);
+            Console.WriteLine(r.text);
+            T.Eq(0, r.stuck, "twenty game years: nothing stuck");
+            SoakInvariants(r, "careers, 100 contractors, 1,200 days");
+            T.Check(r.careerOutcomesApplied > 100 && r.careerCredits > 0, "careers ran: " + r.careerOutcomesApplied + " results applied, " + r.careerCredits + " silver credited");
+            T.Check(r.legacyOperations > 0, "operations were made legacy-ineligible mid-run to prove they stay unawarded (" + r.legacyOperations + ")");
+            ReportCareerSize(r, "100 contractors, 1,200 days");
+        }
+
+        /// <summary>The Phase 2 harness client (always the cheapest quote): work and careers concentrate; every invariant still holds.</summary>
+        private static void SoakCareerCheapest()
+        {
+            TheNetwork.Diagnostics.SoakHarness.Result r = TheNetwork.Diagnostics.SoakHarness.Run(100, 14, 20 * 60, 20752);
+            Console.WriteLine(r.text);
+            T.Eq(0, r.stuck, "twenty game years, cheapest-quote client: nothing stuck");
+            SoakInvariants(r, "careers, cheapest-quote client");
+            T.Check(r.careerOutcomesApplied > 100, "careers ran (" + r.careerOutcomesApplied + " results)");
+        }
+
+        private static void SoakCareerStress()
+        {
+            TheNetwork.Diagnostics.SoakHarness.Result r = TheNetwork.Diagnostics.SoakHarness.Run(300, 42, 20 * 60, 20751, null, false, true);
+            Console.WriteLine(r.text);
+            T.Eq(0, r.stuck, "twenty game years, 300 contractors: nothing stuck");
+            SoakInvariants(r, "careers, 300 contractors, 1,200 days");
+            T.Check(r.careerOutcomesApplied > 300 && r.careerCredits > 0, "careers ran: " + r.careerOutcomesApplied + " results applied");
+            ReportCareerSize(r, "300 contractors, 1,200 days");
+        }
+
+        /// <summary>Saves the soak world and reports how much of it is career data (score, record, flags, ledger attribution).</summary>
+        private static void ReportCareerSize(TheNetwork.Diagnostics.SoakHarness.Result r, string label)
+        {
+            string path = PersistenceTests.SaveState(r.state, 4);
+            long bytes = new System.IO.FileInfo(path).Length;
+            System.Xml.XmlDocument doc = new System.Xml.XmlDocument();
+            doc.Load(path);
+            long career = 0;
+            int nodes = 0;
+            foreach (string xpath in new[] { "//reputation/score", "//careerRecord", "//careerEligible", "//careerApplied", "//contractorSilver" })
+            {
+                foreach (System.Xml.XmlNode node in doc.SelectNodes(xpath))
+                {
+                    career += node.OuterXml.Length + 2;
+                    nodes++;
+                }
+            }
+            System.IO.File.Delete(path);
+            Console.WriteLine("  save size (" + label + "): " + bytes / 1024 + " KB in all; career data " + career / 1024.0 + " KB in " + nodes + " nodes (" + (100.0 * career / bytes).ToString("0.00") + "% of the save)");
+            T.Check(career * 100 < bytes * 5, "career data is a small part of the save (" + (100.0 * career / bytes).ToString("0.0") + "%)");
         }
 
         private static void SoakYears()

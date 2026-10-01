@@ -24,6 +24,8 @@ namespace TheNetwork.Domain.Contractors
         public long upgrades;
         public long classifiedJobs;
         public long earnings;
+        public readonly List<int> jobs = new List<int>();
+        public int worked;
 
         public static CareerDistribution Of(DomainContext ctx)
         {
@@ -54,10 +56,13 @@ namespace TheNetwork.Domain.Contractors
                 d.scores.Add(a.reputation.score);
                 d.upgrades += sim.career.advancementCount;
                 d.classifiedJobs += sim.career.Classified;
+                d.jobs.Add((int)Math.Min(int.MaxValue, sim.career.Classified));
+                if (sim.career.Classified > 0) d.worked++;
                 d.earnings += sim.career.careerEarnings;
             }
             d.funds.Sort();
             d.scores.Sort();
+            d.jobs.Sort();
             return d;
         }
 
@@ -100,6 +105,7 @@ namespace TheNetwork.Domain.Contractors
                 sb.Append(" " + CareerTags.Emitted[i] + "=" + n);
             }
             sb.AppendLine();
+            sb.AppendLine("  work: " + worked + " of " + active + " contractors have finished at least one job; jobs per contractor min/median/max " + Span(jobs));
             sb.AppendLine("  funds min/median/max " + FundsSpan + "; reputation min/median/max " + ScoreSpan + "; equipment upgrades " + upgrades + "; jobs classified " + classifiedJobs + "; career earnings " + earnings);
             return sb.ToString();
         }

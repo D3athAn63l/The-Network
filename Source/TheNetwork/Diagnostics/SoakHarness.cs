@@ -117,8 +117,41 @@ namespace TheNetwork.Diagnostics
             public double avgMoveWork;
             public long maxMoveWork;
 
+            // Phase 2.75 careers (every violation count must be 0).
+            /// <summary>Jobs classified on contractor records above the distinct operations whose career result was applied.</summary>
+            public int careerDuplicateOutcomes;
+            /// <summary>Operations that finished with an outcome, were career-eligible and never had it applied, or whose result is missing from a record.</summary>
+            public int careerStuck;
+            /// <summary>An operation flagged as applied that is not eligible (a legacy operation awarded), or whose flag reverted.</summary>
+            public int careerIneligibleAwarded;
+            /// <summary>Funds that do not equal the sum of every tallied flow; ledger attribution out of bounds or not equal to the credits and clawbacks.</summary>
+            public long careerFundsDrift;
+            public int careerMoneyViolations;
+            /// <summary>An actor whose fame band is not the one its score derives, or whose score is negative or above the cap.</summary>
+            public int careerBadFame;
+            public int careerNegativeScores;
+            /// <summary>Funds, counters or score outside their bounds.</summary>
+            public int careerOverflow;
+            public int careerTierOutOfBounds;
+            public int careerAdvancedWhileCommitted;
+            /// <summary>A tier that moved by something other than an advancement, or two advancements closer than the cooldown.</summary>
+            public int careerAdvancementBreaks;
+            public int careerTagContradictions;
+            public int careerAugmented;
+            public int careerFailures;
+            public int legacyOperations;
+            public int clientCancels, clientVoids;
+            public int careerOutcomesApplied;
+            public Domain.Contractors.CareerDistribution careerEnd;
+            public readonly List<string> careerTimeline = new List<string>();
+            public long careerCredits, careerClawbacks, careerUpkeep, careerAdvancementSpend;
+            public string careerWork;
+
+            public int CareerViolations => careerDuplicateOutcomes + careerStuck + careerIneligibleAwarded + (careerFundsDrift != 0 ? 1 : 0) + careerMoneyViolations + careerBadFame + careerNegativeScores
+                + careerOverflow + careerTierOutOfBounds + careerAdvancedWhileCommitted + careerAdvancementBreaks + careerTagContradictions + careerAugmented + careerFailures;
+
             public int Violations => overCapacity + doubleBooked + moneyViolations + duplicateRefunds + lklAboveSecured + (moneyDrift != 0 ? 1 : 0) + (transferDrift != 0 ? 1 : 0)
-                + spatialInvalid + teleports + fieldLogDuplicates + fieldLogLeaks;
+                + spatialInvalid + teleports + fieldLogDuplicates + fieldLogLeaks + CareerViolations;
             public double totalMs;
             public double maxDayMs;
 
@@ -348,6 +381,110 @@ namespace TheNetwork.Diagnostics
             }
         }
 
+        /// <summary>What the daily career pass remembers between days.</summary>
+        private sealed class CareerWatch
+        {
+            public readonly HashSet<int> appliedOps = new HashSet<int>();
+            public readonly HashSet<int> stuckOps = new HashSet<int>();
+            public readonly HashSet<int> legacyOps = new HashSet<int>();
+            public readonly Dictionary<int, int> heldByContract = new Dictionary<int, int>();
+            public readonly Dictionary<int, int[]> advancement = new Dictionary<int, int[]>(); // tier, count, lastTick
+        }
+
+        /// <summary>
+        /// The daily career pass (ADR-046): every result applied exactly once and never for a legacy operation;
+        /// the books balance (funds = every tallied flow; contractor money on ledgers = credits − clawbacks);
+        /// score, band and counters in bounds; the equipment tier moves only by advancement, one rung at a time,
+        /// never inside the cooldown; derived Tags agree with the state they are read from.
+        /// </summary>
+        private static void CheckCareers(DomainContext ctx, Result res, CareerWatch w)
+        {
+            foreach (Operation op in ctx.operations.operations)
+            {
+                if (op.careerOutcomeApplied)
+                {
+                    if (!op.careerEligible || w.legacyOps.Contains(op.id.Value)) res.careerIneligibleAwarded++;
+                    else w.appliedOps.Add(op.id.Value);
+                }
+                else if (w.appliedOps.Contains(op.id.Value)) res.careerIneligibleAwarded++; // an applied flag never reverts
+                if (op.IsFinished && op.careerEligible && op.outcome != null && !op.careerOutcomeApplied && w.stuckOps.Add(op.id.Value)) res.careerStuck++;
+            }
+            long funds = 0, earnings = 0;
+            int cooldown = CareerPolicy.AdvancementCooldownTicks;
+            foreach (NetworkActor a in ctx.actors.actors)
+            {
+                if (a.reputation.score < 0) res.careerNegativeScores++;
+                if (a.reputation.score > CareerPolicy.ScoreCap) res.careerOverflow++;
+                if (a.reputation.fame != CareerPolicy.FameFor(a.reputation.score)) res.careerBadFame++;
+                ContractorSimulation sim = a.Get<ContractorSimulation>();
+                if (sim == null) continue;
+                funds += sim.funds;
+                earnings += sim.career.careerEarnings;
+                CareerRecord r = sim.career;
+                if (sim.funds > CareerPolicy.FundsBound || sim.funds < -CareerPolicy.FundsBound) res.careerOverflow++;
+                int[] counters = { r.legacyResolved, r.triumphs, r.successes, r.partials, r.failures, r.disasters, r.careerEarnings, r.casualtiesTaken, r.peopleLost, r.captured, r.missing, r.reputationEarned, r.advancementCount };
+                for (int i = 0; i < counters.Length; i++) if (counters[i] < 0 || counters[i] > CareerPolicy.CounterCap) res.careerOverflow++;
+                if (r.highestDanger < 0 || r.highestDanger > 1000) res.careerOverflow++;
+                if (sim.equipment.tier < CareerPolicy.MinTier || sim.equipment.tier > CareerPolicy.MaxTier) res.careerTierOutOfBounds++;
+                // The tier only ever moves by advancement: one rung per count, and counts are a cooldown apart.
+                int[] last;
+                if (w.advancement.TryGetValue(a.id.Value, out last))
+                {
+                    int dCount = r.advancementCount - last[1];
+                    if (dCount < 0 || sim.equipment.tier - last[0] != dCount) res.careerAdvancementBreaks++;
+                    else if (dCount > 1 || (dCount == 1 && last[2] >= 0 && r.lastAdvancementTick - last[2] < cooldown)) res.careerAdvancementBreaks++;
+                }
+                w.advancement[a.id.Value] = new[] { sim.equipment.tier, r.advancementCount, r.lastAdvancementTick };
+                if (!ContractorService.IsNpcContractor(a)) continue;
+                // Derived Tags agree with the state they are read from, and are never duplicated or Augmented.
+                List<string> tags = ctx.Career.Tags(a);
+                HashSet<string> distinct = new HashSet<string>(tags);
+                if (distinct.Count != tags.Count) res.careerTagContradictions++;
+                if (tags.Contains(CareerTags.Augmented)) res.careerAugmented++;
+                if (tags.Contains(CareerTags.WellEquipped) != (sim.equipment.tier >= CareerPolicy.WellEquippedTier)) res.careerTagContradictions++;
+                if (tags.Contains(CareerTags.LongRange) != (sim.mobility.rangeBand >= Band.High)) res.careerTagContradictions++;
+                if (tags.Contains(CareerTags.RapidTransport) != sim.mobility.Has("RapidTransport")) res.careerTagContradictions++;
+                if (tags.Contains(CareerTags.HeavyLift) != sim.mobility.Has("HeavyLift")) res.careerTagContradictions++;
+                if (tags.Contains(CareerTags.SpacerCapable) != sim.mobility.Has("Orbital")) res.careerTagContradictions++;
+                if (tags.Contains(CareerTags.LegendaryReputation) != (a.reputation.fame == FameBand.Legendary)) res.careerTagContradictions++;
+                if (tags.Contains(CareerTags.EliteCombat) && ContractorService.Experience(a) < ExperienceBand.Elite) res.careerTagContradictions++;
+            }
+            // The books: funds are exactly the sum of every tallied flow.
+            long drift = funds - ctx.Career.counters.Net;
+            if (drift != 0) res.careerFundsDrift = drift; // sticky: a transient drift is still a violation
+            foreach (Contract c in ctx.contracts.contracts)
+            {
+                int held = 0;
+                foreach (MoneyRecord m in c.ledger)
+                {
+                    held += m.contractorSilver;
+                    bool ok;
+                    switch (m.direction)
+                    {
+                        case MoneyDirection.PlayerPaid: ok = m.contractorSilver >= 0 && m.contractorSilver <= m.silver && (m.purpose != MoneyPurpose.InsurancePremium || m.contractorSilver == 0); break;
+                        case MoneyDirection.PlayerRefunded: ok = m.contractorSilver <= 0 && -m.contractorSilver <= m.silver && (m.purpose == MoneyPurpose.Refund || m.contractorSilver == 0); break;
+                        default: ok = m.contractorSilver == 0; break;
+                    }
+                    if (!ok) res.careerMoneyViolations++;
+                }
+                if (held < 0 || held > c.ExternalCharged()) res.careerMoneyViolations++;
+                // A technical invalidation refunds every silver: the contractor can keep none of it.
+                if (c.status == ContractStatus.Voided && held != 0) res.careerMoneyViolations++;
+                w.heldByContract[c.id.Value] = held;
+            }
+            long ledgerNet = 0;
+            foreach (int h in w.heldByContract.Values) ledgerNet += h;
+            long flowNet = ctx.Career.counters.Flow(FundsFlow.Credit) + ctx.Career.counters.Flow(FundsFlow.ClawBack);
+            if (ledgerNet != flowNet || earnings != flowNet) res.careerMoneyViolations++;
+        }
+
+        private static string CareerSnapshot(DomainContext ctx, int day)
+        {
+            Domain.Contractors.CareerDistribution d = Domain.Contractors.CareerDistribution.Of(ctx);
+            return "  day " + day + ": fame " + d.fame[0] + "/" + d.fame[1] + "/" + d.fame[2] + "/" + d.fame[3] + "/" + d.fame[4] + " (Unknown/Local/Established/Famous/Legendary), equipment tiers " + string.Join("/", new[] { d.tiers[1].ToString(), d.tiers[2].ToString(), d.tiers[3].ToString(), d.tiers[4].ToString(), d.tiers[5].ToString() })
+                + ", reputation min/median/max " + d.ScoreSpan + ", funds min/median/max " + d.FundsSpan + ", upgrades " + d.upgrades + ", " + d.worked + " have worked";
+        }
+
         /// <summary>The daily invariant pass: capacity, exclusivity, money and Last Known Location cargo.</summary>
         private static void CheckInvariants(DomainContext ctx, Result res, Dictionary<int, long[]> money)
         {
@@ -390,7 +527,11 @@ namespace TheNetwork.Diagnostics
 
         /// <param name="archipelago">Closes the land bridge too: the two halves of the synthetic world have no
         /// ground connection at all, so work across the sea band needs a charter (a stress of ADR-045).</param>
-        public static Result Run(int contractors, int contractsPerWeek, int days, int seed, IList<ItemFacts> items = null, bool archipelago = false)
+        /// <param name="humanClient">The client behaves like a person: picks among the open quotes at random instead of always
+        /// taking the cheapest (so work and careers spread beyond the few strongest and cheapest), sometimes cancels a job still
+        /// being prepared (a partial refund comes out of the contractor's pay) and rarely has a contract technically voided (a
+        /// full refund). The Phase 2 default stays "always the cheapest, never cancels".</param>
+        public static Result Run(int contractors, int contractsPerWeek, int days, int seed, IList<ItemFacts> items = null, bool archipelago = false, bool humanClient = false)
         {
             Result res = new Result { days = days };
             IdAllocator ids = new IdAllocator();
@@ -479,6 +620,7 @@ namespace TheNetwork.Diagnostics
             long workBefore = ctx.Spatial.counters.Work;
             List<double> dayMs = new List<double>();
             HashSet<int> reposted = new HashSet<int>();
+            CareerWatch careerWatch = new CareerWatch();
             long all0 = Stopwatch.GetTimestamp();
             for (int day = 0; day < days; day++)
             {
@@ -515,6 +657,16 @@ namespace TheNetwork.Diagnostics
                     {
                         List<Offer> open = ctx.Procurement.OpenOffers(c);
                         open.Sort((x, y) => x.quote.finalPrice != y.quote.finalPrice ? x.quote.finalPrice.CompareTo(y.quote.finalPrice) : x.id.Value.CompareTo(y.id.Value));
+                        if (humanClient)
+                        {
+                            for (int i = open.Count - 1; i > 0; i--)
+                            {
+                                int j = rng.Range(0, i + 1);
+                                Offer swap = open[i];
+                                open[i] = open[j];
+                                open[j] = swap;
+                            }
+                        }
                         for (int i = 0; i < open.Count; i++)
                         {
                             if (!open[i].IsOpen) continue;
@@ -529,9 +681,41 @@ namespace TheNetwork.Diagnostics
                         ctx.Procurement.Repost(c.id, true);
                     }
                 }
+                if (humanClient)
+                {
+                    foreach (Contract c in ctx.Procurement.Live())
+                    {
+                        if (c.IsSeeking || c.IsTerminal) continue;
+                        Operation cop = ctx.Procurement.CurrentOperation(c);
+                        if (rng.Chance(0.004f))
+                        {
+                            ctx.Procurement.Void(c, Causes.DefMissing);
+                            res.clientVoids++;
+                        }
+                        else if (cop != null && cop.outcome == null && cop.phase <= OpPhase.Transit && rng.Chance(0.02f) && ctx.Procurement.CanCancel(c.id).ok)
+                        {
+                            ctx.Procurement.Cancel(c.id);
+                            res.clientCancels++;
+                        }
+                    }
+                }
                 dayMs.Add((Stopwatch.GetTimestamp() - t0) * 1000.0 / Stopwatch.Frequency);
                 CheckInvariants(ctx, res, money);
                 CheckSpatial(ctx, res, seen, recoveredChecked);
+                // A third of the way in, every operation then running is made career-ineligible, exactly as a
+                // pre-2.75 save would load it: none may ever receive career credit however it ends.
+                if (day == days / 3)
+                {
+                    foreach (Operation op in ctx.operations.operations)
+                    {
+                        if (op.IsFinished || op.careerOutcomeApplied) continue;
+                        op.careerEligible = false;
+                        careerWatch.legacyOps.Add(op.id.Value);
+                    }
+                    res.legacyOperations = careerWatch.legacyOps.Count;
+                }
+                CheckCareers(ctx, res, careerWatch);
+                if (days >= 40 && (day + 1) % Math.Max(1, days / 4) == 0) res.careerTimeline.Add(CareerSnapshot(ctx, day + 1));
                 long work = ctx.Spatial.counters.Work;
                 moveWork.Add(work - workBefore);
                 workBefore = work;
@@ -557,6 +741,22 @@ namespace TheNetwork.Diagnostics
             res.transferDrift = transfers;
             res.overCapacity = ctx.Contractors.overCapacityCheckouts;
             res.spatial = ctx.Spatial.counters;
+            // Careers: the tallies, and the duplicate check (classified jobs against distinct applied operations).
+            long classified = 0;
+            foreach (NetworkActor a in ctx.actors.actors) classified += a.Get<ContractorSimulation>()?.career.Classified ?? 0;
+            if (classified > careerWatch.appliedOps.Count) res.careerDuplicateOutcomes += (int)(classified - careerWatch.appliedOps.Count);
+            else if (classified < careerWatch.appliedOps.Count) res.careerStuck += careerWatch.appliedOps.Count - (int)classified;
+            res.careerOutcomesApplied = careerWatch.appliedOps.Count;
+            res.careerAdvancedWhileCommitted = ctx.Career.counters.advancedWhileCommitted;
+            res.careerFailures = ctx.Career.counters.failures;
+            res.careerCredits = ctx.Career.counters.Flow(FundsFlow.Credit);
+            res.careerClawbacks = ctx.Career.counters.Flow(FundsFlow.ClawBack);
+            res.careerUpkeep = ctx.Career.counters.Flow(FundsFlow.Upkeep);
+            res.careerAdvancementSpend = ctx.Career.counters.Flow(FundsFlow.Advancement);
+            res.careerEnd = Domain.Contractors.CareerDistribution.Of(ctx);
+            StringBuilder byDanger = new StringBuilder();
+            for (int i = 0; i <= 10; i++) byDanger.Append(" " + (i / 10f).ToString("0.0") + (i == 10 ? "" : "+") + "=" + ctx.Career.counters.dangerTenths[i] + "->" + ctx.Career.counters.gainByTenth[i]);
+            res.careerWork = byDanger.ToString() + " (jobs->reputation earned; " + ctx.Career.counters.zeroGainOutcomes + " earned nothing)";
             long moveSum = 0;
             foreach (long w in moveWork)
             {
@@ -610,6 +810,8 @@ namespace TheNetwork.Diagnostics
 
             StringBuilder sb = new StringBuilder();
             sb.AppendLine("[TheNetwork] Phase 2 soak harness (synthetic, in memory; never touches the save)");
+            sb.AppendLine("  client policy: " + (humanClient ? "picks any open quote at random, sometimes cancels a job in preparation, rarely has a contract voided" : "always the cheapest quote, never cancels (work concentrates in the strongest and cheapest)"));
+            if (humanClient) sb.AppendLine("  client actions: " + res.clientCancels + " cancellations, " + res.clientVoids + " technical voids");
             sb.AppendLine("  " + days + " simulated days, " + res.contractorsStart + " contractors at start, " + fixers.Count + " Fixers, " + res.posted + " contracts posted (" + contractsPerWeek + "/week)");
             sb.Append("  statuses:");
             foreach (KeyValuePair<ContractStatus, int> kv in res.byStatus) sb.Append(" " + kv.Key + "=" + kv.Value);
@@ -629,6 +831,17 @@ namespace TheNetwork.Diagnostics
                 + ", chartered returns that walked " + res.charterReturnWalks + ", false \"reached the area\" " + res.falseArrived + ", Field Log duplicates " + res.fieldLogDuplicates + ", Field Log leaks " + res.fieldLogLeaks
                 + " (explained discontinuities, not counted: " + res.explainedJumps + "; provider settlements replaced: " + res.providersChurned + ")");
             sb.AppendLine("  movement work per day: avg " + res.avgMoveWork.ToString("0.0") + ", max " + res.maxMoveWork + " units; " + res.simulatedLoads + " simulated loads (route caches dropped); live Field Logs " + res.fieldLogsLive + " with " + res.fieldLogEntriesLive + " entries");
+            sb.AppendLine("  career invariants (all must be 0): duplicate outcomes " + res.careerDuplicateOutcomes + ", stuck/missing results " + res.careerStuck + ", legacy operations awarded " + res.careerIneligibleAwarded
+                + ", funds drift " + res.careerFundsDrift + ", bad money attribution " + res.careerMoneyViolations + ", fame/score mismatches " + res.careerBadFame + ", negative scores " + res.careerNegativeScores
+                + ", overflow " + res.careerOverflow + ", tier out of bounds " + res.careerTierOutOfBounds + ", advancement while committed " + res.careerAdvancedWhileCommitted + ", advancement breaks " + res.careerAdvancementBreaks
+                + ", Tag contradictions " + res.careerTagContradictions + ", Augmented without truth " + res.careerAugmented + ", career failures " + res.careerFailures);
+            sb.AppendLine("  careers: " + res.careerOutcomesApplied + " results applied (" + res.legacyOperations + " operations made legacy-ineligible mid-run stayed unawarded); contractor money: credited " + res.careerCredits + ", taken back " + res.careerClawbacks
+                + ", upkeep " + res.careerUpkeep + ", equipment spend " + res.careerAdvancementSpend);
+            sb.AppendLine("  work by frozen danger:" + res.careerWork);
+            sb.AppendLine("  career distribution at the end (" + res.careerEnd.active + " active contractors):");
+            sb.Append(res.careerEnd.Text());
+            sb.AppendLine("  convergence (every quarter of the run):");
+            foreach (string line in res.careerTimeline) sb.AppendLine(line);
             sb.AppendLine("  time per simulated day: avg " + res.avgDayMs.ToString("0.00") + " ms, p95 " + p95.ToString("0.00") + " ms, max " + res.maxDayMs.ToString("0.00") + " ms (total " + res.totalMs.ToString("0") + " ms)");
             res.text = sb.ToString();
             res.state = state;

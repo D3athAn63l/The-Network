@@ -80,10 +80,13 @@ namespace TheNetwork.Domain
 
         /// <summary>
         /// The ceiling of the fame a job of this danger can build (the anti-farming rule): work this easy
-        /// stops adding to the score above it, so no number of safe hauls creates a Legendary name.
+        /// stops adding to the score above it, so no number of safe hauls creates a Legendary name. Honest
+        /// work of any difficulty can still make a contractor known locally: the ceiling never falls below
+        /// <see cref="LocalAt"/>.
         /// </summary>
         public const float CeilingAtFullDanger = 2400f;
         public const float CeilingExponent = 2f;
+        public const int CeilingFloor = LocalAt;
 
         /// <summary>Above the ceiling the gain tapers to nothing over this share of the ceiling (at least <see cref="TaperFloor"/> points).</summary>
         public const float TaperShare = 0.5f;
@@ -121,7 +124,7 @@ namespace TheNetwork.Domain
         /// <summary>The fame score work of this danger can build up to, before it stops counting.</summary>
         public static int WorkCeiling(float danger)
         {
-            return (int)Math.Round(CeilingAtFullDanger * (float)Math.Pow(Clamp01(danger), CeilingExponent));
+            return Math.Max(CeilingFloor, (int)Math.Round(CeilingAtFullDanger * (float)Math.Pow(Clamp01(danger), CeilingExponent)));
         }
 
         /// <summary>1 while the score is at or below the work's ceiling, down to 0 at ceiling + taper.</summary>

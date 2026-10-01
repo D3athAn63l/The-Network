@@ -102,7 +102,7 @@ namespace TheNetwork.Diagnostics
         private static string DescribeActor(NetworkRuntime rt, NetworkActor a)
         {
             StringBuilder sb = new StringBuilder();
-            sb.AppendLine("[TheNetwork] " + a + " status " + a.status + " fame " + a.reputation.fame + " provenance " + a.provenance.source + " template " + (a.provenance.templateId ?? "-"));
+            sb.AppendLine("[TheNetwork] " + a + " status " + a.status + " fame " + a.reputation.fame + " (score " + a.reputation.score + ") provenance " + a.provenance.source + " template " + (a.provenance.templateId ?? "-"));
             if (a.bindings.faction != null) sb.AppendLine("  faction " + a.bindings.faction.NameSnapshot + " (load " + a.bindings.faction.loadId + ")");
             if (a.bindings.embodies.IsValid) sb.AppendLine("  embodies " + a.bindings.embodies + " '" + rt.State.characters.Get(a.bindings.embodies)?.name.Display + "'");
             foreach (ActorComponent c in a.components) sb.AppendLine("  component " + c.Key);
