@@ -759,9 +759,12 @@ namespace TheNetwork.Domain.Contracts
             if (op != null) ctx.Operations.Abort(op, causeKey);
             DeclineAll(c);
             // Everything the player still has in this contract, whether paid here or carried over from a
-            // contract it replaced (funding carried onward was moved out and is not refunded here).
+            // contract it replaced (funding carried onward was moved out and is not refunded here). That is the
+            // PLAYER's side: an earlier insurance payout has already reimbursed part of it. The CONTRACTOR's side is
+            // separate: the current contractor gives back all it still holds of what it was paid on this contract,
+            // however small the player's final refund is (nothing left to refund still reverses the contractor).
             int refund = c.NetFunding();
-            if (refund > 0) Refund(c, refund, MoneyPurpose.Refund, "refund.void", RefundScope.Everything);
+            if (refund > 0 || c.ContractorHeld() > 0) Refund(c, refund, MoneyPurpose.Refund, "refund.void", RefundScope.Everything);
             Close(c, ContractStatus.Voided, causeKey, EventKeys.ContractVoided, Importance.Minor, refund);
             NetLog.Info(LogCategory.Contracts, "Contract " + c.id + " (" + c.Quantity + "x " + c.ItemLabel + ") voided: " + causeKey + (refund > 0 ? ", refunded " + refund + " silver" : "") + ".");
         }
@@ -781,19 +784,36 @@ namespace TheNetwork.Domain.Contracts
         /// carried in (paid to a previous contractor) claws nothing. An insurance payout takes nothing: the insurer
         /// paid it. Written in the same step as the movement; a retry of an undelivered refund only flips its pending
         /// flag and takes nothing again. The scope never changes how much silver the player receives.
+        /// A technical invalidation (<see cref="RefundScope.IsFullContractorReversal"/>) is the one refund whose clawback is
+        /// not a share of this refund: the contractor gives back everything it still holds on this contract (typed on the
+        /// record as <see cref="MoneyRecord.fullReversal"/>), while <see cref="MoneyRecord.fromOwnFunding"/> keeps
+        /// describing only the player's refund. With nothing left to refund to the player it writes a record of 0 silver.
         /// </summary>
         private void Refund(Contract c, int silver, MoneyPurpose purpose, string noteKey, RefundScope scope)
         {
-            if (silver <= 0) return;
-            string reason;
-            bool delivered = ctx.payment.TryRefund(silver, out reason);
+            bool reversal = purpose == MoneyPurpose.Refund && scope != null && scope.IsFullContractorReversal;
+            if (silver < 0 || (silver == 0 && !reversal)) return;
+            string reason = null;
+            bool delivered = silver == 0 || ctx.payment.TryRefund(silver, out reason);
             MoneyRecord m = Money(silver, MoneyDirection.PlayerRefunded, purpose, noteKey);
             m.pending = !delivered;
             if (purpose == MoneyPurpose.Refund)
             {
                 int fromOwn = Math.Min(c.OwnDrawnBy(scope), silver);
                 m.fromOwnFunding = fromOwn;
-                if (ctx.Career != null) m.contractorSilver = -ctx.Career.ClawBack(ctx.actors.Get(c.parties.contractor), c, fromOwn);
+                if (ctx.Career != null)
+                {
+                    NetworkActor contractor = ctx.actors.Get(c.parties.contractor);
+                    if (reversal)
+                    {
+                        m.fullReversal = true;
+                        m.contractorSilver = -ctx.Career.ClawBackAll(contractor, c);
+                    }
+                    else
+                    {
+                        m.contractorSilver = -ctx.Career.ClawBack(contractor, c, fromOwn);
+                    }
+                }
             }
             c.ledger.Add(m);
             if (!delivered)

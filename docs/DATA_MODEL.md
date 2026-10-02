@@ -777,7 +777,7 @@ Operation
     knowledgeGains: TopicGain[]
   physical: DeploymentId?               // when the operation went physical
   careerEligible: bool                  // Phase 2.75: its result counts toward the contractor's career (false for an operation from an older save)
-  careerOutcomeApplied: bool            // the career result was applied, exactly once, at the lifecycle's end
+  careerOutcomeApplied: bool            // the durable career mutation committed (set only after it), exactly once, at the lifecycle's end
   spatial: OperationSpatialPlan?        // Phase 2.5; null for operations from an older save
     origin, workRegion, returnTo, incident: TileRef?
     detached: bool                      // an organization's concurrent job: the main body did not move
@@ -1007,7 +1007,9 @@ purpose:   Unspecified | Deposit | Premium | InsurancePremium | Balance | Renego
   (additive, default 0; a `Refund` record only): how much of THIS refund was drawn from funding the player paid ON THIS
   contract (never funding a replacement carried in, which was paid to a previous contractor); the clawback is
   proportional to it alone. `OwnBearingRemaining()` = the contractor-bearing silver the player paid here less what earlier
-  refunds drew from it. See
+  refunds drew from it. `fullReversal` (additive, default false; the technical invalidation's `Refund` record only): the
+  current contractor gave back EVERYTHING `ContractorHeld()` held on this contract, even when an earlier insurance payout
+  made the player's final refund smaller; `fromOwnFunding` still describes only the player's refund. See
   [CAREERS § 5](CAREERS.md#5-contractor-wealth-is-contractorsimulationfunds).
 - Invariant, per lineage: Σ external charges − Σ external refunds = the player's real net silver;
   Σ transfers = 0 (in total and per purpose). See [DECISIONS ADR-038](DECISIONS.md).

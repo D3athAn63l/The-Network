@@ -141,6 +141,9 @@ namespace TheNetwork.Diagnostics
             public int careerFailures;
             /// <summary>A refund whose provenance or clawback disagrees with the funding it drew from (carried-in funding clawed or diluting, a clawback above the own funding refunded, own money left held after all of it was refunded).</summary>
             public int careerRefundAttribution;
+
+            /// <summary>Technical invalidations after which the current contractor still held some of the silver it was paid on that contract.</summary>
+            public int careerVoidWindfalls;
             public int legacyOperations;
             public int clientCancels, clientVoids;
             public int careerOutcomesApplied;
@@ -150,7 +153,7 @@ namespace TheNetwork.Diagnostics
             public string careerWork;
 
             public int CareerViolations => careerDuplicateOutcomes + careerStuck + careerIneligibleAwarded + (careerFundsDrift != 0 ? 1 : 0) + careerMoneyViolations + careerBadFame + careerNegativeScores
-                + careerOverflow + careerTierOutOfBounds + careerAdvancedWhileCommitted + careerAdvancementBreaks + careerTagContradictions + careerAugmented + careerFailures + careerRefundAttribution;
+                + careerOverflow + careerTierOutOfBounds + careerAdvancedWhileCommitted + careerAdvancementBreaks + careerTagContradictions + careerAugmented + careerFailures + careerRefundAttribution + careerVoidWindfalls;
 
             public int Violations => overCapacity + doubleBooked + moneyViolations + duplicateRefunds + lklAboveSecured + (moneyDrift != 0 ? 1 : 0) + (transferDrift != 0 ? 1 : 0)
                 + spatialInvalid + teleports + fieldLogDuplicates + fieldLogLeaks + CareerViolations;
@@ -459,12 +462,18 @@ namespace TheNetwork.Diagnostics
                 int held = 0;
                 foreach (MoneyRecord m in c.ledger)
                 {
+                    int heldBefore = held;
                     held += m.contractorSilver;
                     bool ok;
                     switch (m.direction)
                     {
                         case MoneyDirection.PlayerPaid: ok = m.contractorSilver >= 0 && m.contractorSilver <= m.silver && (m.purpose != MoneyPurpose.InsurancePremium || m.contractorSilver == 0); break;
-                        case MoneyDirection.PlayerRefunded: ok = m.contractorSilver <= 0 && -m.contractorSilver <= m.silver && (m.purpose == MoneyPurpose.Refund || m.contractorSilver == 0); break;
+                        case MoneyDirection.PlayerRefunded:
+                            // An ordinary refund gives back at most its own silver; a typed technical full reversal follows what the
+                            // contractor held (an earlier insurance payout can make the player's refund smaller than that), and can
+                            // never take back more than the contractor actually held from this contract.
+                            ok = m.contractorSilver <= 0 && (m.purpose == MoneyPurpose.Refund || m.contractorSilver == 0) && (m.fullReversal ? -m.contractorSilver <= heldBefore : -m.contractorSilver <= m.silver);
+                            break;
                         default: ok = m.contractorSilver == 0; break;
                     }
                     if (!ok) res.careerMoneyViolations++;
@@ -477,11 +486,16 @@ namespace TheNetwork.Diagnostics
                 foreach (MoneyRecord m in c.ledger)
                 {
                     bool isRefund = m.direction == MoneyDirection.PlayerRefunded && m.purpose == MoneyPurpose.Refund;
-                    if (isRefund ? (m.fromOwnFunding < 0 || m.fromOwnFunding > m.silver || -m.contractorSilver > m.fromOwnFunding) : m.fromOwnFunding != 0) res.careerRefundAttribution++;
+                    // The provenance always describes the player's refund (never above it). An ordinary refund claws at most that
+                    // provenance; a typed full reversal is the one record whose clawback is not bounded by it, and it exists only
+                    // on a technical invalidation's refund.
+                    if (isRefund ? (m.fromOwnFunding < 0 || m.fromOwnFunding > m.silver || (!m.fullReversal && -m.contractorSilver > m.fromOwnFunding)) : (m.fromOwnFunding != 0 || m.fullReversal)) res.careerRefundAttribution++;
+                    if (m.fullReversal && c.status != ContractStatus.Voided) res.careerRefundAttribution++;
                 }
                 if (c.OwnBearingRemaining() == 0 && held != 0) res.careerRefundAttribution++;
-                // A technical invalidation refunds every silver: the contractor can keep none of it.
-                if (c.status == ContractStatus.Voided && held != 0) res.careerMoneyViolations++;
+                // A technical invalidation: the CURRENT contractor retains none of what it was paid on this contract, however much
+                // an earlier insurance payout already reimbursed the player.
+                if (c.status == ContractStatus.Voided && held != 0) res.careerVoidWindfalls++;
                 w.heldByContract[c.id.Value] = held;
             }
             long ledgerNet = 0;
@@ -507,14 +521,16 @@ namespace TheNetwork.Diagnostics
                 long ch = 0, rf = 0, ti = 0, to = 0;
                 foreach (MoneyRecord m in c.ledger)
                 {
-                    if (m.silver <= 0) res.moneyViolations++;
+                    // Every record moves silver; the one exception is a technical invalidation's contractor reversal when nothing
+                    // was left to refund to the player (typed, written for the contractor's side only).
+                    if (m.silver < 0 || (m.silver == 0 && !m.fullReversal)) res.moneyViolations++;
                     switch (m.direction)
                     {
                         case MoneyDirection.PlayerPaid: ch += m.silver; break;
                         case MoneyDirection.PlayerRefunded:
                             rf += m.silver;
                             if (m.purpose == MoneyPurpose.InsurancePayout) payouts++;
-                            else refunds++;
+                            else if (m.silver > 0) refunds++;
                             break;
                         case MoneyDirection.TransferIn: ti += m.silver; break;
                         case MoneyDirection.TransferOut: to += m.silver; break;
@@ -846,7 +862,7 @@ namespace TheNetwork.Diagnostics
             sb.AppendLine("  career invariants (all must be 0): duplicate outcomes " + res.careerDuplicateOutcomes + ", stuck/missing results " + res.careerStuck + ", legacy operations awarded " + res.careerIneligibleAwarded
                 + ", funds drift " + res.careerFundsDrift + ", bad money attribution " + res.careerMoneyViolations + ", fame/score mismatches " + res.careerBadFame + ", negative scores " + res.careerNegativeScores
                 + ", overflow " + res.careerOverflow + ", tier out of bounds " + res.careerTierOutOfBounds + ", advancement while committed " + res.careerAdvancedWhileCommitted + ", advancement breaks " + res.careerAdvancementBreaks
-                + ", Tag contradictions " + res.careerTagContradictions + ", Augmented without truth " + res.careerAugmented + ", career failures " + res.careerFailures + ", refund attribution " + res.careerRefundAttribution);
+                + ", Tag contradictions " + res.careerTagContradictions + ", Augmented without truth " + res.careerAugmented + ", career failures " + res.careerFailures + ", refund attribution " + res.careerRefundAttribution + ", technical-void windfalls " + res.careerVoidWindfalls);
             sb.AppendLine("  careers: " + res.careerOutcomesApplied + " results applied (" + res.legacyOperations + " operations made legacy-ineligible mid-run stayed unawarded); contractor money: credited " + res.careerCredits + ", taken back " + res.careerClawbacks
                 + ", upkeep " + res.careerUpkeep + ", equipment spend " + res.careerAdvancementSpend);
             sb.AppendLine("  work by frozen danger:" + res.careerWork);

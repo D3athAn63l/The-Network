@@ -188,6 +188,7 @@ namespace TheNetwork.Tests
             T.Eq(0, r.careerAugmented, label + ": never Augmented without augmentation truth");
             T.Eq(0, r.careerFailures, label + ": no career result failed to apply");
             T.Eq(0, r.careerRefundAttribution, label + ": every refund follows the funding it drew from (carried-in funding never claws or dilutes; no own money left held after all of it was refunded)");
+            T.Eq(0, r.careerVoidWindfalls, label + ": after a technical invalidation the current contractor holds none of what it was paid on that contract (an earlier insurance payout shields nothing)");
         }
 
         /// <summary>Two ledgers hold the same records, in order: direction, purpose, amount, counterpart, pending.</summary>

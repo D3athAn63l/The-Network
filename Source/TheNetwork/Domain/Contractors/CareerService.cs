@@ -186,7 +186,28 @@ namespace TheNetwork.Domain.Contractors
             long basis = c.OwnBearingRemaining();
             if (held <= 0 || basis <= 0) return 0;
             long claw = held * Math.Min((long)fromOwn, basis) / basis;
-            claw = Math.Min(claw, held);
+            return Reverse(sim, Math.Min(claw, held));
+        }
+
+        /// <summary>
+        /// A technical invalidation: takes back EVERYTHING this contractor still holds of what it was paid on THIS
+        /// contract, whatever the player's own refund came to. An earlier insurance payout reimburses the player (so the
+        /// player's final refund is smaller) but must never shield the contractor's pay from a later invalidation, so
+        /// this is the contractor's whole <see cref="Contract.ContractorHeld"/> and not a share of the refund. It holds
+        /// only silver credited on this very contract: a replacement's carried-in funding credited nobody, and money
+        /// paid to a lost contractor is on another contract's ledger. Call it BEFORE the refund record is added.
+        /// Returns the amount taken back.
+        /// </summary>
+        public int ClawBackAll(NetworkActor a, Contract c)
+        {
+            ContractorSimulation sim = a?.Get<ContractorSimulation>();
+            if (sim == null || c == null) return 0;
+            return Reverse(sim, c.ContractorHeld());
+        }
+
+        /// <summary>Moves <paramref name="claw"/> out of the contractor's funds and career earnings; returns what really moved.</summary>
+        private int Reverse(ContractorSimulation sim, long claw)
+        {
             if (claw <= 0) return 0;
             int applied = -MoveFunds(sim, -claw, FundsFlow.ClawBack);
             sim.career.careerEarnings = Math.Max(0, CareerPolicy.AddSaturating(sim.career.careerEarnings, -applied));
@@ -285,12 +306,6 @@ namespace TheNetwork.Domain.Contractors
             {
                 return CommitFailed(op, ex);
             }
-            if (delta == null)
-            {
-                // No contractor (or no simulation) exists to receive a career: nothing can ever be applied.
-                op.careerOutcomeApplied = true;
-                return true;
-            }
             CareerRecord snapshot = delta.sim.career.Clone();
             int scoreBefore = delta.actor.reputation.score;
             try
@@ -337,13 +352,16 @@ namespace TheNetwork.Domain.Contractors
 
         /// <summary>
         /// The pure plan: what this operation does to its contractor's career. Reads the operation, the actor, its
-        /// record and its score; changes nothing. Null when there is no contractor simulation to apply it to.
+        /// record and its score; changes nothing. A career-eligible operation with a committed outcome always has a
+        /// contractor and a simulation to receive it (an ended contractor's actor persists): when either is missing the
+        /// state is malformed, so this throws and the caller treats it as a failed commit, never as an applied one.
         /// </summary>
         private CareerOutcomeDelta Plan(Operation op, bool writtenOff)
         {
             NetworkActor a = ctx.actors.Get(op.contractor);
-            ContractorSimulation sim = a?.Get<ContractorSimulation>();
-            if (sim == null) return null;
+            if (a == null) throw new InvalidOperationException("MissingCareerActor: operation " + op.id + " has no contractor actor " + op.contractor + " to receive its career result");
+            ContractorSimulation sim = a.Get<ContractorSimulation>();
+            if (sim == null) throw new InvalidOperationException("MissingContractorSimulation: operation " + op.id + " has a contractor actor without a ContractorSimulation to receive its career result");
             OperationOutcome o = op.outcome;
             // A group written off never brought the work home: whatever the resolver rolled (even a Disaster), the
             // career records ONE ultimate meaning, a Failure with nothing secured. The committed OperationOutcome
@@ -583,6 +601,11 @@ namespace TheNetwork.Domain.Contractors
                     {
                         if (findings != null) findings.Add("Operation " + op.id + ": finished without its career result; applied now.");
                         repaired++;
+                    }
+                    else if (findings != null)
+                    {
+                        // Visible, never silently dropped and never marked applied: a missing contractor or simulation stays unresolved.
+                        findings.Add("Operation " + op.id + ": finished with a career result that could not be applied (see the warning); it stays unapplied and is retried by the next validation.");
                     }
                 }
             }

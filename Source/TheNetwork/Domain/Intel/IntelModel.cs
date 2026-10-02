@@ -98,6 +98,15 @@ namespace TheNetwork.Domain.Intel
         /// </summary>
         public int fromOwnFunding;
 
+        /// <summary>
+        /// Phase 2.75, a contract ledger's <c>Refund</c> record only: a technical invalidation, which reverses EVERY silver
+        /// the current contractor still holds of what it was paid on THIS contract, whatever amount the player receives
+        /// (an earlier insurance payout can make that smaller than the contractor's pay). <see cref="fromOwnFunding"/>
+        /// still describes only the player's refund. False on every other record, and on a record written before this
+        /// field existed.
+        /// </summary>
+        public bool fullReversal;
+
         public bool IsExternal => direction == MoneyDirection.PlayerPaid || direction == MoneyDirection.PlayerRefunded;
 
         public void ExposeData()
@@ -112,6 +121,7 @@ namespace TheNetwork.Domain.Intel
             Scribe_Values.Look(ref pending, "pending", false);
             Scribe_Values.Look(ref contractorSilver, "contractorSilver", 0);
             Scribe_Values.Look(ref fromOwnFunding, "fromOwn", 0);
+            Scribe_Values.Look(ref fullReversal, "fullReversal", false);
         }
     }
 

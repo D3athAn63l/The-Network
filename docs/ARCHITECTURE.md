@@ -399,10 +399,10 @@ hold **who may exist in new worlds**; each world holds **what happened to them i
   (`CareerRecord`: cumulative counters, advancement cooldown). `Operation.careerEligible` /
   `careerOutcomeApplied`; `MoneyRecord.contractorSilver` on contract ledgers.
 - **Public surface.** `CareerService` (`DomainContext.Career`): `CommitOutcome(op)`, `MoveFunds` /
-  `Credit` / `ClawBack` (the one saturating money path), `AddReputation`, `RunAdvancement`, `BlockedBy`,
+  `Credit` / `ClawBack` / `ClawBackAll` (the one saturating money path; `ClawBackAll` is a technical invalidation's full reversal of what the current contractor holds), `AddReputation`, `RunAdvancement`, `BlockedBy`,
   `CurrentNeed`, `Tags`, `Validate`. Every number lives in `CareerPolicy`.
 - **Hooks (no new scheduler job, nothing per tick).** `OperationService.Finish` / post-outcome `Abort` /
-  written-off Troubled apply the career result once (planned as a pure delta, committed as one small durable step, flagged, then announced); `UpkeepService.UpkeepJob` runs the advancement
+  written-off Troubled apply the career result once (planned as a pure delta, committed as one small durable step, flagged only after that commit, then announced; a missing contractor or simulation is a failed commit, never an applied one); `UpkeepService.UpkeepJob` runs the advancement
   check; `ProcurementService` mirrors contractor-owned money at the ledger commit point.
 - **Derived, never stored.** `CareerNeed` and Tags (`CareerTags`). Nothing that decides outcomes
   (resolver, pricing, willingness, upkeep) reads them; a source scan in the test run holds that.

@@ -849,6 +849,9 @@ namespace TheNetwork.Domain.Contracts
     /// clawback follow the funding actually refunded and who was actually paid it. <see cref="Everything"/> is a full
     /// technical invalidation; <see cref="None"/> is a payout from the insurer (nothing of the contractor's moves).
     /// The amounts describe the draw only: they never change how much silver the player receives.
+    /// <see cref="Everything"/> also says the CONTRACTOR side is reversed in full: the current contractor gives back all
+    /// it still holds from this contract (<see cref="MoneyRecord.fullReversal"/>), even when an earlier insurance payout
+    /// already reimbursed part of what the player paid and so shrank the player's final refund.
     /// </summary>
     public sealed class RefundScope
     {
@@ -856,6 +859,10 @@ namespace TheNetwork.Domain.Contracts
         public static readonly RefundScope Everything = new RefundScope { everything = true };
 
         public bool everything;
+
+        /// <summary>A technical invalidation: the current contractor retains none of what it was paid on this contract.</summary>
+        public bool IsFullContractorReversal => everything;
+
         public int deposit;
         public int premium;
         public int renegotiation;

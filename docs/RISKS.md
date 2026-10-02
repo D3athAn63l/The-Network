@@ -312,9 +312,11 @@
   days, only with reputation, `cost + reserve`, health and no live commitment, from the existing upkeep; the
   ladder is capped at 5. All funds movement goes through one saturating path; the contractor's share is written
   on the ledger record in the same step as the movement, a refund takes back exactly the proportion that was
-  refunded, an insurance payout and a replacement transfer move nothing, and a load never rescans the ledger.
-  The career result is a persisted flag on the operation, set before it is applied, applied from the lifecycle's
-  end only, and never for an operation from a pre-2.75 save. Tags and `CareerNeed` are computed on demand and a
+  refunded (a technical invalidation takes back everything the current contractor still holds, even after an
+  insurance payout reduced the player's refund), an insurance payout and a replacement transfer move nothing, and a
+  load never rescans the ledger. The career result is a persisted flag on the operation that is set only after the
+  planned result's durable commit (a failed commit, or a missing contractor or simulation, leaves it false and
+  retryable), applied from the lifecycle's end only, and never for an operation from a pre-2.75 save. Tags and `CareerNeed` are computed on demand and a
   source scan keeps the resolver, pricing, willingness and upkeep from ever reading them. `CareerRecord` is a
   fixed set of counters (about 1.6 % of the save); History keeps the detail.
 - **Observed, not asserted (soak, 100 and 300 contractors, 20 in-game years).** Nothing runs away: Legendary

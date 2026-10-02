@@ -639,10 +639,13 @@
     funding actually refunded and who was paid it** (a typed `RefundScope`, recorded as
     `MoneyRecord.fromOwnFunding`); an insurance payout, a carried-over replacement deposit and the Fixer's fee
     never touch the contractor's funds, and carried-in funding can neither dilute nor enlarge a replacement's
-    clawback; a technical invalidation leaves the contractor nothing of what it was paid there (no windfall).
+    clawback; a technical invalidation takes back everything the current contractor still holds from that contract (a typed
+    full reversal, `MoneyRecord.fullReversal`), so an earlier insurance payout that reduced the player's refund
+    can never shield contractor pay from it (no windfall).
   * Exactly-once is a persisted flag on the operation meaning the durable career mutation really committed:
-    the result is planned as a pure delta, committed as one small durable step, flagged, and only then
-    announced; a commit that cannot complete changes nothing and is retried by the next validation.
+    the result is planned as a pure delta, committed as one small durable step, flagged only after that
+    commit, and only then announced; a commit that cannot complete (including a missing contractor or simulation) changes
+    nothing, leaves the flag false and is retried by the next validation.
   * A written-off Troubled group is a Failure in the career record whatever band the resolver rolled; the
     committed outcome keeps its band.
 - **Rejected.** A separate career score, wealth score or equipment-power value (two truths); Tags that
