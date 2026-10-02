@@ -205,7 +205,11 @@ These are dev-mode windows, shipped with the phase that introduces each subsyste
 - **Event Journal**: a filterable list (type, importance, subject) with payload details and
   consumer errors.
 - **Physical Episode Monitor** (Phase 3, designed in
-  [PHYSICAL_LIFECYCLE § 14](PHYSICAL_LIFECYCLE.md#14-event-detection)): each episode's people, the observed state
-  of each pawn, the authority, the pending outcome and the reconciliation trace. Read-only.
+  [PHYSICAL_LIFECYCLE § 8, § 15](PHYSICAL_LIFECYCLE.md#15-reconciliation-algorithm)): each episode's people (named or
+  concretized seat, the seat's operational role), the observed state of each pawn, the authority, the pending outcome and the
+  reconciliation trace: the commit's `attempts` / `lastError`, and the **post-commit stage markers** (release done,
+  follow-up done, `publishedTick`). It also shows a bound person's `agedThroughTick` and `firstEncounterTick`, an
+  organization's role composition with its pinned seats, and a line when the retained-pawn count exceeds the soft cap.
+  Read-only; it never repairs custody or episode truth.
 - **Relationship Graph** (Phase 4+): text-based adjacency with standing and trust per edge,
   filtered by actor.

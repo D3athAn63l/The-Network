@@ -41,7 +41,7 @@
 | **UI-only** | read models, sorting, filtering, narrative formatting | while the window is open | cached per `StateVersion`; lists virtualized (only visible rows drawn) |
 | **Opportunity-generation spikes** | source/context resolution, tile finding, Thing creation for stashes, site creation | when Intel resolves (rare) | the resolver reads a session index `packageId → FactionDefs` and one pass over live factions (tens); `TileFinder` is vanilla and bounded; at most one per job; follow-ups are separate jobs |
 | **Map-generation spikes** | vanilla map generation for a Network site | when the player arrives | vanilla cost (the same as any item-stash quest); the Network adds only its comp callbacks |
-| **Materialization spikes** (Phase 3) | pawn generation for deployments | when the player becomes involved | capped deployment size (default ≤ 12 pawns); generation spread over frames with `LongEventHandler` if > 6 |
+| **Materialization spikes** (Phase 3) | pawn generation for deployments | when the player becomes involved | capped deployment size (default ≤ 12 pawns); generation spread over frames with `LongEventHandler` if > 6. *Phase 3 design: ≤ 8 people per episode; role and cohesion verification adds a **bounded** retry (K attempts, each at most vanilla's own 120 tries), measured by S25; a group may be created one pawn per tick if it spikes* |
 
 ## 3. Scale assumptions and cost estimates
 
@@ -213,5 +213,12 @@ summaries or edges in O(1), or knowledge books in O(64) at most.
    non-mothballed world pawn per tick, so the reserved list length *R* (the stored named people, soft cap ≈ 150) is
    a multiplier to **measure** in the soak ([PHYSICAL_LIFECYCLE § 7.4](PHYSICAL_LIFECYCLE.md#74-the-registry-reservation-retained-pawns-only)).
    Forbidden: scanning all pawns, all maps or all world pawns on a timer.
+   **Added by the amendment pass (targets, nothing measured):** the atomic reconciliation commit is O(the touched set: ≤ 8
+   characters and three small objects), a snapshot and, only on failure, a restore, well under 0.2 ms; role and cohesion
+   verification is reads of one unbound candidate and ≤ 7 teammates inside a bounded retry; truthful aging catches up once
+   per materialized stored pawn (a *periodic* variant would be ≤ 150 calls per game-year, only while a pawn is stored); encounter
+   evidence is ≤ 8 play-log / battle-log lookups per reconcile; role-composition apportionment is O(≤ 8). Forbidden: a per-tick
+   aging job for stored pawns; scanning the play log per tick. The soak also reports **retained-pawn growth under progressive
+   concretization** (R-36) and the *R* × *W* registry cost ([PHYSICAL_LIFECYCLE § 18](PHYSICAL_LIFECYCLE.md#18-performance)).
 4. **Regression gate**: the timing report (see [DEBUGGING § 5](DEBUGGING.md#5-timing-instrumentation))
    is attached to each phase's PR, with the p50, p95 and max per job kind.

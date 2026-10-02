@@ -358,16 +358,23 @@ hold **who may exist in new worlds**; each world holds **what happened to them i
   one real `Pawn`, and only when physically needed. Enforce the no-duplication invariants.
 - **Status.** Phase 2 implemented the *records* (`KnownCharacter`, with a persisted `custody` that is never written).
   **Phase 3 is a design only** ([PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md), [ADR-048](DECISIONS.md)); nothing below is
-  implemented. Identity is `Actor ≠ Person ≠ Pawn`; a named person keeps one pawn for life; anonymous members are
-  ephemeral episode slots.
-- **Persistent (design).** `CharacterStore` (`KnownCharacter` records, plus `pawn`, `episode`, `heldBy`), the
-  `EpisodeStore` in the already-reserved `deployments` slot (the Phase 0 `DeploymentStore`, renamed), and the
-  reserved `LeaseStore` (Phase 4 seam).
+  implemented. Identity is `Actor ≠ Person ≠ Pawn`; a named person keeps one pawn for life; rank-and-file of a *large*
+  organization are ephemeral episode slots while a *small* recurring organization concretizes its placed seats into named,
+  bound people ([PHYSICAL_LIFECYCLE § 4.5](PHYSICAL_LIFECYCLE.md#45-progressive-concretization)). A first projection never
+  contradicts established truth: Operational Roles, role composition, team cohesion and truthful aging
+  ([ADR-050](DECISIONS.md)).
+- **Persistent (design).** `CharacterStore` (`KnownCharacter` records, plus `pawn`, `episode`, `heldBy`, `opRole`,
+  `firstEncounterTick`; `PawnRef` carries `agedThroughTick`), the `EpisodeStore` in the already-reserved `deployments` slot
+  (the Phase 0 `DeploymentStore`, renamed), `OrganizationProfile.composition` (a small role template, established at first
+  use, 3.2), and the reserved `LeaseStore` (one of **two** Phase 4 equipment seams: a *Notable Asset* is owned by the person,
+  not stored in `leases`).
 - **Runtime cache.** `thingIDNumber → (episode, member)`, `CharacterId → member`, and the registry of stored pawns
   (all rebuilt from the stores in `FinalizeInit`).
 - **Public surface (candidate names).** `AuthorityGate.CanSimulateAbstractly(person)`, `Episodes.Plan/Materialize`,
-  `Episodes.Reconcile(episode)`, `Characters.Promote(...)`; the real RimWorld work sits behind a `PhysicalWorldPort`
-  with a scriptable fake for the safe test tier.
+  `Episodes.Reconcile(episode)` (a pure `ReconciliationPlan`, validation, a snapshot-guarded `Applier`, then the
+  post-commit stages), `Characters.Promote(...)`, pure policy functions (role verdict and correction, composition
+  apportionment, concretization policy, cohesion screen); the real RimWorld work sits behind a `PhysicalWorldPort` with a
+  scriptable fake for the safe test tier.
 - **Emits.** `Episode.Opened/Closed`, `KnownCharacterPromoted`, `…Killed`, `…CapturedByPlayer`, `…Defected`, `…Lost`,
   `Contractor.Rescued` (published after the commit).
 - **Consumes.** Tagged signals via `SignalBridge` (wake-ups only), the site comp's map callbacks, the registry quest
@@ -669,9 +676,9 @@ binding). It picks plausible world context for an opportunity. It is not a subsy
 | Adapter | Responsibility | Vanilla APIs used |
 |---|---|---|
 | `SiteAdapter` | Build vanilla `Site`s for opportunities (vanilla `SitePartDef`s such as `ItemStash` plus a threat part), start the timeout, bind the injected `WorldObjectComp_NetworkSite`, and forward its callbacks | `SiteMaker.MakeSite`, `SitePart.things`, `TimeoutComp`, `WorldObjectComp` |
-| `CustodyService` / `PhysicalWorldPort` adapter (Phase 3, design) | The RimWorld half behind the port: create (`ForceGenerateNewPawn`), spawn, tag, observe (`ObservedKind`), release, and the registry reservation. The Episode ledger and reconciliation are **Domain**, tested over a fake port | `PawnGenerator`, `GenSpawn`, `WorldPawns`, `QuestManager` (registry quest), `Pawn`/`Faction`/`Caravan` state reads, `LordMaker` |
+| `CustodyService` / `PhysicalWorldPort` adapter (Phase 3, design) | The RimWorld half behind the port: create (`ForceGenerateNewPawn`, role-constrained and verified before binding), age catch-up, spawn, tag, observe (`ObservedKind`), release, and the registry reservation. The Episode ledger and reconciliation are **Domain**, tested over a fake port | `PawnGenerator`, `GenSpawn`, `WorldPawns`, `QuestManager` (registry quest), `Pawn`/`Faction`/`Caravan` state reads, `LordMaker` |
 | `EncounterFactionAdapter` | One temporary hidden faction per **episode** (vanilla removes it with the episode) (Phase 3, design) | `FactionGenerator`, `Faction.temporary`, `FactionManager` |
-| `DeliveryAdapter` | Hand goods to the player: drop pods (Core), walk-in (Phase 3), shuttle (Royalty, optional) | `DropPodUtility.DropThingsNear`, `TransportShipMaker` (optional) |
+| `DeliveryAdapter` | Hand goods to the player: drop pods (Core; the only mode today), colony handoff and rendezvous (Phase 3.3, **design direction only**), shuttle (Royalty, optional) | `DropPodUtility.DropThingsNear`, `TransportShipMaker` (optional) |
 | `PaymentAdapter` | Take silver from and pay silver to the player; represent debt when the player cannot pay | `TradeUtility.ColonyHasEnoughSilver`, `TradeUtility.LaunchSilver`, drop pods |
 | `SignalBridge` | Receive the `TheNetwork.*` quest-tag signals (pawn, thing and world-object lifecycle) and route them to services | `SignalManager.RegisterReceiver`, `QuestUtility.AddQuestTag` |
 | `CommsAccessAdapter` | Answer "can the player communicate now?": a spawned `Building_CommsConsole` (any subclass, so modded consoles count) on a player home map whose `CanUseCommsNow` is true (powered, no electricity-disabling condition) | `Map.IsPlayerHome`, `ListerBuildings.AllBuildingsColonistOfClass<Building_CommsConsole>()`, `Building_CommsConsole.CanUseCommsNow` |
@@ -747,17 +754,25 @@ that audited the 1.6.9676 assemblies; no Phase 3 code exists. The architectural 
 ```
  DOMAIN (headless-testable)            PORT                          INTEGRATION (RimWorld)
  AuthorityGate ─ every abstract        PhysicalWorldPort             real adapter: GeneratePawn(ForceNew) · GenSpawn ·
-   writer asks it                        Create · Spawn · Tag ·        tags · LordJob_VisitColony · registry quest ·
- EpisodeStore (slot "deployments")       Observe(ObservedKind) ·       temporary faction · state reads
- Reconciler: observe → decide →          Release · Reserve           FAKE (sandbox): scriptable tokens, used by the
-   plan → commit → flag → publish                                      safe runtime tier and the headless suite
+   writer asks it                        Create (a ProjectionRequest:  tags · LordJob_VisitColony · registry quest ·
+ EpisodeStore (slot "deployments")       role, teammates, age) ·      temporary faction · state reads · age catch-up
+ Reconciler: observe → decide →          Spawn · Tag · Observe ·     FAKE (sandbox): scriptable tokens, used by the
+   plan → validate → ATOMIC commit       Release · Reserve · Age       safe runtime tier and the headless suite
+   (Applier, snapshot-guarded) →
+   flag → release → follow-up → publish
+ pure policy: role verdict · composition ·
+   concretization · cohesion screen
  existing services apply consequences
-   (casualties, career, spatial, events)
+   (casualties, career, spatial, events): their
+   state halves inside the commit, their effects after it
 ```
 
 Rules that bound it: one authority per person; `Actor ≠ Person ≠ Pawn`; reconciliation exactly once from observed
-state; no Harmony; no work when nobody is physical; physical tests are a separate tier
-([ADR-048](DECISIONS.md), [ADR-049](DECISIONS.md)).
+state **and atomic for the Network's durable data** (no publication, scheduler or vanilla effect inside the commit);
+a first projection never contradicts established truth; no Harmony; no work when nobody is physical; physical tests are a
+separate, session-armed tier on its own test map ([ADR-048](DECISIONS.md), [ADR-049](DECISIONS.md),
+[ADR-050](DECISIONS.md)). Phase 3.3 (procurement fulfillment by physical handoff) is design direction only
+([ADR-051](DECISIONS.md), [PHYSICAL_LIFECYCLE § 27](PHYSICAL_LIFECYCLE.md#27-phase-33-procurement-fulfillment-and-physical-handoff-design-direction)).
 
 ## 7. Key flows
 

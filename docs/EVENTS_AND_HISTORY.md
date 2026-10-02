@@ -337,6 +337,10 @@ Reputation is **derived from what actually happened**. It is not a stat chosen a
    operational experience tier (which comes from its simulation or, for the player, the real
    colony). A global-cast actor starts with the template's fame, then its own record takes over.
    Fixers have fame and epithets too ("absurd contacts", "cheap but unreliable").
+   *Terminology note (Phase 3 amendment; wording only).* What is **implemented** today is one numeric score, built from
+   completed work and displayed as the fame tier ([CAREERS § 2](CAREERS.md#2-fame-is-not-experience)). The reputation
+   **dimensions** above, and a separate **visibility** that can be high or low independent of a track record, are future
+   design ([PHYSICAL_LIFECYCLE § 6.10](PHYSICAL_LIFECYCLE.md#610-professional-reputation-fame-and-capability)).
 5. **Consumers**: willingness and refusal, pricing and risk premium, bidding priority,
    sanctions and blacklists (Phase 5), the likelihood of introductions, and legend scoring.
 

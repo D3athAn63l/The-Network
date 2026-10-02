@@ -451,6 +451,8 @@ stateDiagram-v2
 > **Phase 3 design review:** the custody and deployment machines below are the Phase 0 design. The normative Phase 3
 > machines (the durable **Episode** machine and the character custody meanings, with the abstract/physical/held authority
 > rule) are in [PHYSICAL_LIFECYCLE § 8](PHYSICAL_LIFECYCLE.md#8-lifecycle-state-machine); where they differ, that document wins.
+> **Amendment:** the Stored row's "age is skipped" is vanilla's behaviour for a suspended pawn; Phase 3 *compensates* it
+> truthfully (full, uncapped biological catch-up before any observation, [§ 6.4](PHYSICAL_LIFECYCLE.md#64-truthful-aging-of-a-retained-pawn)).
 
 Custody describes **who controls the pawn** (if one exists). It is separate from status (alive,
 dead, captured, …).
@@ -490,6 +492,9 @@ Invariants and transition details: [ABSTRACT_PHYSICAL_LIFECYCLE § 3–5](ABSTRA
 
 > **Superseded by the Episode** ([PHYSICAL_LIFECYCLE § 5, § 8.1](PHYSICAL_LIFECYCLE.md#5-materialization-model)): states
 > Planned, Open, Closed, Quarantined; one exactly-once flag; consequences applied through existing services. Kept here as the Phase 0 record.
+> **Amendment:** `Closed(Reconciled)` is reached by an *atomic* durable commit (a pure validated plan, a snapshot-guarded Applier, the flag
+> last); release, follow-up and publish are idempotent post-commit stages with their own markers
+> ([PHYSICAL_LIFECYCLE § 8.1, § 15](PHYSICAL_LIFECYCLE.md#81-the-episode-machine-durable)).
 
 | State | Meaning | Exit |
 |---|---|---|

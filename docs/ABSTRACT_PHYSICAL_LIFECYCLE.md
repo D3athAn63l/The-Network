@@ -10,6 +10,13 @@
 > `Notify_PassedToWorld` rewrites a `Free` pawn's faction); **§ 10** reuses one temporary faction per organization
 > (vanilla removes it with the episode; the review uses one per episode); and the **`Deployment`** concept and name are
 > replaced by the Episode. Read this file for the rationale and the edge-case catalogue; do not implement from it without PHYSICAL_LIFECYCLE.
+>
+> **The amendment pass** (PHYSICAL_LIFECYCLE [Appendix F](PHYSICAL_LIFECYCLE.md#appendix-f-amendment-log)) further supersedes: **§ 2** treating
+> generic members as ephemeral for *every* organization (small recurring organizations concretize progressively); **§ 4.3**'s
+> biological-age catch-up "capped per event" (now truthful and uncapped); **§ 5.4**'s single lease seam for "sponsored or notable"
+> items (a *Lease* and a *Notable Asset* are separate seams; generic gear stays abstract); and the implicit "reconcile in one
+> synchronous block" (now an atomic, snapshot-guarded commit with idempotent post-commit stages). It also adds Operational
+> Roles, role composition and team cohesion, which this document does not have.
 
 > The highest-risk area of the mod. It covers how an off-map contractor organization, which is
 > a record with headcounts, becomes real pawns on a map, and how the results return to the

@@ -1,6 +1,6 @@
 # The Network
 
-**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; the formal in-game S20 checklist has not been run); Phase 2.75 merged (the contractor career foundation); Phase 2.9 merged and owner-runtime-tested (in-game runtime regression test infrastructure, developer-only); Phase 3 (abstract ↔ physical lifecycle) is next: design in progress, no Phase 3 code yet**
+**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; the formal in-game S20 checklist has not been run); Phase 2.75 merged (the contractor career foundation); Phase 2.9 merged and owner-runtime-tested (in-game runtime regression test infrastructure, developer-only); Phase 3 (abstract ↔ physical lifecycle) is next: design reviewed and amended, no Phase 3 code yet**
 
 The Network is a persistent, procedural contractor ecosystem that runs behind the normal RimWorld
 game. The player hires outsiders to find and fetch things they cannot easily get themselves. The
@@ -88,14 +88,18 @@ every slice (RT-INFRA-001), and if that check itself fails the run FAILS. It is 
 proof that all of RimWorld is untouched. It costs one null check per frame when idle,
 stores nothing in the save, and uses no Harmony. It complements the headless suite and does not replace it.
 
-**Phase 3 (abstract ↔ physical lifecycle) is next; its design review is done and no Phase 3 code exists**
-([docs/PHYSICAL_LIFECYCLE.md](docs/PHYSICAL_LIFECYCLE.md), [ADR-048 and ADR-049](docs/DECISIONS.md)). The design, audited against
+**Phase 3 (abstract ↔ physical lifecycle) is next; its design has been reviewed and amended, and no Phase 3 code exists**
+([docs/PHYSICAL_LIFECYCLE.md](docs/PHYSICAL_LIFECYCLE.md), [ADR-048 to ADR-051](docs/DECISIONS.md)). The design, audited against
 the 1.6 game assemblies: **one authority per person at a time** (abstract, physical, or held by vanilla); `Actor ≠ Person ≠
-Pawn`; a named contractor keeps **one pawn for life** and anonymous crew are ephemeral; a physical **Episode** records who is
-out there and is **reconciled exactly once** from observed state; death is final; custody beyond the map is never mistaken for
-"home"; **no Harmony** for the recommended slice. Three subphases: 3.0 the abstract foundation (no pawn), 3.1 one controlled
-physical episode (first real pawn, in a separate disposable-save test tier), 3.2 custody and rescue (first player-visible
-content). Full Safe Regression stays safe on a real colony. Open questions and the spikes that settle them are listed, not hidden.
+Pawn`; a named contractor keeps **one pawn for life** and ages truthfully while stored; a materialized contractor must never
+contradict what the Network already established (**Operational Roles** and **role composition** constrain only what is necessary;
+RimWorld's randomness fills the rest), small recurring crews keep their recognisable members while large companies stay
+ephemeral; a physical **Episode** records who is out there and is **reconciled exactly once**, atomically, from observed state;
+death is final; custody beyond the map is never mistaken for "home"; **no Harmony** for the recommended slice. Four subphases:
+3.0 the abstract foundation (no pawn), 3.1 one controlled physical episode (first real pawn, in a separate, session-armed test
+tier on its own test map), 3.2 custody, rescue and groups (first player-visible content), 3.3 procurement fulfillment / physical
+handoff (**design direction only**). Full Safe Regression stays safe on a real colony. Open questions and the spikes that settle
+them are listed, not hidden; none has been run.
 
 The contract board, the player as contractor and the social layer are later phases
 ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
@@ -164,7 +168,7 @@ same change.
 | [docs/EVENTS_AND_HISTORY.md](docs/EVENTS_AND_HISTORY.md) | Network events, history ledger, summaries, reputation, awareness, gossip, legends |
 | [docs/STATE_MACHINES.md](docs/STATE_MACHINES.md) | Intel, opportunity, contract, procurement, offer, operation, custody, actor lifecycles |
 | [docs/SIMULATION.md](docs/SIMULATION.md) | Scheduler, abstract resolver, willingness/refusal, morale, determinism and RNG |
-| [docs/PHYSICAL_LIFECYCLE.md](docs/PHYSICAL_LIFECYCLE.md) | **Phase 3 design (normative, not implemented):** authority, identity, Episodes, provenance, custody, reconciliation, save/load, RimWorld API audit, invariants, subphases |
+| [docs/PHYSICAL_LIFECYCLE.md](docs/PHYSICAL_LIFECYCLE.md) | **Phase 3 design (normative, not implemented):** authority, identity and progressive concretization, Episodes, provenance, Operational Roles and role composition, team cohesion, truthful aging, custody, atomic reconciliation, save/load, the equipment seams, the Phase 3.3 handoff direction, RimWorld API audit, invariants, subphases |
 | [docs/ABSTRACT_PHYSICAL_LIFECYCLE.md](docs/ABSTRACT_PHYSICAL_LIFECYCLE.md) | The Phase 0 lifecycle design (confirmed in its core; superseded in part by PHYSICAL_LIFECYCLE) |
 | [docs/RIMWORLD_INTEGRATION.md](docs/RIMWORLD_INTEGRATION.md) | What vanilla 1.6 APIs we reuse, avoid or wrap; Harmony policy; runtime spikes |
 | [docs/SAVE_AND_MIGRATION.md](docs/SAVE_AND_MIGRATION.md) | Save layout, `NetworkSaveVersion`, migrations, mod add/remove behaviour |

@@ -287,6 +287,15 @@ migrations** ([SAVE_AND_MIGRATION](SAVE_AND_MIGRATION.md)).
   (`WorldPawns.GetSituation`, `WorldPawns.cs:267–314`). Only quest reservation and a few other
   situations exclude them. This is the core reason for the registry quest.
 - Generation depends on the mod list, so we never regenerate a pawn to "recreate" a character.
+- **Constraining a generated pawn (Phase 3 amendment audit, 1.6.9676).** `PawnGenerationRequest` carries
+  `MustBeCapableOfViolence`, `ForcedTraits`, `ProhibitedTraits`, `ValidatorPreGear` / `ValidatorPostGear`, `FixedIdeo`,
+  `ForcedXenotype`, `BiologicalAgeRange` and more (`PawnGenerationRequest.cs:31–149`). **A validator is not a guarantee:**
+  vanilla retries up to 120 times and **ignores validators from the 100th try** (`PawnGenerator.cs:687–722`), so the returned
+  pawn must be re-verified. `Pawn.kindDef` is saved **by def name** (`Pawn.cs:4571`), so never create a `PawnKindDef` at
+  runtime. `SkillRecord.Level` reads base + aptitudes but **writes the base level** (`SkillRecord.cs:56–66`). An incapability
+  is a consequence of a backstory, trait or gene; the story setters clear only `backstoriesCache`
+  (`Pawn_StoryTracker.cs:47–70`). `CanGeneratePawnRelations = false` skips relation generation (`PawnGenerator.cs:824`).
+  Details and recommendations: [PHYSICAL_LIFECYCLE § 6.8, Appendix A36–A45](PHYSICAL_LIFECYCLE.md#68-role-constrained-creation-validate-then-the-smallest-correction).
 
 ### 2.18 World pawns and GC — **REUSE with reservation**
 
@@ -305,6 +314,11 @@ migrations** ([SAVE_AND_MIGRATION](SAVE_AND_MIGRATION.md)).
   `FactionLeader`, `Kidnapped`; `ReservedByQuest` is **not** low priority)
   (`WorldPawns.cs:11–17, 365–386`). This is why stored characters are normalized at storage
   ([ABSTRACT_PHYSICAL_LIFECYCLE § 4.3](ABSTRACT_PHYSICAL_LIFECYCLE.md#43-consequences-of-suspension-frozen-pawns)).
+- **Aging while suspended (Phase 3 amendment audit).** A `ReservedByQuest` pawn is `Suspended`; `Pawn.TickInterval` skips
+  `AgeTickInterval` for it (`Pawn.cs:1669–1727`) and `Pawn.TickMothballed` does nothing for it (`:1743–1749`), so its
+  **biological** age freezes. **Chronological** age is derived (`TicksAbs − BirthAbsTicks`, `Pawn_AgeTracker.cs:117–127`) and
+  stays truthful. `Pawn_AgeTracker.AgeTickMothballed(int)` is vanilla's public bulk catch-up and crosses every birthday
+  (`:486–496`); the `AgeBiologicalTicks` setter runs no birthday. See [PHYSICAL_LIFECYCLE § 6.4](PHYSICAL_LIFECYCLE.md#64-truthful-aging-of-a-retained-pawn).
 - `Pawn.SpawnSetup` removes the pawn from world pawns automatically (`Pawn.cs:1374`).
 - `Pawn.Discard` refuses while the pawn is still a world pawn (`Pawn.cs:2436`).
 

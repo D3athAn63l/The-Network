@@ -199,6 +199,16 @@ The score can only change through `SetScore` (clamped, re-derives the band) or `
 floor), so the band and the score never disagree. Fame is **not** capability: it is independent of the
 experience band. All thresholds live in `CareerPolicy` ([CAREERS § 3](CAREERS.md#3-numeric-reputation)).
 
+> **Terminology note (Phase 3 amendment; wording only, no code or save change).** What is **implemented** is *one*
+> number: the `score` is earned only from completed work (`CareerPolicy.ReputationGain`), so in substance it is a
+> **professional-record score**, yet the type is called `PublicReputation`, the band `FameBand`, and the band also gates
+> equipment advancement (`CareerPolicy.RequiredFame`). The **intended future** separates three concepts: *professional
+> reputation* (what the work market thinks of a track record, later regional), *fame / visibility* (how widely known,
+> independent of competence) and *capability* (`ExperienceBand`, skill, kit, role). It is **not** built; physical
+> projection never reads fame ([PHYSICAL_LIFECYCLE § 6.10](PHYSICAL_LIFECYCLE.md#610-professional-reputation-fame-and-capability),
+> [ADR-046 amendment note](DECISIONS.md)). A later focused phase would add a separate visibility value initialized from the
+> current band; the persisted labels `fame` and `score` mean C# renames are free but label changes need a migration.
+
 ### 4.1 Actor kinds
 
 | Kind | Examples | Created when |
@@ -316,7 +326,16 @@ KnownCharacter
 ```
 
 When a generic member becomes a Known Character, and how custody works, is defined in
-[ABSTRACT_PHYSICAL_LIFECYCLE § 2](ABSTRACT_PHYSICAL_LIFECYCLE.md#2-identity-tiers).
+[ABSTRACT_PHYSICAL_LIFECYCLE § 2](ABSTRACT_PHYSICAL_LIFECYCLE.md#2-identity-tiers) and, for Phase 3,
+[PHYSICAL_LIFECYCLE § 4.5](PHYSICAL_LIFECYCLE.md#45-progressive-concretization).
+
+> **Phase 3 design (supersedes the Phase 0 shape above where they differ).** The *implemented* record is in
+> `NetworkActor.cs` and has none of `gender`, `bioAgeYearsAtCapture`, `kindDef`, `xenotype`, `traitsSnapshot`,
+> `deploymentId` or `boundTick`: **the pawn is the truth for all of them** and they are not adopted
+> ([PHYSICAL_LIFECYCLE § 4.3](PHYSICAL_LIFECYCLE.md#43-the-questions-answered)). Phase 3 adds only `pawn` (a `PawnRef`, with
+> `agedThroughTick`), `episode`, `heldBy` + `heldSinceTick`, **`opRole`** (an *operational* role, distinct from the
+> organizational `role` above) and `firstEncounterTick`; an organization gains a small **role composition** template.
+> Nothing is implemented.
 
 ---
 
@@ -341,8 +360,8 @@ ContractorProfile : ActorComponent   // Organization | Individual (Solo) | Playe
 
 - **Operational capability and public fame are different things.** Capability (the Green …
   Legendary experience tier, strength, readiness) is derived from the simulation or from the real
-  colony. Fame is the actor's `PublicReputation` (EVENTS_AND_HISTORY § 6). An obscure contractor
-  can be extremely capable; a famous one can be declining and living on an old name.
+  colony. Fame is the actor's `PublicReputation` (EVENTS_AND_HISTORY § 6; *implemented as one work-built score, see § 4.0's
+  terminology note*). An obscure contractor can be extremely capable; a famous one can be declining and living on an old name.
 - **Availability** (available, committed, resting, unavailable) is derived, never stored.
 
 ### 6.2 ContractorSimulation (NPC contractors only)
@@ -794,9 +813,12 @@ it explains WHERE; the checkpoints stay the timeline and the resolver decides WH
 ## 11. Deployments and equipment leases
 
 > **Phase 3 design review:** the `Deployment` below is replaced by the Physical Episode; the candidate persisted shapes
-> (`PhysicalEpisode`, `EpisodeMember`, the `KnownCharacter` additions `pawn`/`episode`/`heldBy`, `PawnRef`) are in
-> [PHYSICAL_LIFECYCLE § 5.3](PHYSICAL_LIFECYCLE.md#53-the-persisted-data-candidate-shapes). `EquipmentLease` stays the Phase 4 seam
-> ([§ 11.2](PHYSICAL_LIFECYCLE.md#112-the-phase-4-seam-not-built)). Nothing here is implemented.
+> (`PhysicalEpisode`, `EpisodeMember`, the `KnownCharacter` additions `pawn`/`episode`/`heldBy`/`opRole`/`firstEncounterTick`,
+> `PawnRef` with `agedThroughTick`, `OrganizationProfile.composition`) are in
+> [PHYSICAL_LIFECYCLE § 5.3](PHYSICAL_LIFECYCLE.md#53-the-persisted-data-candidate-shapes). `EquipmentLease` is **one of two**
+> Phase 4 equipment seams (a *Lease* keeps ownership external; a *Notable Asset* transfers it and is owned by the person, not
+> stored in `leases`): [§ 11.2](PHYSICAL_LIFECYCLE.md#112-the-future-equipment-seam-not-built-a-lease-is-not-a-notable-asset).
+> Nothing here is implemented.
 
 ```
 Deployment                                   // one physical appearance of an org's people

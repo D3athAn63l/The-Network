@@ -11,7 +11,8 @@
 > with zero runtime FAILs and the live colony unchanged by manual check ([§ 15](#15-owner-observed-runtime-evidence)).
 > That is runtime evidence for *this framework*, not a claim that every mod interaction or every RimWorld state is
 > proven ([§ 16](#16-what-was-and-was-not-validated)). Phase 3's physical scenarios will **not** run in the safe
-> suites: they need their own separate, explicit, disposable-environment tier
+> suites: they need their own separate, explicit tier with a **session-only arm** and, by default, **their own generated test
+> map**; the guard never tries to infer whether a save is disposable
 > ([PHYSICAL_LIFECYCLE § 21](PHYSICAL_LIFECYCLE.md#21-runtime-qa-strategy)).
 
 ## Contents
@@ -510,8 +511,9 @@ By design, not built in this phase and not part of any default suite:
 * **Save / load, quit, restart, reload-a-backup** automation. A save-reload scenario must be run by a person.
 * **Destructive or physical suites.** Anything that spends real silver, spawns real items or pawns, creates
   real world objects or edits the live Network needs its own isolated, explicit, opt-in tier. None exists yet;
-  Phase 3's is designed (a disposable dev map and save, never part of Quick or Full safe) in
-  [PHYSICAL_LIFECYCLE § 21](PHYSICAL_LIFECYCLE.md#21-runtime-qa-strategy) and will get its own ADR when built.
+  Phase 3's is designed (a separate Dev menu, a typed **session-only arm**, a dedicated generated test map by default, a stronger
+  second gate for any home-colony scenario, no inference of "disposable", never part of Quick or Full safe) in
+  [PHYSICAL_LIFECYCLE § 21](PHYSICAL_LIFECYCLE.md#21-runtime-qa-strategy) and [ADR-049](DECISIONS.md).
 * **Cancelling a run that is in progress.** The owner pressed *Cancel current run* after a run had finished
   (the game showed the normal "no runtime test is running" Message) so the in-progress path has no manual
   evidence; cancel, cleanup and override restoration are covered headlessly (`Runner.CancelRestoresOverrides`).
@@ -544,6 +546,10 @@ Phase 3's multi-step lifecycle is what the stepped cases and the preserved sandb
 fake physical ports) runs in the existing safe suites against the sandbox; the **physical half** (real pawns on
 a real map) cannot, and runs only in the separate physical tier
 ([PHYSICAL_LIFECYCLE § 21](PHYSICAL_LIFECYCLE.md#21-runtime-qa-strategy)). The safe suites stay safe on a real colony.
+The amendment pass adds to the safe half: a **fault-injection sweep** over the reconciliation commit (a throw after every
+step must leave the deep fingerprint unchanged), a parity test with the abstract casualty path, fame-invariance of
+projection, the truthful-aging contract and the concretization policy (`RT-PHYS-020…028`, 28 cases in all), and in the
+physical tier role-constrained creation, truthful aging and concretization on real pawns (`RT-PHYX-011…014`).
 
 ## 15. Owner-observed runtime evidence
 
