@@ -271,6 +271,110 @@ namespace TheNetwork.Persist
     }
 
     /// <summary>
+    /// A contractor's cumulative career in a fixed handful of counters (Phase 2.75, ADR-046). It is a
+    /// summary, never a log: the detail of each job stays in History. Fame, funds, equipment and skill
+    /// are NOT copied here: they already live in PublicReputation and ContractorSimulation. Every counter
+    /// saturates at <see cref="CareerPolicy.CounterCap"/>. A pre-2.75 save starts with
+    /// <see cref="legacyResolved"/> equal to the jobs it had resolved and every other counter at zero:
+    /// nothing is classified, reconstructed or invented from the past.
+    /// </summary>
+    public sealed class CareerRecord : IExposable
+    {
+        /// <summary>Jobs resolved before this record existed (migration: the old opsCompleted). Never classified as wins or losses.</summary>
+        public int legacyResolved;
+
+        public int triumphs;
+
+        /// <summary>Successes and costly successes.</summary>
+        public int successes;
+
+        public int partials;
+        public int failures;
+        public int disasters;
+
+        /// <summary>The most dangerous work at least partly done, in thousandths (0..1000).</summary>
+        public int highestDanger;
+
+        /// <summary>Silver this contractor was paid and kept (credits less clawbacks), the real contractor earnings.</summary>
+        public int careerEarnings;
+
+        /// <summary>People killed, wounded, captured or lost on the jobs counted here.</summary>
+        public int casualtiesTaken;
+
+        public int peopleLost;
+        public int captured;
+
+        /// <summary>People reported missing at a resolution (some were later found; the report was still made).</summary>
+        public int missing;
+
+        /// <summary>Reputation score this record earned from finished work (not grants).</summary>
+        public int reputationEarned;
+
+        public int lastOutcomeTick = -1;
+
+        /// <summary>When equipment last advanced (the cooldown starts here); -1 never.</summary>
+        public int lastAdvancementTick = -1;
+
+        /// <summary>Equipment advances so far.</summary>
+        public int advancementCount;
+
+        /// <summary>A copy of every field: the career result is planned on a copy and committed as a whole.</summary>
+        public CareerRecord Clone()
+        {
+            CareerRecord r = new CareerRecord();
+            r.CopyFrom(this);
+            return r;
+        }
+
+        /// <summary>Overwrites every field from <paramref name="o"/> (primitive assignments only: it cannot fail half-way).</summary>
+        public void CopyFrom(CareerRecord o)
+        {
+            legacyResolved = o.legacyResolved;
+            triumphs = o.triumphs;
+            successes = o.successes;
+            partials = o.partials;
+            failures = o.failures;
+            disasters = o.disasters;
+            highestDanger = o.highestDanger;
+            careerEarnings = o.careerEarnings;
+            casualtiesTaken = o.casualtiesTaken;
+            peopleLost = o.peopleLost;
+            captured = o.captured;
+            missing = o.missing;
+            reputationEarned = o.reputationEarned;
+            lastOutcomeTick = o.lastOutcomeTick;
+            lastAdvancementTick = o.lastAdvancementTick;
+            advancementCount = o.advancementCount;
+        }
+
+        /// <summary>Jobs this record classified.</summary>
+        public long Classified => (long)triumphs + successes + partials + failures + disasters;
+
+        /// <summary>Every job resolved, before and after the record began.</summary>
+        public long Resolved => legacyResolved + Classified;
+
+        public void ExposeData()
+        {
+            Scribe_Values.Look(ref legacyResolved, "legacyResolved", 0);
+            Scribe_Values.Look(ref triumphs, "triumphs", 0);
+            Scribe_Values.Look(ref successes, "successes", 0);
+            Scribe_Values.Look(ref partials, "partials", 0);
+            Scribe_Values.Look(ref failures, "failures", 0);
+            Scribe_Values.Look(ref disasters, "disasters", 0);
+            Scribe_Values.Look(ref highestDanger, "highestDanger", 0);
+            Scribe_Values.Look(ref careerEarnings, "earnings", 0);
+            Scribe_Values.Look(ref casualtiesTaken, "casualties", 0);
+            Scribe_Values.Look(ref peopleLost, "peopleLost", 0);
+            Scribe_Values.Look(ref captured, "captured", 0);
+            Scribe_Values.Look(ref missing, "missing", 0);
+            Scribe_Values.Look(ref reputationEarned, "repEarned", 0);
+            Scribe_Values.Look(ref lastOutcomeTick, "lastOutcome", -1);
+            Scribe_Values.Look(ref lastAdvancementTick, "lastAdvancement", -1);
+            Scribe_Values.Look(ref advancementCount, "advancements", 0);
+        }
+    }
+
+    /// <summary>
     /// The abstract off-map state of an NPC contractor, Solo or organization (DATA_MODEL § 6.2). It
     /// never exists on the PlayerProxy.
     /// </summary>
@@ -293,6 +397,9 @@ namespace TheNetwork.Persist
 
         /// <summary>Hidden world truth: where the contractor is (Phase 2.5). Capability stays in <see cref="mobility"/>.</summary>
         public SpatialState spatial = new SpatialState();
+
+        /// <summary>Cumulative career summary (Phase 2.75). Funds, equipment and skill stay in their own fields.</summary>
+        public CareerRecord career = new CareerRecord();
 
         public int nextUpkeepTick = -1;
         public int lastUpkeepTick = -1;
@@ -333,6 +440,7 @@ namespace TheNetwork.Persist
             Scribe_Values.Look(ref retirementPressure, "retirementPressure", 0f);
             Scribe_Deep.Look(ref mobility, "mobility");
             Scribe_Deep.Look(ref spatial, "spatial");
+            Scribe_Deep.Look(ref career, "careerRecord");
             Scribe_Values.Look(ref nextUpkeepTick, "nextUpkeepTick", -1);
             Scribe_Values.Look(ref lastUpkeepTick, "lastUpkeepTick", -1);
             Scribe_Values.Look(ref skill, "skill", 0.3f);
@@ -347,6 +455,8 @@ namespace TheNetwork.Persist
                 // A pre-Phase-2.5 save has no spatial node: the contractor starts Uninitialized and gets
                 // its anchor once world data is available. No past journey is invented.
                 if (spatial == null) spatial = new SpatialState();
+                // A pre-Phase-2.75 save has no career node: the migration sets legacyResolved (opsCompleted).
+                if (career == null) career = new CareerRecord();
                 if (commitments == null) commitments = new List<OperationId>();
             }
             cachedStrength = -1f;

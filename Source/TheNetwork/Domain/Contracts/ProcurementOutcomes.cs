@@ -59,14 +59,15 @@ namespace TheNetwork.Domain.Contracts
                 return;
             }
             int deposit = c.Funding(MoneyPurpose.Deposit);
-            int refund = (int)Math.Round(deposit * refundShare) + c.Funding(MoneyPurpose.Premium);
+            int depositRefund = (int)Math.Round(deposit * refundShare);
+            int refund = depositRefund + c.Funding(MoneyPurpose.Premium);
             int payout = 0;
             if (c.terms?.insurance != null && c.terms.insurance.Covers(Causes.PreWorkLoss))
             {
                 payout = (int)Math.Round((deposit - deposit * refundShare) * c.terms.insurance.coverage);
             }
-            if (refund > 0) Refund(c, refund, MoneyPurpose.Refund, "refund.replacementPolicy");
-            if (payout > 0) Refund(c, payout, MoneyPurpose.InsurancePayout, "insurance.payout");
+            if (refund > 0) Refund(c, refund, MoneyPurpose.Refund, "refund.replacementPolicy", RefundScope.Of(deposit: depositRefund, premium: c.Funding(MoneyPurpose.Premium)));
+            if (payout > 0) Refund(c, payout, MoneyPurpose.InsurancePayout, "insurance.payout", RefundScope.None);
             Close(c, ContractStatus.Failed, Causes.PreWorkLoss, EventKeys.ContractFailed, Importance.Notable, refund, payout);
         }
 
@@ -272,9 +273,10 @@ namespace TheNetwork.Domain.Contracts
                         ApplyWorse(c, WorseChoice.AcceptReduced);
                         return;
                     }
-                    c.ledger.Add(Money(ask.extraSilver, MoneyDirection.PlayerPaid, MoneyPurpose.Renegotiation, "renegotiation.extra"));
+                    MoneyRecord extra = Money(ask.extraSilver, MoneyDirection.PlayerPaid, MoneyPurpose.Renegotiation, "renegotiation.extra");
+                    c.ledger.Add(extra);
                     c.terms.price += ask.extraSilver;
-                    PayContractor(c, ctx.actors.Get(c.parties.contractor), ask.extraSilver);
+                    PayContractor(c, ctx.actors.Get(c.parties.contractor), extra);
                     ctx.FieldLog?.Note(c, FieldLogKeys.PaidMore, ask.extraSilver.ToString());
                     break;
                 case WorseChoice.AcceptReduced:
@@ -296,8 +298,9 @@ namespace TheNetwork.Domain.Contracts
                         break; // they go ahead on the original terms, grudgingly
                     }
                     if (op != null) ctx.Operations.Abort(op, Causes.ContractorWalked);
-                    int refund = (int)Math.Round(c.Funding(MoneyPurpose.Deposit) * 0.5f) + c.Funding(MoneyPurpose.Premium);
-                    if (refund > 0) Refund(c, refund, MoneyPurpose.Refund, "refund.walked");
+                    int depositBack = (int)Math.Round(c.Funding(MoneyPurpose.Deposit) * 0.5f);
+                    int refund = depositBack + c.Funding(MoneyPurpose.Premium);
+                    if (refund > 0) Refund(c, refund, MoneyPurpose.Refund, "refund.walked", RefundScope.Of(deposit: depositBack, premium: c.Funding(MoneyPurpose.Premium)));
                     Close(c, ContractStatus.Failed, Causes.ContractorWalked, EventKeys.ContractFailed, Importance.Notable, refund);
                     return;
             }
@@ -449,7 +452,7 @@ namespace TheNetwork.Domain.Contracts
             if (c.terms.insurance != null && c.terms.insurance.Covers(Causes.PartialShortfall))
             {
                 payout = (int)Math.Round(depositPaid * (1f - delivered) * c.terms.insurance.coverage);
-                if (payout > 0) Refund(c, payout, MoneyPurpose.InsurancePayout, "insurance.payout");
+                if (payout > 0) Refund(c, payout, MoneyPurpose.InsurancePayout, "insurance.payout", RefundScope.None);
             }
             c.status = ContractStatus.Active;
             c.subStatus = null;
@@ -554,8 +557,9 @@ namespace TheNetwork.Domain.Contracts
                     return;
                 }
                 d.balancePaid = true;
-                c.ledger.Add(Money(d.balanceDue, MoneyDirection.PlayerPaid, MoneyPurpose.Balance, "balance"));
-                PayContractor(c, ctx.actors.Get(c.parties.contractor), d.balanceDue);
+                MoneyRecord balance = Money(d.balanceDue, MoneyDirection.PlayerPaid, MoneyPurpose.Balance, "balance");
+                c.ledger.Add(balance);
+                PayContractor(c, ctx.actors.Get(c.parties.contractor), balance);
                 ContractEvent paid = NewEvent(EventKeys.PaymentReceived, Importance.Minor, c);
                 paid.silver = d.balanceDue;
                 paid.causeKey = "Balance";
@@ -606,7 +610,7 @@ namespace TheNetwork.Domain.Contracts
             if (hold && ctx.Now - d.holdSinceTick >= (int)(rules.deliveryHoldMaxDays * Ticks.PerDay))
             {
                 int refund = d.balancePaid && d.balanceDue > 0 ? d.balanceDue : 0;
-                if (refund > 0) Refund(c, refund, MoneyPurpose.Refund, "refund.undeliverable");
+                if (refund > 0) Refund(c, refund, MoneyPurpose.Refund, "refund.undeliverable", RefundScope.Of(balance: refund));
                 Operation op = CurrentOperation(c);
                 if (op != null) ctx.Operations.Finish(op);
                 Close(c, ContractStatus.Failed, Causes.UndeliverableNoHome, EventKeys.ContractFailed, Importance.Notable, refund);
@@ -728,7 +732,7 @@ namespace TheNetwork.Domain.Contracts
             {
                 int deposit = c.Funding(MoneyPurpose.Deposit);
                 payout = (int)Math.Round(deposit * ins.coverage);
-                if (payout > 0) Refund(c, payout, MoneyPurpose.InsurancePayout, "insurance.payout");
+                if (payout > 0) Refund(c, payout, MoneyPurpose.InsurancePayout, "insurance.payout", RefundScope.None);
             }
             Close(c, ContractStatus.Failed, causeKey, EventKeys.ContractFailed, importance, 0, payout);
         }

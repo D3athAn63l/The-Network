@@ -162,6 +162,23 @@ summaries or edges in O(1), or knowledge books in O(64) at most.
    land bridge closed, so the world's two halves have no ground connection. 34 charter plans, 24
    crossings, all invariants zero, about 1.7 ms per simulated day. Synthetic timings are harness costs,
    **not** RimWorld TPS; S20 measures the real world graph.
+   **Phase 2.75 (contractor careers).** No new per-tick work and no new scheduler job: the equipment
+   advancement check rides the existing staggered daily upkeep (≈ 0.43 µs per contractor per day, measured:
+   100 contractors ≈ 0.04 ms a day, cheap checks first, no allocation), the career result rides the
+   operation's existing end-of-lifecycle (a few arithmetic operations and one danger evaluation), and
+   contractor money rides the existing ledger transitions. Tags and `CareerNeed` are derived on demand
+   (≈ 4 µs per contractor, dev tools and read models only); nothing scans every contractor from a contract.
+   Same-seed A/B of the 1,080-day soak (100 contractors; five runs each, this machine): main 2.25 ms per
+   simulated day (p95 3.4), branch 2.42 ms (p95 3.5): +0.17 ms, of which the advancement check itself is
+   about 0.04 ms; the rest is the two worlds diverging (careers change who is quoted and who wins work),
+   inside the run-to-run spread. Three further soaks of 20 in-game years (1,200 days) with all career
+   invariants zero: 100 contractors and a person-like client (random quote, 131 cancellations, 56 technical
+   voids) 2.49 ms (p95 3.7); the Phase 2 cheapest-quote client 2.41 ms (p95 3.5); **300 contractors** (7,200
+   contracts, 201 cancellations, 96 voids) 11.4 ms (p95 14.9, max 21.7). Save size: the career data (score,
+   record, flags, ledger attribution) is about **1.6 %** of the save (100 contractors: 48 KB of 3.05 MB;
+   300: 113 KB of 7.0 MB). In the same-seed 18-year soak the Network node grows 2,697 → 2,829 KB (+132 KB,
+   +4.9 %), of which the actors' nodes are +37 KB; the rest is history, summaries and journal records of the
+   diverged world (including the new fame and advancement records, capped by the existing retention).
 3. **Phase 3 soak**: 150 stored pawns plus 5 concurrent deployments. Compare TPS with and
    without The Network on the same save (the prepared-removal path).
 4. **Regression gate**: the timing report (see [DEBUGGING § 5](DEBUGGING.md#5-timing-instrumentation))

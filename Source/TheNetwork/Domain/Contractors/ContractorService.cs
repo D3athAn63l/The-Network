@@ -132,6 +132,13 @@ namespace TheNetwork.Domain.Contractors
             return a != null && a.kind == ActorKind.Individual && !a.Has<OrganizationProfile>();
         }
 
+        /// <summary>The people this contractor keeps: a Solo is one; an organization its healthy, wounded, committed and named members.</summary>
+        public static int Headcount(NetworkActor a)
+        {
+            OrganizationProfile org = a?.Get<OrganizationProfile>();
+            return org == null ? 1 : Math.Max(1, org.Healthy + org.Wounded + org.Committed + org.knownMembers.Count);
+        }
+
         private int SeedFor(ActorId id, string salt)
         {
             return NetHash.Combine(NetHash.Combine(ctx.networkSeed, id.Value), salt);
@@ -194,7 +201,7 @@ namespace TheNetwork.Domain.Contractors
                 provenance = new Provenance { source = source, templateId = templateId, importedTick = ctx.Now }
             };
             a.seed = SeedFor(a.id, "actor");
-            a.reputation.fame = t.startingFame;
+            a.reputation.SetBand(t.startingFame);
             NetRng rng = new NetRng(a.seed, "contractor.create");
 
             ContractorProfile profile = new ContractorProfile { capability = CapabilitySource.NpcSimulation, registeredTick = ctx.Now };
@@ -203,6 +210,7 @@ namespace TheNetwork.Domain.Contractors
             a.Add(profile);
 
             ContractorSimulation sim = BuildSimulation(t, rng, solo);
+            ctx.Career?.NoteStartingFunds(sim);
             a.Add(sim);
             if (t.canIssueWork) a.Add(new IssuerProfile { budgetBand = solo ? 0 : 1 });
 

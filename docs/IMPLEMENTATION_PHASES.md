@@ -13,6 +13,7 @@
 4. [Phase 1: Foundation + Intel](#4-phase-1-foundation--intel)
 5. [Phase 2: Contractors (abstract) + Procurement](#5-phase-2-contractors-abstract--procurement)
    - [Phase 2.5: Abstract spatial continuity + player-contract Field Log](#5a-phase-25-abstract-spatial-continuity--player-contract-field-log)
+   - [Phase 2.75: Contractor career foundation](#5b-phase-275-contractor-career-foundation)
 6. [Phase 3: Abstract ↔ physical lifecycle](#6-phase-3-abstract--physical-lifecycle)
 7. [Phase 4: Player as contractor, contract board, bidding](#7-phase-4-player-as-contractor-contract-board-bidding)
 8. [Phase 5: Social layer](#8-phase-5-social-layer)
@@ -30,6 +31,7 @@
 | **1** | Foundation + Intel + Fixer foundation | global cast in ModSettings → world snapshot → Fixers → Comms Console gate → catalog → persistence → scheduling → multi-lead Intel → source/context resolution → opportunity → vanilla site → physical loot, taken in part or in full → cleanup → history | S1, S2, S5, S6, S8, S19 |
 | **2** | Contractors (abstract) + Procurement | about 100 contractor identities (Solos to companies) from the world's cast, capability split from NPC simulation, Open and Direct contracts with the offer path, Fixer-mediated quotes, deposits and insurance, deterministic resolver, drop-pod delivery, willingness/refusal, relationships core, history changing behaviour, failures that leave a last known location | S13 |
 | **2.5** | Abstract spatial continuity + player-contract Field Log | every contractor has hidden approximate geography (one anchor, coarse lazy journeys, no icons, no caravans, no per-tick work); operations start from the real anchor and work in a hidden region on their committed timeline; Last Known Locations appear where the contractor actually was; the player's running job has a short Field Log | S20 |
+| **2.75** | Contractor career foundation | work changes a contractor: numeric reputation beneath the fame band, a cumulative career record, exact contractor money in the existing funds, equipment advancement, derived `CareerNeed` and Tags; no second reputation, wealth or stat system | — (headless; the soak reports the distributions) |
 | **3** | Abstract ↔ physical lifecycle | Known Characters as pawns, custody, deployments, encounter factions, in-person delivery, rescue follow-ups, contract inheritance | **S9**, S10, S11, S12, S14 |
 | **4** | Player as contractor + NPC contract board + full bidding | player registration (same faction), NPC-issued contracts, competing offers, competitors at opportunities, public reputation epithets | — |
 | **5** | Social layer | rumors and beliefs, gossip, favors and debts, introductions, perceived reputation, sanctions and blacklists, morale v2 | — |
@@ -322,6 +324,41 @@ its own pace; ended contractors never move; recovered groups are where Phase 2 s
 never charters; Field Logs exist only on the player's live contracts and never repeat a line. Zero
 violations in the 18-year soak (a charter world) and the archipelago stress soak; the spatial data
 adds about 127 KB to the 18-year save. S20 (runtime) is **not run**.
+
+---
+
+## 5B. Phase 2.75: Contractor career foundation
+
+Inserted after Phase 2.5 was merged and before Phase 3: the durable progression spine that later phases
+(pawn generation, NPC competition, hiring, alternative compensation, sponsorship, rivalries, equipment
+generation, augmentations, legends) will read. Normative spec: [CAREERS](CAREERS.md); decision
+[ADR-046](DECISIONS.md) (careers extend existing simulation truth).
+
+**Scope (as implemented)**
+
+- `PublicReputation.score` beneath the `FameBand` (derived; thresholds 100 / 300 / 800 / 2,000 in one
+  `CareerPolicy`); reputation from finished work by the operation's frozen danger and outcome, with an
+  anti-farming ceiling; no reputation loss.
+- `CareerRecord` on `ContractorSimulation` (fixed counters; History keeps the detail);
+  `Operation.careerEligible` / `careerOutcomeApplied` and an exactly-once result at the lifecycle's end.
+- Contractor money in the existing `funds`: one saturating path; the contractor's share mirrored on the
+  ledger record at the commit point; proportional clawback on refunds; nothing for the Fixer's fee, an
+  insurance payout or a replacement transfer; no windfall on a technical invalidation.
+- Equipment advancement from the existing daily upkeep (reputation, `cost + reserve`, health, cooldown, no
+  commitment, tier cap).
+- `CareerNeed` and Tags, derived, never stored, never read by the resolver.
+- `Contractor.FameChanged` / `Contractor.Advanced` history events; dev actions; save format 4 with the
+  V3→V4 migration (score = band floor, `legacyResolved = opsCompleted`, old operations ineligible).
+
+**Not in Phase 2.75:** pawns, custody, physical inventories, vehicles or ships, augmentations,
+loadouts, exact weapon ownership, retirement, mergers, NPC-issued contracts, player contractor mode,
+direct hiring, alternative compensation, player Loyalty, rivalries. Mobility advancement is future work.
+
+Headless evidence: 283 tests, 17,609 checks, 0 failures (70 new: the reputation, record, money,
+advancement, Tag, need and migration matrix, the exactly-once paths, the farming loop, and three career
+soaks). The soaks add career invariants, all zero over 20 in-game years at 100 and 300 contractors:
+duplicate outcomes, stuck results, legacy operations awarded, funds drift, ledger attribution, refund
+provenance, technical-void windfalls, fame/score mapping, bounds, advancement rules and Tag contradictions. Career data is about 1.6 % of the save.
 
 ---
 

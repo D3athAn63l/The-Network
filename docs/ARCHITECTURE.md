@@ -389,6 +389,26 @@ hold **who may exist in new worlds**; each world holds **what happened to them i
 - **Lifecycle.** Per-contractor upkeep runs about once per in-game day, staggered by seed.
 - **Detail.** [SIMULATION § 4–5](SIMULATION.md#4-organizations-upkeep-morale-doctrine).
 
+#### 6.8.1 Careers (Phase 2.75, ADR-046)
+
+- **Responsibility.** The spine that lets work change a contractor: reputation from finished jobs,
+  exact contractor money, equipment advancement, and derived `CareerNeed` and Tags. **It extends the
+  existing state and adds no second reputation, wealth, skill or equipment system** ([CAREERS](CAREERS.md)).
+- **Persistent (all existing homes).** `PublicReputation.score` (the fame band is derived),
+  `ContractorSimulation.funds`, `EquipmentProfile.tier`, and one new small `ContractorSimulation.career`
+  (`CareerRecord`: cumulative counters, advancement cooldown). `Operation.careerEligible` /
+  `careerOutcomeApplied`; `MoneyRecord.contractorSilver` on contract ledgers.
+- **Public surface.** `CareerService` (`DomainContext.Career`): `CommitOutcome(op)`, `MoveFunds` /
+  `Credit` / `ClawBack` / `ClawBackAll` (the one saturating money path; `ClawBackAll` is a technical invalidation's full reversal of what the current contractor holds), `AddReputation`, `RunAdvancement`, `BlockedBy`,
+  `CurrentNeed`, `Tags`, `Validate`. Every number lives in `CareerPolicy`.
+- **Hooks (no new scheduler job, nothing per tick).** `OperationService.Finish` / post-outcome `Abort` /
+  written-off Troubled apply the career result once (planned as a pure delta, committed as one small durable step, flagged only after that commit, then announced; a missing contractor or simulation is a failed commit, never an applied one); `UpkeepService.UpkeepJob` runs the advancement
+  check; `ProcurementService` mirrors contractor-owned money at the ledger commit point.
+- **Derived, never stored.** `CareerNeed` and Tags (`CareerTags`). Nothing that decides outcomes
+  (resolver, pricing, willingness, upkeep) reads them; a source scan in the test run holds that.
+- **Emits.** `Contractor.FameChanged` (a band was crossed), `Contractor.Advanced` (equipment advanced).
+- **Detail.** [CAREERS](CAREERS.md), [SIMULATION § 4.7](SIMULATION.md#47-careers-phase-275).
+
 ### 6.9 Knowledge (learning and geographic knowledge)
 
 - **Responsibility.** Let actors get better at things they have actually done. Knowledge is
@@ -424,7 +444,9 @@ hold **who may exist in new worlds**; each world holds **what happened to them i
   ("reliable", "reckless", "rescuers", "oathbreakers") and into numeric reputation inputs for
   willingness and pricing.
 - **Persistent.** `PublicReputation { epithets[], lastComputedTick }` on the actor. It is stored
-  so that reputation has inertia and hysteresis and does not flicker.
+  so that reputation has inertia and hysteresis and does not flicker. **Phase 2.75 implements the
+  numeric core:** `PublicReputation { fame, score }`, where the `FameBand` is derived from the score
+  (§ 6.8.1, [CAREERS § 3](CAREERS.md#3-numeric-reputation)); epithets remain future work.
 - **Runtime cache.** Per-observer perceived-reputation cache (Phase 5).
 - **Public surface.** `Reputation.Public(actor)`, `Reputation.As(observer, subject)`.
 - **Consumes.** Summary-changed notifications from History, which set dirty flags and never
@@ -605,6 +627,8 @@ binding). It picks plausible world context for an opportunity. It is not a subsy
 - **Emits.** `OperationStarted`, `OperationCheckpoint` (Minor), `OperationResolved`,
   `ContractorCasualties`, `ContractorCaptured`, `ContractorMissing`, `ContractorStranded`,
   `CargoLost`, `CargoStolen`.
+- **Career result (Phase 2.75).** An operation started by a 2.75 build is `careerEligible`; its result
+  is applied once at the lifecycle's end (§ 6.8.1). An operation from an older save never is.
 - **Detail.** [SIMULATION § 3](SIMULATION.md#3-abstract-resolver).
 
 ### 6.17 Consequence Engine (chain reactions, inheritance, follow-ups)

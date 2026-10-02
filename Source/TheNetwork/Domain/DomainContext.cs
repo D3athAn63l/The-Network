@@ -107,6 +107,9 @@ namespace TheNetwork.Domain
         public Spatial.SpatialService Spatial;
         public Contracts.FieldLogService FieldLog;
 
+        /// <summary>Contractor careers (Phase 2.75): reputation from finished work, contractor funds, equipment advancement, need and Tags.</summary>
+        public CareerService Career;
+
         public int Now => clock.Now;
     }
 

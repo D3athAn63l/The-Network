@@ -1,6 +1,6 @@
 # The Network
 
-**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 implemented (hidden spatial continuity and the Field Log) — its in-game runtime validation (S20) pending**
+**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; its in-game validation, S20, pending); Phase 2.75 implemented (the contractor career foundation) and under review**
 
 The Network is a persistent, procedural contractor ecosystem that runs behind the normal RimWorld
 game. The player hires outsiders to find and fetch things they cannot easily get themselves. The
@@ -58,11 +58,28 @@ hidden, approximate place in the world ([docs/SPATIAL.md](docs/SPATIAL.md)):
 - **Field Log.** While a contractor works a player's contract, the contract card shows short reports
   ("has set out", "running behind schedule", "499 of 500 secured"). It ends with the contract.
 
+**Phase 2.75 (contractor career foundation)** lets work change a contractor
+([docs/CAREERS.md](docs/CAREERS.md)). It extends what already exists; it adds no second reputation,
+wealth or stat system:
+- **Reputation.** A numeric score sits beneath the fame band (Unknown, Local, Established, Famous,
+  Legendary), which is now derived from it. A finished job earns reputation by how dangerous it really
+  was and how it ended, once; easy work stops counting above a ceiling, so no number of safe hauls makes
+  a legend. Fame is public standing and stays independent of experience.
+- **Money.** A contractor's pay lands in its funds exactly once; a refund takes back the proportional
+  part; the Fixer's fee, insurance payouts and a replacement's carried-over deposit never touch it.
+- **Advancement.** Equipment advances one tier at a time from the daily upkeep when reputation, funds
+  (plus an operating reserve) and health allow, never during a job.
+- **Need and Tags.** A derived `CareerNeed` and descriptive Tags (`WellEquipped`, `Wealthy`,
+  `EliteCombat`, `BattleTested`, `LongRange`, `RapidTransport`, `HeavyLift`, `SpacerCapable`,
+  `LegendaryReputation`) are computed from existing state: descriptors, never bonuses.
+- **Old saves.** Format 4 keeps every visible fact (each reputation score starts at its band's floor)
+  and invents no past: a running operation never earns career credit.
+
 Contractor pawns, the contract board, the player as contractor and the social layer are later
 phases ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
 
-The headless tests pass (213 tests, including an 18-in-game-year procurement soak with daily money,
-capacity and spatial invariant checks). The owner has run the Phase 2 procurement loop in game,
+The headless tests pass (283 tests, including an 18-in-game-year procurement soak and three 20-in-game-year
+career soaks with daily money, capacity, spatial and career invariant checks). The owner has run the Phase 2 procurement loop in game,
 normal drop-pod delivery included. The other runtime spikes, including S20 for spatial continuity,
 have **not** been run yet. Their records and owner test steps are in [docs/spikes/](docs/spikes/README.md).
 

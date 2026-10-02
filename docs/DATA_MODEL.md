@@ -182,9 +182,22 @@ NetworkActor
     importedTick: int
   homeRegion: RegionKey?
   components: ActorComponent[] // capabilities (polymorphic, persisted type names frozen)
-  reputation: PublicReputation // see EVENTS_AND_HISTORY § 6
+  reputation: PublicReputation // see EVENTS_AND_HISTORY § 6. Phase 2.75: { fame: FameBand (derived), score: int }; see § 4.4
   flags: ActorFlags            // Quarantined, PlayerVisible, Legendary, …
 ```
+
+### 4.0 PublicReputation (Phase 2.75)
+
+```
+PublicReputation
+  score: int            // the truth: 0 … 1,000,000
+  fame: FameBand        // DERIVED from the score (Unknown 0–99, Local 100–299, Established 300–799,
+                        // Famous 800–1,999, Legendary 2,000+); read-only, saved by name for readability
+```
+
+The score can only change through `SetScore` (clamped, re-derives the band) or `SetBand` (starts at the band's
+floor), so the band and the score never disagree. Fame is **not** capability: it is independent of the
+experience band. All thresholds live in `CareerPolicy` ([CAREERS § 3](CAREERS.md#3-numeric-reputation)).
 
 ### 4.1 Actor kinds
 
@@ -358,6 +371,7 @@ ContractorSimulation : ActorComponent   // NPC Organization or Individual (Solo)
   retirementPressure: float
   mobility: MobilityProfile          // how far, how fast and what the contractor can move (below)
   spatial: SpatialState              // Phase 2.5: where it is approximately (hidden world truth, below)
+  career: CareerRecord               // Phase 2.75: cumulative career summary (below); fame, funds, skill and kit stay in their own fields
   nextUpkeepTick: int                // mirrored by a scheduler job; kept for validation
 ```
 
@@ -385,11 +399,30 @@ MobilityProfile                      // part of ContractorSimulation; capability
 - **Abstract only.** No simulated world caravans, persistent vehicles, off-map ships, per-tick
   movement or vehicle inventories. It becomes physical only when a contractor does.
 
+#### Career record (CareerRecord, Phase 2.75)
+
+```
+CareerRecord                         // part of ContractorSimulation; fixed size, never one row per job
+  legacyResolved: int                // jobs resolved before the record existed (migration: opsCompleted)
+  triumphs, successes, partials, failures, disasters: int
+  highestDanger: int (0..1000)       // the most dangerous work at least partly done
+  careerEarnings: int                // silver paid and kept (credits less clawbacks)
+  casualtiesTaken, peopleLost, captured, missing: int
+  reputationEarned: int              // score earned from finished work (not grants)
+  lastOutcomeTick: int
+  lastAdvancementTick: int, advancementCount: int   // the equipment cooldown
+```
+
+Detail stays in History. Every counter saturates at 10⁹. `funds` is bounded to ±10⁹ and moves only through
+`CareerService.MoveFunds`. A fresh save-4 contractor starts at zero; a migrated one has `legacyResolved =
+opsCompleted` and nothing else. `CareerNeed` and the Tags are **derived** and have no field anywhere
+([CAREERS](CAREERS.md)).
+
 #### Spatial state (SpatialState, Phase 2.5)
 
 ```
 SpatialState                          // part of ContractorSimulation; world truth, never shown to the player
-  status: Uninitialized | Idle | Travelling | OnAssignment | Blocked
+  status: Uninitialized | Idle | Travelling | OnAssignment | Blocked   // Idle is the technical state: an available contractor maintains contacts, looks for work, relocates occasionally (no hidden NPC contracts)
   anchor: TileRef?                    // one tile: "approximately around here"
   destination: TileRef?               // committed; never rerolled
   journeyOrigin: TileRef?
@@ -743,6 +776,8 @@ Operation
     extraLoot: ItemTally[]
     knowledgeGains: TopicGain[]
   physical: DeploymentId?               // when the operation went physical
+  careerEligible: bool                  // Phase 2.75: its result counts toward the contractor's career (false for an operation from an older save)
+  careerOutcomeApplied: bool            // the durable career mutation committed (set only after it), exactly once, at the lifecycle's end
   spatial: OperationSpatialPlan?        // Phase 2.5; null for operations from an older save
     origin, workRegion, returnTo, incident: TileRef?
     detached: bool                      // an organization's concurrent job: the main body did not move
@@ -948,7 +983,7 @@ PaymentStep { when: OnAward | OnMilestone(key) | OnDelivery | OnClose, amount: i
 ### 16.1 Phase 2 contract ledger (implemented)
 
 ```
-MoneyRecord { tick, silver, direction, purpose, linkedContract, noteKey, round, pending }
+MoneyRecord { tick, silver, direction, purpose, linkedContract, noteKey, round, pending, contractorSilver }
 direction: PlayerPaid | PlayerRefunded | TransferIn | TransferOut
 purpose:   Unspecified | Deposit | Premium | InsurancePremium | Balance | Renegotiation | Refund | InsurancePayout
 ```
@@ -963,6 +998,19 @@ purpose:   Unspecified | Deposit | Premium | InsurancePremium | Balance | Renego
 - `NetFunding()` = all funding − everything already returned. A technical invalidation refunds exactly
   this; a replacement carries exactly this (the parent is left with 0).
 - `noteKey` is display only. Intel request fees keep `purpose = Unspecified`.
+- `contractorSilver` (Phase 2.75, contract ledgers only): the silver of THIS movement that reached (+) or was
+  taken back from (−) the contractor's own funds, written in the same step as the movement. A deposit,
+  premium contribution, renegotiation extra or balance credits the contractor's share of the quote; a
+  `Refund` takes back the proportional part of what it holds on this contract; an insurance premium, an
+  insurance payout and every transfer are 0. `ContractorHeld()` = Σ over the ledger (never negative, never
+  above what the player paid). Never rescanned on load: the funds already hold it. `fromOwnFunding`
+  (additive, default 0; a `Refund` record only): how much of THIS refund was drawn from funding the player paid ON THIS
+  contract (never funding a replacement carried in, which was paid to a previous contractor); the clawback is
+  proportional to it alone. `OwnBearingRemaining()` = the contractor-bearing silver the player paid here less what earlier
+  refunds drew from it. `fullReversal` (additive, default false; the technical invalidation's `Refund` record only): the
+  current contractor gave back EVERYTHING `ContractorHeld()` held on this contract, even when an earlier insurance payout
+  made the player's final refund smaller; `fromOwnFunding` still describes only the player's refund. See
+  [CAREERS § 5](CAREERS.md#5-contractor-wealth-is-contractorsimulationfunds).
 - Invariant, per lineage: Σ external charges − Σ external refunds = the player's real net silver;
   Σ transfers = 0 (in total and per purpose). See [DECISIONS ADR-038](DECISIONS.md).
 

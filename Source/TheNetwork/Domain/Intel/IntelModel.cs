@@ -82,6 +82,31 @@ namespace TheNetwork.Domain.Intel
         /// <summary>A refund that could not be delivered yet (no home map); retried by a job.</summary>
         public bool pending;
 
+        /// <summary>
+        /// Phase 2.75, contract ledgers only: the silver of THIS movement that reached (positive) or was
+        /// taken back from (negative) the contractor's own funds, written in the same step as the
+        /// movement. The Fixer's part, an insurance premium, an insurance payout and a transfer are 0.
+        /// Never rescanned on load: the funds already hold it.
+        /// </summary>
+        public int contractorSilver;
+
+        /// <summary>
+        /// Phase 2.75, a contract ledger's <c>Refund</c> record only: how much of THIS refund was drawn from
+        /// funding the player paid on THIS contract (never carried-in funding, which was paid to a previous
+        /// contractor). The contractor's clawback is proportional to this and to nothing else. 0 on every other
+        /// record, and on a refund written before this field existed.
+        /// </summary>
+        public int fromOwnFunding;
+
+        /// <summary>
+        /// Phase 2.75, a contract ledger's <c>Refund</c> record only: a technical invalidation, which reverses EVERY silver
+        /// the current contractor still holds of what it was paid on THIS contract, whatever amount the player receives
+        /// (an earlier insurance payout can make that smaller than the contractor's pay). <see cref="fromOwnFunding"/>
+        /// still describes only the player's refund. False on every other record, and on a record written before this
+        /// field existed.
+        /// </summary>
+        public bool fullReversal;
+
         public bool IsExternal => direction == MoneyDirection.PlayerPaid || direction == MoneyDirection.PlayerRefunded;
 
         public void ExposeData()
@@ -94,6 +119,9 @@ namespace TheNetwork.Domain.Intel
             Scribe_Values.Look(ref noteKey, "note");
             Scribe_Values.Look(ref round, "round", 0);
             Scribe_Values.Look(ref pending, "pending", false);
+            Scribe_Values.Look(ref contractorSilver, "contractorSilver", 0);
+            Scribe_Values.Look(ref fromOwnFunding, "fromOwn", 0);
+            Scribe_Values.Look(ref fullReversal, "fullReversal", false);
         }
     }
 

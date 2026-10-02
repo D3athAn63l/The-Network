@@ -576,15 +576,25 @@ namespace TheNetwork.Domain.Contracts
             string reason;
             if (due > 0 && !ctx.payment.TryCharge(due, out reason)) return CommandResult.Fail("CannotAffordDeposit");
 
-            c.ledger.Add(Money(o.quote.deposit, MoneyDirection.PlayerPaid, MoneyPurpose.Deposit, "deposit"));
-            if (c.request.premiumContribution > 0) c.ledger.Add(Money(c.request.premiumContribution, MoneyDirection.PlayerPaid, MoneyPurpose.Premium, "premium"));
+            // The records that pay the contractor (deposit, premium), handed to Award so each is mirrored into the
+            // contractor's funds at this very commit. The insurance premium is the insurer's, never the contractor's.
+            List<MoneyRecord> toContractor = new List<MoneyRecord>();
+            MoneyRecord depositRecord = Money(o.quote.deposit, MoneyDirection.PlayerPaid, MoneyPurpose.Deposit, "deposit");
+            c.ledger.Add(depositRecord);
+            toContractor.Add(depositRecord);
+            if (c.request.premiumContribution > 0)
+            {
+                MoneyRecord premiumRecord = Money(c.request.premiumContribution, MoneyDirection.PlayerPaid, MoneyPurpose.Premium, "premium");
+                c.ledger.Add(premiumRecord);
+                toContractor.Add(premiumRecord);
+            }
             Insurance bought = insure ? o.quote.insuranceOffer?.Copy() : null;
             if (bought != null) c.ledger.Add(Money(bought.premium, MoneyDirection.PlayerPaid, MoneyPurpose.InsurancePremium, "insurance.premium"));
-            Award(c, o, a, f, bought);
+            Award(c, o, a, f, bought, false, toContractor);
             return CommandResult.Ok;
         }
 
-        private void Award(Contract c, Offer o, NetworkActor a, ItemFacts f, Insurance bought, bool transferred = false)
+        private void Award(Contract c, Offer o, NetworkActor a, ItemFacts f, Insurance bought, bool transferred = false, List<MoneyRecord> toContractor = null)
         {
             ProcurementQuote q = o.quote;
             c.terms = new Terms
@@ -614,7 +624,10 @@ namespace TheNetwork.Domain.Contracts
             // The player's Field Log starts here, with the contract (never before a quote is accepted).
             ctx.FieldLog?.Note(c, transferred ? FieldLogKeys.TookOver : FieldLogKeys.Accepted, a.name.Display);
             // Carried-over funding was paid to the contractor that was lost: no new money exists to pay out.
-            if (!transferred) PayContractor(c, a, q.deposit + c.request.premiumContribution);
+            if (!transferred && toContractor != null)
+            {
+                for (int i = 0; i < toContractor.Count; i++) PayContractor(c, a, toContractor[i]);
+            }
 
             ContractEvent e = NewEvent(EventKeys.ContractAwarded, Importance.Minor, c);
             e.offer = o.id;
@@ -635,14 +648,20 @@ namespace TheNetwork.Domain.Contracts
             StateVersion.Bump();
         }
 
-        /// <summary>The contractor's share of silver the client paid lands in its funds (the Fixer keeps its part).</summary>
-        private void PayContractor(Contract c, NetworkActor a, int silver)
+        /// <summary>
+        /// The contractor's share of silver the client paid lands in its funds (the Fixer keeps its part), at
+        /// the very step the ledger record was written, through the one saturating money path. What actually
+        /// reached the funds is written on that record, so a later refund takes back exactly that much and a
+        /// reload never has to look at the ledger again (the funds already hold it).
+        /// </summary>
+        private void PayContractor(Contract c, NetworkActor a, MoneyRecord paid)
         {
-            ContractorSimulation sim = a?.Get<ContractorSimulation>();
+            if (paid == null || paid.direction != MoneyDirection.PlayerPaid || paid.silver <= 0) return;
             Offer o = ctx.contracts.Get(c.acceptedOffer);
-            if (sim == null || silver <= 0 || o?.quote == null || o.quote.finalPrice <= 0) return;
+            if (o?.quote == null || o.quote.finalPrice <= 0) return;
             float share = ContractorService.Clamp(o.quote.ContractorShare() / (float)o.quote.finalPrice, 0f, 1f);
-            sim.funds += (int)(silver * share);
+            int credit = (int)(paid.silver * share);
+            if (credit > 0 && ctx.Career != null) paid.contractorSilver = ctx.Career.Credit(a, credit);
         }
 
         public CommandResult CanDecline(OfferId offerId)
@@ -701,14 +720,20 @@ namespace TheNetwork.Domain.Contracts
             Operation op = CurrentOperation(c);
             bool renegotiating = c.status == ContractStatus.Renegotiating;
             int refund = 0;
+            float share = 0f;
             if (!renegotiating)
             {
                 bool preparing = op == null || op.phase == OpPhase.Preparing;
-                float share = FixerPolicies.CancelRefundShare(c.terms?.refundPolicyKey, preparing);
+                share = FixerPolicies.CancelRefundShare(c.terms?.refundPolicyKey, preparing);
                 refund = (int)Math.Round((c.Funding(MoneyPurpose.Deposit) + c.Funding(MoneyPurpose.Premium)) * share);
             }
             if (op != null) ctx.Operations.Abort(op, "IssuerCancelled");
-            if (refund > 0) Refund(c, refund, MoneyPurpose.Refund, "refund.cancel");
+            if (refund > 0)
+            {
+                // Drawn from the deposit and the premium by the policy's share (the player's amount is unchanged).
+                int fromDeposit = Math.Min(refund, (int)Math.Round(c.Funding(MoneyPurpose.Deposit) * share));
+                Refund(c, refund, MoneyPurpose.Refund, "refund.cancel", RefundScope.Of(deposit: fromDeposit, premium: refund - fromDeposit));
+            }
             Close(c, ContractStatus.Cancelled, renegotiating ? Causes.IssuerCancelledDuringRenegotiation : Causes.IssuerCancelledAfterAward, EventKeys.ContractCancelled, Importance.Minor, refund);
             return CommandResult.Ok;
         }
@@ -734,9 +759,12 @@ namespace TheNetwork.Domain.Contracts
             if (op != null) ctx.Operations.Abort(op, causeKey);
             DeclineAll(c);
             // Everything the player still has in this contract, whether paid here or carried over from a
-            // contract it replaced (funding carried onward was moved out and is not refunded here).
+            // contract it replaced (funding carried onward was moved out and is not refunded here). That is the
+            // PLAYER's side: an earlier insurance payout has already reimbursed part of it. The CONTRACTOR's side is
+            // separate: the current contractor gives back all it still holds of what it was paid on this contract,
+            // however small the player's final refund is (nothing left to refund still reverses the contractor).
             int refund = c.NetFunding();
-            if (refund > 0) Refund(c, refund, MoneyPurpose.Refund, "refund.void");
+            if (refund > 0 || c.ContractorHeld() > 0) Refund(c, refund, MoneyPurpose.Refund, "refund.void", RefundScope.Everything);
             Close(c, ContractStatus.Voided, causeKey, EventKeys.ContractVoided, Importance.Minor, refund);
             NetLog.Info(LogCategory.Contracts, "Contract " + c.id + " (" + c.Quantity + "x " + c.ItemLabel + ") voided: " + causeKey + (refund > 0 ? ", refunded " + refund + " silver" : "") + ".");
         }
@@ -749,13 +777,44 @@ namespace TheNetwork.Domain.Contracts
         }
 
         /// <summary>Real silver back to the player: a refund or an insurance payout (never a transfer).</summary>
-        private void Refund(Contract c, int silver, MoneyPurpose purpose, string noteKey)
+        /// <summary>
+        /// <paramref name="scope"/> says which funding the refund is drawn from (typed provenance). A refund comes back
+        /// out of what THIS contractor was paid on THIS contract: the part of the refund drawn from the player's own
+        /// payments here claws back that proportion of the contractor's pay; the part drawn from funding a replacement
+        /// carried in (paid to a previous contractor) claws nothing. An insurance payout takes nothing: the insurer
+        /// paid it. Written in the same step as the movement; a retry of an undelivered refund only flips its pending
+        /// flag and takes nothing again. The scope never changes how much silver the player receives.
+        /// A technical invalidation (<see cref="RefundScope.IsFullContractorReversal"/>) is the one refund whose clawback is
+        /// not a share of this refund: the contractor gives back everything it still holds on this contract (typed on the
+        /// record as <see cref="MoneyRecord.fullReversal"/>), while <see cref="MoneyRecord.fromOwnFunding"/> keeps
+        /// describing only the player's refund. With nothing left to refund to the player it writes a record of 0 silver.
+        /// </summary>
+        private void Refund(Contract c, int silver, MoneyPurpose purpose, string noteKey, RefundScope scope)
         {
-            if (silver <= 0) return;
-            string reason;
-            bool delivered = ctx.payment.TryRefund(silver, out reason);
+            bool reversal = purpose == MoneyPurpose.Refund && scope != null && scope.IsFullContractorReversal;
+            if (silver < 0 || (silver == 0 && !reversal)) return;
+            string reason = null;
+            bool delivered = silver == 0 || ctx.payment.TryRefund(silver, out reason);
             MoneyRecord m = Money(silver, MoneyDirection.PlayerRefunded, purpose, noteKey);
             m.pending = !delivered;
+            if (purpose == MoneyPurpose.Refund)
+            {
+                int fromOwn = Math.Min(c.OwnDrawnBy(scope), silver);
+                m.fromOwnFunding = fromOwn;
+                if (ctx.Career != null)
+                {
+                    NetworkActor contractor = ctx.actors.Get(c.parties.contractor);
+                    if (reversal)
+                    {
+                        m.fullReversal = true;
+                        m.contractorSilver = -ctx.Career.ClawBackAll(contractor, c);
+                    }
+                    else
+                    {
+                        m.contractorSilver = -ctx.Career.ClawBack(contractor, c, fromOwn);
+                    }
+                }
+            }
             c.ledger.Add(m);
             if (!delivered)
             {

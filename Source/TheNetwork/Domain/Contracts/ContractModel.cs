@@ -460,6 +460,67 @@ namespace TheNetwork.Domain.Contracts
             return s;
         }
 
+        /// <summary>
+        /// What this contract's contractor currently holds of the silver it was paid here: every credit less
+        /// every clawback written on the ledger. Never negative, never above what the player paid in.
+        /// </summary>
+        public int ContractorHeld()
+        {
+            long s = 0;
+            for (int i = 0; i < ledger.Count; i++) s += ledger[i].contractorSilver;
+            return s < 0 ? 0 : (s > int.MaxValue ? int.MaxValue : (int)s);
+        }
+
+        /// <summary>The purposes whose payment belongs, in part, to the contractor (not the insurer).</summary>
+        public static bool IsContractorBearing(MoneyPurpose purpose)
+        {
+            return purpose == MoneyPurpose.Deposit || purpose == MoneyPurpose.Premium || purpose == MoneyPurpose.Renegotiation || purpose == MoneyPurpose.Balance;
+        }
+
+        /// <summary>Silver of one purpose the player paid ON THIS CONTRACT (never what a replacement carried in).</summary>
+        public int OwnPaid(MoneyPurpose purpose) => Sum(MoneyDirection.PlayerPaid, purpose);
+
+        /// <summary>
+        /// The contractor-bearing silver the player paid on THIS contract and has not yet had refunded out of it.
+        /// Funding carried in from a replaced contract is NOT in it: it was paid to a previous contractor, so it
+        /// can neither dilute nor enlarge this contractor's clawback. An insurance premium is not in it.
+        /// </summary>
+        public int OwnBearingRemaining()
+        {
+            long paid = 0;
+            for (int i = 0; i < ledger.Count; i++)
+            {
+                MoneyRecord m = ledger[i];
+                if (m.direction == MoneyDirection.PlayerPaid && IsContractorBearing(m.purpose)) paid += m.silver;
+                else if (m.direction == MoneyDirection.PlayerRefunded && m.purpose == MoneyPurpose.Refund) paid -= m.fromOwnFunding;
+            }
+            return paid < 0 ? 0 : (paid > int.MaxValue ? int.MaxValue : (int)paid);
+        }
+
+        /// <summary>
+        /// Of the funding a refund draws from, how much is the player's own payment on this contract (as opposed to
+        /// funding carried in from a replaced contract). Per purpose, pro rata between own and carried-in funding;
+        /// never more than the own bearing silver still held.
+        /// </summary>
+        public int OwnDrawnBy(RefundScope scope)
+        {
+            int remaining = OwnBearingRemaining();
+            if (remaining <= 0 || scope == null) return 0;
+            if (scope.everything) return remaining;
+            long own = OwnPart(MoneyPurpose.Deposit, scope.deposit) + OwnPart(MoneyPurpose.Premium, scope.premium)
+                + OwnPart(MoneyPurpose.Renegotiation, scope.renegotiation) + OwnPart(MoneyPurpose.Balance, scope.balance);
+            return (int)Math.Min(own, remaining);
+        }
+
+        private int OwnPart(MoneyPurpose purpose, int draw)
+        {
+            if (draw <= 0) return 0;
+            int funding = Funding(purpose), paid = OwnPaid(purpose);
+            if (funding <= 0 || paid <= 0) return 0;
+            long part = paid >= funding ? draw : (long)draw * paid / funding;
+            return (int)Math.Min(part, draw);
+        }
+
         public bool HasPendingRefund()
         {
             for (int i = 0; i < ledger.Count; i++) if (ledger[i].pending) return true;
@@ -781,5 +842,35 @@ namespace TheNetwork.Domain.Contracts
         }
 
         public int Count => contracts.Count;
+    }
+
+    /// <summary>
+    /// Which funding a refund is drawn from (Phase 2.75): typed provenance, never a note key. It lets the contractor's
+    /// clawback follow the funding actually refunded and who was actually paid it. <see cref="Everything"/> is a full
+    /// technical invalidation; <see cref="None"/> is a payout from the insurer (nothing of the contractor's moves).
+    /// The amounts describe the draw only: they never change how much silver the player receives.
+    /// <see cref="Everything"/> also says the CONTRACTOR side is reversed in full: the current contractor gives back all
+    /// it still holds from this contract (<see cref="MoneyRecord.fullReversal"/>), even when an earlier insurance payout
+    /// already reimbursed part of what the player paid and so shrank the player's final refund.
+    /// </summary>
+    public sealed class RefundScope
+    {
+        public static readonly RefundScope None = new RefundScope();
+        public static readonly RefundScope Everything = new RefundScope { everything = true };
+
+        public bool everything;
+
+        /// <summary>A technical invalidation: the current contractor retains none of what it was paid on this contract.</summary>
+        public bool IsFullContractorReversal => everything;
+
+        public int deposit;
+        public int premium;
+        public int renegotiation;
+        public int balance;
+
+        public static RefundScope Of(int deposit = 0, int premium = 0, int renegotiation = 0, int balance = 0)
+        {
+            return new RefundScope { deposit = deposit, premium = premium, renegotiation = renegotiation, balance = balance };
+        }
     }
 }

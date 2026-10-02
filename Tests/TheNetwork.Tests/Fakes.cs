@@ -226,6 +226,9 @@ namespace TheNetwork.Tests
         public List<int> homes = new List<int> { 1 };
         public HashSet<int> noSpot = new HashSet<int>();
         public bool failCreation;
+
+        /// <summary>The next N drops fail AFTER the balance was charged (a pod that did not land), without ever being a creation failure.</summary>
+        public int failNextDeliveries;
         public int deliveries;
         public int delivered;
         public List<TheNetwork.Persist.ItemPayload> lastPayload = new List<TheNetwork.Persist.ItemPayload>();
@@ -251,6 +254,11 @@ namespace TheNetwork.Tests
 
         public DeliveryResult Deliver(DeliveryPlan plan, List<TheNetwork.Persist.ItemPayload> payload, int seed)
         {
+            if (failNextDeliveries > 0)
+            {
+                failNextDeliveries--;
+                return new DeliveryResult { failureKey = "PodDidNotLand" };
+            }
             if (failCreation) return new DeliveryResult { failureKey = "FailedToGenerate", thingCreationFailed = true, failedDefName = payload.Count > 0 ? payload[0].thing?.defName : null };
             int n = 0;
             lastPayload = payload;
@@ -315,6 +323,7 @@ namespace TheNetwork.Tests
             ctx.Consequences = new TheNetwork.Domain.Consequences.ConsequenceEngine(ctx);
             ctx.Spatial = new TheNetwork.Domain.Spatial.SpatialService(ctx);
             ctx.FieldLog = new TheNetwork.Domain.Contracts.FieldLogService(ctx);
+            ctx.Career = new TheNetwork.Domain.Contractors.CareerService(ctx);
             history = new HistoryService(ledger, summaries, ctx.actors, ids, clock, seed);
             scheduler.RegisterKind(JobKinds.IntelRound, ctx.Intel.RunRound, true, true);
             scheduler.RegisterKind(JobKinds.IntelClose, ctx.Intel.CloseJob, true, true);

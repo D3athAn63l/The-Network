@@ -33,7 +33,9 @@ namespace TheNetwork.Domain.Contractors
             if (!ContractorService.IsNpcContractor(a) || a.status != ActorStatus.Active || a.quarantinedReason != null) return;
             ContractorSimulation sim = a.Get<ContractorSimulation>();
             RunUpkeep(a, sim);
-            // Spatial continuity rides this existing staggered job: no extra job, nothing per tick.
+            // Career advancement and spatial continuity ride this existing staggered job: no extra job,
+            // nothing per tick, no scan of every contractor from anywhere else.
+            if (a.status == ActorStatus.Active) ctx.Career?.RunAdvancement(a);
             if (a.status == ActorStatus.Active) ctx.Spatial?.Upkeep(a);
             int next = Math.Max(ctx.Now + Ticks.PerHour, NextDue(a, sim));
             sim.nextUpkeepTick = next;
@@ -130,20 +132,21 @@ namespace TheNetwork.Domain.Contractors
             }
 
             // 2. Morale drifts toward a baseline lowered by recent losses.
-            int headcount = org == null ? 1 : Math.Max(1, org.Healthy + org.Wounded + org.Committed + org.knownMembers.Count);
+            int headcount = ContractorService.Headcount(a);
             ActorRecordSummary summary = ctx.summaries?.Get(a.id);
             float recentLosses = summary == null ? 0f : Math.Min(1f, summary.Recent("casualties.taken", now) / headcount);
             MoraleModel.Drift(sim, days, sim.commitments.Count > 0, recentLosses);
 
             // 3. Funds and equipment.
-            int upkeep = (int)Math.Round((org == null ? 2f : 3f) * headcount * days);
-            sim.funds -= upkeep;
+            // Every funds movement goes through the one saturating path (CareerService.MoveFunds).
+            int upkeep = (int)Math.Round(CareerPolicy.DailyUpkeep(org != null, headcount) * days);
+            MoveFunds(sim, -upkeep, FundsFlow.Upkeep);
             int repairCost = 20 * sim.equipment.tier;
             if (sim.equipment.condition < 1f && sim.funds > repairCost * 3)
             {
                 float restored = Math.Min(1f - sim.equipment.condition, 0.04f * days);
                 sim.equipment.condition += restored;
-                sim.funds -= (int)Math.Round(repairCost * restored / 0.04f);
+                MoveFunds(sim, -(int)Math.Round(repairCost * restored / 0.04f), FundsFlow.Repair);
             }
 
             // 4. Recruitment (organizations below capacity with the funds to pay for it).
@@ -160,7 +163,7 @@ namespace TheNetwork.Domain.Contractors
                         org.TierOf(Tier.Recruit).healthy += n;
                         org.recruitment.recruitedTotal += n;
                         org.recruitment.lastRecruitTick = now;
-                        sim.funds -= 60 * n;
+                        MoveFunds(sim, -60 * n, FundsFlow.Recruitment);
                     }
                 }
 
@@ -198,6 +201,13 @@ namespace TheNetwork.Domain.Contractors
 
             sim.MarkDirty();
             contractors.MoraleShiftCheck(a, sim);
+        }
+
+        /// <summary>Contractor funds move only through the career service when there is one (tests may run without it).</summary>
+        private void MoveFunds(ContractorSimulation sim, long delta, FundsFlow flow)
+        {
+            if (ctx.Career != null) ctx.Career.MoveFunds(sim, delta, flow);
+            else sim.funds = CareerPolicy.AddFunds(sim.funds, delta);
         }
 
         private static void Promote(OrganizationProfile org, Tier from, Tier to, int n)

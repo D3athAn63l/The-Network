@@ -36,6 +36,18 @@ if grep -rnE "ThingMaker|GenSpawn|SkyfallerMaker|TransportShuttle|CompShuttle|Dr
 fi
 echo "ok"
 
+echo "### Source scan: derived Tags are read models, never a second stat system (ADR-046)"
+if grep -rnE "CareerTags|\.Tags\(|HasTag\(" Source/TheNetwork/Domain/Operations Source/TheNetwork/Domain/Contracts Source/TheNetwork/Domain/Opportunities Source/TheNetwork/Domain/Consequences Source/TheNetwork/Domain/Contractors/ContractorService.cs Source/TheNetwork/Domain/Contractors/UpkeepService.cs Source/TheNetwork/Domain/Contractors/MoraleModel.cs ; then
+  echo "FAIL: a Tag is read where state decides outcomes (resolver, pricing, willingness, upkeep)" >&2; exit 1
+fi
+echo "ok"
+
+echo "### Source scan: careers add no pawn, inventory, vehicle, augmentation or Harmony (ADR-046)"
+if grep -rnE "PawnGenerator|Hediff|Bionic|Implant|ThingMaker|Vehicle|Inventory|HarmonyLib" Source/TheNetwork/Domain/CareerPolicy.cs Source/TheNetwork/Domain/Contractors/CareerService.cs Source/TheNetwork/Domain/Contractors/CareerDistribution.cs ; then
+  echo "FAIL: career code touches physical things" >&2; exit 1
+fi
+echo "ok"
+
 OUT="${TEST_OUT:-$(mktemp -d)}"
 EXTRA=()
 if [ ! -f "$MANAGED/netstandard.dll" ]; then

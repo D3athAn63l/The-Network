@@ -199,6 +199,8 @@ N = Notable, Ma = Major, L = Legendary.
 | `Employer.RefusedPayment` | 2 | Ma | issuer, contractor | relations, gossip, sanctions |
 | `JointOperation.Completed` | 7 | N | actors | relations (+) |
 | `Organization.MoraleShifted` | 2 | Mi | org, descriptor | history (Notable only on extreme shifts) |
+| `Contractor.FameChanged` | 2.75 | Mi / N | contractor, new band, old band | history (a record from Established up; below that a counter). Published only when the derived fame band is crossed, never for hidden score drift; no letter. |
+| `Contractor.Advanced` | 2.75 | Mi / N | contractor, what advanced (Equipment), new tier | history (a record from tier 4; below that a counter). No letter. |
 | `Organization.Retired` / `.Dissolved` / `.WipedOut` | 6 | Ma / Ma / L | org | legends, knowledge transfer |
 | `Organization.Fragmented` / `.Merged` / `.Absorbed` | 6 | Ma | orgs | lineage, knowledge, relations inheritance |
 | `Obligation.Created` / `.Settled` / `.Defaulted` | 5 | Mi / Mi / N | debtor, creditor | relations |
