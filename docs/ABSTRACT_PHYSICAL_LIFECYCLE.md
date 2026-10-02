@@ -1,5 +1,16 @@
 # Abstract ↔ Physical Lifecycle
 
+> **Superseded in part by [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md) (the Phase 3 design review).** This is the Phase 0
+> design, written before the code existed and before the 1.6.9676 assemblies were audited for it. Its core is
+> **confirmed** (identity tiers, one pawn per character, never discarding, reconciliation from state, the registry quest).
+> Where the two documents differ, **PHYSICAL_LIFECYCLE is normative**; the corrections, with evidence, are listed in its
+> [Appendix E](PHYSICAL_LIFECYCLE.md#appendix-e-what-the-audit-changed-from-the-phase-0-design). In particular: **§ 5.3**
+> generates pawns without `ForceGenerateNewPawn` (`GeneratePawn` can return an existing world pawn); **§ 7** omits that
+> normal pawn death sends `Killed` (mid-kill); **§ 9** sets a collapsed pawn's faction "back to null" (vanilla's
+> `Notify_PassedToWorld` rewrites a `Free` pawn's faction); **§ 10** reuses one temporary faction per organization
+> (vanilla removes it with the episode; the review uses one per episode); and the **`Deployment`** concept and name are
+> replaced by the Episode. Read this file for the rationale and the edge-case catalogue; do not implement from it without PHYSICAL_LIFECYCLE.
+
 > The highest-risk area of the mod. It covers how an off-map contractor organization, which is
 > a record with headcounts, becomes real pawns on a map, and how the results return to the
 > abstract record without duplication, resurrection or leaks.

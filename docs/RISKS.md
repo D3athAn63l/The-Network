@@ -33,7 +33,14 @@
 | R-24 | Hidden spatial continuity costs, misleads or leaks | Medium | Medium | Phase 2.5 (S20) |
 | R-25 | Abstract charter transport becomes a teleport, a hidden economy or a crutch | Low | Medium | Phase 2.5 (S20) |
 | R-26 | Contractor careers run away, double-credit, contradict themselves or bloat the save | Medium | Medium | Phase 2.75 soaks |
-| R-27 | The in-game runtime test framework damages a live colony, leaks overrides, hangs, lies, or becomes a second architecture | High | Low | Phase 2.9 (headless `Runner.*`, mutation checks) + the owner's first in-game runs |
+| R-27 | The in-game runtime test framework damages a live colony, leaks overrides, hangs, lies, or becomes a second architecture | High | Low | Phase 2.9 (headless `Runner.*`, mutation checks) + the owner's in-game runs in two environments (0 FAILs) |
+| R-28 | An abstract writer keeps simulating a physical person (an authority leak) | Critical | Medium | Phase 3.0 (`RT-PHYS-011`, the gate) |
+| R-29 | Exactly-once reconciliation fails under duplicate, late or missing wake-ups, or a throw mid-commit | High | Medium | Phase 3.0 (`RT-PHYS-003/013/014`) |
+| R-30 | The registry reservation is unworkable or too costly (*R* × *W* per tick) | High | Medium | Phase 3.1 (S9r) |
+| R-31 | Observation gaps (downed, caravan join, resurrection, map-removal pawns, dropped signals) lose a person | High | Medium | Phase 3.1/3.2 (S21) |
+| R-32 | The physical test tier damages a real colony | Critical | Low | Phase 3.1 (S22) |
+| R-33 | Pawn creation on a heavily modded list fails, is slow, spams relations or yields a wrong race | Medium | High | Phase 3.1 (S23) |
+| R-34 | An unprepared removal strands reserved, suspended pawns (only if the vanilla-only registry is chosen) | Medium | Low | Phase 3.1 (S9r, S6) |
 
 ---
 
@@ -47,6 +54,10 @@
   (no GC, no redress). A validator checks one-to-one maps on every load.
 - **Proven by.** S9 (reservation effects), S11 (holder), S17 (copies); Phase 3 soak with forced
   scenarios (dev actions).
+- **Phase 3 design review.** Refined and re-audited against the 1.6.9676 assemblies in
+  [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md): identity is `Actor ≠ Person ≠ Pawn`, a named person keeps one pawn for
+  life, the invariants are P3-INV-001…016 ([Appendix B](PHYSICAL_LIFECYCLE.md#appendix-b-formal-invariants)); the
+  corrections to this entry's premises are in [Appendix E](PHYSICAL_LIFECYCLE.md#appendix-e-what-the-audit-changed-from-the-phase-0-design).
 
 ## R-02 · Save/load during physical encounters
 - **Failure modes.** Deployment state and pawn locations disagree after load. Signals are lost
@@ -55,6 +66,9 @@
   first-tick reconciliation re-derives fates. The registry reserved set is rebuilt from our
   stores. Signals are re-registered. The watchdog backstops missed signals.
 - **Proven by.** Phase 3 test matrix: save/load at each deployment state × each anchor type.
+- **Phase 3 design review.** The save matrix is [PHYSICAL_LIFECYCLE § 16.1](PHYSICAL_LIFECYCLE.md#161-save-at-every-point):
+  load never generates, spawns or destroys a pawn; a reference to a dead pawn needs `saveDestroyedThings: true`; the
+  minimum new persisted truth and the one-way version bump are in § 16.4–16.5.
 
 ## R-03 · Vanilla quest and site cleanup
 - **Failure modes.** Vanilla removes a site or map at an unexpected time. Timeout destroys the
@@ -131,6 +145,10 @@
   `Captured` (leader). Recruited characters stay Known with a defected status.
 - **Proven by.** The Phase 3 scenario matrix (recruit, arrest, execute, release, sell, enslave,
   rescue).
+- **Phase 3 design review.** Held people are a persisted custody state with a bounded *custody watch*
+  ([PHYSICAL_LIFECYCLE § 9](PHYSICAL_LIFECYCLE.md#9-custody-model)); implementation is subphase 3.2, and 3.1 fails safe
+  into `Quarantined(UnsupportedCustody)` rather than faking capture support. Vanilla recruits kidnapped pawns into the
+  captor's faction with MTB ≈ 30 days; the watch expects it.
 
 ## R-12 · World-object deletion
 - **Failure modes.** A site is deleted by vanilla timeout, the player, a mod or a map-settling
@@ -146,6 +164,8 @@
   generated or offered. Its parts do nothing in generic callbacks. No Network contracts are
   modelled as quests.
 - **Proven by.** S9 with a sample of popular quest-related mods.
+- **Phase 3 design review.** S9 is revised as **S9r**: it also compares a registry built only of vanilla classes
+  (`QuestPart_ReservePawns`) against the Network-owned part ([PHYSICAL_LIFECYCLE § 7.4](PHYSICAL_LIFECYCLE.md#74-the-registry-reservation-retained-pawns-only)).
 
 ## R-14 · Performance of large, long-running contractor populations
 - **Failure modes.** TPS degradation from many orgs, pawns or events over decades.
@@ -162,6 +182,10 @@
   factionless storage) and a contingency patch C-1 with its analysis done in advance
   ([RIMWORLD_INTEGRATION § 3.3](RIMWORLD_INTEGRATION.md#33-contingency-patches-analysed-not-adopted)).
 - **Proven by.** S9.
+- **Phase 3 design review (R-30).** The reserved set is only the *stored named people* (vanilla already keeps spawned,
+  held, caravan and kidnapped pawns); a `Free` retained pawn is redressed with chance up to 0.8 per generation, so the
+  reservation is **required**; its cost is a vanilla per-tick check multiplied by the list length. The fallback ladder is
+  in [PHYSICAL_LIFECYCLE § 7.4](PHYSICAL_LIFECYCLE.md#74-the-registry-reservation-retained-pawns-only).
 
 ## R-16 · Master design brief unavailable during Phase 0 (resolved)
 - **Status.** **Resolved and closed.** Kept here as history, not deleted.
@@ -375,8 +399,9 @@
   services (RT-PROC-011); the live scan inspects the real adapters; the sandbox ports mirror the port
   interfaces and a port interface change fails the build.
 - **Residual risk (stated, not hidden).** The in-game suites `RT-SMOKE-*` / `RT-LIVE-*`, the game host and the
-  Dev actions were **compile-checked only**: RimWorld could not be launched where this phase was built, so
-  their first real execution is the owner's. The fingerprint covers the Network's persisted fields and the
+  Dev actions were compile-checked where this phase was built and have since **run in the owner's game in two
+  environments with zero runtime FAILs** ([RUNTIME_TESTING § 15](RUNTIME_TESTING.md#15-owner-observed-runtime-evidence));
+  the in-progress Cancel path was not exercised by hand. The fingerprint covers the Network's persisted fields and the
   sentinel's selected colony/world state, and nothing else (it is not a byte-compare of the save, and pawn state,
   terrain and buildings are not covered). A false alarm is possible if a runtime-only cache field that a
   read-only call fills in is not named `cached*`; the walker skips dictionaries, sets and `cached*` fields, and
@@ -389,4 +414,62 @@
   report counts, stable export format, exact override restore, no control job in the scheduler, the safe suite
   leaving a synthetic live world's fingerprint, silver, scheduler and careers identical, a mutated fake live
   world detected, idle cost one null check); the three sandbox suites through the real runner; and the
-  source scan. The owner's first in-game *Full safe regression* is the remaining evidence.
+  source scan. The owner's in-game *Full safe regression* runs (a fresh Quicktest colony; the real modded
+  colony twice) are the in-game evidence: 0 FAILs, live colony unchanged by manual check.
+
+## R-28 · An abstract writer keeps simulating a physical person (Phase 3)
+- **Failure modes.** "Abstract Halvard is healthy, available and taking jobs while physical Halvard is dead in a ditch":
+  an upkeep job heals him, procurement selects him, spatial relocates him, succession counts him, an operation
+  checkpoint resolves his fate a second time.
+- **Mitigation.** One central question, `CanSimulateAbstractly(person)`, in front of every writer in the inventory
+  ([PHYSICAL_LIFECYCLE § 2.3](PHYSICAL_LIFECYCLE.md#23-the-writer-inventory-every-abstract-site-that-must-honour-authority));
+  authority changes only in `Materialize` and `Reconcile`; a validator finding for a custody/episode mismatch;
+  a static test that enumerates the writers.
+- **Proven by.** Phase 3.0: `RT-PHYS-011` (the gate is complete), `RT-PHYS-002/006/016`, mutation checks (a writer
+  bypassing the gate must fail a named test).
+
+## R-29 · Exactly-once reconciliation fails (Phase 3)
+- **Failure modes.** A death signal, a poll, a map removal, a load pass and a dev action each apply the consequence;
+  or a throw leaves half of it applied; or the flag is set before the mutation.
+- **Mitigation.** *plan → durable commit → flag → publish*; set-once member outcomes; `consequencesApplied` set last
+  inside the commit; `publishedTick` for publish-only retries; the Closed gate; tags as the idempotent release marker
+  ([§ 15](PHYSICAL_LIFECYCLE.md#15-reconciliation-algorithm)).
+- **Proven by.** Phase 3.0: `RT-PHYS-003/013/014`; mutation checks (flag first; reconcile inline in a handler).
+
+## R-30 · The registry reservation is unworkable or too costly (Phase 3)
+- See R-15 and [PHYSICAL_LIFECYCLE § 7.4](PHYSICAL_LIFECYCLE.md#74-the-registry-reservation-retained-pawns-only). Cost
+  ∝ the reserved list length × the non-mothballed world pawns, per tick; bounded by the small reserved set (stored
+  named people, soft cap ≈ 150) and measured in the Phase 3 soak.
+- **Proven by.** Spike **S9r** (3.1): no redress in 200 forced generations, `Suspended`, GC-safe across several passes,
+  clean save/load, removal ≤ 3 errors, cost within budget; or the fallback ladder is decided and recorded.
+
+## R-31 · Observation gaps lose a person (Phase 3)
+- **Failure modes.** No downed signal; no signal when a pawn joins a caravan; no resurrection signal; map removal
+  passes non-colonist pawns to the world without `LeftMap`; `SignalManager` drops signals past 3,000 per frame.
+- **Mitigation.** Signals are only wake-ups; bounded polls (Open-episode members every 250 ticks, held people every
+  2,500); `Returned` only on a positive observation; the load pass; Quarantine for the unclassifiable
+  ([§ 14](PHYSICAL_LIFECYCLE.md#14-event-detection), [§ 9](PHYSICAL_LIFECYCLE.md#9-custody-model)).
+- **Proven by.** Spike **S21** and the physical tier (`RT-PHYX-*`); `RT-PHYS-008/010`.
+
+## R-32 · The physical test tier damages a real colony (Phase 3)
+- **Failure modes.** A destructive suite is pressed by accident in the owner's real, heavily modded colony: it spawns
+  pawns, creates world objects and factions, and mutates the Network's records in a save the owner plays.
+- **Mitigation.** A separate menu category; a typed confirmation; an environment guard that refuses a colony that looks
+  real; a dedicated generated test map; every created entity tagged; a blast-radius proof (untagged state unchanged);
+  cleanup only of tagged entities; a separate source folder with its own scan; Full Safe Regression never reaches it
+  ([PHYSICAL_LIFECYCLE § 21](PHYSICAL_LIFECYCLE.md#21-runtime-qa-strategy), ADR-049).
+- **Proven by.** Spike **S22** (how to detect a disposable save); headless `Runner.*` tests for the guard.
+
+## R-33 · Pawn creation on a heavily modded list (Phase 3)
+- **Failure modes.** A modded race or xenotype cannot be generated or named; generation is slow; relation generation
+  creates relatives as new world pawns; a redressed existing pawn is returned instead of a new one.
+- **Mitigation.** `ForceGenerateNewPawn = true`, `CanGeneratePawnRelations = false`, capability-based kind selection
+  with a fallback chain, a contained abort that reverts custody, bounded group size.
+- **Proven by.** Spike **S23** across the owner's mod list.
+
+## R-34 · An unprepared removal strands reserved, suspended pawns (Phase 3)
+- **Failure modes.** If the registry is built only of vanilla classes, removing the mod without *Prepare for removal*
+  leaves the pawns reserved, suspended and un-aging forever.
+- **Mitigation.** The default registry part is **Network-owned**, so vanilla drops it on removal and the pawns become
+  ordinary; *Prepare for removal* clears the registry either way ([§ 20](PHYSICAL_LIFECYCLE.md#20-prepare-for-removal)).
+- **Proven by.** Spike S9r with a mod-removal run.

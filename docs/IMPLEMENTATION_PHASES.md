@@ -33,8 +33,8 @@
 | **2** | Contractors (abstract) + Procurement | about 100 contractor identities (Solos to companies) from the world's cast, capability split from NPC simulation, Open and Direct contracts with the offer path, Fixer-mediated quotes, deposits and insurance, deterministic resolver, drop-pod delivery, willingness/refusal, relationships core, history changing behaviour, failures that leave a last known location | S13 |
 | **2.5** | Abstract spatial continuity + player-contract Field Log | every contractor has hidden approximate geography (one anchor, coarse lazy journeys, no icons, no caravans, no per-tick work); operations start from the real anchor and work in a hidden region on their committed timeline; Last Known Locations appear where the contractor actually was; the player's running job has a short Field Log | S20 |
 | **2.75** | Contractor career foundation | work changes a contractor: numeric reputation beneath the fame band, a cumulative career record, exact contractor money in the existing funds, equipment advancement, derived `CareerNeed` and Tags; no second reputation, wealth or stat system | — (headless; the soak reports the distributions) |
-| **2.9** | Runtime test infrastructure | an in-game regression runner that exercises the real production services in an isolated sandbox and reads the live game strictly read-only, so it is safe to press in a real colony; stable test IDs, time-sliced, never saved, no Harmony, no player UI; Phase 3 adds its own scenarios to it | — (headless `Runner.*`; the owner's first in-game run of the runner is the evidence) |
-| **3** | Abstract ↔ physical lifecycle | Known Characters as pawns, custody, deployments, encounter factions, in-person delivery, rescue follow-ups, contract inheritance | **S9**, S10, S11, S12, S14 |
+| **2.9** | Runtime test infrastructure | an in-game regression runner that exercises the real production services in an isolated sandbox and reads the live game strictly read-only, so it is safe to press in a real colony; stable test IDs, time-sliced, never saved, no Harmony, no player UI; Phase 3 adds its own scenarios to it | — (headless `Runner.*`; **owner runtime validation PASSED** in a fresh Dev Quicktest colony and the real modded colony) |
+| **3** | Abstract ↔ physical lifecycle (**design reviewed; not implemented**; three subphases 3.0 / 3.1 / 3.2, [§ 6](#6-phase-3-abstract--physical-lifecycle)) | one authority per person; Known Characters keep one pawn for life; physical Episodes reconciled exactly once; custody and rescue; a separate physical test tier. Leases, sponsorship, in-person delivery and contract inheritance are **re-scoped for owner decision** | **S9r**, S10, S11, S12, S14, S21–S24 |
 | **4** | Player as contractor + NPC contract board + full bidding | player registration (same faction), NPC-issued contracts, competing offers, competitors at opportunities, public reputation epithets | — |
 | **5** | Social layer | rumors and beliefs, gossip, favors and debts, introductions, perceived reputation, sanctions and blacklists, morale v2 | — |
 | **6** | Organizational lifecycle + legends | contested succession, retirement transformation, fragmentation, mergers, legends | — |
@@ -403,38 +403,72 @@ from live gameplay state); risk [R-27](RISKS.md).
 **Not in Phase 2.9:** any physical, destructive or save-reload suite; real delivery in a test; automated
 quit / restart; a normal-game background monitor; a player-facing tab; Phase 3 or Phase 4 behaviour; Harmony.
 
-Headless evidence: 315 tests, 20,331 checks, 0 failures, 0 `warning CS` (32 new `Runner.*` tests: the
+**Status: merged (PR #6) and owner-runtime-validated.**
+
+Headless evidence at merge: 315 tests, 20,331 checks, 0 failures, 0 `warning CS` (32 new `Runner.*` tests: the
 runner, the plans, the sandbox suites through the real runner against a synthetic live world, the fingerprint,
-the idle cost). The existing 283 tests and every soak are unchanged and green. **RimWorld was not launched** where
-this phase was built: the `RT-SMOKE-*` / `RT-LIVE-*` suites, the game host and the Dev actions are
-compile-checked only, and S20 remains *NOT RUN — owner runtime validation required*.
+the idle cost). The existing 283 tests and every soak are unchanged and green. RimWorld could not be launched where
+this phase was built; the in-game half was therefore compile-checked at merge and then run by the owner.
+
+**Owner runtime validation: PASS** ([RUNTIME_TESTING § 15](RUNTIME_TESTING.md#15-owner-observed-runtime-evidence)),
+in two environments, with **0 runtime FAILs**:
+
+- *Fresh Dev Quicktest colony* (simple base, stockpiles, silver, power, Comms Console, trade beacon over the
+  payment stockpile): Quick smoke 12 PASS (≈ 84 ms); Full safe regression 49 PASS, 2 WARN (RT-PROC-001 ≈ 6.65 ms
+  and RT-SPAT-008 ≈ 6.97 ms slow-step telemetry; ≈ 160 ms); Live integration scan 10 PASS (≈ 3 ms).
+- *The real, ongoing, heavily modded colony* (130 contractors, 4,114 silver, both unchanged by manual check after
+  each run): Quick smoke 12 PASS (≈ 133 ms); Full safe regression 50 PASS, 1 WARN (RT-SPAT-008,
+  `job:consequence.followup` ≈ 5.01 ms; ≈ 222 ms) then 51 PASS, 0 WARN (≈ 96 ms); Live integration scan 10 PASS
+  (≈ 9 ms). No missing or extra silver, test cargo, test contracts, changed careers or reputation, fake history,
+  fake gameplay Letters, moved contractors or leftover test world objects were observed.
+
+This does **not** claim every mod interaction is proven, that every RimWorld state is fingerprinted, that the
+in-progress Cancel path was exercised by hand (the run had already finished; it has headless coverage), or that
+the formal Phase 2.5 **S20** checklist was completed: S20 remains *NOT RUN — owner runtime validation required*.
+The earlier owner-observed legacy-procurement pass (payment hold → recovery → full drop-pod delivery, no
+observed errors) stays recorded as Phase 2 / 2.75 runtime evidence.
 
 ---
 
 ## 6. Phase 3: Abstract ↔ physical lifecycle
 
-**Spikes first:** S9 (registry quest), S10 (encounter factions), S11 (site-part pawn holder),
-S12 (catch-up), S14 (walk-in Lord), S17 (tag hygiene).
+> **Status: design reviewed, not implemented.** Normative design: [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md)
+> (audited against the 1.6.9676 assemblies; supersedes the Phase 0 scope below where they differ). Decisions:
+> [ADR-048](DECISIONS.md) and [ADR-049](DECISIONS.md). Risks: [R-28 to R-34](RISKS.md). Save format stays **4** until
+> implementation; Phase 3 will need one bump (the number is not chosen here).
 
-**Scope**
+**The target is not "spawn some contractor pawns."** It is: a persistent Network actor can temporarily become
+physically present, actual physical consequences become authoritative, and that reality reconciles back into The
+Network **exactly once**, with one authority per person at a time.
 
-- `CustodyService`, registry quest (or the documented fallback), `PawnRef`, binding invariants,
-  deployments, reconciliation, collapse, leases.
-- `EncounterFactionAdapter` (temporary per-org factions).
-- Scenarios: **in-person delivery** (walk-in contractors hand over goods) and **rescue**
-  (captured, stranded or missing contractors become an Opportunity with pawns in the site holder).
-  Last known locations gain survivors, captives, bodies and left-behind gear.
-- **Sponsorship with equipment** (master § 30–31): gear the player gives or lends becomes
-  tracked leases that reappear physically with the org's pawns.
-- Consequence Engine v1: rules for rescue, recovery and continuation. **Contract inheritance and
-  continuation** (repost, successor inheritance).
-- Promotion of generic pawns to Known Characters from encounters.
-- Events: `Contractor.Rescued`, `KnownCharacter.CapturedByPlayer` / `.Defected` / `.Lost`,
-  `Player.BetrayedContractor`.
-- Deployment Monitor dev window.
-- Runtime scenarios for the physical lifecycle (custody, deployment, in-person delivery, rescue) as stepped cases
-  on the Phase 2.9 runner, with a sandbox physical-delivery port that records; destructive physical suites remain
-  out of the default run ([ADR-047](DECISIONS.md)).
+**Three subphases, each ending in something the owner can review**
+
+| Subphase | Content | Spikes needed |
+|---|---|---|
+| **3.0 Authority and episode foundation** (no RimWorld pawn) | the Episode store (reserved `deployments` slot), `PawnRef`, the new `KnownCharacter` fields, the authority gate and every abstract writer behind it, reconciliation (plan → commit → flag → publish), a `PhysicalWorldPort` with a scriptable fake, validator, compaction, prepare-for-removal settle, `RT-PHYS-001…019` in the **safe** runtime tier, one save-format bump | none |
+| **3.1 The controlled physical episode** (the vertical slice) | the real adapter: create-once-and-bind a named pawn, spawn, tags, signal routes, the visit Lord, the per-episode temporary faction, the registry reservation, store-time normalization and catch-up, the **physical test tier** (separate, disposable-save only), a read-only Episode Monitor. One Solo contractor, dev-triggered: exits, is wounded, is killed, or its map is removed; then re-materializes as the **same pawn** | S9r, S10, S12, S14, S17, S21, S22, S23, S24 |
+| **3.2 Custody and rescue** | held people (arrest, recruit, enslave, kidnap, caravan, pod) and the custody watch; anonymous members and groups; promotion of generic pawns; the **rescue** episode for a Troubled operation (site holder, `OpStatus.Physical`); Last Known Locations with survivors and captives. First player-visible content | S11, S21 |
+
+**Recommended re-scope (needs owner confirmation).** The Phase 0 scope listed below is larger than the physical
+lifecycle needs and partly belongs to Phase 4:
+
+| Original Phase 3 item | Recommendation |
+|---|---|
+| `CustodyService`, registry quest, `PawnRef`, binding invariants, deployments, reconciliation, collapse | **In** (3.0 to 3.2), as the Episode design |
+| `EncounterFactionAdapter` | **In** (3.1), one temporary faction per *episode* |
+| Rescue scenario; Last Known Locations with survivors | **In** (3.2) |
+| In-person delivery (walk-in hand-over) | **Out** of 3.0 to 3.2; the owner-validated drop-pod delivery stays; revisit after 3.2 |
+| Sponsorship with equipment and tracked leases | **Out** (Phase 4 compensation); the `leases` slot and a gear seam are reserved |
+| Contract inheritance and continuation | **Out** (a contract-lifecycle feature) |
+| Consequence Engine v1 | **Reduced** to the rescue rule (3.2) |
+| Promotion of generic pawns | **In**, minimally (3.2) |
+| Events `Contractor.Rescued`, `KnownCharacter.CapturedByPlayer/.Defected/.Lost`, `Player.BetrayedContractor` | **In** as 3.2 needs them |
+| Deployment Monitor dev window | **In**, read-only, as an Episode Monitor (3.1) |
+| Runtime scenarios for the lifecycle | **In**, as two tiers: abstract half in the safe suites over a fake port; physical half in a separate disposable-environment tier ([ADR-049](DECISIONS.md)) |
+| Ambient contractor visits | **Deferred**, unchanged |
+
+**Not in Phase 3:** Phase 4 compensation, the contract board, the player as contractor, physical contractor caravans for
+background movement, a persisted roster of anonymous individuals, a Hediff/inventory mirror, Harmony.
 
 ---
 

@@ -174,6 +174,10 @@ agree with the logic in a running game. [RUNTIME_TESTING](RUNTIME_TESTING.md) ad
 under the same rules as everything here: it is Dev Mode only, **never saved**, uses no Harmony, and is silent
 unless a Dev action starts it (idle cost: one static null check per frame).
 
+- **Status.** Merged and owner-runtime-validated in a fresh Dev Quicktest colony and the real modded colony, with
+  zero runtime FAILs ([RUNTIME_TESTING § 15](RUNTIME_TESTING.md#15-owner-observed-runtime-evidence)). A WARN on
+  `RT-PROC-001` / `RT-SPAT-008` that names a few milliseconds of "slow Network work" is the runner's profiler
+  telemetry, was seen in the owner's runs, and is not a failure; it usually does not recur on a second run.
 - **Where the code is.** `Source/TheNetwork/Diagnostics/RuntimeTests/` (runner, sandbox, fingerprint, invariant
   scan, report, game host) and `Suites/` (`RuntimeSmokeSuite`, `RuntimeLiveSuite`, `ProcurementRuntimeSuite`,
   `CareerRuntimeSuite`, `SpatialRuntimeSuite`).
@@ -200,7 +204,8 @@ These are dev-mode windows, shipped with the phase that introduces each subsyste
   and live refresh on `StateVersion`.
 - **Event Journal**: a filterable list (type, importance, subject) with payload details and
   consumer errors.
-- **Deployment Monitor** (Phase 3): each entry's pawn, its current observed state, the pending
-  fate and the reconciliation trace.
+- **Physical Episode Monitor** (Phase 3, designed in
+  [PHYSICAL_LIFECYCLE § 14](PHYSICAL_LIFECYCLE.md#14-event-detection)): each episode's people, the observed state
+  of each pawn, the authority, the pending outcome and the reconciliation trace. Read-only.
 - **Relationship Graph** (Phase 4+): text-based adjacency with standing and trust per edge,
   filtered by actor.

@@ -319,9 +319,12 @@ migrations** ([SAVE_AND_MIGRATION](SAVE_AND_MIGRATION.md)).
     pawn death), `LeftMap`, `Recruited`, `Arrested`, `Rescued`, `Released`, `Kidnapped`,
     `Banished`, `Enslaved`, `ChangedFaction*`, `BecameMutant`, `TookDamageFromPlayer`;
   - world objects: `Spawned`, `Despawned`, `Destroyed`, `MapGenerated`, `MapRemoved`.
-- **Pawn death** does not reliably send `Killed` for normal deaths: `Pawn.Kill` despawns and
-  makes a corpse without `Destroy(KillFinalize)`. Death is observed through `Despawned` plus
-  reconciliation on maps, and through the registry quest's `Notify_PawnKilled` anywhere.
+- **Pawn death** *does* send `Destroyed` and `Killed`: `Pawn.Kill` ends with `if (!base.Destroyed) base.Kill(...)`,
+  `Thing.Kill → Destroy(KillFinalize)`, and `Thing.Destroy` sends both (`Pawn.cs:2088…`, `Thing.cs:1043–1099`; corrected by
+  the Phase 3 design audit, [PHYSICAL_LIFECYCLE Appendix E](PHYSICAL_LIFECYCLE.md#appendix-e-what-the-audit-changed-from-the-phase-0-design)).
+  The signal fires **in the middle of `Pawn.Kill`**, before `QuestManager.Notify_PawnKilled` and the faction/ideology
+  notifications, so a handler must only enqueue a wake-up and reconciliation reads `pawn.Dead`. The registry quest's
+  `Notify_PawnKilled` and a bounded poll are independent second and third paths.
 - Vanilla never parses tags as quest IDs. It only matches strings, and sometimes **copies**
   tags to another pawn (`QuestPart_ReplaceLostLeaderReferences.cs:28–34`). Hence invariant I-10.
 

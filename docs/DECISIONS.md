@@ -169,6 +169,9 @@
   (missed signals would corrupt state).
 - **Consequences.** A promotion policy and caps are needed. Released generic pawns become
   vanilla's concern.
+- **Phase 3 design review.** Confirmed and refined by [ADR-048](#adr-048--one-authority-at-a-time-physical-presence-is-an-episode-reconciled-exactly-once)
+  and [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md): the tiers stand; a *named* person is bound when first materialized;
+  `Actor ≠ Person ≠ Pawn`.
 
 ### ADR-014 · Off-map pawn custody via a hidden registry quest (Conditional: S9)
 - **Decision.** One hidden, never-ending Network quest with a Network `QuestScriptDef` root. Its
@@ -184,6 +187,12 @@
   ([RIMWORLD_INTEGRATION § 3.3](RIMWORLD_INTEGRATION.md#33-contingency-patches-analysed-not-adopted)).
 - **Consequences.** Stored pawns are frozen; catch-up happens at materialization (S12). Mod
   removal adds about 2 errors unless the save is prepared for removal.
+- **Phase 3 design review.** Re-audited against the 1.6.9676 assemblies ([PHYSICAL_LIFECYCLE § 7.4](PHYSICAL_LIFECYCLE.md#74-the-registry-reservation-retained-pawns-only),
+  [Appendix E](PHYSICAL_LIFECYCLE.md#appendix-e-what-the-audit-changed-from-the-phase-0-design)). The decision stands and is
+  sharper: reservation is **required** for a retained pawn that would be `Free` (redress chance up to 0.8 per generation);
+  reserve **before** passing to the world (`Notify_PassedToWorld` rewrites a `Free` pawn's faction); the reserved set is
+  only the stored named people; its cost grows with the list length. **Open (S9r):** a registry of vanilla classes only
+  (`QuestPart_ReservePawns`) vs the Network-owned part (the default, because it self-heals on removal).
 
 ### ADR-015 · Sites = vanilla Site + vanilla parts + injected WorldObjectComp (Conditional: S1, S2, S19)
 - **Decision.** Use `WorldObjectDefOf.Site` and vanilla `SitePartDef`s (`ItemStash` + a threat
@@ -728,5 +737,73 @@
   Phase 3 adds its own stepped scenarios and a sandbox delivery port to a runner that is already proven.
   The framework can drift from production (see [RISKS R-27](RISKS.md)) and is itself a surface that needs
   its own headless tests; both are mitigated by calling production services and by the `Runner.*` suite.
-  Honest limit: the in-game suites (`RT-SMOKE-*`, `RT-LIVE-*`) and the Dev actions were compile-checked,
-  not run, in the environment that built them; the first owner run is their first execution.
+  Honest limit (updated after the owner's runs): the in-game suites (`RT-SMOKE-*`, `RT-LIVE-*`), the game host,
+  the colony sentinel and the Dev actions were compile-checked where they were built and have since been
+  **run by the owner in a fresh Dev Quicktest colony and in the real, heavily modded, ongoing colony, with zero
+  runtime FAILs and the live colony (130 contractors, 4,114 silver) unchanged by manual check**
+  ([RUNTIME_TESTING § 15](RUNTIME_TESTING.md#15-owner-observed-runtime-evidence)). That is evidence for this
+  framework in two environments, not a proof of every mod combination or of every RimWorld state; the sentinel
+  remains a bounded tripwire, and the in-progress Cancel path has headless coverage only.
+  Phase 3's physical scenarios are the case this ADR deferred (point 5): they get their own separate,
+  explicit, disposable-environment tier and ADR ([PHYSICAL_LIFECYCLE § 21](PHYSICAL_LIFECYCLE.md#21-runtime-qa-strategy)).
+
+### ADR-048 · One authority at a time; physical presence is an Episode, reconciled exactly once
+- **Status.** Proposed by the Phase 3 design review ([PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md)); implemented in
+  subphases 3.0 to 3.2. Refines ADR-013 and ADR-014; the Phase 0 `Deployment` concept is superseded by the Episode.
+- **Context.** Phase 3 crosses from abstract records into real RimWorld pawn state. The failure to avoid is a hidden
+  second authority: a person simulated abstractly while physical, a death overwritten by stale abstract health, a
+  clone, a consequence applied twice, a prisoner abstracted because it is "not spawned". The Phase 3 design audit of the
+  1.6.9676 assemblies showed several Phase 0 assumptions were wrong (death does send `Killed`; `PassToWorld` rewrites a
+  `Free` pawn's faction; a reference to a dead pawn saves `null`; `GeneratePawn` can return someone else's world pawn).
+- **Decision.** Twelve rules.
+  1. **One authority per person:** Abstract, Physical or Vanilla-held. One gate, `CanSimulateAbstractly(person)`, fronts
+     every abstract writer of person state; authority changes only in `Materialize` and `Reconcile`.
+  2. **`Actor ≠ Person ≠ Pawn`.** A crew is never one pawn; an anonymous member is an episode slot; `thingIDNumber` is a
+     binding attribute, never identity.
+  3. **A named person has one pawn for life,** bound at first materialization and never regenerated or rerolled; a
+     lost pawn makes the person `Lost`. **Anonymous members are ephemeral:** a new pawn per episode (`ForceGenerateNewPawn`),
+     released to vanilla, headcount deltas only.
+  4. **One new durable concept, the Physical Episode,** in the reserved `deployments` slot. It owns *presence facts only*;
+     consequences go through the existing casualty, career, spatial and event services in the existing vocabulary.
+  5. **Provenance is the persisted binding** (pointer saved with `saveDestroyedThings: true`, plus `thingIDNumber`),
+     written **before** the pawn is spawned. Quest tags are a signal-routing aid only. A registry reservation protects a
+     retained pawn that would be `Free` (S9r). No Hediff, no ThingComp, no name or faction matching.
+  6. **Reconciliation is plan → durable commit → flag → publish,** idempotent, from *observed* state; signals are
+     wake-ups that only enqueue; `consequencesApplied` is set last inside the commit; `Returned` requires a positive
+     observation, never absence.
+  7. **Death is monotonic;** resurrection is observed, never initiated, and never makes a person `Active`.
+  8. **Held people are a persisted custody state** observed by a bounded custody watch; an unsupported custody fails safe
+     into `Quarantined`, never faked.
+  9. **Faction:** one temporary hidden faction per *episode* (vanilla removes it with the episode); the Network
+     relationship and the faction relation are bridged only at seeding and at reconcile.
+  10. **Gear is real and never mirrored** into the abstract tier; Phase 4 gets an explicit-record seam.
+  11. **No Harmony** for the recommended slice; the three genuine hook gaps (downed, caravan join, resurrection) are
+      bounded polls.
+  12. **Event-driven:** no job, scan or allocation when nobody is physical or held.
+- **Rejected.** Extending `Operation` or `KnownCharacter` to own presence (a visit has no operation; operations are
+  compacted; a character cannot own a group event). A permanent faction per contractor, a shared hidden faction, the
+  origin faction, null faction, guest status. A second pawn-regeneration path ("reproject from a snapshot") for named people
+  (mod-list dependent; a twin if the original lives on). `KeepForever` alone (the pawn stays `Free`: redress, hijack by
+  `PrisonerWillingToJoin`). A Hediff or ThingComp provenance marker (Defs, removal errors, every race). A persisted
+  roster of anonymous individuals. Mirroring Hediffs, inventories or gear into abstract state.
+- **Consequences.** One save-format bump (no data migration; it makes older builds warn instead of silently dropping
+  episode data). A registry whose cost must be measured. Three subphases with owner gates. The writer inventory is part
+  of the design and a test.
+
+### ADR-049 · Physical runtime QA is a separate, explicit, disposable-environment tier
+- **Status.** Proposed by the Phase 3 design review; implemented in 3.1. Completes ADR-047's deferred point 5.
+- **Context.** ADR-047 made Full Safe Regression safe on a real colony by forbidding spawning, spending, creating and
+  sending. Phase 3's behaviour *is* spawning and creating (real pawns, maps, factions). The two requirements cannot share
+  a suite. The owner validated the safe tier in a fresh Quicktest colony and the real modded colony with zero FAILs; it
+  must not be weakened.
+- **Decision.** Two tiers. **Tier S (safe):** the abstract half of the lifecycle (`RT-PHYS-*`) runs over a scriptable fake
+  `PhysicalWorldPort` and never references the real physical adapter or a pawn-creating API (source-scan enforced).
+  **Tier P (physical):** a separate Dev menu category, typed confirmation, an environment guard that refuses a colony that
+  looks real, a dedicated generated test map, every created entity tagged `TheNetwork.Test.<runId>`, a blast-radius proof
+  (untagged state unchanged), cleanup of tagged entities only, a preserved failed scenario, its own source folder and scan,
+  and a pawn-level sentinel. Nothing about either tier is saved.
+- **Rejected.** Letting Full Safe Regression spawn on a "test" map in the live save (one bug from the owner's colony).
+  Auto-cleanup of anything untagged. A persisted "this save is a test" flag if a non-persisted guard suffices (S22).
+  Automated save/reload (not safe; the save matrix is an owner checklist).
+- **Consequences.** Two places to maintain; the physical tier needs the owner's explicit choice to run. How to detect a
+  disposable save robustly is open (S22).

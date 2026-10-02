@@ -57,7 +57,7 @@ The architecture has to:
 | Player intent | Presentation → Commands → Intel / Contracts | `IntelRequest`, `Contract` (issuer = player) |
 | World reaction | Scheduler → Intel / Bidding / Willingness | Offers, refusals, search progress |
 | Opportunity | Opportunities (world truth) + Leads (reported perception) | `Opportunity`, `Lead` |
-| Success / failure | Operations + Abstract Resolver, or physical play via Physical Adapters | `Operation` outcome, `Deployment` reconciliation |
+| Success / failure | Operations + Abstract Resolver, or physical play via Physical Adapters | `Operation` outcome, physical `Episode` reconciliation |
 | Consequences | Event Bus → consumers; Consequence Engine | Relation edges, obligations, morale, follow-up opportunities |
 | Remembered history | History Ledger + Summaries + Legends | `HistoryRecord`, `ActorRecordSummary`, `Legend` |
 | Changed future behaviour | Willingness, pricing, resolver, gossip, reputation all read summaries and edges | derived caches (rebuilt, never rescanned) |
@@ -95,7 +95,7 @@ The architecture has to:
 │   KnowledgeStore                             GossipService (Phase 5)                           │
 │   IntelStore · OpportunityStore                                                                │
 │   ContractStore · OperationStore             HISTORY                                           │
-│   DeploymentStore · LeaseStore                 HistoryLedger (tiered records) · SummaryStore   │
+│   EpisodeStore · LeaseStore                    HistoryLedger (tiered records) · SummaryStore   │
 │   BeliefStore (Phase 5)                        LegendArchive · Awareness (facts vs knowledge)  │
 │                                                                                                │
 │  INTEGRATION (the only code that touches live RimWorld objects) ─────────────────────────────── │
@@ -356,19 +356,24 @@ hold **who may exist in new worlds**; each world holds **what happened to them i
 - **Responsibility.** Track the individuals that matter as **Known Characters**: leaders,
   lieutenants, and anyone the player met or who did something notable. Bind each one to at most
   one real `Pawn`, and only when physically needed. Enforce the no-duplication invariants.
-- **Persistent.** `CharacterStore` (`KnownCharacter` records, including custody state and
-  `PawnRef`), `DeploymentStore` and `LeaseStore`.
-- **Runtime cache.** A reverse map from `Pawn` to `CharacterId`, and the set of pawns currently
-  reserved.
-- **Public surface.** `Custody.Materialize(characterId, purpose)`,
-  `Custody.BeginDeployment(...)`, `Custody.Reconcile(deploymentId)`,
-  `Characters.Promote(...)`.
-- **Emits.** `KnownCharacterPromoted`, `KnownCharacterKilled`, `KnownCharacterCaptured`,
-  `KnownCharacterRescued`, `KnownCharacterDefected`, `KnownCharacterLost`,
-  `DeploymentReconciled`.
-- **Consumes.** Signals via `SignalBridge`, registry-quest notifications (Phase 3), and
-  `OperationResolved` (abstract fates).
-- **Detail.** [ABSTRACT_PHYSICAL_LIFECYCLE](ABSTRACT_PHYSICAL_LIFECYCLE.md).
+- **Status.** Phase 2 implemented the *records* (`KnownCharacter`, with a persisted `custody` that is never written).
+  **Phase 3 is a design only** ([PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md), [ADR-048](DECISIONS.md)); nothing below is
+  implemented. Identity is `Actor ≠ Person ≠ Pawn`; a named person keeps one pawn for life; anonymous members are
+  ephemeral episode slots.
+- **Persistent (design).** `CharacterStore` (`KnownCharacter` records, plus `pawn`, `episode`, `heldBy`), the
+  `EpisodeStore` in the already-reserved `deployments` slot (the Phase 0 `DeploymentStore`, renamed), and the
+  reserved `LeaseStore` (Phase 4 seam).
+- **Runtime cache.** `thingIDNumber → (episode, member)`, `CharacterId → member`, and the registry of stored pawns
+  (all rebuilt from the stores in `FinalizeInit`).
+- **Public surface (candidate names).** `AuthorityGate.CanSimulateAbstractly(person)`, `Episodes.Plan/Materialize`,
+  `Episodes.Reconcile(episode)`, `Characters.Promote(...)`; the real RimWorld work sits behind a `PhysicalWorldPort`
+  with a scriptable fake for the safe test tier.
+- **Emits.** `Episode.Opened/Closed`, `KnownCharacterPromoted`, `…Killed`, `…CapturedByPlayer`, `…Defected`, `…Lost`,
+  `Contractor.Rescued` (published after the commit).
+- **Consumes.** Tagged signals via `SignalBridge` (wake-ups only), the site comp's map callbacks, the registry quest
+  part's kill/discard notifications, and `OperationResolved`.
+- **Detail.** [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md) (normative); the Phase 0 text
+  [ABSTRACT_PHYSICAL_LIFECYCLE](ABSTRACT_PHYSICAL_LIFECYCLE.md) is superseded where they differ.
 
 ### 6.8 Organizations (contractor behaviour)
 
@@ -664,8 +669,8 @@ binding). It picks plausible world context for an opportunity. It is not a subsy
 | Adapter | Responsibility | Vanilla APIs used |
 |---|---|---|
 | `SiteAdapter` | Build vanilla `Site`s for opportunities (vanilla `SitePartDef`s such as `ItemStash` plus a threat part), start the timeout, bind the injected `WorldObjectComp_NetworkSite`, and forward its callbacks | `SiteMaker.MakeSite`, `SitePart.things`, `TimeoutComp`, `WorldObjectComp` |
-| `CustodyService` | Pawn binding, registry reservation (Phase 3), deployment ledger, reconciliation | `WorldPawns`, `QuestManager` (registry quest), `PawnGenerator` under `Rand.PushState` |
-| `EncounterFactionAdapter` | Temporary per-organization factions for physical presence (Phase 3) | `FactionGenerator`, `Faction.temporary`, `FactionManager` |
+| `CustodyService` / `PhysicalWorldPort` adapter (Phase 3, design) | The RimWorld half behind the port: create (`ForceGenerateNewPawn`), spawn, tag, observe (`ObservedKind`), release, and the registry reservation. The Episode ledger and reconciliation are **Domain**, tested over a fake port | `PawnGenerator`, `GenSpawn`, `WorldPawns`, `QuestManager` (registry quest), `Pawn`/`Faction`/`Caravan` state reads, `LordMaker` |
+| `EncounterFactionAdapter` | One temporary hidden faction per **episode** (vanilla removes it with the episode) (Phase 3, design) | `FactionGenerator`, `Faction.temporary`, `FactionManager` |
 | `DeliveryAdapter` | Hand goods to the player: drop pods (Core), walk-in (Phase 3), shuttle (Royalty, optional) | `DropPodUtility.DropThingsNear`, `TransportShipMaker` (optional) |
 | `PaymentAdapter` | Take silver from and pay silver to the player; represent debt when the player cannot pay | `TradeUtility.ColonyHasEnoughSilver`, `TradeUtility.LaunchSilver`, drop pods |
 | `SignalBridge` | Receive the `TheNetwork.*` quest-tag signals (pawn, thing and world-object lifecycle) and route them to services | `SignalManager.RegisterReceiver`, `QuestUtility.AddQuestTag` |
@@ -733,6 +738,26 @@ it sits beside the Domain, never inside it.
 * **Single-threaded**, driven from the main thread's update, never blocking: it fits the model of § 12.
 
 ---
+
+### 6.23 Physical lifecycle (Phase 3, design only)
+
+The abstract ↔ physical lifecycle is specified in [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md) after a design review
+that audited the 1.6.9676 assemblies; no Phase 3 code exists. The architectural shape:
+
+```
+ DOMAIN (headless-testable)            PORT                          INTEGRATION (RimWorld)
+ AuthorityGate ─ every abstract        PhysicalWorldPort             real adapter: GeneratePawn(ForceNew) · GenSpawn ·
+   writer asks it                        Create · Spawn · Tag ·        tags · LordJob_VisitColony · registry quest ·
+ EpisodeStore (slot "deployments")       Observe(ObservedKind) ·       temporary faction · state reads
+ Reconciler: observe → decide →          Release · Reserve           FAKE (sandbox): scriptable tokens, used by the
+   plan → commit → flag → publish                                      safe runtime tier and the headless suite
+ existing services apply consequences
+   (casualties, career, spatial, events)
+```
+
+Rules that bound it: one authority per person; `Actor ≠ Person ≠ Pawn`; reconciliation exactly once from observed
+state; no Harmony; no work when nobody is physical; physical tests are a separate tier
+([ADR-048](DECISIONS.md), [ADR-049](DECISIONS.md)).
 
 ## 7. Key flows
 

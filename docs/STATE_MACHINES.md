@@ -448,6 +448,10 @@ stateDiagram-v2
 
 ## 7. Character custody
 
+> **Phase 3 design review:** the custody and deployment machines below are the Phase 0 design. The normative Phase 3
+> machines (the durable **Episode** machine and the character custody meanings, with the abstract/physical/held authority
+> rule) are in [PHYSICAL_LIFECYCLE § 8](PHYSICAL_LIFECYCLE.md#8-lifecycle-state-machine); where they differ, that document wins.
+
 Custody describes **who controls the pawn** (if one exists). It is separate from status (alive,
 dead, captured, …).
 
@@ -483,6 +487,9 @@ Invariants and transition details: [ABSTRACT_PHYSICAL_LIFECYCLE § 3–5](ABSTRA
 ---
 
 ## 8. Deployment
+
+> **Superseded by the Episode** ([PHYSICAL_LIFECYCLE § 5, § 8.1](PHYSICAL_LIFECYCLE.md#5-materialization-model)): states
+> Planned, Open, Closed, Quarantined; one exactly-once flag; consequences applied through existing services. Kept here as the Phase 0 record.
 
 | State | Meaning | Exit |
 |---|---|---|

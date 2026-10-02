@@ -248,6 +248,12 @@ External defs are stored as defName strings, so repair is a **string remap**:
 
 ## 10. Removing The Network from a save
 
+> **Phase 3 design review (not implemented):** Phase 3 adds one format bump with no data change (the new `KnownCharacter`
+> fields default correctly and the reserved `deployments` slot loads empty) so that an older build **warns instead of
+> silently dropping episode data**; the minimum new persisted truth and the migration/validator/compaction rules are
+> [PHYSICAL_LIFECYCLE § 16.4–16.5](PHYSICAL_LIFECYCLE.md#164-the-minimum-new-persisted-truth); removal with physical pawns
+> (settle, clear the registry, strip pawn tags, never delete a pawn) is [§ 20](PHYSICAL_LIFECYCLE.md#20-prepare-for-removal).
+
 **Supported path: "Prepare save for removal"** (a Mod Settings button, following the
 Grandmaster21 uninstall pattern):
 

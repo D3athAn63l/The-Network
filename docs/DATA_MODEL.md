@@ -793,6 +793,11 @@ it explains WHERE; the checkpoints stay the timeline and the resolver decides WH
 
 ## 11. Deployments and equipment leases
 
+> **Phase 3 design review:** the `Deployment` below is replaced by the Physical Episode; the candidate persisted shapes
+> (`PhysicalEpisode`, `EpisodeMember`, the `KnownCharacter` additions `pawn`/`episode`/`heldBy`, `PawnRef`) are in
+> [PHYSICAL_LIFECYCLE § 5.3](PHYSICAL_LIFECYCLE.md#53-the-persisted-data-candidate-shapes). `EquipmentLease` stays the Phase 4 seam
+> ([§ 11.2](PHYSICAL_LIFECYCLE.md#112-the-phase-4-seam-not-built)). Nothing here is implemented.
+
 ```
 Deployment                                   // one physical appearance of an org's people
   id: DeploymentId
