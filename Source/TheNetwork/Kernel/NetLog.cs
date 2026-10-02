@@ -101,6 +101,23 @@ namespace TheNetwork.Kernel
             onceKeys.Clear();
         }
 
+        /// <summary>
+        /// The once-per-session memory as it is now, and a way to put it back exactly (runtime tests: a scratch world's warnings
+        /// must never use up the memory of the same warning in the real world). Developer facility; allocates only when called.
+        /// </summary>
+        public static string[] SnapshotOnceKeys()
+        {
+            string[] keys = new string[onceKeys.Count];
+            onceKeys.CopyTo(keys);
+            return keys;
+        }
+
+        public static void RestoreOnceKeys(string[] keys)
+        {
+            onceKeys.Clear();
+            if (keys != null) for (int i = 0; i < keys.Length; i++) onceKeys.Add(keys[i]);
+        }
+
         private static void Write(NetLogLevel level, string line)
         {
             Action<NetLogLevel, string> sink = Sink;

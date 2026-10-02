@@ -1,6 +1,6 @@
 # The Network
 
-**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; its in-game validation, S20, pending); Phase 2.75 implemented (the contractor career foundation) and under review**
+**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; its in-game validation, S20, pending); Phase 2.75 merged (the contractor career foundation); Phase 2.9 (in-game runtime regression test infrastructure, developer-only) under review**
 
 The Network is a persistent, procedural contractor ecosystem that runs behind the normal RimWorld
 game. The player hires outsiders to find and fetch things they cannot easily get themselves. The
@@ -75,13 +75,27 @@ wealth or stat system:
 - **Old saves.** Format 4 keeps every visible fact (each reputation score starts at its band's floor)
   and invents no past: a running operation never earns career credit.
 
+**Phase 2.9 (runtime test infrastructure)** is developer tooling, not gameplay
+([docs/RUNTIME_TESTING.md](docs/RUNTIME_TESTING.md)). With Dev Mode on, **Dev Mode → The Network → Runtime
+tests: Quick smoke / Full safe regression / Live integration scan** (plus Status, Cancel, Last report, Export
+and Inspect preserved failure) runs stable-ID regression tests inside the running game. The mutable scenarios
+(procurement, careers, spatial) run in an **isolated in-memory sandbox** built from the real production services;
+the live game, catalog, comms gate, payment environment and world graph are only **read**. A safe run does not
+spend silver, spawn cargo, create contracts or history, send letters or move contractors, and it never starts or
+repairs the live Network (a never-ticked game gets SKIP). It checks that: a fingerprint of the Network's durable
+data plus selected colony/world state (payment silver, cargo, world objects, letters) is compared before and after
+every slice (RT-INFRA-001), and if that check itself fails the run FAILS. It is a tripwire for those effects, not a
+proof that all of RimWorld is untouched. It costs one null check per frame when idle,
+stores nothing in the save, and uses no Harmony. It complements the headless suite and does not replace it.
+
 Contractor pawns, the contract board, the player as contractor and the social layer are later
 phases ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
 
-The headless tests pass (283 tests, including an 18-in-game-year procurement soak and three 20-in-game-year
-career soaks with daily money, capacity, spatial and career invariant checks). The owner has run the Phase 2 procurement loop in game,
-normal drop-pod delivery included. The other runtime spikes, including S20 for spatial continuity,
-have **not** been run yet. Their records and owner test steps are in [docs/spikes/](docs/spikes/README.md).
+The headless tests pass (315 tests, including an 18-in-game-year procurement soak and three 20-in-game-year
+career soaks with daily money, capacity, spatial and career invariant checks, and the runtime-runner tests). The owner has run the Phase 2 procurement loop in game,
+normal drop-pod delivery included, and has observed a legacy active procurement continue after an update, go on payment hold, recover and
+deliver in full by vanilla drop pods (an owner-observed runtime pass, [RUNTIME_TESTING § 15](docs/RUNTIME_TESTING.md#15-owner-observed-runtime-evidence); it is **not** the formal S20 checklist). The other runtime spikes, including S20 for spatial continuity,
+have **not** been run yet. RimWorld was not launched while building Phase 2.9: the in-game runtime tests are compile-checked only until the owner's first run. Their records and owner test steps are in [docs/spikes/](docs/spikes/README.md).
 
 ### Build
 
@@ -101,6 +115,8 @@ Tests/run-tests.sh "<RimWorld Managed folder>" "<path to 0Harmony.dll>"
 Runs the real `TheNetwork.dll` against the real `Assembly-CSharp` under Mono with fake adapter ports.
 `0Harmony` is used by the **test runner only** (to stub Unity-only logging); the mod references no
 Harmony. These tests prove Network logic, not vanilla behaviour.
+
+The in-game counterpart (Dev Mode, no setup) is described in [docs/RUNTIME_TESTING.md](docs/RUNTIME_TESTING.md).
 
 > **Design authority.** The [master design document](The%20Network%20%E2%80%94%20Full%20Mod%20Design%20-%20Master%20Implementation%20Brief.md) defines product and gameplay intent. The
 > architecture documents define technical implementation. Where they conflict, the design takes
@@ -130,6 +146,7 @@ same change.
 | [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | Item catalog, external Def safety, DLC and optional systems |
 | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Work classes, budgets, scheduling frequencies, anti-patterns |
 | [docs/DEBUGGING.md](docs/DEBUGGING.md) | Logging policy, dev actions, validators, timing instrumentation |
+| [docs/RUNTIME_TESTING.md](docs/RUNTIME_TESTING.md) | In-game runtime regression tests: sandbox, live scan, safety model, stable test IDs, how to run, what is not automated |
 | [docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md) | Phase plan, Phase 1 vertical slice and acceptance criteria |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Architectural decision records, including the alternatives we rejected |
 | [docs/RISKS.md](docs/RISKS.md) | Technical risk register |

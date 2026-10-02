@@ -48,6 +48,30 @@ if grep -rnE "PawnGenerator|Hediff|Bionic|Implant|ThingMaker|Vehicle|Inventory|H
 fi
 echo "ok"
 
+echo "### Source scan: runtime tests never spawn, spend, launch or touch the live scheduler (ADR-047)"
+# The scratch worlds reach the colony through nothing: no Thing creation, no spawn, no trade/launch, no drop pod, no silver movement,
+# no live scheduler, no letters, no start-up of the live Network. Only the read-only Live suite and the colony sentinel may name RimWorld
+# world APIs (and only to READ them).
+if grep -rnE "ThingMaker|GenSpawn|GenPlace|SkyfallerMaker|DropPodUtility|TradeUtility\.LaunchSilver|\.TryCharge|\.TryRefund|NetworkRuntime\.Current\.Scheduler|rt\.Scheduler\.(Schedule|Cancel|RegisterKind|Clear)|ctx\.scheduler\.Schedule\(\"devtest|\"devtest\." Source/TheNetwork/Diagnostics/RuntimeTests ; then
+  echo "FAIL: runtime-test code reaches a gameplay effect or the live scheduler" >&2; exit 1
+fi
+if grep -rnE "HarmonyLib|0Harmony|Scribe_|IExposable|ExposeData" Source/TheNetwork/Diagnostics/RuntimeTests Source/TheNetwork/Diagnostics/NetworkDevActions.RuntimeTests.cs ; then
+  echo "FAIL: runtime-test code uses Harmony or is Scribed (it must be runtime only)" >&2; exit 1
+fi
+if grep -n "TheNetwork.Tests" Source/TheNetwork/TheNetwork.csproj ; then
+  echo "FAIL: the production project references the test project" >&2; exit 1
+fi
+# Reading the letter stack (the colony sentinel counts letters) is fine; sending, removing or building one is not.
+if grep -rnE "ReceiveLetter|RemoveLetter|LetterMaker|ChoiceLetter|StandardLetter|ContractLetterConsumer|LetterConsumer|Find\.LetterStack\.[A-Za-z]*(Receive|Remove)" Source/TheNetwork/Diagnostics/RuntimeTests Source/TheNetwork/Diagnostics/NetworkDevActions.RuntimeTests.cs | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' ; then
+  echo "FAIL: runtime-test code sends a gameplay letter" >&2; exit 1
+fi
+# A runtime test never starts, repairs or reconciles the LIVE Network (the game does that on its first tick, Network tab or command).
+# Comment lines are ignored; production code outside RuntimeTests is not scanned.
+if grep -rnE "\.EnsureStarted\(|\.StartNow\(|\bRunStartup\(|\b(rt|runtime|Runtime|Current)\.Active\b|\.Session\.Ensure\(|NetValidator\." Source/TheNetwork/Diagnostics/RuntimeTests Source/TheNetwork/Diagnostics/NetworkDevActions.RuntimeTests.cs | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' ; then
+  echo "FAIL: runtime-test code starts, reconciles or repairs the live Network (EnsureStarted / StartNow / RunStartup / .Active / NetValidator)" >&2; exit 1
+fi
+echo "ok"
+
 OUT="${TEST_OUT:-$(mktemp -d)}"
 EXTRA=()
 if [ ! -f "$MANAGED/netstandard.dll" ]; then

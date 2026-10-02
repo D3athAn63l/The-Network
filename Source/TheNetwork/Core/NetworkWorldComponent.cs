@@ -53,6 +53,15 @@ namespace TheNetwork
             Instance = this;
         }
 
+        /// <summary>
+        /// Once per rendered frame (also while paused). Dev-only runtime tests (Phase 2.9) are pumped from here; with no run in progress
+        /// this is one static reference check and nothing else.
+        /// </summary>
+        public override void WorldComponentUpdate()
+        {
+            Diagnostics.RuntimeTests.RuntimeTestGame.PumpFrame(this);
+        }
+
         public override void ExposeData()
         {
             base.ExposeData();

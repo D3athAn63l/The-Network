@@ -32,6 +32,8 @@
 | R-23 | Global cast settings lost, corrupted or leaking into saves | Medium | Medium | Phase 1 (A15) |
 | R-24 | Hidden spatial continuity costs, misleads or leaks | Medium | Medium | Phase 2.5 (S20) |
 | R-25 | Abstract charter transport becomes a teleport, a hidden economy or a crutch | Low | Medium | Phase 2.5 (S20) |
+| R-26 | Contractor careers run away, double-credit, contradict themselves or bloat the save | Medium | Medium | Phase 2.75 soaks |
+| R-27 | The in-game runtime test framework damages a live colony, leaks overrides, hangs, lies, or becomes a second architecture | High | Low | Phase 2.9 (headless `Runner.*`, mutation checks) + the owner's first in-game runs |
 
 ---
 
@@ -335,3 +337,56 @@
   credits less clawbacks; a voided contract holds nothing), fame/score mapping, negative score, overflow, tier
   bounds, advancement while committed, tier moved other than by advancement, Tag contradictions, Augmented.
 
+## R-27 · The in-game runtime test framework damages a live colony, leaks overrides, hangs, lies, or becomes a second architecture (Phase 2.9)
+- **Failure modes.** (1) The runner **mutates the live save**: a test spends silver, adds a contract or
+  history entry, moves a contractor, changes a career, or leaves a test actor that the next autosave persists.
+  (2) A **global dev override leaks**: a test sets `ProcurementDevOverrides` / `IntelDevOverrides` /
+  `ServiceToggles`, and the owner's colony then gets forced outcomes or free fees; or a test "resets" an override
+  the owner had deliberately set. (3) A **false PASS** from testing copied logic instead of the production
+  services. (4) A **hanging runtime test** that blocks or starves the game thread, or waits forever. (5) A
+  **persisted dev scheduler job**: the runner's own bookkeeping is a job in the saved scheduler and survives a
+  reload or a mod removal. (6) **Destructive physical cleanup** of a future physical suite deletes the player's
+  items or leaves cargo and world objects. (7) The framework grows into a **second gameplay architecture**
+  (its own services, rules and state that the game starts to depend on). (8) The tests **diverge from the
+  actual production code** (the sandbox ports drift from the real adapters; a suite is green while the game is
+  not).
+- **Mitigation.** (1) Sandboxes share no writable state with the live Network; the live Network is read only
+  through read-only views; a `LiveFingerprint` of the Network's durable truth (every persisted field of every
+  store, by content, so a change to an existing relation, contract term, checkpoint, history record or Field
+  Log entry is seen even when no count moves) plus a colony/world sentinel (beacon silver, cargo, world
+  objects, letters) is compared before and after every slice and reported as RT-INFRA-001; **a capture that
+  throws on a running Network FAILS it (fail closed)**; a runtime test **never starts, reconciles or repairs
+  the live Network** (`EnsureStarted`, `StartNow`, `RunStartup`, `NetValidator` are forbidden in runtime-test
+  code; a never-started Network gives SKIP, with the advice to allow one tick); nothing the runner holds is
+  `Scribe`d; a source scan forbids spawning, spending, launching, letters and live-scheduler use. (2) Every step captures the current values of all 18 static overrides and toggles,
+  presents the neutral state a scenario expects, and restores the **previous** values after the step even when
+  it threw, so the game never sees one; a step that forgets to clear one fails its test (RT-INFRA-002). (3)
+  Sandbox scenarios call the *production* services over sandbox ports; they contain no copy of the rules; the
+  expected values are derived from generated terms; eight mutation checks against the production code and the
+  runner each made a named test fail. (4) The runner is pumped in 8 ms slices from the world component's
+  update, a `Wait` yields at once, every test has a finite real-time timeout and wait count, a sandbox's clock
+  only moves through bounded `AdvanceUntil`, and a timeout reports step, sandbox tick, pending jobs and
+  entities. (5) The runner has no job at all; RT-INFRA-003 checks that no runtime-test job kind is in the live
+  scheduler. (6) No destructive or physical suite exists (ADR-047 point 5); one needs its own disposable
+  environment, design and ADR; the safe suite only *plans* a drop-pod delivery. (7) ADR-047 freezes the scope:
+  developer infrastructure, no player UI, no background monitoring, no Harmony, no save change; nothing in the
+  game's own code depends on it except one static null check per frame. (8) The suites run the production
+  classes (a change to them changes the test's subject); a real catalog item is priced through production
+  services (RT-PROC-011); the live scan inspects the real adapters; the sandbox ports mirror the port
+  interfaces and a port interface change fails the build.
+- **Residual risk (stated, not hidden).** The in-game suites `RT-SMOKE-*` / `RT-LIVE-*`, the game host and the
+  Dev actions were **compile-checked only**: RimWorld could not be launched where this phase was built, so
+  their first real execution is the owner's. The fingerprint covers the Network's persisted fields and the
+  sentinel's selected colony/world state, and nothing else (it is not a byte-compare of the save, and pawn state,
+  terrain and buildings are not covered). A false alarm is possible if a runtime-only cache field that a
+  read-only call fills in is not named `cached*`; the walker skips dictionaries, sets and `cached*` fields, and
+  `FingerprintIgnoresReadOnlyAccess` checks the known read paths. The fingerprint costs about 5 ms per capture
+  on a synthetic 365-actor world (two per frame while a run is active, nothing otherwise). The sandbox is a model of the game, not the game:
+  real-game-only behaviour (a real pod landing, a real map) stays a manual check (§ 13 of
+  [RUNTIME_TESTING](RUNTIME_TESTING.md)).
+- **Proven by.** `Runner.*` (exception containment, stable order and IDs, stop / continue, cancel restoring
+  overrides, clean timeout, runtime-only preserved failure, discarded sandboxes, live-scan non-mutation, exact
+  report counts, stable export format, exact override restore, no control job in the scheduler, the safe suite
+  leaving a synthetic live world's fingerprint, silver, scheduler and careers identical, a mutated fake live
+  world detected, idle cost one null check); the three sandbox suites through the real runner; and the
+  source scan. The owner's first in-game *Full safe regression* is the remaining evidence.

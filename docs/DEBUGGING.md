@@ -96,6 +96,23 @@ appear in these readouts only, never in normal UI; nothing is drawn on the world
 |---|---|
 | Careers | Inspect contractor career… (fame, reputation score and the next band, experience, career stage, `opsCompleted`, `legacyResolved`, the detailed career record, funds, operating reserve, equipment tier and condition, `CareerNeed`, derived Tags, last advancement, advancement count, and why it can or cannot advance now) · Grant reputation to contractor… (same path as real play: the band re-derives) · Add test funds to contractor… (saturating) · Run career advancement now… (the same rules: committed, cooldown, reputation, funds + reserve, recovery) · Dump career distribution… (fame, experience, tiers, needs, Tags, funds and reputation min/median/max, upgrades, this session's career tallies) |
 
+**Phase 2.9 as implemented** (debug menu category **"The Network"**, `Runtime tests: ...`, developer infrastructure only;
+[RUNTIME_TESTING](RUNTIME_TESTING.md)). Unlike every action above, these **change nothing in the colony**: they
+run the production services in an isolated in-memory sandbox and read the live game strictly read-only.
+
+| Group | Action |
+|---|---|
+| Run | Runtime tests: **Quick smoke** (RT-SMOKE-001..008, stops at the first failure) · **Full safe regression** (smoke + live scan + the procurement, career and spatial sandbox scenarios; verbose; does not stop) · **Live integration scan** (RT-LIVE-001..006, read-only) |
+| Control | Runtime tests: **Status** (suite, test, step, progress, counts, options, preserved failure) · **Cancel current run** (clean, at the next safe boundary) |
+| Report | Runtime tests: **Last report** (to the log) · **Export last report** (`<SaveDataFolderPath>/TheNetwork/runtime-tests-YYYYMMDD-HHMMSS.txt`) · **Inspect preserved failure** (the kept sandbox of the last failed test, in memory only) |
+
+A run logs a summary when it starts and when it ends and shows one Message (positive, negative or neutral);
+it sends no letter. It **never starts or repairs the live Network**: in a game loaded paused (never ticked) the
+tests that need a started Network report SKIP with the advice to unpause for one tick and rerun, and RT-INFRA-001
+says nothing was verified. A WARN result means production code logged a warning or error while a test ran (the
+lines are in the report and the real log). The runner restores every static dev override to its previous value after every step, so
+the forced draws above are never changed by a run.
+
 Spatial log lines use the `[TheNetwork][Spatial]` category ([SPATIAL § 13](SPATIAL.md#13-diagnostics)).
 
 The forced draws live in `ProcurementDevOverrides` (runtime only, never saved) and are consumed by
@@ -149,6 +166,31 @@ The Domain and Kernel layers are written so their **pure logic** can run without
   must equal resolving once (idempotency).
 - **Reflective target verification** (only once Harmony or reflection is used): verify every
   reflective target and parameter name against the shipped assembly at build time.
+
+### 6.1 Runtime regression tests (Phase 2.9)
+
+The headless suite cannot show that the loaded mod, the real Defs, the real catalog and the real adapters still
+agree with the logic in a running game. [RUNTIME_TESTING](RUNTIME_TESTING.md) adds an in-game runner for that,
+under the same rules as everything here: it is Dev Mode only, **never saved**, uses no Harmony, and is silent
+unless a Dev action starts it (idle cost: one static null check per frame).
+
+- **Where the code is.** `Source/TheNetwork/Diagnostics/RuntimeTests/` (runner, sandbox, fingerprint, invariant
+  scan, report, game host) and `Suites/` (`RuntimeSmokeSuite`, `RuntimeLiveSuite`, `ProcurementRuntimeSuite`,
+  `CareerRuntimeSuite`, `SpatialRuntimeSuite`).
+- **Headless coverage of the runner** is `Tests/TheNetwork.Tests/RuntimeRunnerTests.cs` (filter: `TEST_FILTER=Runner.`).
+  The sandbox suites also run headlessly through the real runner against a synthetic live world, so the
+  scenarios are checked on every build and only the game-only smoke and live suites need the game.
+- **Reading a failure.** The log line and the report give the stable ID (`RT-PROC-007`), expected and actual,
+  the exception, the sandbox tick, the entities, and the scratch world's own log lines. *Inspect preserved
+  failure* dumps the failed sandbox. Re-run the one scenario headlessly by adding its ID to a filter in
+  `RuntimeRunnerTests.cs`, or in the game with *Full safe regression*.
+- **Do not** call `NetValidator.RunAll` from a runtime test (it repairs); use `LiveInvariants.Scan`.
+- **A run that finds a live-state change** reports **RT-INFRA-001** with the store and entity that moved
+  (`contracts.contracts[3]#17`): that is a bug in a test (or in a service that was handed a live object), not in
+  the colony. **A run whose fingerprint could not be captured also FAILS RT-INFRA-001** (it fails closed), with the
+  end (before / after), the slice and the exception. Its scope is the Network's durable fields plus the colony
+  sentinel ([RUNTIME_TESTING § 6](RUNTIME_TESTING.md#6-safety-model)); a runtime-only cache field that a read-only call
+  fills in must be named `cached*` or the walker will report it.
 
 ## 7. Inspector windows
 

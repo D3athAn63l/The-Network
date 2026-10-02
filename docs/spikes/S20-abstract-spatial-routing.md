@@ -161,6 +161,15 @@ unchanged.
 
 Not run.
 
+**Related owner observation (not an S20 result).** After Phase 2.75 the owner reported a real-game run of a
+*legacy* active procurement contract (a pre-update save; 10,000 Plasteel, about 200,000 silver, a team reached
+through a Fixer) that continued after the update, went on payment hold when the balance (58,335 silver) exceeded the
+available silver (about 56,000), resumed as the **same** contract when funds were available, and delivered
+10,000 / 10,000 by vanilla drop pods with no error, duplicate or stuck state. That is recorded as an
+**owner-observed runtime pass** of that scenario ([RUNTIME_TESTING § 15](../RUNTIME_TESTING.md#15-owner-observed-runtime-evidence),
+suggested id RT-PROC-LEGACY-001). It did not exercise the checklist above (charters, the Field Log's beats, Last
+Known Location placement), so **S20 stays NOT RUN**.
+
 ## Logs
 
 —

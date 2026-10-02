@@ -14,6 +14,7 @@
 5. [Phase 2: Contractors (abstract) + Procurement](#5-phase-2-contractors-abstract--procurement)
    - [Phase 2.5: Abstract spatial continuity + player-contract Field Log](#5a-phase-25-abstract-spatial-continuity--player-contract-field-log)
    - [Phase 2.75: Contractor career foundation](#5b-phase-275-contractor-career-foundation)
+   - [Phase 2.9: Runtime test infrastructure](#5c-phase-29-runtime-test-infrastructure)
 6. [Phase 3: Abstract ↔ physical lifecycle](#6-phase-3-abstract--physical-lifecycle)
 7. [Phase 4: Player as contractor, contract board, bidding](#7-phase-4-player-as-contractor-contract-board-bidding)
 8. [Phase 5: Social layer](#8-phase-5-social-layer)
@@ -32,6 +33,7 @@
 | **2** | Contractors (abstract) + Procurement | about 100 contractor identities (Solos to companies) from the world's cast, capability split from NPC simulation, Open and Direct contracts with the offer path, Fixer-mediated quotes, deposits and insurance, deterministic resolver, drop-pod delivery, willingness/refusal, relationships core, history changing behaviour, failures that leave a last known location | S13 |
 | **2.5** | Abstract spatial continuity + player-contract Field Log | every contractor has hidden approximate geography (one anchor, coarse lazy journeys, no icons, no caravans, no per-tick work); operations start from the real anchor and work in a hidden region on their committed timeline; Last Known Locations appear where the contractor actually was; the player's running job has a short Field Log | S20 |
 | **2.75** | Contractor career foundation | work changes a contractor: numeric reputation beneath the fame band, a cumulative career record, exact contractor money in the existing funds, equipment advancement, derived `CareerNeed` and Tags; no second reputation, wealth or stat system | — (headless; the soak reports the distributions) |
+| **2.9** | Runtime test infrastructure | an in-game regression runner that exercises the real production services in an isolated sandbox and reads the live game strictly read-only, so it is safe to press in a real colony; stable test IDs, time-sliced, never saved, no Harmony, no player UI; Phase 3 adds its own scenarios to it | — (headless `Runner.*`; the owner's first in-game run of the runner is the evidence) |
 | **3** | Abstract ↔ physical lifecycle | Known Characters as pawns, custody, deployments, encounter factions, in-person delivery, rescue follow-ups, contract inheritance | **S9**, S10, S11, S12, S14 |
 | **4** | Player as contractor + NPC contract board + full bidding | player registration (same faction), NPC-issued contracts, competing offers, competitors at opportunities, public reputation epithets | — |
 | **5** | Social layer | rumors and beliefs, gossip, favors and debts, introductions, perceived reputation, sanctions and blacklists, morale v2 | — |
@@ -82,6 +84,8 @@ retirement, legends.
 - **Every phase ends with**: save/load tests at each new state; the mod-removal test (S6
   extended); the external-mod-removal test (S7 extended); a performance report; updated docs.
 - **Update this documentation in the same PR** as any architectural deviation.
+- **From Phase 3 on, new multi-step behaviour ships with runtime scenarios** (stepped cases and sandbox ports
+  on the Phase 2.9 runner, [RUNTIME_TESTING § 14](RUNTIME_TESTING.md)) alongside its headless tests.
 - **Spikes first**: a phase's listed spikes are run and documented before its content is built.
 
 ---
@@ -362,6 +366,51 @@ provenance, technical-void windfalls, fame/score mapping, bounds, advancement ru
 
 ---
 
+## 5C. Phase 2.9: Runtime test infrastructure
+
+Inserted after Phase 2.75 and before Phase 3, while The Network is still almost entirely abstract: a small
+in-game regression runner so that Phase 3's physical contractor lifecycle can add its own multi-step runtime
+scenarios to a framework that is already proven. **Developer infrastructure only**: no gameplay change, no
+tuning, no new player UI, no Harmony, no save-format change (still 4). Normative guide:
+[RUNTIME_TESTING](RUNTIME_TESTING.md); decision [ADR-047](DECISIONS.md) (runtime regression tests are isolated
+from live gameplay state); risk [R-27](RISKS.md).
+
+**Scope (as implemented)**
+
+- A time-sliced, never-blocking runner pumped from `NetworkWorldComponent.WorldComponentUpdate` (one static
+  null check per frame when idle), with stable test IDs, PASS / FAIL / WARN / SKIP, expected / actual /
+  exception / elapsed / entity ids, a tiny assertion API (`True`, `Equal`, `NotNull`, `Zero`, `Eventually`,
+  ...), immediate and stepped (multi-step, waiting) tests, per-test exception containment, finite timeouts,
+  clean cancel, and options `stopOnFirstFailure` / `verbose` / `preserveFailedSandbox`.
+- An isolated **sandbox**: a private Network built from the production services over sandbox ports
+  (comms, payment, catalog, world facts, sites, a recording delivery) and a synthetic world graph, sharing
+  nothing writable with the live Network; a failed one can be kept in memory and inspected.
+- A read-only **live scan** of the real catalog, comms gate, payment environment, world graph and drop-pod
+  plan, and a read-only invariant scan of the live Network (never the repairing validator).
+- **Safety proof built in**: the Network's durable truth (every persisted field, by content) plus a colony/world
+  sentinel compared before and after every slice, failing closed if the capture itself fails (RT-INFRA-001),
+  exact snapshot / restore of all 18 static dev overrides and service toggles (RT-INFRA-002), no control job
+  in the persisted scheduler (RT-INFRA-003), every sandbox accounted for (RT-INFRA-004). A runtime test never
+  starts, reconciles or repairs the live Network (a never-started Network gives SKIP), and production warnings
+  raised during a test surface as WARN.
+- Suites: `RT-SMOKE-001..008`, `RT-LIVE-001..006`, `RT-PROC-001..011`, `RT-CAR-001..014`, `RT-SPAT-001..008`.
+- Eight Dev Mode actions under **The Network**: Runtime tests: Quick smoke, Full safe regression, Live
+  integration scan, Status, Cancel current run, Last report, Export last report, Inspect preserved failure.
+- The owner's real-game observation (legacy procurement → continuation → payment hold → recovery → full
+  drop-pod delivery) is recorded as an **owner-observed runtime pass**, not as a formal S20 result; the sandbox
+  keeps its *invariant* as RT-PROC-007.
+
+**Not in Phase 2.9:** any physical, destructive or save-reload suite; real delivery in a test; automated
+quit / restart; a normal-game background monitor; a player-facing tab; Phase 3 or Phase 4 behaviour; Harmony.
+
+Headless evidence: 315 tests, 20,331 checks, 0 failures, 0 `warning CS` (32 new `Runner.*` tests: the
+runner, the plans, the sandbox suites through the real runner against a synthetic live world, the fingerprint,
+the idle cost). The existing 283 tests and every soak are unchanged and green. **RimWorld was not launched** where
+this phase was built: the `RT-SMOKE-*` / `RT-LIVE-*` suites, the game host and the Dev actions are
+compile-checked only, and S20 remains *NOT RUN — owner runtime validation required*.
+
+---
+
 ## 6. Phase 3: Abstract ↔ physical lifecycle
 
 **Spikes first:** S9 (registry quest), S10 (encounter factions), S11 (site-part pawn holder),
@@ -383,6 +432,9 @@ S12 (catch-up), S14 (walk-in Lord), S17 (tag hygiene).
 - Events: `Contractor.Rescued`, `KnownCharacter.CapturedByPlayer` / `.Defected` / `.Lost`,
   `Player.BetrayedContractor`.
 - Deployment Monitor dev window.
+- Runtime scenarios for the physical lifecycle (custody, deployment, in-person delivery, rescue) as stepped cases
+  on the Phase 2.9 runner, with a sandbox physical-delivery port that records; destructive physical suites remain
+  out of the default run ([ADR-047](DECISIONS.md)).
 
 ---
 
