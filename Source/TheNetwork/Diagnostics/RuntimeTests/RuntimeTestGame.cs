@@ -27,13 +27,29 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             }
         }
 
-        public LiveFingerprint CaptureFingerprint()
+        /// <summary>
+        /// The Network's durable truth plus the colony sentinel, read-only. A Network the game has not started yet has no settled state to compare
+        /// and is REPORTED as such (never started here: a runtime test never starts, repairs or reconciles the live Network). A capture that
+        /// throws propagates: the runner records it as a failed capture and RT-INFRA-001 FAILS (the safety sentinel fails closed).
+        /// </summary>
+        public FingerprintCapture CaptureFingerprint()
         {
             NetworkRuntime rt = NetworkRuntime.Current;
-            // A Network the game has not started yet (a save just loaded, nothing has ticked) has no settled state to compare: its own
-            // start-up gate (the same one the first tick, the Network tab and every command go through) is not a test's doing.
-            if (rt == null || !rt.Session.IsRunning) return null;
-            return LiveFingerprint.Of(rt.Ctx, rt.Root.ids, rt.Scheduler, rt.State.journal);
+            if (rt == null) return FingerprintCapture.NetworkUnavailable("no Network runtime in this game");
+            if (!rt.Session.IsRunning) return FingerprintCapture.NetworkNotStarted("session state " + rt.Session.State);
+            LiveFingerprint f = LiveFingerprint.Of(rt.Ctx, rt.Root.ids, rt.Scheduler, rt.State.journal);
+            ColonySentinel.AddTo(f);
+            return FingerprintCapture.Available(f);
+        }
+
+        /// <summary>Read-only: looks at the session gate and nothing else.</summary>
+        public NetworkProbe ProbeNetwork()
+        {
+            NetworkRuntime rt = NetworkRuntime.Current;
+            if (rt == null) return new NetworkProbe { State = NetworkStartState.Absent };
+            if (rt.Session.IsRunning) return new NetworkProbe { State = NetworkStartState.Running };
+            if (rt.Session.IsFailed) return new NetworkProbe { State = NetworkStartState.Failed, FailedStage = rt.Session.FailedStage, FailureMessage = rt.Session.FailureMessage };
+            return new NetworkProbe { State = NetworkStartState.NotStarted, Detail = rt.Session.State.ToString() };
         }
 
         public IEnumerable<string> LiveSchedulerKinds()
@@ -79,7 +95,8 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             }
             else if (s.Count(RuntimeTestOutcome.Fail) == 0)
             {
-                Messages.Message("[TheNetwork] Runtime tests: all " + s.Count(RuntimeTestOutcome.Pass) + " passed (" + s.Count(RuntimeTestOutcome.Warn) + " warnings, " + s.Count(RuntimeTestOutcome.Skip) + " skipped) in " + Math.Round(s.ElapsedMs).ToString("0") + " ms.", MessageTypeDefOf.PositiveEvent, false);
+                string notStarted = s.LiveChecks == 0 && s.LiveNotStartedSlices > 0 ? " The Network had not started yet, so the live-state checks were skipped: unpause for one tick and rerun." : "";
+                Messages.Message("[TheNetwork] Runtime tests: all " + s.Count(RuntimeTestOutcome.Pass) + " passed (" + s.Count(RuntimeTestOutcome.Warn) + " warnings, " + s.Count(RuntimeTestOutcome.Skip) + " skipped) in " + Math.Round(s.ElapsedMs).ToString("0") + " ms." + notStarted, s.Count(RuntimeTestOutcome.Skip) > 0 && notStarted.Length > 0 ? MessageTypeDefOf.NeutralEvent : MessageTypeDefOf.PositiveEvent, false);
             }
             else
             {

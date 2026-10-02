@@ -17,11 +17,21 @@ namespace TheNetwork.Diagnostics.RuntimeTests
         /// <summary>Build/version text for the report header.</summary>
         string BuildInfo { get; }
 
-        /// <summary>The fingerprint of the LIVE Network world, or null when there is none to protect. Read-only.</summary>
-        LiveFingerprint CaptureFingerprint();
+        /// <summary>
+        /// The state of the LIVE world right now: its fingerprint, or exactly why there is none (no live Network; not started yet; or the
+        /// capture failed). Read-only. A host never starts the Network to make it fingerprintable, and never returns null: a throw is the
+        /// runner's cue to record a failed capture (the safety sentinel fails closed).
+        /// </summary>
+        FingerprintCapture CaptureFingerprint();
 
         /// <summary>The kinds of every job in the LIVE persisted scheduler (to prove no test-control job ever entered it). Empty when none.</summary>
         IEnumerable<string> LiveSchedulerKinds();
+
+        /// <summary>
+        /// Whether the game has started the live Network, read-only. A runtime test never starts it: it asks, and reports SKIP when the game has
+        /// not (no EnsureStarted, StartNow or RunStartup anywhere in runtime-test code: ADR-047, enforced by a source scan).
+        /// </summary>
+        NetworkProbe ProbeNetwork();
 
         /// <summary>Facts of a real, loaded def copied by value (null result when unknown). Never a reference to the live catalog.</summary>
         bool TryGetRealItemFacts(string defName, out ItemFacts facts);
@@ -30,6 +40,29 @@ namespace TheNetwork.Diagnostics.RuntimeTests
 
         /// <summary>The run finished or was cancelled (the game shows one Message; never a letter).</summary>
         void RunFinished(RuntimeTestSession session);
+    }
+
+    public enum NetworkStartState
+    {
+        /// <summary>There is no Network runtime in this game.</summary>
+        Absent = 0,
+
+        /// <summary>The Network exists and the game has not started it (nothing has ticked, no Network tab or command yet). Not a defect.</summary>
+        NotStarted = 1,
+
+        Running = 2,
+
+        /// <summary>The game tried to start the Network and its start-up threw (a defect worth a FAIL).</summary>
+        Failed = 3
+    }
+
+    /// <summary>A read-only description of the live Network's start-up state.</summary>
+    public sealed class NetworkProbe
+    {
+        public NetworkStartState State;
+        public string FailedStage;
+        public string FailureMessage;
+        public string Detail;
     }
 
     /// <summary>A failed sandbox kept (in memory only) so a developer can look at exactly what the failing scenario left behind.</summary>
@@ -78,11 +111,21 @@ namespace TheNetwork.Diagnostics.RuntimeTests
         public int SandboxesDiscarded;
         public int SandboxesPreserved;
         public int LiveChecks;
-        public int LiveChecksSkipped;
+
+        /// <summary>Slices in which there was legitimately no live Network (a headless host).</summary>
+        public int LiveUnavailableSlices;
+
+        /// <summary>Slices in which the live Network existed but the game had not started it: nothing settled to compare, and the run did not start it.</summary>
+        public int LiveNotStartedSlices;
+
+        /// <summary>Every fingerprint capture that threw while a live Network was expected: "slice N, before/after: Type: message". Any entry fails RT-INFRA-001.</summary>
+        public readonly List<string> FingerprintFailures = new List<string>();
+
+        public Exception FirstFingerprintError;
         public string LastDump;
 
         /// <summary>The live fingerprint taken at the start of the slice in progress (compared at the end of that slice, or at the finish, whichever comes first).</summary>
-        internal LiveFingerprint SliceBefore;
+        internal FingerprintCapture SliceBefore;
 
         /// <summary>True from the start of a slice until its live comparison has been made (a slice is compared exactly once).</summary>
         internal bool SliceOpen;
@@ -205,30 +248,55 @@ namespace TheNetwork.Diagnostics.RuntimeTests
         {
             if (!s.SliceOpen) return; // this slice was already compared (the final slice is compared by Finish, then again by Pump's finally)
             s.SliceOpen = false;
-            LiveFingerprint before = s.SliceBefore;
+            FingerprintCapture before = s.SliceBefore ?? FingerprintCapture.Failed(new InvalidOperationException("no capture was taken at the start of the slice"));
             s.SliceBefore = null;
-            LiveFingerprint after = SafeFingerprint();
-            if (before == null || after == null)
+            FingerprintCapture after = SafeFingerprint();
+
+            bool failed = false;
+            if (before.Status == FingerprintStatus.Failed) { RecordCaptureFailure(s, "before", before); failed = true; }
+            if (after.Status == FingerprintStatus.Failed) { RecordCaptureFailure(s, "after", after); failed = true; }
+            if (failed) return; // fail closed: the run cannot claim the live Network was verified
+
+            if (before.Status == FingerprintStatus.Available && after.Status == FingerprintStatus.Available)
             {
-                // The host had nothing to compare at one end of this slice (a game whose Network the first tick has not started yet).
-                if (before != null || after != null) s.LiveChecksSkipped++;
-                return;
+                s.LiveChecks++;
+                List<string> diff = before.Fingerprint.Diff(after.Fingerprint);
+                for (int i = 0; i < diff.Count; i++) s.LiveChanges.Add("slice " + s.Slices + ": " + diff[i]);
             }
-            s.LiveChecks++;
-            List<string> diff = before.Diff(after);
-            for (int i = 0; i < diff.Count; i++) s.LiveChanges.Add("slice " + s.Slices + ": " + diff[i]);
+            else if (before.Status == after.Status)
+            {
+                // Unavailable by design, or not started: nothing to compare at either end, and the run did nothing to change that.
+                if (before.Status == FingerprintStatus.NetworkNotStarted) s.LiveNotStartedSlices++;
+                else s.LiveUnavailableSlices++;
+            }
+            else
+            {
+                // The live Network's availability changed INSIDE a slice. Only this slice's own steps ran in it, so a step did it (for example by starting the
+                // Network): that is exactly what a safe run must never do.
+                s.LiveChanges.Add("slice " + s.Slices + ": the live Network's availability changed during the slice (" + before.Status + " -> " + after.Status + ")");
+            }
         }
 
-        private LiveFingerprint SafeFingerprint()
+        private void RecordCaptureFailure(RuntimeTestSession s, string end, FingerprintCapture c)
+        {
+            if (s.FingerprintFailures.Count == 0) host.Log("[TheNetwork] Runtime tests: the live-state fingerprint could not be captured (" + end + " slice " + s.Slices + "): " + (c.Error == null ? "unknown error" : c.Error.GetType().Name + ": " + c.Error.Message) + ". RT-INFRA-001 will FAIL: the run cannot claim the live Network was verified.");
+            s.FingerprintFailures.Add("slice " + s.Slices + ", " + end + ": " + (c.Error == null ? "unknown error" : c.Error.GetType().Name + ": " + c.Error.Message) + (c.Detail != null ? " (" + c.Detail + ")" : ""));
+            if (s.FirstFingerprintError == null) s.FirstFingerprintError = c.Error;
+        }
+
+        /// <summary>One capture of the live world. It never throws and never returns null: a throw (or a host that returns nothing) is a FAILED capture, which the run reports as a failure.</summary>
+        private FingerprintCapture SafeFingerprint()
         {
             try
             {
-                return host.CaptureFingerprint();
+                FingerprintCapture c = host.CaptureFingerprint();
+                if (c == null) return FingerprintCapture.Failed(new InvalidOperationException("the host returned no capture"), "a host must always say why there is no fingerprint");
+                if (c.Status == FingerprintStatus.Available && c.Fingerprint == null) return FingerprintCapture.Failed(new InvalidOperationException("the host reported Available with no fingerprint"));
+                return c;
             }
             catch (Exception ex)
             {
-                host.Log("[TheNetwork] Runtime tests: could not fingerprint the live Network (" + ex.GetType().Name + ": " + ex.Message + ").");
-                return null;
+                return FingerprintCapture.Failed(ex);
             }
         }
 
@@ -384,6 +452,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests
                 r.StackTrace = ex.StackTrace;
             }
             r.Notes.AddRange(ctx.Notes);
+            if (ctx.Log.ExpectedLines > 0) r.Notes.Add(ctx.Log.ExpectedLines + " expected production log line(s) (declared by the scenario) did not count as warnings");
             r.Warnings.AddRange(ctx.Warnings);
             r.Entities.AddRange(ctx.EntityLabels());
             if (outcome == RuntimeTestOutcome.Pass)
@@ -393,10 +462,13 @@ namespace TheNetwork.Diagnostics.RuntimeTests
                     r.Outcome = RuntimeTestOutcome.Warn;
                     r.Message = ctx.Warnings[0];
                 }
-                else if (ctx.Log.Errors > 0)
+                else if (ctx.Log.Warnings > 0 || ctx.Log.Errors > 0)
                 {
+                    // Production code logged a warning or error while the test otherwise passed. The log sink was redirected for the step, so these
+                    // lines would never reach the owner's log: they are surfaced here as WARN, with the lines kept in the report (Phase 2.9 policy:
+                    // any unexpected production warning in any suite is a WARN, never a FAIL and never silent).
                     r.Outcome = RuntimeTestOutcome.Warn;
-                    r.Message = "The scratch world logged " + ctx.Log.Errors + " error line(s) while the test passed (see the log lines below).";
+                    r.Message = "The test passed, but production code logged " + ctx.Log.Warnings + " warning(s) and " + ctx.Log.Errors + " error(s) while it ran. First: " + FirstProblemLine(ctx.Log);
                     r.Warnings.Add(r.Message);
                 }
                 if (r.Outcome == RuntimeTestOutcome.Warn) r.CapturedLog.AddRange(ctx.Log.Lines);
@@ -424,8 +496,19 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             }
             s.Results.Add(r);
             s.Current = null;
-            if (failed || s.Options.Verbose) host.Log(RuntimeTestReport.Line(r) + (failed && r.Message != null ? " :: " + r.Message : ""));
+            // A warning is always logged for real (it would otherwise be invisible: its own lines were captured away from the log).
+            if (failed || s.Options.Verbose || r.Outcome == RuntimeTestOutcome.Warn) host.Log(RuntimeTestReport.Line(r) + ((failed || r.Outcome == RuntimeTestOutcome.Warn) && r.Message != null ? " :: " + r.Message : ""));
             if (failed && s.Options.StopOnFirstFailure) s.StoppedEarly = true;
+        }
+
+        private static string FirstProblemLine(RuntimeLogCapture log)
+        {
+            for (int i = 0; i < log.Lines.Count; i++)
+            {
+                string line = log.Lines[i];
+                if (line.StartsWith("Warning", StringComparison.Ordinal) || line.StartsWith("Error", StringComparison.Ordinal)) return line;
+            }
+            return "(the line was not kept)";
         }
 
         private RuntimeTestResult Infra(string id, string name, RuntimeTestOutcome outcome, string message, string expected, string actual, Exception ex = null)
@@ -470,26 +553,61 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             }
         }
 
+        private RuntimeTestResult LiveStateResult(RuntimeTestSession s)
+        {
+            const string id = "RT-INFRA-001";
+            const string name = "Live Network state unchanged by the run";
+            if (s.FingerprintFailures.Count > 0 || s.LiveChanges.Count > 0)
+            {
+                // Fail closed: a safety sentinel that broke is a failure, never a silent skip.
+                StringBuilder sb = new StringBuilder();
+                if (s.FingerprintFailures.Count > 0)
+                {
+                    sb.Append("The live-state fingerprint could not be captured, so this run cannot claim the live Network was verified (").Append(s.FingerprintFailures.Count).Append(" failed capture(s)): ");
+                    sb.Append(string.Join("; ", s.FingerprintFailures.GetRange(0, Math.Min(3, s.FingerprintFailures.Count)).ToArray()));
+                    if (s.FingerprintFailures.Count > 3) sb.Append("; (+").Append(s.FingerprintFailures.Count - 3).Append(" more)");
+                }
+                if (s.LiveChanges.Count > 0)
+                {
+                    if (sb.Length > 0) sb.Append(" | ");
+                    sb.Append("The live Network changed during a slice of this run: ");
+                    sb.Append(string.Join("; ", s.LiveChanges.GetRange(0, Math.Min(8, s.LiveChanges.Count)).ToArray()));
+                    if (s.LiveChanges.Count > 8) sb.Append("; (+").Append(s.LiveChanges.Count - 8).Append(" more)");
+                }
+                RuntimeTestResult bad = Infra(id, name, RuntimeTestOutcome.Fail, sb.ToString(), "every capture succeeds and nothing changes", s.FingerprintFailures.Count + " failed capture(s), " + s.LiveChanges.Count + " change(s)", s.FirstFingerprintError);
+                return bad;
+            }
+            if (s.LiveChecks > 0)
+            {
+                string extra = s.LiveNotStartedSlices > 0 ? " (" + s.LiveNotStartedSlices + " earlier slice(s) had no started Network to compare; the game started it by itself during the run.)" : "";
+                return Infra(id, name, RuntimeTestOutcome.Pass, s.LiveChecks + " slices fingerprinted before and after: the Network's durable fields (actors and components, contracts with terms, ledgers and Field Logs, operations, relations, knowledge, history, summaries, journal, characters, cast, intel, opportunities, consequences), the scheduler, the id counters and the host's selected colony state were identical." + extra, null, null);
+            }
+            if (s.LiveNotStartedSlices > 0)
+            {
+                return Infra(id, name, RuntimeTestOutcome.Skip, "The Network has not started in this game session yet, so there was no settled live state to fingerprint and nothing about the live Network was verified. The run did not start it. Unpause for one game tick (or use The Network normally), then rerun the runtime tests.", null, null);
+            }
+            return Infra(id, name, RuntimeTestOutcome.Skip, "There is no live Network in this host to fingerprint.", null, null);
+        }
+
         /// <summary>The run's own safety proofs: the live Network untouched, overrides restored, no control job persisted, sandboxes discarded.</summary>
         private void AddInfrastructureResults(RuntimeTestSession s)
         {
-            if (s.LiveChecks > 0)
-            {
-                if (s.LiveChanges.Count == 0) s.Results.Add(Infra("RT-INFRA-001", "Live Network state unchanged by the run", RuntimeTestOutcome.Pass, s.LiveChecks + " slices fingerprinted before and after: actors, contracts, ledgers, operations, history, relations, careers, scheduler and id counters identical." + (s.LiveChecksSkipped > 0 ? " (" + s.LiveChecksSkipped + " slice(s) could not be compared at both ends: the game's own start-up of the Network ran during them.)" : ""), null, null));
-                else s.Results.Add(Infra("RT-INFRA-001", "Live Network state unchanged by the run", RuntimeTestOutcome.Fail, "The live Network changed during a slice of this run: " + string.Join("; ", s.LiveChanges.ToArray()), "no change", s.LiveChanges.Count + " change(s)"));
-            }
-            else
-            {
-                s.Results.Add(Infra("RT-INFRA-001", "Live Network state unchanged by the run", RuntimeTestOutcome.Skip, s.LiveChecksSkipped > 0 ? "No slice could be compared at both ends: the game's own start-up of the Network ran during this run (" + s.LiveChecksSkipped + " slice(s)). Run again to compare." : "This host has no live Network state to fingerprint.", null, null));
-            }
+            s.Results.Add(LiveStateResult(s));
             bool overridesOk = s.OverrideLeaks == 0 && s.OverrideRestoreMismatches == 0;
             s.Results.Add(Infra("RT-INFRA-002", "Dev overrides restored exactly", overridesOk ? RuntimeTestOutcome.Pass : RuntimeTestOutcome.Fail,
                 overridesOk ? "Every step restored the previous values of the dev overrides and service toggles (" + s.Steps + " steps)." : s.OverrideLeaks + " step(s) left a dev override set and " + s.OverrideRestoreMismatches + " restore(s) did not match (all were put back).",
                 "0 leaks, 0 mismatches", s.OverrideLeaks + " leaks, " + s.OverrideRestoreMismatches + " mismatches"));
             List<string> bad = new List<string>();
-            foreach (string kind in host.LiveSchedulerKinds())
+            try
             {
-                if (kind != null && (kind.StartsWith("devtest", StringComparison.OrdinalIgnoreCase) || kind.StartsWith("runtimetest", StringComparison.OrdinalIgnoreCase))) bad.Add(kind);
+                foreach (string kind in host.LiveSchedulerKinds())
+                {
+                    if (kind != null && (kind.StartsWith("devtest", StringComparison.OrdinalIgnoreCase) || kind.StartsWith("runtimetest", StringComparison.OrdinalIgnoreCase))) bad.Add(kind);
+                }
+            }
+            catch (Exception ex)
+            {
+                bad.Add("(the live scheduler could not be read: " + ex.GetType().Name + ": " + ex.Message + ")");
             }
             s.Results.Add(Infra("RT-INFRA-003", "No test-control job in the persisted scheduler", bad.Count == 0 ? RuntimeTestOutcome.Pass : RuntimeTestOutcome.Fail,
                 bad.Count == 0 ? "The live scheduler holds no job of a runtime-test kind (the runner never uses it)." : "The live persisted scheduler holds runtime-test job kinds: " + string.Join(", ", bad.ToArray()), "none", bad.Count.ToString()));

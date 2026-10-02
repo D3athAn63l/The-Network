@@ -185,10 +185,15 @@ summaries or edges in O(1), or knowledge books in O(64) at most.
    runner, its host, the suites and every sandbox are created only when a Dev Mode action starts a run, and
    nothing about a run is saved ([RUNTIME_TESTING § 12](RUNTIME_TESTING.md#12-cost)). Measured headlessly
    (`Runner.IdleCostIsOneNullCheck`, 5,000,000 calls): **about 2.5–3.4 ns per idle frame, 0 bytes allocated**.
-   While a run is in progress it is time-sliced to at most 8 ms of real time per frame and fingerprints the live
-   Network twice per frame; measured headlessly (`Runner.FingerprintCostIsBounded`, a synthetic world of 365
-   actors, 61 contracts and operations): **about 0.1–0.16 ms per fingerprint** (the cost is linear in the live
-   Network's size). Headless elapsed times of the isolated scenarios through the real runner: Procurement
+   While a run is in progress it is time-sliced to at most 8 ms of real time per frame and captures the live
+   state twice per frame. The Network fingerprint hashes every durable field by content (it replaced a cheaper
+   count-and-hash version that missed mutations of existing state); measured headlessly
+   (`Runner.FingerprintCostIsBounded`, a synthetic world of 365 actors, 61 contracts and operations, 67 history
+   records, about 25,000 objects and lists): **about 5 ms per capture**, linear in the live Network's size, plus a
+   one-time **about 23 ms** to compile the per-type accessors at the first capture of a process; the reflective
+   fallback (no expression trees) takes about 44 ms per capture. A run therefore adds roughly 10 ms to each frame
+   it runs in, for the second or two it lasts, and nothing otherwise. The colony sentinel's cost in game (silver by
+   beacon, a hash of haulable items, world objects) is bounded and **not measured**. Headless elapsed times of the isolated scenarios through the real runner: Procurement
    (11 tests) ≈ 8 ms, Career (14) ≈ 7 ms, Spatial (8) ≈ 9 ms, all 33 plus the infrastructure checks ≈ 23 ms in 7
    slices. **Not measured:** the in-game elapsed time of Quick smoke, Full safe regression and the Live scan
    (RimWorld could not be launched where this phase was built); the first owner run's own summary line and

@@ -128,8 +128,14 @@ namespace TheNetwork.Diagnostics.RuntimeTests
     public sealed class RuntimeLogCapture
     {
         public readonly List<string> Lines = new List<string>();
+
+        /// <summary>Unexpected warnings and errors: they make an otherwise passing test a WARN.</summary>
         public int Warnings;
         public int Errors;
+
+        /// <summary>Fragments a scenario declared it EXPECTS production code to log (a deliberately provoked fault). Matching lines are kept but do not count.</summary>
+        public readonly List<string> Expected = new List<string>();
+        public int ExpectedLines;
         private Action<NetLogLevel, string> previousSink;
         private string[] previousOnceKeys;
         private bool active;
@@ -155,9 +161,16 @@ namespace TheNetwork.Diagnostics.RuntimeTests
 
         private void Capture(NetLogLevel level, string line)
         {
-            if (level == NetLogLevel.Warning) Warnings++;
-            else if (level == NetLogLevel.Error) Errors++;
-            if (Lines.Count < 200) Lines.Add(level + " " + line);
+            if (level == NetLogLevel.Warning || level == NetLogLevel.Error)
+            {
+                bool expected = false;
+                for (int i = 0; i < Expected.Count && !expected; i++) expected = line.IndexOf(Expected[i], StringComparison.Ordinal) >= 0;
+                if (expected) ExpectedLines++;
+                else if (level == NetLogLevel.Warning) Warnings++;
+                else Errors++;
+            }
+            // Warnings and errors are always kept (up to a hard ceiling); chatter is kept only while there is room, so it cannot crowd them out.
+            if (level == NetLogLevel.Warning || level == NetLogLevel.Error ? Lines.Count < 400 : Lines.Count < 200) Lines.Add(level + " " + line);
         }
     }
 }

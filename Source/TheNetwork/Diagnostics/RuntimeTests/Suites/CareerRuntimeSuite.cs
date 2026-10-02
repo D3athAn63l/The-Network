@@ -104,6 +104,8 @@ namespace TheNetwork.Diagnostics.RuntimeTests.Suites
             CareerRecord record = Sim(team).career;
             long classified = record.Classified;
             // A fault in the middle of the commit (a reputation that is missing: corrupt state): nothing may change and nothing may be flagged.
+            // Production logs a warning for exactly this fault: it is the provoked, expected behaviour, not a surprise.
+            ctx.ExpectLog("could not be applied");
             PublicReputation rep = team.reputation;
             team.reputation = null;
             bool applied;

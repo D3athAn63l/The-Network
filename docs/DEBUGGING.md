@@ -107,7 +107,10 @@ run the production services in an isolated in-memory sandbox and read the live g
 | Report | Runtime tests: **Last report** (to the log) · **Export last report** (`<SaveDataFolderPath>/TheNetwork/runtime-tests-YYYYMMDD-HHMMSS.txt`) · **Inspect preserved failure** (the kept sandbox of the last failed test, in memory only) |
 
 A run logs a summary when it starts and when it ends and shows one Message (positive, negative or neutral);
-it sends no letter. The runner restores every static dev override to its previous value after every step, so
+it sends no letter. It **never starts or repairs the live Network**: in a game loaded paused (never ticked) the
+tests that need a started Network report SKIP with the advice to unpause for one tick and rerun, and RT-INFRA-001
+says nothing was verified. A WARN result means production code logged a warning or error while a test ran (the
+lines are in the report and the real log). The runner restores every static dev override to its previous value after every step, so
 the forced draws above are never changed by a run.
 
 Spatial log lines use the `[TheNetwork][Spatial]` category ([SPATIAL § 13](SPATIAL.md#13-diagnostics)).
@@ -182,8 +185,12 @@ unless a Dev action starts it (idle cost: one static null check per frame).
   failure* dumps the failed sandbox. Re-run the one scenario headlessly by adding its ID to a filter in
   `RuntimeRunnerTests.cs`, or in the game with *Full safe regression*.
 - **Do not** call `NetValidator.RunAll` from a runtime test (it repairs); use `LiveInvariants.Scan`.
-- **A run that finds a live-state change** reports **RT-INFRA-001** with the collection that moved: that is a
-  bug in a test (or in a service that was handed a live object), not in the colony.
+- **A run that finds a live-state change** reports **RT-INFRA-001** with the store and entity that moved
+  (`contracts.contracts[3]#17`): that is a bug in a test (or in a service that was handed a live object), not in
+  the colony. **A run whose fingerprint could not be captured also FAILS RT-INFRA-001** (it fails closed), with the
+  end (before / after), the slice and the exception. Its scope is the Network's durable fields plus the colony
+  sentinel ([RUNTIME_TESTING § 6](RUNTIME_TESTING.md#6-safety-model)); a runtime-only cache field that a read-only call
+  fills in must be named `cached*` or the walker will report it.
 
 ## 7. Inspector windows
 

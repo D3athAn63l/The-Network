@@ -8,7 +8,8 @@ namespace TheNetwork.Diagnostics
     /// <summary>
     /// Runtime regression tests (Phase 2.9, RUNTIME_TESTING.md): Dev Mode, The Network, "Runtime tests: ...". Developer infrastructure only:
     /// no normal player tab, no gameplay button, no setting. The safe runs execute in isolated scratch worlds and read the live game
-    /// strictly read-only, so pressing them in a real colony changes nothing: no silver, no cargo, no contracts, no history, no letters.
+    /// strictly read-only: they never start, reconcile or repair the live Network (a never-started Network gives SKIP), and a before/after
+    /// fingerprint of its durable data plus selected colony state (silver, cargo, world objects, letters) checks that nothing moved.
     /// </summary>
     public static partial class NetworkDevActions
     {

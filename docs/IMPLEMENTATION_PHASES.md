@@ -387,9 +387,12 @@ from live gameplay state); risk [R-27](RISKS.md).
   nothing writable with the live Network; a failed one can be kept in memory and inspected.
 - A read-only **live scan** of the real catalog, comms gate, payment environment, world graph and drop-pod
   plan, and a read-only invariant scan of the live Network (never the repairing validator).
-- **Safety proof built in**: a live-Network fingerprint compared before and after every slice (RT-INFRA-001),
+- **Safety proof built in**: the Network's durable truth (every persisted field, by content) plus a colony/world
+  sentinel compared before and after every slice, failing closed if the capture itself fails (RT-INFRA-001),
   exact snapshot / restore of all 18 static dev overrides and service toggles (RT-INFRA-002), no control job
-  in the persisted scheduler (RT-INFRA-003), every sandbox accounted for (RT-INFRA-004).
+  in the persisted scheduler (RT-INFRA-003), every sandbox accounted for (RT-INFRA-004). A runtime test never
+  starts, reconciles or repairs the live Network (a never-started Network gives SKIP), and production warnings
+  raised during a test surface as WARN.
 - Suites: `RT-SMOKE-001..008`, `RT-LIVE-001..006`, `RT-PROC-001..011`, `RT-CAR-001..014`, `RT-SPAT-001..008`.
 - Eight Dev Mode actions under **The Network**: Runtime tests: Quick smoke, Full safe regression, Live
   integration scan, Status, Cancel current run, Last report, Export last report, Inspect preserved failure.
@@ -400,7 +403,7 @@ from live gameplay state); risk [R-27](RISKS.md).
 **Not in Phase 2.9:** any physical, destructive or save-reload suite; real delivery in a test; automated
 quit / restart; a normal-game background monitor; a player-facing tab; Phase 3 or Phase 4 behaviour; Harmony.
 
-Headless evidence: 306 tests, 18,910 checks, 0 failures, 0 `warning CS` (23 new `Runner.*` tests: the
+Headless evidence: 315 tests, 20,331 checks, 0 failures, 0 `warning CS` (32 new `Runner.*` tests: the
 runner, the plans, the sandbox suites through the real runner against a synthetic live world, the fingerprint,
 the idle cost). The existing 283 tests and every soak are unchanged and green. **RimWorld was not launched** where
 this phase was built: the `RT-SMOKE-*` / `RT-LIVE-*` suites, the game host and the Dev actions are

@@ -706,21 +706,26 @@ it sits beside the Domain, never inside it.
                   │  one static null check per frame when idle ─ NetworkWorldComponent.WorldComponentUpdate ─► PumpFrame
                   ▼
             RuntimeTestRunner ── pumped slices (8 ms), per-step override snapshot/restore, exception containment,
-                  │              finite timeouts, cancel, live fingerprint before/after every slice (RT-INFRA-001)
+                  │              finite timeouts, cancel, live-state capture before/after every slice (RT-INFRA-001):
+                  │              a fingerprint, or why there is none; a capture that throws FAILS (fails closed)
                   │
         ┌─────────┴───────────────────────────────┐
         ▼                                         ▼
   RuntimeTestSandbox (isolated, in memory)    GameRuntimeTestHost (read-only view of the live game)
   production services over sandbox ports:     real catalog, comms gate, payment environment inspection,
   own ids/clock/scheduler/bus/journal/        world graph, drop-pod plan, LiveInvariants.Scan,
-  stores/History; SandboxComms/Payment/       LiveFingerprint of the live Network
-  Catalog/WorldFacts/Sites/Delivery           (never writes; never calls NetValidator)
+  stores/History; SandboxComms/Payment/       LiveFingerprint (Network durable fields, by content)
+  Catalog/WorldFacts/Sites/Delivery           + ColonySentinel (silver by beacon, cargo, world objects, letters)
+                                              (never writes; never starts the Network; never calls NetValidator)
   + GridWorldGraph; discarded after the test
 ```
 
 * **Dependency rule.** The runner and sandbox depend on the Domain, Kernel and Integration *ports* like any
   other client; **the Domain, Kernel and Persist layers never reference the runner**. The production assembly
   never references the test project.
+* **Never starts or repairs the live Network.** `ProbeNetwork()` only asks whether the game has started it; a
+  never-started Network is SKIP ("allow one normal tick and rerun"). A source scan forbids `EnsureStarted`,
+  `StartNow`, `RunStartup`, `.Active` and `NetValidator` in `RuntimeTests`.
 * **Not persisted.** The runner, sessions, results, preserved failures and sandboxes are runtime-only: no
   `Scribe`, no scheduler job (RT-INFRA-003), no save-version change (still 4).
 * **Process-wide statics** a test can influence (`ProcurementDevOverrides`, `IntelDevOverrides`,

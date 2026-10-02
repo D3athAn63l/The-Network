@@ -12,8 +12,10 @@ namespace TheNetwork.Diagnostics.RuntimeTests.Suites
 {
     /// <summary>
     /// RT-SMOKE: seconds-or-less checks that the mod loaded and started in THIS RimWorld process (after replacing the DLL or loading a
-    /// save). Game-only (it reads the live Network and real Defs); read-only; it never fails because a colony has no comms console or
-    /// no home map: those are gameplay states.
+    /// save). Game-only (it reads the live Network and real Defs); STRICTLY read-only: it inspects whether the Network has started and
+    /// never starts, repairs or reconciles it (no EnsureStarted, StartNow or RunStartup: ADR-047). A Network the game has not started
+    /// yet is a gameplay state, reported as SKIP with an instruction to allow one normal game tick; it never fails because a colony
+    /// has no comms console or no home map either.
     /// </summary>
     public static class RuntimeSmokeSuite
     {
@@ -38,11 +40,26 @@ namespace TheNetwork.Diagnostics.RuntimeTests.Suites
             return root;
         }
 
+        private const string NotStartedAdvice = "The Network has not started in this game session yet. Unpause for one game tick or use The Network normally, then rerun the runtime tests. (A runtime test never starts it on the game's behalf.)";
+
+        /// <summary>The live runtime, which must exist (it is built when the world loads). Does NOT require it to have started.</summary>
         private static NetworkRuntime Rt(RuntimeTestContext ctx)
         {
             NetworkRuntime rt = Root(ctx).Runtime;
             ctx.Assert.NotNull(rt, "The Network runtime was not built (FinalizeInit failed: see the log).");
             return rt;
+        }
+
+        /// <summary>
+        /// The live runtime once the GAME has started it. A failed start-up is reported by RT-SMOKE-002 / 008 (not repeated here); a Network that has
+        /// not started yet is SKIP with the advice. This never starts anything: it only asks the host for the start-up state.
+        /// </summary>
+        private static NetworkRuntime Started(RuntimeTestContext ctx)
+        {
+            NetworkProbe p = ctx.Host.ProbeNetwork();
+            if (p.State == NetworkStartState.Failed) ctx.Skip("The Network failed to start this session (see RT-SMOKE-002): nothing settled to inspect.");
+            if (p.State == NetworkStartState.NotStarted) ctx.Skip(NotStartedAdvice);
+            return Rt(ctx); // Absent falls through to Rt(), which fails with its own message
         }
 
         private static void WorldComponentExists(RuntimeTestContext ctx)
@@ -54,20 +71,27 @@ namespace TheNetwork.Diagnostics.RuntimeTests.Suites
 
         private static void RuntimeStarts(RuntimeTestContext ctx)
         {
+            // Inspect only. The game starts the Network on its first tick, Network tab or command; a test never does it for the game.
+            NetworkProbe p = ctx.Host.ProbeNetwork();
+            switch (p.State)
+            {
+                case NetworkStartState.Absent:
+                    ctx.Assert.Fail("There is no Network runtime in this game (the world component did not build it: FinalizeInit failed, see the log).");
+                    break;
+                case NetworkStartState.Failed:
+                    ctx.Assert.Fail("The Network failed to start this session during " + (p.FailedStage ?? "?") + ": " + p.FailureMessage);
+                    break;
+                case NetworkStartState.NotStarted:
+                    ctx.Skip(NotStartedAdvice + " (session state: " + p.Detail + ")");
+                    break;
+            }
             NetworkRuntime rt = Rt(ctx);
-            // Already started in any game that has ticked, opened the Network tab or issued a command (then this changes nothing). In a game
-            // loaded paused it is the game's own start-up gate, the very call the first tick makes; it is the one thing a run can cause in
-            // the live Network, it is noted, and the runner does not count that slice as a live-state comparison.
-            bool wasRunning = rt.Session.IsRunning;
-            bool started = rt.EnsureStarted();
-            if (!wasRunning && started) ctx.Note("the Network had not started in this session yet: this call performed the game's own start-up (the first tick would have done the same)");
-            ctx.Assert.True(started, "EnsureStarted failed during " + (rt.Session.FailedStage ?? "?") + ": " + rt.Session.FailureMessage);
-            ctx.Assert.True(rt.Session.IsRunning, "the session is running (" + rt.Session.State + ")");
             ctx.Note("session " + rt.Session.State + ", next due tick " + rt.Scheduler.NextDueTick + " (now " + rt.Clock.Now + ")");
         }
 
         private static void SaveVersionUnderstood(RuntimeTestContext ctx)
         {
+            Started(ctx); // the save is only settled once the game has run its own load reconciliation
             NetworkWorldComponent root = Root(ctx);
             if (!root.bootstrapped)
             {
@@ -85,6 +109,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests.Suites
 
         private static void StoresPresent(RuntimeTestContext ctx)
         {
+            Started(ctx);
             NetworkState s = Root(ctx).state;
             ctx.Assert.NotNull(s.cast, "cast snapshot");
             ctx.Assert.NotNull(s.actors, "actor store");
@@ -131,6 +156,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests.Suites
 
         private static void ActorIndexes(RuntimeTestContext ctx)
         {
+            Started(ctx);
             NetworkState s = Root(ctx).state;
             HashSet<int> seen = new HashSet<int>();
             for (int i = 0; i < s.actors.actors.Count; i++)
@@ -146,10 +172,11 @@ namespace TheNetwork.Diagnostics.RuntimeTests.Suites
 
         private static void NoStartupFailure(RuntimeTestContext ctx)
         {
+            NetworkProbe p = ctx.Host.ProbeNetwork();
+            ctx.Assert.True(p.State != NetworkStartState.Absent, "the runtime exists");
+            ctx.Assert.True(p.State != NetworkStartState.Failed, "start-up did not fail (stage " + (p.FailedStage ?? "-") + "): " + p.FailureMessage);
+            if (p.State == NetworkStartState.NotStarted) ctx.Skip(NotStartedAdvice);
             NetworkWorldComponent root = Root(ctx);
-            NetworkRuntime rt = root.Runtime;
-            ctx.Assert.NotNull(rt, "the runtime exists");
-            ctx.Assert.False(rt.Session.IsFailed, "start-up did not fail (stage " + (rt.Session.FailedStage ?? "-") + "): " + rt.Session.FailureMessage);
             List<string> degraded = root.state.diagnostics.degradedSubsystems;
             if (degraded.Count > 0) ctx.Warn("subsystems degraded by a load failure: " + string.Join(", ", degraded.ToArray()) + " (see the log from the load)");
             else if (root.state.diagnostics.quarantine.Count > 0) ctx.Warn(root.state.diagnostics.quarantine.Count + " quarantined item(s) from this save or session (kept, skipped)");

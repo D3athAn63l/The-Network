@@ -89,6 +89,16 @@ namespace TheNetwork.Diagnostics.RuntimeTests
         }
 
         /// <summary>This world does not have what the test needs (a gameplay state, never a defect): ends the test as SKIP.</summary>
+        /// <summary>
+        /// Declares that this scenario deliberately provokes a production warning or error containing <paramref name="fragment"/> (for example a
+        /// commit fault whose handling is the thing under test). Matching lines are kept in the report but do not turn the result into a WARN.
+        /// Anything else production code logs still does.
+        /// </summary>
+        public void ExpectLog(string fragment)
+        {
+            Log.Expected.Add(fragment);
+        }
+
         public void Skip(string reason)
         {
             throw new RuntimeSkipException(reason);

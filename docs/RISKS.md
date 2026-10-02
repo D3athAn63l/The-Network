@@ -351,10 +351,14 @@
   actual production code** (the sandbox ports drift from the real adapters; a suite is green while the game is
   not).
 - **Mitigation.** (1) Sandboxes share no writable state with the live Network; the live Network is read only
-  through read-only views; a `LiveFingerprint` of actors, contracts, ledgers, operations, history, relations,
-  careers, scheduler and id counters is compared before and after every slice and reported as RT-INFRA-001;
-  nothing the runner holds is `Scribe`d; a source scan forbids spawning, spending, launching and live-scheduler
-  use in runtime-test code. (2) Every step captures the current values of all 18 static overrides and toggles,
+  through read-only views; a `LiveFingerprint` of the Network's durable truth (every persisted field of every
+  store, by content, so a change to an existing relation, contract term, checkpoint, history record or Field
+  Log entry is seen even when no count moves) plus a colony/world sentinel (beacon silver, cargo, world
+  objects, letters) is compared before and after every slice and reported as RT-INFRA-001; **a capture that
+  throws on a running Network FAILS it (fail closed)**; a runtime test **never starts, reconciles or repairs
+  the live Network** (`EnsureStarted`, `StartNow`, `RunStartup`, `NetValidator` are forbidden in runtime-test
+  code; a never-started Network gives SKIP, with the advice to allow one tick); nothing the runner holds is
+  `Scribe`d; a source scan forbids spawning, spending, launching, letters and live-scheduler use. (2) Every step captures the current values of all 18 static overrides and toggles,
   presents the neutral state a scenario expects, and restores the **previous** values after the step even when
   it threw, so the game never sees one; a step that forgets to clear one fails its test (RT-INFRA-002). (3)
   Sandbox scenarios call the *production* services over sandbox ports; they contain no copy of the rules; the
@@ -372,9 +376,12 @@
   interfaces and a port interface change fails the build.
 - **Residual risk (stated, not hidden).** The in-game suites `RT-SMOKE-*` / `RT-LIVE-*`, the game host and the
   Dev actions were **compile-checked only**: RimWorld could not be launched where this phase was built, so
-  their first real execution is the owner's. The fingerprint covers what it hashes (it is not a byte-compare of
-  the save); a new live collection must be added to it. In a game loaded paused (never ticked), RT-SMOKE-002 runs the game's own start-up gate, which the
-  first tick would run anyway; it is noted in the result and RT-INFRA-001 reports the slices it could not compare. The sandbox is a model of the game, not the game:
+  their first real execution is the owner's. The fingerprint covers the Network's persisted fields and the
+  sentinel's selected colony/world state, and nothing else (it is not a byte-compare of the save, and pawn state,
+  terrain and buildings are not covered). A false alarm is possible if a runtime-only cache field that a
+  read-only call fills in is not named `cached*`; the walker skips dictionaries, sets and `cached*` fields, and
+  `FingerprintIgnoresReadOnlyAccess` checks the known read paths. The fingerprint costs about 5 ms per capture
+  on a synthetic 365-actor world (two per frame while a run is active, nothing otherwise). The sandbox is a model of the game, not the game:
   real-game-only behaviour (a real pod landing, a real map) stays a manual check (§ 13 of
   [RUNTIME_TESTING](RUNTIME_TESTING.md)).
 - **Proven by.** `Runner.*` (exception containment, stable order and IDs, stop / continue, cancel restoring

@@ -81,14 +81,17 @@ tests: Quick smoke / Full safe regression / Live integration scan** (plus Status
 and Inspect preserved failure) runs stable-ID regression tests inside the running game. The mutable scenarios
 (procurement, careers, spatial) run in an **isolated in-memory sandbox** built from the real production services;
 the live game, catalog, comms gate, payment environment and world graph are only **read**. A safe run does not
-spend silver, spawn cargo, create contracts or history, send letters or move contractors: it fingerprints the
-live Network before and after every slice and says so (RT-INFRA-001). It costs one null check per frame when idle,
+spend silver, spawn cargo, create contracts or history, send letters or move contractors, and it never starts or
+repairs the live Network (a never-ticked game gets SKIP). It checks that: a fingerprint of the Network's durable
+data plus selected colony/world state (payment silver, cargo, world objects, letters) is compared before and after
+every slice (RT-INFRA-001), and if that check itself fails the run FAILS. It is a tripwire for those effects, not a
+proof that all of RimWorld is untouched. It costs one null check per frame when idle,
 stores nothing in the save, and uses no Harmony. It complements the headless suite and does not replace it.
 
 Contractor pawns, the contract board, the player as contractor and the social layer are later
 phases ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
 
-The headless tests pass (306 tests, including an 18-in-game-year procurement soak and three 20-in-game-year
+The headless tests pass (315 tests, including an 18-in-game-year procurement soak and three 20-in-game-year
 career soaks with daily money, capacity, spatial and career invariant checks, and the runtime-runner tests). The owner has run the Phase 2 procurement loop in game,
 normal drop-pod delivery included, and has observed a legacy active procurement continue after an update, go on payment hold, recover and
 deliver in full by vanilla drop pods (an owner-observed runtime pass, [RUNTIME_TESTING § 15](docs/RUNTIME_TESTING.md#15-owner-observed-runtime-evidence); it is **not** the formal S20 checklist). The other runtime spikes, including S20 for spatial continuity,
