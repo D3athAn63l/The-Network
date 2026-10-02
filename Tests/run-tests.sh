@@ -48,6 +48,23 @@ if grep -rnE "PawnGenerator|Hediff|Bionic|Implant|ThingMaker|Vehicle|Inventory|H
 fi
 echo "ok"
 
+echo "### Source scan: runtime tests never spawn, spend, launch or touch the live scheduler (ADR-047)"
+# The scratch worlds reach the colony through nothing: no Thing creation, no spawn, no trade/launch, no drop pod, no silver movement,
+# no live scheduler. Only the read-only Live suite may name RimWorld world APIs (and only to READ them).
+if grep -rnE "ThingMaker|GenSpawn|GenPlace|SkyfallerMaker|DropPodUtility|TradeUtility\.LaunchSilver|\.TryCharge|\.TryRefund|NetworkRuntime\.Current\.Scheduler|rt\.Scheduler\.(Schedule|Cancel|RegisterKind|Clear)|ctx\.scheduler\.Schedule\(\"devtest|\"devtest\." Source/TheNetwork/Diagnostics/RuntimeTests ; then
+  echo "FAIL: runtime-test code reaches a gameplay effect or the live scheduler" >&2; exit 1
+fi
+if grep -rnE "HarmonyLib|0Harmony|Scribe_|IExposable|ExposeData" Source/TheNetwork/Diagnostics/RuntimeTests Source/TheNetwork/Diagnostics/NetworkDevActions.RuntimeTests.cs ; then
+  echo "FAIL: runtime-test code uses Harmony or is Scribed (it must be runtime only)" >&2; exit 1
+fi
+if grep -n "TheNetwork.Tests" Source/TheNetwork/TheNetwork.csproj ; then
+  echo "FAIL: the production project references the test project" >&2; exit 1
+fi
+if grep -rnE "LetterStack|Find\.LetterStack|Letter\b|ContractLetterConsumer|LetterConsumer" Source/TheNetwork/Diagnostics/RuntimeTests ; then
+  echo "FAIL: runtime-test code sends a gameplay letter" >&2; exit 1
+fi
+echo "ok"
+
 OUT="${TEST_OUT:-$(mktemp -d)}"
 EXTRA=()
 if [ ! -f "$MANAGED/netstandard.dll" ]; then

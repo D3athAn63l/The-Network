@@ -179,6 +179,20 @@ summaries or edges in O(1), or knowledge books in O(64) at most.
    300: 113 KB of 7.0 MB). In the same-seed 18-year soak the Network node grows 2,697 → 2,829 KB (+132 KB,
    +4.9 %), of which the actors' nodes are +37 KB; the rest is history, summaries and journal records of the
    diverged world (including the new fame and advancement records, capped by the existing retention).
+   **Phase 2.9 (runtime test infrastructure).** Nothing new runs in a normal game: the whole idle cost is one
+   static field read and null check per rendered frame in `NetworkWorldComponent.WorldComponentUpdate`
+   (`RuntimeTestGame.PumpFrame`), with no scan, enumeration, allocation, scheduler job or per-tick work. The
+   runner, its host, the suites and every sandbox are created only when a Dev Mode action starts a run, and
+   nothing about a run is saved ([RUNTIME_TESTING § 12](RUNTIME_TESTING.md#12-cost)). Measured headlessly
+   (`Runner.IdleCostIsOneNullCheck`, 5,000,000 calls): **about 2.5–3.4 ns per idle frame, 0 bytes allocated**.
+   While a run is in progress it is time-sliced to at most 8 ms of real time per frame and fingerprints the live
+   Network twice per frame; measured headlessly (`Runner.FingerprintCostIsBounded`, a synthetic world of 365
+   actors, 61 contracts and operations): **about 0.1–0.16 ms per fingerprint** (the cost is linear in the live
+   Network's size). Headless elapsed times of the isolated scenarios through the real runner: Procurement
+   (11 tests) ≈ 8 ms, Career (14) ≈ 7 ms, Spatial (8) ≈ 9 ms, all 33 plus the infrastructure checks ≈ 23 ms in 7
+   slices. **Not measured:** the in-game elapsed time of Quick smoke, Full safe regression and the Live scan
+   (RimWorld could not be launched where this phase was built); the first owner run's own summary line and
+   exported report carry that number.
 3. **Phase 3 soak**: 150 stored pawns plus 5 concurrent deployments. Compare TPS with and
    without The Network on the same save (the prepared-removal path).
 4. **Regression gate**: the timing report (see [DEBUGGING § 5](DEBUGGING.md#5-timing-instrumentation))

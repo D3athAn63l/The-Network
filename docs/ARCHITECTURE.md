@@ -691,8 +691,41 @@ The API facts behind each adapter are in [RIMWORLD_INTEGRATION](RIMWORLD_INTEGRA
 
 ### 6.22 Diagnostics
 
-- **Responsibility.** Logging, timing, validators, dev actions and the simulation harness.
-- **Detail.** [DEBUGGING](DEBUGGING.md).
+- **Responsibility.** Logging, timing, validators, dev actions and the simulation harness, and (Phase 2.9)
+  the in-game **runtime regression runner**.
+- **Detail.** [DEBUGGING](DEBUGGING.md), [RUNTIME_TESTING](RUNTIME_TESTING.md).
+
+#### 6.22.1 Runtime regression tests (Phase 2.9, [ADR-047](DECISIONS.md))
+
+Developer infrastructure under `Diagnostics/RuntimeTests/`, reachable only from eight Dev Mode actions and one
+per-frame call. It is **not** a gameplay subsystem: nothing in the game depends on it, it stores nothing, and
+it sits beside the Domain, never inside it.
+
+```
+ Dev action ─► RuntimeTestGame (Start/Cancel/Status/Report/Export/Inspect)
+                  │  one static null check per frame when idle ─ NetworkWorldComponent.WorldComponentUpdate ─► PumpFrame
+                  ▼
+            RuntimeTestRunner ── pumped slices (8 ms), per-step override snapshot/restore, exception containment,
+                  │              finite timeouts, cancel, live fingerprint before/after every slice (RT-INFRA-001)
+                  │
+        ┌─────────┴───────────────────────────────┐
+        ▼                                         ▼
+  RuntimeTestSandbox (isolated, in memory)    GameRuntimeTestHost (read-only view of the live game)
+  production services over sandbox ports:     real catalog, comms gate, payment environment inspection,
+  own ids/clock/scheduler/bus/journal/        world graph, drop-pod plan, LiveInvariants.Scan,
+  stores/History; SandboxComms/Payment/       LiveFingerprint of the live Network
+  Catalog/WorldFacts/Sites/Delivery           (never writes; never calls NetValidator)
+  + GridWorldGraph; discarded after the test
+```
+
+* **Dependency rule.** The runner and sandbox depend on the Domain, Kernel and Integration *ports* like any
+  other client; **the Domain, Kernel and Persist layers never reference the runner**. The production assembly
+  never references the test project.
+* **Not persisted.** The runner, sessions, results, preserved failures and sandboxes are runtime-only: no
+  `Scribe`, no scheduler job (RT-INFRA-003), no save-version change (still 4).
+* **Process-wide statics** a test can influence (`ProcurementDevOverrides`, `IntelDevOverrides`,
+  `ServiceToggles`: 18 values) are snapshotted and restored to their *previous* values after every step.
+* **Single-threaded**, driven from the main thread's update, never blocking: it fits the model of § 12.
 
 ---
 
@@ -853,6 +886,7 @@ reaction; later decisions read summaries and edges, never the raw ledger.**
 | Global cast template IDs, template schema and `NetworkSettingsVersion`; the snapshot-at-import rule | Cast generation, name pools, fame and experience distribution |
 | One Intel request, many leads (rounds) | Continuation policies, round durations |
 | Quote structure (components tagged with the contributing actor) | Quote arithmetic |
+| The runtime test contract: stable test IDs (`RT-*`), PASS / FAIL / WARN / SKIP, runtime-only and never persisted, isolated sandbox, read-only live scan ([ADR-047](DECISIONS.md)) | Which scenarios exist, the sandbox ports' internals, the runner's slicing and report layout |
 
 ## 11. Where abstraction pays and where it does not
 

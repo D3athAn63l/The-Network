@@ -658,3 +658,60 @@
   market is player-driven, so most contractors do few jobs and move slowly (see RISKS). The derived `CareerNeed`
   and Tags are the hooks that Phase 4B (alternative compensation), hiring, sponsorship, rivalries and
   legends will consume, with no further change to what is saved. The save grows by about 1.6 %.
+
+### ADR-047 · Runtime regression tests are isolated from live gameplay state
+- **Context.** The headless suite proves the logic but not the integration in a running game, and the owner
+  had been the only runtime test. Phase 3 will add multi-step physical behaviour that cannot be re-verified
+  by hand after every change, so an in-game test runner is built now, while The Network is still abstract.
+  Its defining constraint is that it must be **safe to press in a real colony**: a test that spends silver,
+  spawns cargo or leaves objects behind is itself a defect generator.
+- **Decision.** Runtime regression testing ([RUNTIME_TESTING](RUNTIME_TESTING.md)) is frozen as eight rules:
+  1. **Runtime tests complement the headless tests; they do not replace them.** The headless suite stays
+     the required, independent proof of the logic; the production assembly never references the test
+     project; the runner is itself tested headlessly.
+  2. **The default runtime suite never mutates live colony or Network truth.** No silver, item, contract,
+     operation, history, relationship, career, contractor position, site, cargo, letter or world object in
+     the live game. It is *proven*, not asserted: a fingerprint of the live Network is compared before and
+     after every slice (RT-INFRA-001), and a source scan forbids spawning, spending and live-scheduler use. The one exception is the game's own
+     start-up gate (`EnsureStarted`, in RT-SMOKE-002), which a just-loaded, never-ticked game has not yet run: it is the
+     call the first tick makes anyway, it is noted in the result, and RT-INFRA-001 counts the slices it could not compare.
+  3. **Mutable scenarios execute in an isolated sandbox.** A sandbox is a private in-memory Network built
+     from the *production* services over *sandbox ports* (own ids, clock, scheduler, bus, journal, stores,
+     payment, comms, catalog, world graph, delivery recorder), shares nothing writable with the live
+     Network, and is discarded after the test.
+  4. **Real RimWorld integration is inspected read-only by the safe suite.** The real catalog, comms gate,
+     payment environment, world graph and drop-pod *plan* are read, never driven; the live Network is
+     checked by a read-only invariant scan, never by the repairing validator.
+  5. **Physical or destructive integration requires a future explicit, disposable environment.** Spending
+     real silver, spawning cargo, launching a pod, creating world objects or editing the live Network is not
+     part of any default suite and needs its own design and its own ADR. No automated save reload, quit or
+     restart is built.
+  6. **Test-runner control state is never persisted.** The runner, its session, results, preserved failures
+     and sandboxes are runtime-only: not `Scribe`d, no `devtest.*` job in the persisted scheduler (RT-INFRA-003),
+     no save-version change (still 4). Every static dev override a test can influence is snapshotted and
+     restored to its **previous** value after every step (RT-INFRA-002), never blindly reset.
+  7. **Runtime tests use no Harmony.** The mod remains Harmony-free (ADR-017); the headless runner's own
+     Harmony stub is a test-host tool and is never in the mod.
+  8. **No normal-game background monitoring.** Nothing runs unless a Dev Mode action starts it. Idle cost is
+     one static null check per frame, with no allocation, scan or job; a run is time-sliced (default 8 ms
+     per frame), never blocks the game thread, and has finite real-time and wait limits.
+- **Design details that matter.**
+  * Stable test IDs (`RT-SMOKE-*`, `RT-LIVE-*`, `RT-PROC-*`, `RT-CAR-*`, `RT-SPAT-*`, plus `RT-INFRA-*` appended
+    to every run) are permanent and never reused; the outcome vocabulary is PASS / FAIL / WARN / SKIP.
+  * Tests exercise the **real production services** (not copies of their logic), so a green run says something
+    about the code that ships; expected numbers are derived from generated state, never copied constants.
+  * Determinism comes from `NetRng` seeded from the test ID and a fixed Phase 2.9 seed.
+  * A failed sandbox is kept in memory (one at a time) for inspection and is never saved.
+- **Rejected.** Running scenarios against the live Network and "cleaning up" afterwards (cleanup is where
+  player items get deleted); a persisted control job in the scheduler (a stuck job would survive a reload);
+  Harmony patches to observe the game (ADR-017); an always-on background self-check (idle cost, noise); a
+  second copy of the domain logic written for the tests (a false PASS about code that does not ship);
+  automated save-reload and physical-delivery suites (not safe in a real colony; deferred to a future
+  explicit design); a player-facing test tab (developer infrastructure only).
+- **Consequences.** The owner can press *Full safe regression* in any colony and keep playing it. A
+  regression in the integration or in a multi-step invariant is caught in seconds instead of by a playtest.
+  Phase 3 adds its own stepped scenarios and a sandbox delivery port to a runner that is already proven.
+  The framework can drift from production (see [RISKS R-27](RISKS.md)) and is itself a surface that needs
+  its own headless tests; both are mitigated by calling production services and by the `Runner.*` suite.
+  Honest limit: the in-game suites (`RT-SMOKE-*`, `RT-LIVE-*`) and the Dev actions were compile-checked,
+  not run, in the environment that built them; the first owner run is their first execution.

@@ -125,6 +125,7 @@ namespace TheNetwork.Tests
             SpatialCorrectionTests.Register(tests);
             CharterTests.Register(tests);
             CareerTests.Register(tests);
+            RuntimeRunnerTests.Register(tests);
             StartupTests.Register(tests);
 
             int ran = 0;
