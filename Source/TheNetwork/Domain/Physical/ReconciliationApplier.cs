@@ -105,6 +105,9 @@ namespace TheNetwork.Domain.Physical
                     if (c.pawn != null) c.pawn.agedThroughTick = now;
                     if (op.member?.pawn != null) op.member.pawn.agedThroughTick = now;
                     break;
+                case CommitOpKind.CharacterReturnedFree:
+                    FateRules.ReturnedFree(c, now);
+                    break;
                 case CommitOpKind.CharacterReverted:
                     c.custody = c.pawn != null && c.pawn.IsBound ? CustodyState.Stored : CustodyState.Unmaterialized;
                     break;
@@ -249,6 +252,7 @@ namespace TheNetwork.Domain.Physical
                 case CommitOpKind.CharacterReverted:
                 case CommitOpKind.CharacterDetached:
                 case CommitOpKind.CharacterUnlink:
+                case CommitOpKind.CharacterReturnedFree:
                     w.Add(op.character);
                     break;
                 case CommitOpKind.CharacterStored:

@@ -49,6 +49,12 @@ namespace TheNetwork.Diagnostics.RuntimeTests
         /// <summary>When set, every Place fails (the "map is gone before spawn" case).</summary>
         public bool failPlace;
 
+        /// <summary>
+        /// Scripts what a failed placement left behind (for example a pawn that ended up spawned, held, dead or gone anyway), so a
+        /// test can drive RELEASE's precondition for a never-placed member through the production lifecycle.
+        /// </summary>
+        public System.Action<Token> onPlaceFailed;
+
         public readonly Dictionary<int, Token> tokens = new Dictionary<int, Token>();
 
         /// <summary>Every action requested, in order ("create 900001", "place 900001", "pass-rejected 900003 AlreadyInWorldPawns", ...).</summary>
@@ -211,7 +217,12 @@ namespace TheNetwork.Diagnostics.RuntimeTests
         {
             Token t = TokenOf(pawn);
             Fault("place", t);
-            if (t == null || failPlace) return false;
+            if (t == null) return false;
+            if (failPlace)
+            {
+                onPlaceFailed?.Invoke(t);
+                return false;
+            }
             t.spawned = true;
             t.inWorldPawns = false; // placing a token takes it out of the (simulated) world-pawn set
             t.mapId = mapId;

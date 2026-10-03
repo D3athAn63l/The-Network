@@ -701,8 +701,10 @@ derived from the generated terms and never the observed 58,335.
   unchanged; that the compiled and reflective walkers hash a world identically; that captured warnings surface
   as WARN with the sink and once-keys restored; the override snapshot; the source scan; the idle and fingerprint
   cost; the mutation checks (§ 12); and the full pre-existing suite and soaks. Baseline of the merged build:
-  **315 tests, 20,331 checks, 0 failures.** Phase 3.0 adds the 19 `RT-PHYS` sandbox cases and 18 headless `Phys.*` tests:
-  **334 tests, 22,155 checks, 0 failures**, all headless (not yet run in the game).
+  **315 tests, 20,331 checks, 0 failures.** Phase 3.0 adds the 19 `RT-PHYS` sandbox cases and 23 headless `Phys.*` tests
+  (18, plus five regressions from the PR #8 review: a refused `PassToWorld` precondition blocks RELEASE, `AlreadyInWorldPawns`
+  is an observed no-op, duplicate anonymous tier rows are aggregated, a returned `Missing`/`Captured` person is resolved, `Dead`
+  and `Lost` stay immutable): **339 tests, 22,299 checks, 0 failures**, all headless (not yet run in the game).
 * **Validated by the owner in the running game (§ 15.1, § 15.2):** the `GameRuntimeTestHost`, `ColonySentinel`,
   `RuntimeTestGame`, the `RT-SMOKE-*` and `RT-LIVE-*` suites and the Dev Mode actions all executed. Quick smoke,
   Full safe regression and Live integration scan produced **0 runtime FAILs in both environments** (a fresh Dev

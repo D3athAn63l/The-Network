@@ -217,8 +217,19 @@ namespace TheNetwork.Domain.Physical
             if (string.IsNullOrEmpty(r.purposeKey)) return CommandResult.Fail("NoPurpose");
             if (r.cause == null || !r.cause.IsValid) return CommandResult.Fail("NoCause");
             OrganizationProfile org = a.Get<OrganizationProfile>();
+            // Anonymous headcount is validated per TIER, summed over every row of the request (two rows of one tier must not each
+            // pass against the same headcount), and a negative row is malformed input, never clamped away (§ 5.1 conservation).
+            Dictionary<Tier, int> anonymousByTier = new Dictionary<Tier, int>();
             int anonymous = 0;
-            for (int i = 0; i < r.anonymous.Count; i++) anonymous += Math.Max(0, r.anonymous[i].healthy);
+            for (int i = 0; i < r.anonymous.Count; i++)
+            {
+                TierCount t = r.anonymous[i];
+                if (t == null || t.healthy < 0) return CommandResult.Fail("Headcount", "a negative or missing anonymous row");
+                int sum;
+                anonymousByTier.TryGetValue(t.tier, out sum);
+                anonymousByTier[t.tier] = sum + t.healthy;
+                anonymous += t.healthy;
+            }
             int total = r.named.Count + anonymous;
             if (total == 0 || total > MaxMembers) return CommandResult.Fail("MemberCount", total.ToString());
             Operation op = null;
@@ -254,9 +265,9 @@ namespace TheNetwork.Domain.Physical
             if (anonymous > 0)
             {
                 if (org == null) return CommandResult.Fail("NoHeadcount");
-                for (int i = 0; i < r.anonymous.Count; i++)
+                foreach (KeyValuePair<Tier, int> kv in anonymousByTier)
                 {
-                    if (FateRules.PeekHealthy(org, r.anonymous[i].tier) < r.anonymous[i].healthy) return CommandResult.Fail("Headcount", r.anonymous[i].tier.ToString());
+                    if (FateRules.PeekHealthy(org, kv.Key) < kv.Value) return CommandResult.Fail("Headcount", kv.Key + " " + kv.Value + " requested, " + FateRules.PeekHealthy(org, kv.Key) + " healthy");
                 }
             }
             return CommandResult.Ok;
@@ -513,6 +524,12 @@ namespace TheNetwork.Domain.Physical
             StateVersion.Bump();
         }
 
+        /// <summary>
+        /// A failed step, recorded on the episode. BEFORE the commit (an Open or Quarantined episode, nothing applied) the bounded
+        /// retries end in quarantine. AFTER the commit a Closed episode is never re-labelled: it stays Closed with the failed stage's
+        /// marker false (its people still linked, so the gate stays closed), is retried by its watch job (slowly once past the
+        /// bound) and reported by the validator after 30 days. It is never completed by inference.
+        /// </summary>
         private void RecordFailure(PhysicalEpisode e, Exception ex)
         {
             e.attempts++;
@@ -653,9 +670,13 @@ namespace TheNetwork.Domain.Physical
                         }
                         else
                         {
+                            // Spawned, held, dead, unknown: the pawn is NOT released, so this action has NOT completed. It is never
+                            // forced and never skipped: the throw leaves the cursor where it is, RELEASE COMPLETE cannot run, the
+                            // link stays and the gate stays closed; the stage is retried (one authority, P3-INV-029/031).
                             counters.passRefused++;
-                            e.lastError = "PassToWorld skipped: precondition " + check + " for " + m;
-                            NetLog.WarnOnce(LogCategory.Physical, "pass." + e.id.Value + "." + m.slot, "Episode " + e.id + ": " + e.lastError + " (skipped and diagnosed, never forced).");
+                            NetLog.WarnOnce(LogCategory.Physical, "pass." + e.id.Value + "." + m.slot + "." + check,
+                                "Episode " + e.id + ": " + m + " cannot be passed to the world (precondition " + check + "); RELEASE stays pending and the person stays blocked.");
+                            throw new PhysicalPreconditionException("PassToWorld " + m, check);
                         }
                         break;
                     }

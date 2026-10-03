@@ -597,7 +597,7 @@ them are a *deployment* of troops. The name is not frozen.)
 | `followUpApplied: bool` | the **FOLLOW-UP completion marker** (for an episode linked to an operation): written only after the operation's re-entrant resolution returned normally ([§ 15.5](#155-reuse-of-the-existing-services-no-parallel-rules)) |
 | `publications: List<PublicationSpec>`, `publishCursor: int` | the **outbox**: the ordered, bounded (≲ 12) compact typed specs written by the commit, and the number the event bus has **accepted**. Cleared when PUBLISH completes ([§ 15.2](#152-the-steps)) |
 | `publishedTick: int` | the **PUBLISH completion marker**: written only after the final spec was accepted by the bus. A retry resumes at `publishCursor`; an accepted event is **never** submitted again and a consequence is **never** reapplied ([§ 15.2](#152-the-steps)) |
-| `attempts: int`, `lastError: string` | bounded reconcile retries, then `Quarantined` |
+| `attempts: int`, `lastError: string` | bounded reconcile retries, then `Quarantined` **while not yet committed**; after the commit a failing post-commit stage keeps the episode `Closed` with its marker false, retried and reported, never quarantined or completed by inference ([§ 8.1](#81-the-episode-machine-durable) rule 8) |
 | `where: {tile: TileRef, mapId: int}` | context only; **not** the actor's location |
 | `faction: FactionRef?` | the temporary encounter faction, if any |
 | `seed: int` | seeds the *first* creation of anonymous pawns |
@@ -1187,8 +1187,13 @@ moment of the call*:
 3. no other vanilla owner holds it (not a caravan or transporter member, not kidnapped, not a prisoner or slave of a host, not
    a faction leader, not dead).
 
-Absence of evidence is not enough: an unrecognized holder fails the precondition and the action is skipped and diagnosed
-(never forced). `Decide` only; `Discard` is never used for a person the Network created.
+Absence of evidence is not enough: an unrecognized holder fails the precondition. **A failed precondition is never forced and
+never skipped:** the release action has *not* completed, so it throws a typed `PhysicalPreconditionException` into the
+ordinary stage-failure path. It is diagnosed (once per member and state), the member's `releaseStep` does not advance,
+`releaseApplied` stays false, the episode link stays, the authority gate stays closed, and the finish-pending pass retries
+it until the observed state allows the pass ([§ 8.1](#81-the-episode-machine-durable)). The only non-`Allowed` result that
+counts as success is `AlreadyInWorldPawns`: vanilla already made the transition, so the action is an observed no-op and the
+pawn is **not** passed a second time. `Decide` only; `Discard` is never used for a person the Network created.
 
 | Case | Who put the pawn in `WorldPawns` | The Network |
 |---|---|---|
@@ -1293,7 +1298,7 @@ commit is a synchronous, **all-or-nothing** step and every post-commit stage is 
 | **Planned** | members chosen; named members' custody is already `Deployed`; pawns are being created and bound | physical (reserved for the episode) | → Open when ≥ 1 member is `Present`; → Closed(NeverPlaced) if none is |
 | **Open** | at least one pawn exists in play | physical | → Closed(Reconciled) when every member is `Done`; → Quarantined |
 | **Closed** | terminal. `consequencesApplied` is true (Reconciled) or nothing physical ever happened (NeverPlaced/Detached) | abstract, held or dead per member outcome, **but a Reconciled member is not abstractly simulatable until RELEASE COMPLETE** | none |
-| **Quarantined** | the Network cannot reconcile safely (an invariant broke, an unsupported custody was observed, retries exhausted) | **blocked from abstraction**; pawns untouched | → Closed by a later successful reconcile; never auto-resolved to "returned" |
+| **Quarantined** | the Network cannot reconcile safely (an invariant broke, an unsupported custody was observed, pre-commit retries exhausted) | **blocked from abstraction**; pawns untouched | → Closed by a later successful reconcile; never auto-resolved to "returned" |
 
 `Closed(Reconciled)` is reached by the atomic durable commit ([§ 15](#15-reconciliation-algorithm)). Three stages remain.
 Each has an **explicit durable completion marker, written only after every operation of the stage has succeeded**, and a
@@ -1314,7 +1319,7 @@ it is never itself stored; only the cursor is. **No row passes an already-passed
 |---|---|
 | **Named `Returned`, already a world pawn** | normalize as legal (S12) → prove the retained reservation is in force, establishing it if the mechanism S31 selects leaves that to RELEASE → strip the episode tag → COMPLETE. **No `PassToWorld`.** |
 | **Anonymous `Returned`, already a world pawn** | strip the Network's routing and provenance aids (the episode tag; its runtime-index entry). Vanilla owns the world pawn. **No `PassToWorld`.** |
-| **`NeverPlaced`, bound pawn, not in `WorldPawns`, not spawned, no other holder** | `PassToWorld(Decide)` **after** the three-part precondition of § 7.5 → strip the episode tag |
+| **`NeverPlaced`, bound pawn, not in `WorldPawns`, not spawned, no other holder** | `PassToWorld(Decide)` **after** the three-part precondition of § 7.5 → strip the episode tag. Observed `AlreadyInWorldPawns` counts as done (no second pass); observed spawned, held, dead or unknown **blocks** the action: RELEASE stays pending at that cursor and is retried |
 | **`NeverPlaced`, a retained named pawn that never left `WorldPawns`** (the spawn failed before `SpawnSetup` removed it) | prove or restore the reservation → strip the episode tag. **No `PassToWorld`.** |
 | **Held by vanilla** (`HeldByPlayer`, `JoinedPlayer`, `Kidnapped`, `HeldByOther`, caravan, transporter) | leave physical custody untouched; strip only the Network's episode routing, as far as is legal |
 | **`Killed`** | leave the corpse or pawn to vanilla; strip the Network's routing |
@@ -1347,6 +1352,14 @@ it throws).
 6. **RELEASE never calls `PassToWorld` for a pawn it observed as already a world pawn** (`WorldFree`, or `Contains`). Vanilla
    has passed it, and a second call is rejected with an "already here" error. Every Network call needs the three-part
    precondition of [§ 7.5](#75-who-may-call-passtoworld-an-observed-world-pawn-is-never-passed-again) (P3-INV-031).
+7. **A release action whose precondition fails has not completed.** It fails the stage (it is never skipped), so the cursor
+   stays on it, COMPLETE cannot run, and the person stays physical until a retry observes a state that allows the action.
+8. **A stuck post-commit stage stays pending; it does not quarantine.** Bounded retries that end in `Quarantined` apply only
+   while the episode is not yet committed. A `Closed(Reconciled)` episode whose RELEASE, FOLLOW-UP or PUBLISH keeps failing
+   stays `Closed` with that marker false: its people keep their episode link (the gate stays closed), the watch keeps
+   retrying (every 250 ticks, then every 2 500 ticks once `attempts` passes the bound), `lastError` names the failure, and the
+   validator reports any stage still pending 30 days after `closedTick`. **It is never considered complete by
+   inference.**
 
 ### 8.2 The character custody machine (durable; reuses the persisted `CustodyState`)
 
@@ -1849,9 +1862,9 @@ time. So the design does **not** assume any dedupe feature. Instead:
 
 | If it throws in … | State left behind | Recovery |
 |---|---|---|
-| 1–4 | nothing changed (`attempts++`, `lastError`) | retried by the watch with backoff; after the bound ⇒ `Quarantined` |
+| 1–4 | nothing changed (`attempts++`, `lastError`) | retried by the watch with backoff; after the bound ⇒ `Quarantined` (pre-commit only) |
 | **5** | **nothing: the snapshot is restored and the flag was never set** | retried; the plan is recomputed from observation, so the retry decides from the world as it is *now* |
-| 6, after *k* of *n* actions | consequences applied (`Closed`); `releaseStep` records exactly what succeeded; **`releaseApplied` is false and the authority gate is closed** | the finish-pending pass resumes at the cursor; no completed action repeats; the person becomes abstract only when COMPLETE has run |
+| 6, after *k* of *n* actions (including a refused `PassToWorld` precondition) | consequences applied (`Closed`); `releaseStep` records exactly what succeeded; **`releaseApplied` is false and the authority gate is closed** | the finish-pending pass resumes at the cursor; no completed action repeats; the person becomes abstract only when COMPLETE has run. Repeated failure never quarantines a `Closed` episode: it stays pending, retried and reported (§ 8.1 rule 8) |
 | 7 | consequences applied; `followUpApplied` false | the pass re-runs the re-entrant entry point; the marker is set only on a normal return |
 | 8, after *k* of *n* specs | consequences applied; `publishCursor = k` | resume at *k*: the first *k* events are **not** re-published and allocate **no** new sequence number |
 
@@ -1860,8 +1873,8 @@ time. So the design does **not** assume any dedupe feature. Instead:
 | Observation (with evidence) | Member outcome | Abstract effect (existing vocabulary) | Pawn handling |
 |---|---|---|---|
 | `Dead` | `Killed` | named: `Fate.Killed`, `status Dead`, `diedTick`, `custody Released`, leader ⇒ succession, Solo ⇒ `EndActor`; anonymous: tier headcount −1 | left to vanilla |
-| `WorldFree` **and** exit evidence, alive, healthy | `Returned` | named: `custody Stored`, anchor written; anonymous: headcount back to healthy | named: normalize, ensure the reservation; anonymous: strip routing; **neither is passed again**, vanilla already did |
-| as above but injured | `Returned` (+ recovery) | named: `status Wounded`, `woundedUntilTick`; anonymous: `AddWounded` bucket | as above |
+| `WorldFree` **and** exit evidence, alive, healthy | `Returned` | named: `custody Stored`, anchor written; a prior `Missing` or `Captured` status resolves to `Active` (the observed return is authoritative; `FateRules.ReturnedFree`); `Dead` and `Lost` never change; anonymous: headcount back to healthy | named: normalize, ensure the reservation; anonymous: strip routing; **neither is passed again**, vanilla already did |
+| as above but injured | `Returned` (+ recovery) | named: `status Wounded`, `woundedUntilTick` (from a prior `Active`, `Missing` or `Captured`, through the shared `Fate.Wounded` rule; one recovery); anonymous: `AddWounded` bucket | as above |
 | `HeldByPlayer` | `HeldByPlayer` | named: `Fate.Captured`, `status Captured`, `custody OutOfCustody(PlayerPrisoner/Slave)`; anonymous: **promoted** to a Known Character first (record + binding), then the same; headcount −1; event | untouched; binding and char tag kept |
 | `JoinedPlayer` | `JoinedPlayer` | `status Defected`, `custody OutOfCustody(PlayerColonist)`, relation hit (unless the recruitment was a rescue the org wanted) | untouched |
 | `Kidnapped` | `Kidnapped` | `Fate.Captured`, `status Captured`, `custody OutOfCustody(Kidnapped)`; `Contractor.Captured` with the captor | untouched |
@@ -2050,12 +2063,12 @@ Prefer **fail safe, preserve truth, quarantine and diagnose, retry idempotently*
 | pawn generation returns null / throws | episode `Planned`; custody `Deployed` for named members | abort: `Closed(NeverPlaced)`, custody reverted, headcount returned, one log line naming the request and the Defs | spawn a placeholder; retry forever |
 | invalid race/xenotype/kind | as above | fall back along the kind chain; if none, abort as above | write a pawn with a default body |
 | gear generation fails | as above | vanilla throws from `GeneratePawn` ⇒ same as generation failure | hand-build a loadout |
-| the map is gone before spawn | `Planned`, pawns created and bound | abort; **a bound-but-unspawned pawn that is positively not in `WorldPawns` and held by nobody is passed to the world (Decide)** (the § 7.5 precondition; a retained pawn that never left `WorldPawns` is not passed again, only its reservation is proven) and tags stripped; nothing is discarded | discard |
+| the map is gone before spawn | `Planned`, pawns created and bound | abort; **a bound-but-unspawned pawn that is positively not in `WorldPawns` and held by nobody is passed to the world (Decide)** (the § 7.5 precondition; a retained pawn that never left `WorldPawns` is not passed again, only its reservation is proven) and tags stripped; nothing is discarded. If the precondition is not met (spawned, held, dead, unknown), RELEASE stays pending at that action and the person stays blocked until a retry observes a passable state | discard |
 | partial group placed | some members `Present`, some `Created`/`Planned` | the placed members make the episode `Open`; the others become `NeverPlaced` (custody reverted, headcount returned), logged once | pretend the group is complete |
 | provenance binding cannot be written | pawn generated, binding failed | do **not** spawn; drop the unreferenced pawn (nothing holds it) and abort | spawn an unbound pawn |
 | episode saved halfway (`Planned`) | `Planned` | load pass: resolvable pointers ⇒ `Present`; none ⇒ `NeverPlaced` | regenerate |
 | reconcile threw **before or inside the commit** (stages 1–5) | `Open`, **nothing committed**: a throw inside the commit restores the snapshot and the flag was never set | retry with backoff; the plan is recomputed from observation; after the bound `Quarantined` | partial apply; double-apply |
-| RELEASE threw after *k* of *n* actions (stage 6) | `Closed(Reconciled)`; `releaseStep` = exactly what succeeded; **`releaseApplied` false; the gate closed** | the finish-pending pass resumes at the cursor; completed actions are not repeated; the person turns abstract only after COMPLETE | treat a missing tag as "released"; reapply a consequence; let abstract systems advance the person |
+| RELEASE threw after *k* of *n* actions (stage 6), or a release precondition was refused | `Closed(Reconciled)`; `releaseStep` = exactly what succeeded; **`releaseApplied` false; the gate closed** | the finish-pending pass resumes at the cursor; completed actions are not repeated; the person turns abstract only after COMPLETE; repeated failure leaves it pending (retried, reported after 30 days), never quarantined and never complete by inference | treat a missing tag as "released"; reapply a consequence; let abstract systems advance the person |
 | FOLLOW-UP threw (stage 7) | `Closed(Reconciled)`; `followUpApplied` false | re-run the re-entrant entry point | infer completion from `OpStatus` |
 | PUBLISH threw or was interrupted after *k* of *n* specs (stage 8) | `Closed(Reconciled)`; `publishCursor = k` | resume at *k*; the first *k* events are not re-published | re-`Publish` an event the bus accepted; replay a consumer; reapply a consequence |
 | the spatial write inside the commit fails | the commit throws and is restored | retried | skip it silently (the existing facade would) |
@@ -3018,6 +3031,26 @@ In a live 3.0 game no episode can exist (planning is refused without an availabl
     terminal path does not `Finish` one, and the procurement validator never "repairs" one back onto its abstract jobs.
 11. RELEASE's episode-level steps (an ended actor's upkeep job, its spatial clean-up) are idempotent by observed state, and a fault
     the spatial facade would swallow is caught by re-checking the settled state before COMPLETE.
+12. **A refused release precondition blocks RELEASE** (PR #8 review). `PassToWorldIfAllowed` succeeds on `Allowed` (the pass) and on
+    `AlreadyInWorldPawns` (an observed no-op: vanilla made the transition, the pawn is not passed again). Any other result (`Spawned`,
+    `Held`, `Dead`, `Unknown`, or a future non-success value) throws `PhysicalPreconditionException` into the ordinary stage failure:
+    diagnosed once, `releaseStep` not advanced, no COMPLETE, the link kept, the gate closed, retried by the watch until a passable
+    state is observed. So a `NeverPlaced` bound pawn whose token is gone keeps its RELEASE pending (fail safe), rather than being
+    released on absent evidence.
+13. **Anonymous headcount is validated per tier, in aggregate** (PR #8 review). `CheckPlan` sums every anonymous row by `Tier` and
+    refuses the plan (`Headcount`) when a tier's sum exceeds `FateRules.PeekHealthy`; a negative or missing row is refused as
+    malformed. Duplicate rows that fit together are accepted and conserve the count.
+14. **A positively returned `Missing` / `Captured` person becomes available again** (PR #8 review). A Phase 2 `Troubled` operation
+    applies abstract fates first, so a named member can enter an episode already `Missing` (or, later, `Captured`). On a healthy
+    `Returned` the plan adds `CommitOpKind.CharacterReturnedFree`, which the Applier runs through `FateRules.ReturnedFree`
+    (`Missing`/`Captured` ⇒ `Active`, the same status setter the abstract rules use); on an injured `Returned` the existing
+    `Fate.Wounded` op sets `Wounded` and a bounded `woundedUntilTick` (one recovery). VALIDATE refuses `CharacterReturnedFree` on any
+    other status, and refuses any member op on a `Dead` (`DeadTarget`) or `Lost` (`LostTarget`) person, so death stays monotonic and
+    `Lost` is never converted back. The person is abstractly simulatable only after RELEASE COMPLETE clears the link.
+15. **A stuck post-commit stage stays pending** (§ 8.1 rule 8). Bounded retries end in quarantine only before the commit. A
+    `Closed(Reconciled)` episode whose RELEASE, FOLLOW-UP or PUBLISH keeps failing stays `Closed` with that marker false, its people
+    linked (gate closed), retried by the watch (slowly past the bound), reported by the validator after 30 days, and never completed
+    by inference.
 
 ### H.3 Not in 3.0
 

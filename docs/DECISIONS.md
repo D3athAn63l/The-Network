@@ -966,8 +966,20 @@
      differs (the abstract path publishes, and so draws history-record ids, before it creates the person; the commit after).
   10. **Narrow guards** (unreachable in 3.0 production): a `Physical` operation is never aborted, finished by a contract's terminal
       path, or "repaired" by the procurement validator; its episode's FOLLOW-UP resolves it.
+  11. **A refused `PassToWorld` precondition blocks RELEASE** (PR #8 review). Only `Allowed` (the pass) and `AlreadyInWorldPawns`
+      (an observed no-op, never a second pass) complete the action; `Spawned`, `Held`, `Dead`, `Unknown` or any future non-success
+      value throws `PhysicalPreconditionException` into the ordinary stage failure, so the cursor stays, COMPLETE cannot run, the
+      link and the closed gate stay, and the watch retries.
+  12. **Anonymous headcount is checked per tier in aggregate** (PR #8 review): duplicate rows for one tier are summed against
+      `FateRules.PeekHealthy` before the plan is accepted, and a negative or missing row is refused.
+  13. **A positive return resolves `Missing` / `Captured`** (PR #8 review): healthy ⇒ `Active` through `FateRules.ReturnedFree`,
+      injured ⇒ `Wounded` through the shared `Fate.Wounded` rule; VALIDATE keeps `Dead` monotonic and never converts `Lost`.
+  14. **A stuck post-commit stage stays pending, not quarantined.** Bounded retries quarantine only before the commit; a
+      `Closed(Reconciled)` episode with a failing RELEASE, FOLLOW-UP or PUBLISH keeps that marker false, its people linked and
+      blocked, is retried (slowly past the bound) and reported by the validator after 30 days, and is never completed by inference.
 - **Rejected.** Inventing a capture, a rescue or a "came home" for a held or unobservable person; writing an operation off because
   a materialization failed; a new availability value that would change refusal texts; inferring any stage's completion from
-  operation status, tags or custody.
+  operation status, tags or custody; skipping a release action whose precondition failed; re-labelling a committed episode
+  `Quarantined`.
 - **Consequences.** 3.2 replaces rule 1 with held-person support and adds anonymous members to linked episodes. Rule 9 is the
   only observable difference from the abstract path, and it is in id numbering alone.

@@ -39,7 +39,9 @@ namespace TheNetwork.Domain.Physical
 
     /// <summary>
     /// The three-part precondition of a Network <c>PassToWorld</c> (§ 7.5, P3-INV-031), observed positively at the moment of the
-    /// call. Only <see cref="Allowed"/> permits the call; every other answer means the action is skipped and diagnosed, never forced.
+    /// call. Only <see cref="Allowed"/> permits the call. <see cref="AlreadyInWorldPawns"/> completes the release action as an
+    /// observed no-op (vanilla made the transition; never a second pass). Every other answer means the action has NOT completed: it
+    /// is diagnosed and fails the RELEASE stage (never forced, never skipped), so the cursor stays and the stage is retried.
     /// </summary>
     public enum PassToWorldCheck : byte
     {

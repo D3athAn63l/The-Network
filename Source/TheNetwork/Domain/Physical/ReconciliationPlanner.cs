@@ -145,7 +145,11 @@ namespace TheNetwork.Domain.Physical
                             CommitOp stored = p.Add(CommitOpKind.CharacterStored);
                             stored.character = c;
                             stored.member = m;
+                            // The positive return is authoritative for the person's story status too (a rescued Missing or Captured
+                            // person is not left Missing forever): injured ⇒ the shared wound rule (which resolves Missing/Captured to
+                            // Wounded), unhurt ⇒ the shared return rule (Missing/Captured ⇒ Active). Neither ever revives Dead or Lost.
                             if (d.woundDays > 0) fates.Add(new FateEntry { character = c, fate = PlannedFate.Wounded, woundDays = d.woundDays });
+                            else if (c.status == CharacterStatus.Missing || c.status == CharacterStatus.Captured) p.Add(CommitOpKind.CharacterReturnedFree).character = c;
                             if (p.org == null && c.id == p.actor.bindings.embodies) soloReturn = d;
                             break;
                         case MemberOutcome.NeverPlaced:
@@ -515,6 +519,14 @@ namespace TheNetwork.Domain.Physical
                     case CommitOpKind.CharacterReverted:
                     case CommitOpKind.CharacterDetached:
                         if (c.status == CharacterStatus.Dead) throw new PlanInvalidException("DeadTarget", op.ToString());
+                        // A Lost person cannot be a member (planning requires the living); if a record says otherwise, no return
+                        // story is written over it (a found-again person is not this task's content).
+                        if (op.kind == CommitOpKind.CharacterStored && c.status == CharacterStatus.Lost) throw new PlanInvalidException("LostTarget", op.ToString());
+                        break;
+                    case CommitOpKind.CharacterReturnedFree:
+                        // A return resolves only Missing or Captured; it is never a way back from Dead or Lost (P3-INV-004).
+                        if (c.status != CharacterStatus.Missing && c.status != CharacterStatus.Captured) throw new PlanInvalidException("NotRecoverable", op.ToString());
+                        if (!statusTargets.Add(c.id.Value)) throw new PlanInvalidException("DuplicateFate", c.id.ToString());
                         break;
                     case CommitOpKind.Promotion:
                         if (ctx.characters.Get(new CharacterId(ctx.ids.PeekNextId)) != null || ctx.actors.Get(new ActorId(ctx.ids.PeekNextId)) != null)

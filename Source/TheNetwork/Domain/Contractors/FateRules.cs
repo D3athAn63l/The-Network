@@ -60,6 +60,18 @@ namespace TheNetwork.Domain.Contractors
             SetStatus(c, CharacterStatus.Missing, now);
         }
 
+        /// <summary>
+        /// A person POSITIVELY observed back and free (PHYSICAL_LIFECYCLE § 15.3, a physical return), unhurt: a story status of
+        /// Missing or Captured resolves to Active, because the observation is authoritative. Any other status is left as it is: an
+        /// Active person stays Active, and a Dead or Lost person is never revived by a return (P3-INV-004). An injured return goes
+        /// through <see cref="Wounded"/> instead (which also resolves Missing or Captured, to Wounded).
+        /// </summary>
+        public static void ReturnedFree(KnownCharacter c, int now)
+        {
+            if (c == null || (c.status != CharacterStatus.Missing && c.status != CharacterStatus.Captured)) return;
+            SetStatus(c, CharacterStatus.Active, now);
+        }
+
         /// <summary>The person is gone with no evidence (§ 17): Lost, never "home", never regenerated.</summary>
         public static void Lost(KnownCharacter c, int now)
         {

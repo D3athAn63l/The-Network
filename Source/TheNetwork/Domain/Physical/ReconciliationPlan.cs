@@ -85,7 +85,10 @@ namespace TheNetwork.Domain.Physical
         StageMarkers = 23,
 
         /// <summary>Derived strength is recomputed after the people changed.</summary>
-        SimDirty = 24
+        SimDirty = 24,
+
+        /// <summary>A named person positively returned unhurt: Missing or Captured resolves to Active (the shared rule; never revives).</summary>
+        CharacterReturnedFree = 25
     }
 
     /// <summary>One durable assignment of the plan. Plain data: the Applier interprets it; nothing here runs code.</summary>

@@ -46,6 +46,11 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Phys.CompactionRefusesPendingStages", Compaction));
             t.Add(new KeyValuePair<string, Action>("Phys.ZeroIdleCost", ZeroIdleCost));
             t.Add(new KeyValuePair<string, Action>("Phys.DurableSnapshotRestoresInPlace", SnapshotRestores));
+            t.Add(new KeyValuePair<string, Action>("Phys.Fix1_RefusedPassToWorldBlocksRelease", RefusedPassBlocksRelease));
+            t.Add(new KeyValuePair<string, Action>("Phys.Fix1_AlreadyInWorldPawnsIsASuccessfulNoOp", AlreadyWorldPawnIsSuccess));
+            t.Add(new KeyValuePair<string, Action>("Phys.Fix2_DuplicateTierRowsAreAggregated", DuplicateTierRows));
+            t.Add(new KeyValuePair<string, Action>("Phys.Fix3_ReturnedMissingOrCapturedIsResolved", ReturnedMissingOrCaptured));
+            t.Add(new KeyValuePair<string, Action>("Phys.Fix3_DeadAndLostStayImmutable", DeadAndLostImmutable));
         }
 
         // ================================================================== helpers
@@ -305,7 +310,7 @@ namespace TheNetwork.Tests
             T.Check(Src("Domain/Contracts/Willingness.cs").Contains("ctx.Contractors.AvailabilityOf(a)"), "willingness (procurement selection) reads AvailabilityOf");
 
             // 2. The shared fate rules are reachable only from the gated abstract path and the lifecycle's commit.
-            Regex fateCall = new Regex(@"FateRules\.(SetStatus|Killed|Wounded|Captured|Missing|Lost)\(");
+            Regex fateCall = new Regex(@"FateRules\.(SetStatus|Killed|Wounded|Captured|Missing|Lost|ReturnedFree)\(");
             foreach (string f in AllSources())
             {
                 string rel = Rel(f);
@@ -960,6 +965,210 @@ namespace TheNetwork.Tests
             T.Eq(refused, AuthorityGate.refusedWrites, "the gate refused nothing (it only confirmed the abstract state)");
             T.Eq(0, L(n).OnLoaded(), "and the load pass schedules nothing");
             foreach (KnownCharacter c in n.ctx.characters.characters) T.Check(c.custody == CustodyState.Unmaterialized && !c.episode.IsValid && c.pawn == null, "every person stays abstract and unbound");
+        }
+
+        // ================================================================== PR #8 corrections
+
+        /// <summary>
+        /// Fix 1: a never-placed, bound named pawn whose § 7.5 precondition is refused (spawned, held, dead, unknown) keeps RELEASE pending
+        /// through the PRODUCTION lifecycle: the cursor stays on the pass, COMPLETE never runs, the link stays and the gate stays closed;
+        /// once the observed state allows it, the retry passes it exactly once and completes.
+        /// </summary>
+        private static void RefusedPassBlocksRelease()
+        {
+            string[] states = { "Spawned", "Held", "Dead", "Unknown" };
+            for (int i = 0; i < states.Length; i++)
+            {
+                string s = states[i];
+                TestNet n = new TestNet(9400 + i);
+                NetworkActor a = Make(n, ContractorForm.Solo, "pass-" + s);
+                KnownCharacter c = Self(n, a);
+                n.physical.failPlace = true;
+                n.physical.onPlaceFailed = t =>
+                {
+                    if (s == "Spawned") t.spawned = true;
+                    else if (s == "Held") t.held = true;
+                    else if (s == "Dead") t.dead = true;
+                    else t.gone = true;
+                };
+                PhysicalEpisode e = Begin(n, a, new[] { c });
+                n.physical.failPlace = false;
+                n.physical.onPlaceFailed = null;
+                EpisodeMember m = e.members[0];
+                FakePhysicalWorldPort.Token tok = n.physical.TokenOf(c.pawn);
+                T.Check(e.state == EpisodeState.Closed && e.consequencesApplied && m.outcome == MemberOutcome.NeverPlaced, s + ": committed as NeverPlaced");
+                T.Eq((byte)0, m.releaseStep, s + ": the cursor does not advance past PassToWorldIfAllowed");
+                T.Check(!e.releaseApplied, s + ": releaseApplied stays false");
+                T.Eq(e.id, c.episode, s + ": the episode link stays");
+                T.Check(!AuthorityGate.CanSimulateAbstractly(c), s + ": the person stays blocked (custody " + c.custody + ")");
+                T.Eq(0, n.physical.passCalls, s + ": no PassToWorld was requested");
+                T.Eq(0, n.physical.passRejected, s + ": so none could be rejected either");
+                T.Check(e.lastError != null && e.lastError.Contains("PhysicalPreconditionException"), s + ": diagnosed (" + e.lastError + ")");
+                // Retries while the precondition still fails change nothing (the watch keeps trying).
+                L(n).FinishPending(e);
+                n.Advance(PhysicalLifecycleService.WatchPeriod + 5);
+                T.Check(!e.releaseApplied && m.releaseStep == 0 && n.physical.passCalls == 0 && !AuthorityGate.CanSimulateAbstractly(c), s + ": retries stay blocked");
+                // The observed state becomes valid: not spawned, not held, alive, resolvable, not yet a world pawn.
+                tok.spawned = false;
+                tok.held = false;
+                tok.dead = false;
+                tok.gone = false;
+                tok.inWorldPawns = false;
+                L(n).FinishPending(e);
+                T.Check(e.IsComplete, s + ": the retry completes RELEASE (and the episode)");
+                T.Eq(1, tok.passedToWorld, s + ": passed to the world exactly once");
+                T.Eq((byte)ReleasePolicy.ActionsFor(m).Length, m.releaseStep, s + ": every release action done");
+                T.Check(!c.episode.IsValid && AuthorityGate.CanSimulateAbstractly(c) && c.custody == CustodyState.Stored, s + ": only now abstract (Stored)");
+                L(n).FinishPending(e);
+                L(n).Reconcile(e, "again");
+                n.Advance(PhysicalLifecycleService.WatchPeriod + 5);
+                T.Check(tok.passedToWorld == 1 && tok.retainCalls == 1 && tok.tagStrips == 1, s + ": exactly once (pass " + tok.passedToWorld + ", retain " + tok.retainCalls + ", strip " + tok.tagStrips + ")");
+            }
+        }
+
+        /// <summary>Fix 1, the other side: a pawn already in WorldPawns is a SUCCESSFUL observed no-op, never a second pass.</summary>
+        private static void AlreadyWorldPawnIsSuccess()
+        {
+            TestNet n = new TestNet(9410);
+            NetworkActor a = Make(n, ContractorForm.Solo, "already");
+            KnownCharacter c = Self(n, a);
+            n.physical.failPlace = true;
+            n.physical.onPlaceFailed = t => t.inWorldPawns = true; // a retained pawn that never left WorldPawns
+            PhysicalEpisode e = Begin(n, a, new[] { c });
+            n.physical.failPlace = false;
+            n.physical.onPlaceFailed = null;
+            T.Check(e.IsComplete, "RELEASE completes");
+            T.Eq(0, n.physical.passCalls, "no PassToWorld (vanilla already holds it as a world pawn)");
+            T.Eq(1, L(n).counters.passSkippedAlreadyWorld, "counted as an observed no-op");
+            T.Check(AuthorityGate.CanSimulateAbstractly(c), "and the person is abstract again");
+        }
+
+        /// <summary>Fix 2: anonymous headcount is validated per tier over every request row; negative rows are refused.</summary>
+        private static void DuplicateTierRows()
+        {
+            TestNet n = new TestNet(9420);
+            NetworkActor org = Make(n, ContractorForm.Company, "tiers");
+            OrganizationProfile p = org.Get<OrganizationProfile>();
+            p.TierOf(Tier.Regular).healthy = 5;
+            int committed = ReconciliationPlanner.PeekCommitted(p, Tier.Regular);
+            LiveFingerprint before = Print(n);
+            int nextId = n.ids.PeekNextId;
+            EpisodeRequest twice = PhysicalRuntimeSuite.Request(org, null);
+            twice.anonymous.Add(new TierCount(Tier.Regular, 4));
+            twice.anonymous.Add(new TierCount(Tier.Regular, 4));
+            PhysicalEpisode e;
+            CommandResult r = L(n).Plan(twice, out e);
+            T.Check(!r.ok && r.reasonKey == "Headcount", "Regular x4 + Regular x4 against 5 is refused (" + r + ")");
+            T.Check(e == null && n.ctx.episodes.Count == 0, "no episode was created");
+            T.Eq(5, FateRules.PeekHealthy(p, Tier.Regular), "no headcount changed");
+            T.Eq(nextId, n.ids.PeekNextId, "no id was drawn");
+            Same(before, Print(n), "the durable state is exactly unchanged");
+
+            EpisodeRequest negative = PhysicalRuntimeSuite.Request(org, null);
+            negative.anonymous.Add(new TierCount(Tier.Regular, -1));
+            negative.anonymous.Add(new TierCount(Tier.Regular, 2));
+            r = L(n).Plan(negative, out e);
+            T.Check(!r.ok && r.reasonKey == "Headcount", "a negative row is malformed and refused, never clamped (" + r + ")");
+            Same(before, Print(n), "and changes nothing");
+
+            EpisodeRequest fits = PhysicalRuntimeSuite.Request(org, null);
+            fits.anonymous.Add(new TierCount(Tier.Regular, 2));
+            fits.anonymous.Add(new TierCount(Tier.Regular, 3));
+            r = L(n).Plan(fits, out e);
+            T.Check(r.ok, "Regular x2 + Regular x3 against 5 fits (" + r + ")");
+            L(n).Materialize(e);
+            T.Eq(5, e.members.Count, "five anonymous members");
+            T.Eq(0, FateRules.PeekHealthy(p, Tier.Regular), "all five checked out");
+            T.Eq(committed + 5, ReconciliationPlanner.PeekCommitted(p, Tier.Regular), "into the checked-out headcount");
+            foreach (EpisodeMember m in e.members) n.physical.ExitNormally(m.pawn, 41);
+            L(n).Reconcile(e, "test");
+            T.Check(e.IsComplete, "reconciled");
+            T.Eq(5, FateRules.PeekHealthy(p, Tier.Regular), "all five back: counts conserved");
+            T.Eq(committed, ReconciliationPlanner.PeekCommitted(p, Tier.Regular), "nothing left checked out");
+        }
+
+        /// <summary>
+        /// Fix 3: the real Phase 2 state shape (an operation's abstract casualties already made the person Missing or Captured, then the
+        /// operation went Troubled), a rescue episode, and a POSITIVE return: unhurt ⇒ Active, injured ⇒ Wounded with the bounded
+        /// recovery, applied once, and the person is abstract only after RELEASE COMPLETE.
+        /// </summary>
+        private static void ReturnedMissingOrCaptured()
+        {
+            ReturnCase("missing, unhurt", Fate.Missing, 1f, CharacterStatus.Active, 0, 9430);
+            ReturnCase("missing, injured", Fate.Missing, 0.5f, CharacterStatus.Wounded, 8, 9431);
+            ReturnCase("captured, unhurt", Fate.Captured, 1f, CharacterStatus.Active, 0, 9432);
+            ReturnCase("captured, injured", Fate.Captured, 0.3f, CharacterStatus.Wounded, 15, 9433);
+        }
+
+        private static void ReturnCase(string label, Fate prior, float health, CharacterStatus expected, int woundDays, int seed)
+        {
+            TestNet n = new TestNet(seed);
+            NetworkActor org = Make(n, ContractorForm.Company, "return" + seed);
+            Operation op = LiveOperation(n, org);
+            KnownCharacter member = n.ctx.characters.Get(op.characters[op.characters.Count - 1]);
+            CasualtyReport r = new CasualtyReport();
+            r.fates.Add(new CharacterFate { character = member.id, fate = prior });
+            n.ctx.Contractors.ApplyCasualties(org, r, ContractId.None, op.id, false);
+            CharacterStatus shape = prior == Fate.Missing ? CharacterStatus.Missing : CharacterStatus.Captured;
+            T.Eq(shape, member.status, label + ": the abstract fate is already applied (the real Troubled shape)");
+            PhysicalEpisode e = Begin(n, org, new[] { member }, 0, op.id);
+            n.physical.ExitNormally(member.pawn, 42, health);
+            n.physical.ThrowOn("strip");
+            L(n).Reconcile(e, "found");
+            T.Check(e.consequencesApplied && !e.releaseApplied, label + ": committed, RELEASE held open");
+            T.Eq(expected, member.status, label + ": the positive return resolves the story status");
+            T.Eq(CustodyState.Stored, member.custody, label + ": custody Stored");
+            T.Check(!AuthorityGate.CanSimulateAbstractly(member), label + ": still not abstract before RELEASE COMPLETE");
+            if (expected == CharacterStatus.Wounded) T.Eq(e.committedTick + woundDays * Ticks.PerDay, member.woundedUntilTick, label + ": the bounded recovery (" + woundDays + " days)");
+            int until = member.woundedUntilTick, statusTick = member.statusTick;
+            L(n).FinishPending(e);
+            T.Check(e.IsComplete, label + ": completes");
+            T.Check(AuthorityGate.CanSimulateAbstractly(member) && !member.episode.IsValid, label + ": abstract only now");
+            T.Eq(OpStatus.Resolved, op.status, label + ": the operation resolved as found");
+            L(n).Reconcile(e, "again");
+            L(n).FinishPending(e);
+            T.Check(member.woundedUntilTick == until && member.statusTick == statusTick, label + ": no second recovery");
+            if (expected == CharacterStatus.Wounded)
+            {
+                n.clock.Now = until + 1;
+                n.ctx.Upkeep.UpkeepJob(new ScheduledJob { kind = ContractorService.UpkeepJob, target = org.id.Value });
+                T.Eq(CharacterStatus.Active, member.status, label + ": abstract recovery heals it once, at its tick");
+            }
+            T.Check(member.IsAvailable, label + ": and the person can work again");
+        }
+
+        /// <summary>Fix 3, the limits: a return never revives the dead or the Lost; the rule itself and VALIDATE both refuse.</summary>
+        private static void DeadAndLostImmutable()
+        {
+            KnownCharacter dead = new KnownCharacter { id = new CharacterId(3), status = CharacterStatus.Dead, diedTick = 5 };
+            FateRules.ReturnedFree(dead, 100);
+            T.Check(dead.status == CharacterStatus.Dead && dead.diedTick == 5, "the shared return rule leaves the dead dead");
+            KnownCharacter lost = new KnownCharacter { id = new CharacterId(4), status = CharacterStatus.Lost };
+            FateRules.ReturnedFree(lost, 100);
+            T.Eq(CharacterStatus.Lost, lost.status, "and the Lost Lost");
+            KnownCharacter active = new KnownCharacter { id = new CharacterId(5), status = CharacterStatus.Active, statusTick = 7 };
+            FateRules.ReturnedFree(active, 100);
+            T.Check(active.status == CharacterStatus.Active && active.statusTick == 7, "an Active person is untouched");
+
+            foreach (CharacterStatus bad in new[] { CharacterStatus.Dead, CharacterStatus.Lost })
+            {
+                TestNet n = new TestNet(9440 + (int)bad);
+                NetworkActor a = Make(n, ContractorForm.Solo, "immutable" + bad);
+                KnownCharacter c = Self(n, a);
+                PhysicalEpisode e = Begin(n, a, new[] { c });
+                c.status = bad; // the record says so (an impossible state for a member, set from outside): no return may overwrite it
+                n.physical.ExitNormally(c.pawn, 43, 0.5f);
+                T.Check(!L(n).Reconcile(e, "test"), bad + ": nothing is committed");
+                T.Eq(bad, c.status, bad + ": the status is unchanged");
+                T.Check(!e.consequencesApplied, bad + ": no consequence applied");
+                T.Check(e.lastError != null && (e.lastError.Contains("DeadTarget") || e.lastError.Contains("LostTarget")), bad + ": VALIDATE refused it (" + e.lastError + ")");
+            }
+            TestNet n2 = new TestNet(9450);
+            NetworkActor solo = Make(n2, ContractorForm.Solo, "dead-plan");
+            KnownCharacter d = Self(n2, solo);
+            d.status = CharacterStatus.Dead;
+            PhysicalEpisode none;
+            T.Eq("NotAlive", L(n2).Plan(PhysicalRuntimeSuite.Request(solo, new[] { d }), out none).reasonKey, "and a dead person can never join an episode");
         }
 
         private static void SnapshotRestores()
