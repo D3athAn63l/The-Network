@@ -255,7 +255,11 @@ where everyone was killed, captured or missing teaches the contractor nothing (A
 ### 4.5 Leadership and succession
 
 - The leader is always a Known Character (a record; it becomes a pawn only when physically
-  needed).
+  needed). *Phase 3 (design): the abstract roster stays headcounts by tier and the abstract resolver is **not** role-aware.
+  An organization additionally has a small **role composition** (a pure function of immutable origin facts, stored lazily; it
+  never depends on when anyone first looked) used only to choose and constrain physical
+  projection, and a small recurring organization's physically met seats become Known Characters
+  ([PHYSICAL_LIFECYCLE § 4.5, § 6.7](PHYSICAL_LIFECYCLE.md#45-progressive-concretization)).*
 - **When the leader is killed or captured:** succession runs immediately inside the event
   consumer. It picks the best living Known Character (by role, lieutenant first, then
   notability), otherwise promotes a Veteran from headcount into a new Known Character. The
@@ -288,7 +292,10 @@ Normative spec: [CAREERS](CAREERS.md); decision ADR-046. In short:
 - **Reputation from finished work.** When an eligible operation reaches the end of its lifecycle its
   frozen danger and outcome earn `round(difficultyValue × outcomeMultiplier × taper)` points
   (4–40 × 1.25 / 1.0 / 0.9 / 0.45–0.9 / 0 …), tapering above a danger-dependent ceiling so easy work
-  cannot make a famous name. The `FameBand` is derived from the score. No reputation is ever lost.
+  cannot make a famous name. The `FameBand` is derived from the score. No reputation is ever lost. *Terminology (Phase 3
+  amendment): this one work-built score is, in substance, a professional-record score displayed as "fame"; the intended
+  separation of professional reputation, fame / visibility and capability is future design only
+  ([PHYSICAL_LIFECYCLE § 6.10](PHYSICAL_LIFECYCLE.md#610-professional-reputation-fame-and-capability)).*
 - **Contractor money.** The contractor's share of each payment is credited at the ledger commit point
   and recorded on the ledger record; a refund takes back its proportional part; insurance, the Fixer's
   fee and carried-over replacement funding never touch the contractor's funds.
@@ -483,4 +490,5 @@ player's choices are not.
   faction def filter. Names follow the lightweight compositional model of
   [DATA_MODEL § 18.4](DATA_MODEL.md#184-name-generation).
 - **Cost.** Upkeep is one small staggered job per NPC contractor per day (about 100 per day by
-  default). Only Known Characters who matter ever get pawns, and only when physically needed.
+  default). Only Known Characters who matter ever get pawns, and only when physically needed *(Phase 3 design: a small
+  recurring organization's placed seats concretize into Known Characters; a large organization's rank-and-file stay ephemeral)*.

@@ -41,7 +41,7 @@
 | **UI-only** | read models, sorting, filtering, narrative formatting | while the window is open | cached per `StateVersion`; lists virtualized (only visible rows drawn) |
 | **Opportunity-generation spikes** | source/context resolution, tile finding, Thing creation for stashes, site creation | when Intel resolves (rare) | the resolver reads a session index `packageId → FactionDefs` and one pass over live factions (tens); `TileFinder` is vanilla and bounded; at most one per job; follow-ups are separate jobs |
 | **Map-generation spikes** | vanilla map generation for a Network site | when the player arrives | vanilla cost (the same as any item-stash quest); the Network adds only its comp callbacks |
-| **Materialization spikes** (Phase 3) | pawn generation for deployments | when the player becomes involved | capped deployment size (default ≤ 12 pawns); generation spread over frames with `LongEventHandler` if > 6 |
+| **Materialization spikes** (Phase 3) | pawn generation for deployments | when the player becomes involved | capped deployment size (default ≤ 12 pawns); generation spread over frames with `LongEventHandler` if > 6. *Phase 3 design: ≤ 8 people per episode; role and cohesion verification adds a **bounded** retry (K attempts, each at most vanilla's own 120 tries), measured by S25; a group may be created one pawn per tick if it spikes* |
 
 ## 3. Scale assumptions and cost estimates
 
@@ -193,12 +193,37 @@ summaries or edges in O(1), or knowledge books in O(64) at most.
    one-time **about 23 ms** to compile the per-type accessors at the first capture of a process; the reflective
    fallback (no expression trees) takes about 44 ms per capture. A run therefore adds roughly 10 ms to each frame
    it runs in, for the second or two it lasts, and nothing otherwise. The colony sentinel's cost in game (silver by
-   beacon, a hash of haulable items, world objects) is bounded and **not measured**. Headless elapsed times of the isolated scenarios through the real runner: Procurement
+   beacon, a hash of haulable items, world objects) is bounded and not measured separately. Headless elapsed times of the isolated scenarios through the real runner: Procurement
    (11 tests) ≈ 8 ms, Career (14) ≈ 7 ms, Spatial (8) ≈ 9 ms, all 33 plus the infrastructure checks ≈ 23 ms in 7
-   slices. **Not measured:** the in-game elapsed time of Quick smoke, Full safe regression and the Live scan
-   (RimWorld could not be launched where this phase was built); the first owner run's own summary line and
-   exported report carry that number.
-3. **Phase 3 soak**: 150 stored pawns plus 5 concurrent deployments. Compare TPS with and
-   without The Network on the same save (the prepared-removal path).
+   slices. **In-game, as the runner's own summary reported to the owner** (single runs, whole-run totals including both
+   fingerprints per slice and the colony sentinel; not a controlled benchmark): fresh Dev Quicktest colony: Quick
+   smoke ≈ 84 ms, Full safe regression ≈ 160 ms, Live scan ≈ 3 ms; real heavily modded colony (130 contractors):
+   ≈ 133 ms, ≈ 222 ms (first run) / ≈ 96 ms (second run), ≈ 9 ms. No normal-game cost was reported or observed
+   (the idle cost is the one null check). The only slow-step WARNs were ≈ 5–7 ms single steps (RT-PROC-001,
+   RT-SPAT-008), profiler telemetry rather than a defect.
+3. **Phase 3 soak**: a bounded number of persisted physical-identity records (target 150 bound people) plus 5
+   concurrent physical episodes, with the idle (nobody physical) cost measured separately and required to be
+   near zero. Compare TPS with and without The Network on the same save (the prepared-removal path).
+   Budgets and the required measurements are in [PHYSICAL_LIFECYCLE § 18](PHYSICAL_LIFECYCLE.md#18-performance).
+   **Phase 3 design budgets (targets, nothing measured yet; no Phase 3 code exists).** Nobody physical and nobody
+   vanilla-held: **zero** (no job, no per-tick work). An Open episode (≤ 8 people): one `episode.watch` job every 250
+   ticks (≈ 15 hash/contains operations per person); held people: one global `custody.watch` every 2,500 ticks, only
+   while someone is held; signals O(1); reconcile < 1 ms. The one cost that is **not** ours to bound is the registry
+   reservation: vanilla evaluates `IsReservedByAnyQuest` (quests × parts × `List<Pawn>.Contains`) for each
+   non-mothballed world pawn per tick, so the reserved list length *R* (the stored named people, soft cap ≈ 150) is
+   a multiplier to **measure** in the soak ([PHYSICAL_LIFECYCLE § 7.4](PHYSICAL_LIFECYCLE.md#74-the-registry-reservation-retained-pawns-only)).
+   Forbidden: scanning all pawns, all maps or all world pawns on a timer.
+   **Added by the amendment pass (targets, nothing measured):** the atomic reconciliation commit is O(the touched set: ≤ 8
+   characters and three small objects), a snapshot and, only on failure, a restore, well under 0.2 ms; role and cohesion
+   verification is reads of one unbound candidate and ≤ 7 teammates inside a bounded retry; truthful aging catches up once
+   per materialized stored pawn (a *periodic* variant would be ≤ 150 calls per game-year, only while a pawn is stored); encounter
+   evidence is ≤ 8 play-log / battle-log lookups per reconcile; role-composition apportionment is O(≤ 8). Forbidden: a per-tick
+   aging job for stored pawns; scanning the play log per tick. The soak also reports **retained-pawn growth under progressive
+   concretization** (R-36) and the *R* × *W* registry cost ([PHYSICAL_LIFECYCLE § 18](PHYSICAL_LIFECYCLE.md#18-performance)).
+   **Added by the correction pass (targets, nothing measured):** the publication outbox is ≲ 12 compact specs per episode and a
+   cursor, written once at commit and advanced only while publishing; release is ≤ 8 members × ≤ 4 actions, each advancing a
+   persisted step; the finish-pending pass runs at load and from the episode watch only while a stage is unfinished, so an
+   idle game pays nothing; narrowed encounter-evidence lookups happen only at reconcile for the non-seat members of a
+   large organization.
 4. **Regression gate**: the timing report (see [DEBUGGING § 5](DEBUGGING.md#5-timing-instrumentation))
    is attached to each phase's PR, with the p50, p95 and max per job kind.

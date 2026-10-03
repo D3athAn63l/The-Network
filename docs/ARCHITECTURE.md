@@ -57,7 +57,7 @@ The architecture has to:
 | Player intent | Presentation → Commands → Intel / Contracts | `IntelRequest`, `Contract` (issuer = player) |
 | World reaction | Scheduler → Intel / Bidding / Willingness | Offers, refusals, search progress |
 | Opportunity | Opportunities (world truth) + Leads (reported perception) | `Opportunity`, `Lead` |
-| Success / failure | Operations + Abstract Resolver, or physical play via Physical Adapters | `Operation` outcome, `Deployment` reconciliation |
+| Success / failure | Operations + Abstract Resolver, or physical play via Physical Adapters | `Operation` outcome, physical `Episode` reconciliation |
 | Consequences | Event Bus → consumers; Consequence Engine | Relation edges, obligations, morale, follow-up opportunities |
 | Remembered history | History Ledger + Summaries + Legends | `HistoryRecord`, `ActorRecordSummary`, `Legend` |
 | Changed future behaviour | Willingness, pricing, resolver, gossip, reputation all read summaries and edges | derived caches (rebuilt, never rescanned) |
@@ -95,7 +95,7 @@ The architecture has to:
 │   KnowledgeStore                             GossipService (Phase 5)                           │
 │   IntelStore · OpportunityStore                                                                │
 │   ContractStore · OperationStore             HISTORY                                           │
-│   DeploymentStore · LeaseStore                 HistoryLedger (tiered records) · SummaryStore   │
+│   EpisodeStore · LeaseStore                    HistoryLedger (tiered records) · SummaryStore   │
 │   BeliefStore (Phase 5)                        LegendArchive · Awareness (facts vs knowledge)  │
 │                                                                                                │
 │  INTEGRATION (the only code that touches live RimWorld objects) ─────────────────────────────── │
@@ -356,19 +356,34 @@ hold **who may exist in new worlds**; each world holds **what happened to them i
 - **Responsibility.** Track the individuals that matter as **Known Characters**: leaders,
   lieutenants, and anyone the player met or who did something notable. Bind each one to at most
   one real `Pawn`, and only when physically needed. Enforce the no-duplication invariants.
-- **Persistent.** `CharacterStore` (`KnownCharacter` records, including custody state and
-  `PawnRef`), `DeploymentStore` and `LeaseStore`.
-- **Runtime cache.** A reverse map from `Pawn` to `CharacterId`, and the set of pawns currently
-  reserved.
-- **Public surface.** `Custody.Materialize(characterId, purpose)`,
-  `Custody.BeginDeployment(...)`, `Custody.Reconcile(deploymentId)`,
-  `Characters.Promote(...)`.
-- **Emits.** `KnownCharacterPromoted`, `KnownCharacterKilled`, `KnownCharacterCaptured`,
-  `KnownCharacterRescued`, `KnownCharacterDefected`, `KnownCharacterLost`,
-  `DeploymentReconciled`.
-- **Consumes.** Signals via `SignalBridge`, registry-quest notifications (Phase 3), and
-  `OperationResolved` (abstract fates).
-- **Detail.** [ABSTRACT_PHYSICAL_LIFECYCLE](ABSTRACT_PHYSICAL_LIFECYCLE.md).
+- **Status.** Phase 2 implemented the *records* (`KnownCharacter`, with a persisted `custody` that is never written).
+  **Phase 3 is a design only** ([PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md), [ADR-048](DECISIONS.md)); nothing below is
+  implemented. Identity is `Actor ≠ Person ≠ Pawn`; a named person keeps one pawn for life; rank-and-file of a *large*
+  organization are ephemeral episode slots while a *small* recurring organization concretizes its placed seats into named,
+  bound people ([PHYSICAL_LIFECYCLE § 4.5](PHYSICAL_LIFECYCLE.md#45-progressive-concretization)); *presence alone* promotes
+  nobody in a large organization (a material outcome or a named story is required). A first projection never
+  contradicts established truth: Operational Roles, role composition, team cohesion and truthful aging
+  ([ADR-050](DECISIONS.md)); a role or composition derives from **immutable origin facts**, never from when the player first
+  looked ([PHYSICAL_LIFECYCLE § 6.6.5](PHYSICAL_LIFECYCLE.md#665-identity-comes-from-immutable-origin-facts-never-from-when-the-player-first-looks)).
+- **Persistent (design).** `CharacterStore` (`KnownCharacter` records, plus `pawn`, `episode`, `heldBy`, `opRole`,
+  `firstEncounterTick`; `PawnRef` carries `agedThroughTick`), the `EpisodeStore` in the already-reserved `deployments` slot
+  (the Phase 0 `DeploymentStore`, renamed; it also carries the explicit per-stage markers, the publication outbox and its
+  cursor), `OrganizationProfile.composition` (a small role template, *stored* lazily in 3.2 but a pure function of immutable
+  origin facts, so storing it never changes what it is), and the reserved `LeaseStore` (one of **two** Phase 4 equipment seams: a *Notable Asset* is owned by the person,
+  not stored in `leases`).
+- **Runtime cache.** `thingIDNumber → (episode, member)`, `CharacterId → member`, and the registry of stored pawns
+  (all rebuilt from the stores in `FinalizeInit`).
+- **Public surface (candidate names).** `AuthorityGate.CanSimulateAbstractly(person)`, `Episodes.Plan/Materialize`,
+  `Episodes.Reconcile(episode)` (a pure `ReconciliationPlan`, validation, a snapshot-guarded `Applier`, then the
+  post-commit stages release, follow-up and publish, each with its own durable marker), `Characters.Promote(...)`, pure policy functions (role verdict and correction, composition
+  apportionment, concretization policy, cohesion screen); the real RimWorld work sits behind a `PhysicalWorldPort` with a
+  scriptable fake for the safe test tier.
+- **Emits.** `Episode.Opened/Closed`, `KnownCharacterPromoted`, `…Killed`, `…CapturedByPlayer`, `…Defected`, `…Lost`,
+  `Contractor.Rescued` (published after the commit from a durable outbox, one event at a time under a persisted cursor).
+- **Consumes.** Tagged signals via `SignalBridge` (wake-ups only), the site comp's map callbacks, the registry quest
+  part's kill/discard notifications, and `OperationResolved`.
+- **Detail.** [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md) (normative); the Phase 0 text
+  [ABSTRACT_PHYSICAL_LIFECYCLE](ABSTRACT_PHYSICAL_LIFECYCLE.md) is superseded where they differ.
 
 ### 6.8 Organizations (contractor behaviour)
 
@@ -664,9 +679,9 @@ binding). It picks plausible world context for an opportunity. It is not a subsy
 | Adapter | Responsibility | Vanilla APIs used |
 |---|---|---|
 | `SiteAdapter` | Build vanilla `Site`s for opportunities (vanilla `SitePartDef`s such as `ItemStash` plus a threat part), start the timeout, bind the injected `WorldObjectComp_NetworkSite`, and forward its callbacks | `SiteMaker.MakeSite`, `SitePart.things`, `TimeoutComp`, `WorldObjectComp` |
-| `CustodyService` | Pawn binding, registry reservation (Phase 3), deployment ledger, reconciliation | `WorldPawns`, `QuestManager` (registry quest), `PawnGenerator` under `Rand.PushState` |
-| `EncounterFactionAdapter` | Temporary per-organization factions for physical presence (Phase 3) | `FactionGenerator`, `Faction.temporary`, `FactionManager` |
-| `DeliveryAdapter` | Hand goods to the player: drop pods (Core), walk-in (Phase 3), shuttle (Royalty, optional) | `DropPodUtility.DropThingsNear`, `TransportShipMaker` (optional) |
+| `CustodyService` / `PhysicalWorldPort` adapter (Phase 3, design) | The RimWorld half behind the port: create (`ForceGenerateNewPawn`, role-constrained and verified before binding), age catch-up, spawn, tag, observe (`ObservedKind`), release, and the registry reservation. The Episode ledger and reconciliation are **Domain**, tested over a fake port | `PawnGenerator`, `GenSpawn`, `WorldPawns`, `QuestManager` (registry quest), `Pawn`/`Faction`/`Caravan` state reads, `LordMaker` |
+| `EncounterFactionAdapter` | One temporary hidden faction per **episode** (vanilla removes it with the episode) (Phase 3, design) | `FactionGenerator`, `Faction.temporary`, `FactionManager` |
+| `DeliveryAdapter` | Hand goods to the player: drop pods (Core; the only mode today), colony handoff and rendezvous (Phase 3.3, **design direction only**), shuttle (Royalty, optional) | `DropPodUtility.DropThingsNear`, `TransportShipMaker` (optional) |
 | `PaymentAdapter` | Take silver from and pay silver to the player; represent debt when the player cannot pay | `TradeUtility.ColonyHasEnoughSilver`, `TradeUtility.LaunchSilver`, drop pods |
 | `SignalBridge` | Receive the `TheNetwork.*` quest-tag signals (pawn, thing and world-object lifecycle) and route them to services | `SignalManager.RegisterReceiver`, `QuestUtility.AddQuestTag` |
 | `CommsAccessAdapter` | Answer "can the player communicate now?": a spawned `Building_CommsConsole` (any subclass, so modded consoles count) on a player home map whose `CanUseCommsNow` is true (powered, no electricity-disabling condition) | `Map.IsPlayerHome`, `ListerBuildings.AllBuildingsColonistOfClass<Building_CommsConsole>()`, `Building_CommsConsole.CanUseCommsNow` |
@@ -733,6 +748,38 @@ it sits beside the Domain, never inside it.
 * **Single-threaded**, driven from the main thread's update, never blocking: it fits the model of § 12.
 
 ---
+
+### 6.23 Physical lifecycle (Phase 3, design only)
+
+The abstract ↔ physical lifecycle is specified in [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md) after a design review
+that audited the 1.6.9676 assemblies; no Phase 3 code exists. The architectural shape:
+
+```
+ DOMAIN (headless-testable)            PORT                          INTEGRATION (RimWorld)
+ AuthorityGate ─ every abstract        PhysicalWorldPort             real adapter: GeneratePawn(ForceNew) · GenSpawn ·
+   writer asks it                        Create (a ProjectionRequest:  tags · LordJob_VisitColony · registry quest ·
+ EpisodeStore (slot "deployments")       role, teammates, age) ·      temporary faction · state reads · age catch-up
+ Reconciler: observe → decide →          Spawn · Tag · Observe ·     FAKE (sandbox): scriptable tokens, used by the
+   plan → validate → ATOMIC commit       Release · Reserve · Age       safe runtime tier and the headless suite
+   (Applier, snapshot-guarded) →
+   flag → release → follow-up → publish
+   (each stage: explicit marker; publish: outbox + cursor)
+ pure policy: role verdict · composition ·
+   concretization · cohesion screen
+ existing services apply consequences
+   (casualties, career, spatial, events): their
+   state halves inside the commit, their effects after it
+```
+
+Rules that bound it: one authority per person; `Actor ≠ Person ≠ Pawn`; reconciliation exactly once from observed
+state **and atomic for the Network's durable data** (no publication, scheduler or vanilla effect inside the commit; each
+later stage has an explicit durable marker written last, publication progress is durable per event so the event bus is never
+asked to accept one twice, and a person is not abstractly simulatable again until release has completed; vanilla itself
+passes an exiting pawn to the world, so the Network never passes a pawn already in `WorldPawns`, and the exit-reservation
+window is the open spike S31 that gates 3.1); a first projection never contradicts established truth; no Harmony; no work when nobody is physical; physical tests are a
+separate, session-armed tier on its own test map ([ADR-048](DECISIONS.md), [ADR-049](DECISIONS.md),
+[ADR-050](DECISIONS.md)). Phase 3.3 (procurement fulfillment by physical handoff) is design direction only
+([ADR-051](DECISIONS.md), [PHYSICAL_LIFECYCLE § 27](PHYSICAL_LIFECYCLE.md#27-phase-33-procurement-fulfillment-and-physical-handoff-design-direction)).
 
 ## 7. Key flows
 

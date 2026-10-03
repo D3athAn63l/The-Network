@@ -1,5 +1,29 @@
 # Abstract ↔ Physical Lifecycle
 
+> **Superseded in part by [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md) (the Phase 3 design review).** This is the Phase 0
+> design, written before the code existed and before the 1.6.9676 assemblies were audited for it. Its core is
+> **confirmed** (identity tiers, one pawn per character, never discarding, reconciliation from state, the registry quest).
+> Where the two documents differ, **PHYSICAL_LIFECYCLE is normative**; the corrections, with evidence, are listed in its
+> [Appendix E](PHYSICAL_LIFECYCLE.md#appendix-e-what-the-audit-changed-from-the-phase-0-design). In particular: **§ 5.3**
+> generates pawns without `ForceGenerateNewPawn` (`GeneratePawn` can return an existing world pawn); **§ 7** omits that
+> normal pawn death sends `Killed` (mid-kill); **§ 9** sets a collapsed pawn's faction "back to null" (vanilla's
+> `Notify_PassedToWorld` rewrites a `Free` pawn's faction); **§ 10** reuses one temporary faction per organization
+> (vanilla removes it with the episode; the review uses one per episode); and the **`Deployment`** concept and name are
+> replaced by the Episode. Read this file for the rationale and the edge-case catalogue; do not implement from it without PHYSICAL_LIFECYCLE.
+>
+> **The amendment pass** (PHYSICAL_LIFECYCLE [Appendix F](PHYSICAL_LIFECYCLE.md#appendix-f-amendment-log)) further supersedes: **§ 2** treating
+> generic members as ephemeral for *every* organization (small recurring organizations concretize progressively); **§ 4.3**'s
+> biological-age catch-up "capped per event" (now truthful and uncapped); **§ 5.4**'s single lease seam for "sponsored or notable"
+> items (a *Lease* and a *Notable Asset* are separate seams; generic gear stays abstract); and the implicit "reconcile in one
+> synchronous block" (now an atomic, snapshot-guarded commit with idempotent post-commit stages). It also adds Operational
+> Roles, role composition and team cohesion, which this document does not have.
+>
+> **A final micro-correction** supersedes this document's "(c) passes to world with `Decide`" (I-8) and its collapse / map-removal
+> steps wherever they pass a *returning* pawn to the world: vanilla (`Pawn.ExitMap`, `MapDeiniter`) has **already** passed it, and
+> a second `PassToWorld` is rejected; the Network passes only a bound pawn that is positively not in `WorldPawns`
+> ([PHYSICAL_LIFECYCLE § 7.5](PHYSICAL_LIFECYCLE.md#75-who-may-call-passtoworld-an-observed-world-pawn-is-never-passed-again)).
+> It also leaves the retained-pawn exit window to the unresolved spike S31 ([§ 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31)).
+
 > The highest-risk area of the mod. It covers how an off-map contractor organization, which is
 > a record with headcounts, becomes real pawns on a map, and how the results return to the
 > abstract record without duplication, resurrection or leaks.

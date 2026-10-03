@@ -287,6 +287,15 @@ migrations** ([SAVE_AND_MIGRATION](SAVE_AND_MIGRATION.md)).
   (`WorldPawns.GetSituation`, `WorldPawns.cs:267–314`). Only quest reservation and a few other
   situations exclude them. This is the core reason for the registry quest.
 - Generation depends on the mod list, so we never regenerate a pawn to "recreate" a character.
+- **Constraining a generated pawn (Phase 3 amendment audit, 1.6.9676).** `PawnGenerationRequest` carries
+  `MustBeCapableOfViolence`, `ForcedTraits`, `ProhibitedTraits`, `ValidatorPreGear` / `ValidatorPostGear`, `FixedIdeo`,
+  `ForcedXenotype`, `BiologicalAgeRange` and more (`PawnGenerationRequest.cs:31–149`). **A validator is not a guarantee:**
+  vanilla retries up to 120 times and **ignores validators from the 100th try** (`PawnGenerator.cs:687–722`), so the returned
+  pawn must be re-verified. `Pawn.kindDef` is saved **by def name** (`Pawn.cs:4571`), so never create a `PawnKindDef` at
+  runtime. `SkillRecord.Level` reads base + aptitudes but **writes the base level** (`SkillRecord.cs:56–66`). An incapability
+  is a consequence of a backstory, trait or gene; the story setters clear only `backstoriesCache`
+  (`Pawn_StoryTracker.cs:47–70`). `CanGeneratePawnRelations = false` skips relation generation (`PawnGenerator.cs:824`).
+  Details and recommendations: [PHYSICAL_LIFECYCLE § 6.8, Appendix A36–A45](PHYSICAL_LIFECYCLE.md#68-role-constrained-creation-validate-then-the-smallest-correction).
 
 ### 2.18 World pawns and GC — **REUSE with reservation**
 
@@ -305,6 +314,11 @@ migrations** ([SAVE_AND_MIGRATION](SAVE_AND_MIGRATION.md)).
   `FactionLeader`, `Kidnapped`; `ReservedByQuest` is **not** low priority)
   (`WorldPawns.cs:11–17, 365–386`). This is why stored characters are normalized at storage
   ([ABSTRACT_PHYSICAL_LIFECYCLE § 4.3](ABSTRACT_PHYSICAL_LIFECYCLE.md#43-consequences-of-suspension-frozen-pawns)).
+- **Aging while suspended (Phase 3 amendment audit).** A `ReservedByQuest` pawn is `Suspended`; `Pawn.TickInterval` skips
+  `AgeTickInterval` for it (`Pawn.cs:1669–1727`) and `Pawn.TickMothballed` does nothing for it (`:1743–1749`), so its
+  **biological** age freezes. **Chronological** age is derived (`TicksAbs − BirthAbsTicks`, `Pawn_AgeTracker.cs:117–127`) and
+  stays truthful. `Pawn_AgeTracker.AgeTickMothballed(int)` is vanilla's public bulk catch-up and crosses every birthday
+  (`:486–496`); the `AgeBiologicalTicks` setter runs no birthday. See [PHYSICAL_LIFECYCLE § 6.4](PHYSICAL_LIFECYCLE.md#64-truthful-aging-of-a-retained-pawn).
 - `Pawn.SpawnSetup` removes the pawn from world pawns automatically (`Pawn.cs:1374`).
 - `Pawn.Discard` refuses while the pawn is still a world pawn (`Pawn.cs:2436`).
 
@@ -319,9 +333,12 @@ migrations** ([SAVE_AND_MIGRATION](SAVE_AND_MIGRATION.md)).
     pawn death), `LeftMap`, `Recruited`, `Arrested`, `Rescued`, `Released`, `Kidnapped`,
     `Banished`, `Enslaved`, `ChangedFaction*`, `BecameMutant`, `TookDamageFromPlayer`;
   - world objects: `Spawned`, `Despawned`, `Destroyed`, `MapGenerated`, `MapRemoved`.
-- **Pawn death** does not reliably send `Killed` for normal deaths: `Pawn.Kill` despawns and
-  makes a corpse without `Destroy(KillFinalize)`. Death is observed through `Despawned` plus
-  reconciliation on maps, and through the registry quest's `Notify_PawnKilled` anywhere.
+- **Pawn death** *does* send `Destroyed` and `Killed`: `Pawn.Kill` ends with `if (!base.Destroyed) base.Kill(...)`,
+  `Thing.Kill → Destroy(KillFinalize)`, and `Thing.Destroy` sends both (`Pawn.cs:2088…`, `Thing.cs:1043–1099`; corrected by
+  the Phase 3 design audit, [PHYSICAL_LIFECYCLE Appendix E](PHYSICAL_LIFECYCLE.md#appendix-e-what-the-audit-changed-from-the-phase-0-design)).
+  The signal fires **in the middle of `Pawn.Kill`**, before `QuestManager.Notify_PawnKilled` and the faction/ideology
+  notifications, so a handler must only enqueue a wake-up and reconciliation reads `pawn.Dead`. The registry quest's
+  `Notify_PawnKilled` and a bounded poll are independent second and third paths.
 - Vanilla never parses tags as quest IDs. It only matches strings, and sometimes **copies**
   tags to another pawn (`QuestPart_ReplaceLostLeaderReferences.cs:28–34`). Hence invariant I-10.
 
@@ -430,6 +447,17 @@ These patches are documented in advance so a failed spike does not lead to an im
 | Compatibility risk | Very low. The alternative is adding a Network SitePartDef whose worker gets `Notify_SiteMapAboutToBeRemoved` without Harmony. **Preferred over the patch** if exact accounting becomes necessary, at the cost of a Network Def on sites. |
 | Fallback | sampling (current design) |
 | Phase | 1 only if playtesting demands it; expected to be unnecessary |
+
+**C-4 · Exit-window reservation guard (only if Spike S31 proves reservation-while-spawned and the vanilla callbacks insufficient)**
+
+| Field | Value |
+|---|---|
+| Target | `RimWorld.Planet.WorldPawns.PassToWorld(Pawn, PawnDiscardDecideMode)` (public), **prefix**: if the pawn has a Network retained binding (an O(1) lookup by `thingIDNumber` in the runtime index), add it to the registry reservation before the original runs, so that `AddPawn`, `Notify_PassedToWorld`, the GC and redress all see `ReservedByQuest`. It never changes the result and never skips the original. |
+| Why vanilla is insufficient | only if S31 shows both that a *spawned* reserved pawn misbehaves and that no synchronous vanilla callback precedes every path that passes a pawn (notably a map removal on a map type with no pre-removal hook) |
+| Call frequency | once per pawn passed to the world (map exit, map removal, quests, pods); never per tick |
+| Compatibility risk | Low to medium. About fifty vanilla call sites and other mods call it; a prefix that only adds to the Network's own list and always lets the original run composes, and costs O(1) |
+| Fallback | M1 / M2 of [PHYSICAL_LIFECYCLE § 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31); or C-1 plus C-2 (a redress guard and a GC keep reason), a larger surface that covers redress and GC but **not** quest-generation selection of `Free` pawns |
+| Phase | 3.1, conditional (expected unnecessary). Needs its own ADR; **not adopted** |
 
 No other contingency is anticipated through Phase 6. Black contracts, witnesses, rumors and
 bidding are domain logic plus vanilla observation.

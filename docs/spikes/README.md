@@ -15,6 +15,14 @@ question, the build, the environment, the steps, the result, the logs, the verdi
 **No spike in this folder is marked PASS.** The environment that built Phases 1 and 2 cannot launch RimWorld, and
 compiling, static inspection or headless tests are not runtime passes.
 
+**What the owner has run since, and what it is not.** The owner has since run real-game observations that are
+recorded elsewhere and are deliberately **not** counted as spike passes here: the Phase 2 / 2.75 legacy
+procurement run (payment hold → recovery → full drop-pod delivery) and the **Phase 2.9 runtime-test validation**
+in a fresh Dev Quicktest colony and the real modded colony (0 runtime FAILs;
+[RUNTIME_TESTING § 15](../RUNTIME_TESTING.md#15-owner-observed-runtime-evidence)). Neither is the formal S4, S13
+edge-case or **S20** checklist, so those verdicts below are unchanged. The Phase 2.9 runtime pass does not
+complete S20: its spatial scenarios run in a sandbox over a synthetic world graph.
+
 ## Environment of this pass
 
 | Item | Value |
@@ -54,3 +62,19 @@ compiling, static inspection or headless tests are not runtime passes.
 | [S19](S19-loot-without-extermination.md) loot without extermination | NOT RUN — OWNER RUNTIME VALIDATION REQUIRED |
 | [S13](S13-drop-pod-delivery.md) drop-pod delivery (Phase 2) | PARTIAL — normal home delivery PASSED in the owner's runtime test; edge cases NOT RUN |
 | [S20](S20-abstract-spatial-routing.md) abstract spatial routing, charter transport and Last Known Location placement (Phase 2.5) | NOT RUN — OWNER RUNTIME VALIDATION REQUIRED |
+
+## Phase 3 spikes (planned; no records yet)
+
+The Phase 3 design review revised the Phase 0 spike list and added four; the **amendment pass** extended S12 and S22 and added
+S25 to S30. They are **defined, not run**, and have no record files yet; each gets one when its subphase starts. The questions, narrowest experiments and pass criteria are in
+[PHYSICAL_LIFECYCLE § 25](../PHYSICAL_LIFECYCLE.md#25-open-questions-and-spikes): **S9r** registry reservation (revises S9),
+S10 temporary faction, S11 site-part pawn holder, **S12** store-time normalization **and truthful aging catch-up**, S14 visit
+Lord, S17 tag hygiene, **S21** observation completeness, **S22** the physical-tier guard (a session-only arm and a dedicated test
+map; no disposability inference), **S23** first-creation pins and modded races, **S24** the save/load matrix, **S25**
+role-constrained creation, **S26** team cohesion, **S27** encounter evidence, and, for the design-direction-only Phase 3.3,
+**S28** a right-click command without Harmony, **S29** physical cargo at a handoff, **S30** a rendezvous site. A final
+**micro-correction** added **S31**, *retained pawn exit reservation / the Free-world-pawn window*: the smallest safe 1.6
+mechanism that keeps a retained named pawn from being redressed, discarded or reused between a **vanilla** map exit and
+`Stored` authority (reserve while spawned, else a synchronous vanilla callback, else a narrow Harmony contingency, in that
+order; [PHYSICAL_LIFECYCLE § 7.6](../PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31)). **S31 is
+mandatory and blocks Phase 3.1** (3.0 does not need it); it is **NOT RUN**.

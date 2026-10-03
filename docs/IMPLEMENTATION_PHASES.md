@@ -33,8 +33,8 @@
 | **2** | Contractors (abstract) + Procurement | about 100 contractor identities (Solos to companies) from the world's cast, capability split from NPC simulation, Open and Direct contracts with the offer path, Fixer-mediated quotes, deposits and insurance, deterministic resolver, drop-pod delivery, willingness/refusal, relationships core, history changing behaviour, failures that leave a last known location | S13 |
 | **2.5** | Abstract spatial continuity + player-contract Field Log | every contractor has hidden approximate geography (one anchor, coarse lazy journeys, no icons, no caravans, no per-tick work); operations start from the real anchor and work in a hidden region on their committed timeline; Last Known Locations appear where the contractor actually was; the player's running job has a short Field Log | S20 |
 | **2.75** | Contractor career foundation | work changes a contractor: numeric reputation beneath the fame band, a cumulative career record, exact contractor money in the existing funds, equipment advancement, derived `CareerNeed` and Tags; no second reputation, wealth or stat system | — (headless; the soak reports the distributions) |
-| **2.9** | Runtime test infrastructure | an in-game regression runner that exercises the real production services in an isolated sandbox and reads the live game strictly read-only, so it is safe to press in a real colony; stable test IDs, time-sliced, never saved, no Harmony, no player UI; Phase 3 adds its own scenarios to it | — (headless `Runner.*`; the owner's first in-game run of the runner is the evidence) |
-| **3** | Abstract ↔ physical lifecycle | Known Characters as pawns, custody, deployments, encounter factions, in-person delivery, rescue follow-ups, contract inheritance | **S9**, S10, S11, S12, S14 |
+| **2.9** | Runtime test infrastructure | an in-game regression runner that exercises the real production services in an isolated sandbox and reads the live game strictly read-only, so it is safe to press in a real colony; stable test IDs, time-sliced, never saved, no Harmony, no player UI; Phase 3 adds its own scenarios to it | — (headless `Runner.*`; **owner runtime validation PASSED** in a fresh Dev Quicktest colony and the real modded colony) |
+| **3** | Abstract ↔ physical lifecycle (**design reviewed and amended; not implemented**; four subphases 3.0 / 3.1 / 3.2 / 3.3, 3.3 being design direction only, [§ 6](#6-phase-3-abstract--physical-lifecycle)) | one authority per person; Known Characters keep one pawn for life; physical Episodes reconciled exactly once (atomically); Operational Roles and role composition so a materialized contractor never contradicts its established identity; progressive concretization of small organizations; truthful aging; custody and rescue; a separate, session-armed physical test tier; **3.3 procurement fulfillment / physical handoff** as the first consumer. Leases, notable-asset grants, sponsorship and contract inheritance are **re-scoped out** | **S9r**, S10, S11, S12, S14, S21–S30 |
 | **4** | Player as contractor + NPC contract board + full bidding | player registration (same faction), NPC-issued contracts, competing offers, competitors at opportunities, public reputation epithets | — |
 | **5** | Social layer | rumors and beliefs, gossip, favors and debts, introductions, perceived reputation, sanctions and blacklists, morale v2 | — |
 | **6** | Organizational lifecycle + legends | contested succession, retirement transformation, fragmentation, mergers, legends | — |
@@ -60,7 +60,8 @@ retirement, legends.
 3. **Minimal succession (leader dies, next in line takes over) moves into Phase 2.** Contractors
    can die from Phase 2 onward, so organizations must survive leader death from then on.
    Contested succession and fragmentation stay in Phase 6.
-4. **Physical delivery by contractors *in person* goes to Phase 3** with the lifecycle. Phase 4
+4. **Physical delivery by contractors *in person* goes to Phase 3**, as its last subphase **3.3** (design direction only; the
+   first design review had pushed it out of 3.0 to 3.2 and suggested "later or Phase 4"; the amendment pass names it). Phase 4
    (the proposed Phase 3) focuses on the player-as-contractor and the NPC board, which reuse the
    Phase 3 machinery.
 5. **Public reputation epithets arrive in Phase 4**, when there is enough history and enough
@@ -403,38 +404,94 @@ from live gameplay state); risk [R-27](RISKS.md).
 **Not in Phase 2.9:** any physical, destructive or save-reload suite; real delivery in a test; automated
 quit / restart; a normal-game background monitor; a player-facing tab; Phase 3 or Phase 4 behaviour; Harmony.
 
-Headless evidence: 315 tests, 20,331 checks, 0 failures, 0 `warning CS` (32 new `Runner.*` tests: the
+**Status: merged (PR #6) and owner-runtime-validated.**
+
+Headless evidence at merge: 315 tests, 20,331 checks, 0 failures, 0 `warning CS` (32 new `Runner.*` tests: the
 runner, the plans, the sandbox suites through the real runner against a synthetic live world, the fingerprint,
-the idle cost). The existing 283 tests and every soak are unchanged and green. **RimWorld was not launched** where
-this phase was built: the `RT-SMOKE-*` / `RT-LIVE-*` suites, the game host and the Dev actions are
-compile-checked only, and S20 remains *NOT RUN — owner runtime validation required*.
+the idle cost). The existing 283 tests and every soak are unchanged and green. RimWorld could not be launched where
+this phase was built; the in-game half was therefore compile-checked at merge and then run by the owner.
+
+**Owner runtime validation: PASS** ([RUNTIME_TESTING § 15](RUNTIME_TESTING.md#15-owner-observed-runtime-evidence)),
+in two environments, with **0 runtime FAILs**:
+
+- *Fresh Dev Quicktest colony* (simple base, stockpiles, silver, power, Comms Console, trade beacon over the
+  payment stockpile): Quick smoke 12 PASS (≈ 84 ms); Full safe regression 49 PASS, 2 WARN (RT-PROC-001 ≈ 6.65 ms
+  and RT-SPAT-008 ≈ 6.97 ms slow-step telemetry; ≈ 160 ms); Live integration scan 10 PASS (≈ 3 ms).
+- *The real, ongoing, heavily modded colony* (130 contractors, 4,114 silver, both unchanged by manual check after
+  each run): Quick smoke 12 PASS (≈ 133 ms); Full safe regression 50 PASS, 1 WARN (RT-SPAT-008,
+  `job:consequence.followup` ≈ 5.01 ms; ≈ 222 ms) then 51 PASS, 0 WARN (≈ 96 ms); Live integration scan 10 PASS
+  (≈ 9 ms). No missing or extra silver, test cargo, test contracts, changed careers or reputation, fake history,
+  fake gameplay Letters, moved contractors or leftover test world objects were observed.
+
+This does **not** claim every mod interaction is proven, that every RimWorld state is fingerprinted, that the
+in-progress Cancel path was exercised by hand (the run had already finished; it has headless coverage), or that
+the formal Phase 2.5 **S20** checklist was completed: S20 remains *NOT RUN — owner runtime validation required*.
+The earlier owner-observed legacy-procurement pass (payment hold → recovery → full drop-pod delivery, no
+observed errors) stays recorded as Phase 2 / 2.75 runtime evidence.
 
 ---
 
 ## 6. Phase 3: Abstract ↔ physical lifecycle
 
-**Spikes first:** S9 (registry quest), S10 (encounter factions), S11 (site-part pawn holder),
-S12 (catch-up), S14 (walk-in Lord), S17 (tag hygiene).
+> **Status: design reviewed, not implemented.** Normative design: [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md)
+> (audited against the 1.6.9676 assemblies; supersedes the Phase 0 scope below where they differ). Decisions:
+> [ADR-048](DECISIONS.md), [ADR-049](DECISIONS.md), [ADR-050](DECISIONS.md) and [ADR-051](DECISIONS.md). Risks:
+> [R-28 to R-42](RISKS.md). Save format stays **4** until implementation; the first Phase 3 build will bump once (the
+> number is not chosen here). **Amended** after the first design review by ten owner decisions (roles and composition,
+> progressive concretization, team cohesion, the reputation / fame / capability split, reconciliation atomicity, truthful
+> aging, a generalized equipment seam, Phase 3.3, a stricter physical-test guard); see
+> [PHYSICAL_LIFECYCLE Appendix F](PHYSICAL_LIFECYCLE.md#appendix-f-amendment-log). **Corrected** by a final design pass (explicit
+> release / follow-up / publish markers and a durable publication outbox, the authority gate waiting for release, strong
+> evidence for company concretization, time-independent role and composition identity, passion-free role correction, and the
+> 3.3 handoff as an idempotent staged protocol); see [Appendix G](PHYSICAL_LIFECYCLE.md#appendix-g-correction-log). A **micro-correction** then fixed the RELEASE return
+> semantics (a pawn vanilla already passed to the world is never passed again) and added the **mandatory spike S31** (the
+> retained-pawn exit-reservation window): **3.0 may begin; 3.1 is blocked until S31 is run and owner-reviewed**
+> ([Appendix G.2](PHYSICAL_LIFECYCLE.md#g2-micro-correction-on-top-of-3f1cbee)).
 
-**Scope**
+**The target is not "spawn some contractor pawns."** It is: a persistent Network actor can temporarily become
+physically present, actual physical consequences become authoritative, and that reality reconciles back into The
+Network **exactly once**, with one authority per person at a time.
 
-- `CustodyService`, registry quest (or the documented fallback), `PawnRef`, binding invariants,
-  deployments, reconciliation, collapse, leases.
-- `EncounterFactionAdapter` (temporary per-org factions).
-- Scenarios: **in-person delivery** (walk-in contractors hand over goods) and **rescue**
-  (captured, stranded or missing contractors become an Opportunity with pawns in the site holder).
-  Last known locations gain survivors, captives, bodies and left-behind gear.
-- **Sponsorship with equipment** (master § 30–31): gear the player gives or lends becomes
-  tracked leases that reappear physically with the org's pawns.
-- Consequence Engine v1: rules for rescue, recovery and continuation. **Contract inheritance and
-  continuation** (repost, successor inheritance).
-- Promotion of generic pawns to Known Characters from encounters.
-- Events: `Contractor.Rescued`, `KnownCharacter.CapturedByPlayer` / `.Defected` / `.Lost`,
-  `Player.BetrayedContractor`.
-- Deployment Monitor dev window.
-- Runtime scenarios for the physical lifecycle (custody, deployment, in-person delivery, rescue) as stepped cases
-  on the Phase 2.9 runner, with a sandbox physical-delivery port that records; destructive physical suites remain
-  out of the default run ([ADR-047](DECISIONS.md)).
+**Four subphases, each ending in something the owner can review** (3.3 is design direction only)
+
+| Subphase | Content | Spikes needed |
+|---|---|---|
+| **3.0 Authority and episode foundation** (no RimWorld pawn) | the Episode store (reserved `deployments` slot), `PawnRef` (with `agedThroughTick`), the new `KnownCharacter` fields (incl. `opRole`, `firstEncounterTick`), the authority gate and every abstract writer behind it, **reconciliation as plan → validate → atomic snapshot-guarded commit → flag last → release → follow-up → publish** (the existing casualty/succession/ending paths are *split*, not called), a `PhysicalWorldPort` with a scriptable fake, validator, compaction, prepare-for-removal settle, `RT-PHYS-001…019` and `025…029` in the **safe** runtime tier (incl. the fault-injection sweep, release interruption with the authority gate, and publication interruption), one save-format bump | none (**S31 is not needed**: no pawn exists in 3.0) |
+| **3.1 The controlled physical episode** (the vertical slice) | the real adapter: create-once-and-bind a named pawn as a **role-constrained projection** (verified before binding; the smallest correction: raise a role-defining skill's base level only, never passion), spawn, tags, signal routes, the visit Lord, the per-episode temporary faction, the registry reservation, store-time normalization and **truthful, uncapped aging catch-up**, the **physical test tier** (separate; a session-only typed arm; its own generated test map by default; no inference of "disposable"), a read-only Episode Monitor. One Solo contractor, dev-triggered: exits, is wounded, is killed, or its map is removed; then re-materializes as the **same pawn**, truthfully older. **Blocked until S31 is run and owner-reviewed** | S9r, S10, S12, S14, S17, S21, S22, S23, S24, S25, **S31 (mandatory, blocks 3.1)** |
+| **3.2 Custody, rescue and groups** | held people (arrest, recruit, enslave, kidnap, caravan, pod) and the custody watch; **group materialization with organization and mission role composition, anonymous vs concretized people (progressive concretization), promotion, team cohesion**; the **rescue** episode for a Troubled operation (site holder, `OpStatus.Physical`); Last Known Locations with survivors and captives. First player-visible content | S11, S21, S26, S27 |
+| **3.3 Procurement fulfillment / physical handoff** (**design direction only**) | delivery-mode selection (orbital, colony handoff, rendezvous) constrained by capability and logistics; a per-contract orbital charter ("Additional Funds for Orbital Delivery"); personnel mobility vs freight capability; the explicit physical handoff (an idempotent staged protocol, not one atomic transaction); the robbery / betrayal consequence hook; seams for payment timing (future Direct Contracts) and rival interception (never implemented here). Decided after 3.2 | S28, S29, S30 |
+
+**Gating (explicit).** **3.0 may begin once the design is accepted**: it is the abstract foundation over a fake port and needs
+no spike. **3.1 may not begin until spike S31 (retained-pawn exit reservation / the Free-world-pawn window) has been run and
+owner-reviewed**, because 3.1 introduces the first retained pawn, a real map exit, a real reservation and a real `WorldPawns`
+transition, and the mechanism that keeps that pawn from ever being `Free` is **not yet chosen**
+([PHYSICAL_LIFECYCLE § 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31)). S31 has not been run.
+
+**Recommended re-scope (needs owner confirmation).** The Phase 0 scope listed below is larger than the physical
+lifecycle needs and partly belongs to Phase 4:
+
+| Original Phase 3 item | Recommendation |
+|---|---|
+| `CustodyService`, registry quest, `PawnRef`, binding invariants, deployments, reconciliation, collapse | **In** (3.0 to 3.2), as the Episode design |
+| `EncounterFactionAdapter` | **In** (3.1), one temporary faction per *episode* |
+| Rescue scenario; Last Known Locations with survivors | **In** (3.2) |
+| In-person delivery (walk-in hand-over) | **Amended: recommended as Phase 3.3**, design direction only ([PHYSICAL_LIFECYCLE § 27](PHYSICAL_LIFECYCLE.md#27-phase-33-procurement-fulfillment-and-physical-handoff-design-direction)); **not** in 3.0 to 3.2; the owner-validated drop-pod delivery stays |
+| Sponsorship with equipment and tracked leases | **Out** (Phase 4 compensation); the `leases` slot is *one of two* equipment seams |
+| Notable-asset / equipment grants | **Out** (Phase 4 compensation); a separate seam from leases ([PHYSICAL_LIFECYCLE § 11.2](PHYSICAL_LIFECYCLE.md#112-the-future-equipment-seam-not-built-a-lease-is-not-a-notable-asset)) |
+| Payment-timing variants; rival interception; contract board; player-as-contractor; NPC-issued market | **Out** of Phase 3 (future Direct Contracts / later competition and social phases); 3.3 keeps compatible seams only |
+| Reputation / fame / capability separation | **Out** of Phase 3: a later focused phase ([PHYSICAL_LIFECYCLE § 6.10](PHYSICAL_LIFECYCLE.md#610-professional-reputation-fame-and-capability)); wording corrections only now |
+| Contract inheritance and continuation | **Out** (a contract-lifecycle feature) |
+| Consequence Engine v1 | **Reduced** to the rescue rule (3.2) |
+| Promotion of generic pawns | **In**, minimally (3.2) |
+| Events `Contractor.Rescued`, `KnownCharacter.CapturedByPlayer/.Defected/.Lost`, `Player.BetrayedContractor` | **In** as 3.2 needs them |
+| Deployment Monitor dev window | **In**, read-only, as an Episode Monitor (3.1) |
+| Runtime scenarios for the lifecycle | **In**, as two tiers: abstract half in the safe suites over a fake port; physical half in a separate disposable-environment tier ([ADR-049](DECISIONS.md)) |
+| Ambient contractor visits | **Deferred**, unchanged |
+
+**Not in Phase 3:** Phase 4 compensation, the contract board, the player as contractor, physical contractor caravans for
+background movement, a persisted roster of anonymous individuals, a Hediff/inventory mirror, **roles as RPG classes**, an
+exact skill sheet for a never-materialized person, **sanitizing real pawn relationships after materialization**, persistent
+trucks/ships/vehicles, rival simulation, Harmony.
 
 ---
 
@@ -450,7 +507,10 @@ S12 (catch-up), S14 (walk-in Lord), S17 (tag hygiene).
   accepts. Completion is physical (deliver items, reach a site, escort).
 - **Full bidding** among NPC contractors on player contracts. Competitors can race the player to
   opportunities (`Opportunity.LostToCompetitor`).
-- **Public reputation epithets and fame tiers** v1 (hysteresis, persisted; master § 39, § 66).
+- **Public reputation epithets and fame tiers** v1 (hysteresis, persisted; master § 39, § 66). *Prerequisite note:* today one
+  numeric score is both the professional record and the "fame" band; separating **professional reputation, fame /
+  visibility and capability** ([PHYSICAL_LIFECYCLE § 6.10](PHYSICAL_LIFECYCLE.md#610-professional-reputation-fame-and-capability), O-17)
+  should land as a focused pass before this item, so the epithets are built on the right concept.
 - Contested leads (another group has the same information, master § 12) and non-exclusive
   contracts (master § 42).
 - The ContactBook v1 (listings; the player sees orgs they have dealt with).

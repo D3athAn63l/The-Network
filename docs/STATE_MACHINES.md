@@ -448,6 +448,16 @@ stateDiagram-v2
 
 ## 7. Character custody
 
+> **Phase 3 design review:** the custody and deployment machines below are the Phase 0 design. The normative Phase 3
+> machines (the durable **Episode** machine and the character custody meanings, with the abstract/physical/held authority
+> rule) are in [PHYSICAL_LIFECYCLE § 8](PHYSICAL_LIFECYCLE.md#8-lifecycle-state-machine); where they differ, that document wins.
+> **Amendment:** the Stored row's "age is skipped" is vanilla's behaviour for a suspended pawn; Phase 3 *compensates* it
+> truthfully (full, uncapped biological catch-up before any observation, [§ 6.4](PHYSICAL_LIFECYCLE.md#64-truthful-aging-of-a-retained-pawn)).
+> **Correction:** the reconcile commit sets custody `Stored`, but a person is **not** abstractly simulatable until the episode's
+> RELEASE has completed (`CanSimulateAbstractly` also requires *no episode membership*, which is cleared only at release
+> COMPLETE; [PHYSICAL_LIFECYCLE § 3.3, § 8.1](PHYSICAL_LIFECYCLE.md#33-operational-rules)), so the `Deployed --> Stored` edge
+> above grants no abstract authority by itself.
+
 Custody describes **who controls the pawn** (if one exists). It is separate from status (alive,
 dead, captured, …).
 
@@ -483,6 +493,14 @@ Invariants and transition details: [ABSTRACT_PHYSICAL_LIFECYCLE § 3–5](ABSTRA
 ---
 
 ## 8. Deployment
+
+> **Superseded by the Episode** ([PHYSICAL_LIFECYCLE § 5, § 8.1](PHYSICAL_LIFECYCLE.md#5-materialization-model)): states
+> Planned, Open, Closed, Quarantined; one exactly-once flag; consequences applied through existing services. Kept here as the Phase 0 record.
+> **Amendment:** `Closed(Reconciled)` is reached by an *atomic* durable commit (a pure validated plan, a snapshot-guarded Applier, the flag
+> last); release, follow-up and publish are idempotent post-commit stages, each with its **own explicit durable marker written
+> only after the stage's work completed** (`releaseApplied`, `followUpApplied`, and for publish a durable outbox with a
+> per-event `publishCursor` plus `publishedTick`); no marker is inferred from a side effect such as a removed tag or a changed
+> status ([PHYSICAL_LIFECYCLE § 8.1, § 15](PHYSICAL_LIFECYCLE.md#81-the-episode-machine-durable)).
 
 | State | Meaning | Exit |
 |---|---|---|

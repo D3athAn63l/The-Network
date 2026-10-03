@@ -36,6 +36,15 @@ Solo can be Legendary by name (a famous heir, a notorious accident) and a Legend
 Unknown. Nothing derives one from the other: `CareerService` never reads or writes the experience
 band, and `skill` never reads reputation.
 
+> **Terminology note (Phase 3 amendment; wording only, no code or save change).** The two *bands* are independent, but in
+> the code **today** the `score` beneath `FameBand` is earned *only* from completed work (§ 3.1), so it behaves as a
+> **professional-record score** that the UI calls "fame", and the equipment rung of § 6 reads that band. The intended
+> future separates three concepts: **professional reputation** (what the work market thinks of a track record, later
+> regional), **fame / visibility / notoriety** (how widely known) and **capability** (what one can actually do). Implemented
+> today: one score. Future design only: the separation. Until then a *low-profile veteran*, a *famous heir with one elite
+> bodyguard* and an *unknown professional new to a region* cannot all be represented. Physical projection never reads fame
+> ([PHYSICAL_LIFECYCLE § 6.10](PHYSICAL_LIFECYCLE.md#610-professional-reputation-fame-and-capability), ADR-046's amendment note).
+
 ## 3. Numeric reputation
 
 `PublicReputation { fame, score }`. The score is the truth; the band is derived through `CareerPolicy`:
@@ -230,6 +239,11 @@ The **operating reserve** is 45 days of the contractor's real upkeep (`DailyUpke
 daily upkeep pays: 3 per person for an organization, 2 for a Solo), floor 150, so it scales with size
 (a Solo ≈ 150, a 24-person company ≈ 3,200). The purchase spends the cost and nothing else; condition
 is untouched. It is deterministic (no randomness). The result is a normal `Contractor.Advanced` event.
+
+*Note (Phase 3 amendment).* The fame rung is an **access** rule (a supplier or sponsor trusts a track record), not a
+statement about competence, and it is unchanged by Phase 3. A later focused phase would let it read professional
+reputation, need and funds rather than public visibility, so a low-profile elite is not stuck at tier 1
+([PHYSICAL_LIFECYCLE § 6.10](PHYSICAL_LIFECYCLE.md#610-professional-reputation-fame-and-capability)).
 
 ## 7. CareerNeed (derived)
 

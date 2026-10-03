@@ -174,6 +174,10 @@ agree with the logic in a running game. [RUNTIME_TESTING](RUNTIME_TESTING.md) ad
 under the same rules as everything here: it is Dev Mode only, **never saved**, uses no Harmony, and is silent
 unless a Dev action starts it (idle cost: one static null check per frame).
 
+- **Status.** Merged and owner-runtime-validated in a fresh Dev Quicktest colony and the real modded colony, with
+  zero runtime FAILs ([RUNTIME_TESTING § 15](RUNTIME_TESTING.md#15-owner-observed-runtime-evidence)). A WARN on
+  `RT-PROC-001` / `RT-SPAT-008` that names a few milliseconds of "slow Network work" is the runner's profiler
+  telemetry, was seen in the owner's runs, and is not a failure; it usually does not recur on a second run.
 - **Where the code is.** `Source/TheNetwork/Diagnostics/RuntimeTests/` (runner, sandbox, fingerprint, invariant
   scan, report, game host) and `Suites/` (`RuntimeSmokeSuite`, `RuntimeLiveSuite`, `ProcurementRuntimeSuite`,
   `CareerRuntimeSuite`, `SpatialRuntimeSuite`).
@@ -200,7 +204,13 @@ These are dev-mode windows, shipped with the phase that introduces each subsyste
   and live refresh on `StateVersion`.
 - **Event Journal**: a filterable list (type, importance, subject) with payload details and
   consumer errors.
-- **Deployment Monitor** (Phase 3): each entry's pawn, its current observed state, the pending
-  fate and the reconciliation trace.
+- **Physical Episode Monitor** (Phase 3, designed in
+  [PHYSICAL_LIFECYCLE § 8, § 15](PHYSICAL_LIFECYCLE.md#15-reconciliation-algorithm)): each episode's people (named or
+  concretized seat, the seat's operational role), the observed state of each pawn, the authority, the pending outcome and the
+  reconciliation trace: the commit's `attempts` / `lastError`, and the **post-commit stage markers** (`releaseApplied`
+  with each member's `releaseStep`, `followUpApplied`, the outbox with its `publishCursor`, `publishedTick`), plus whether
+  the authority gate is still held closed by an unfinished release. It also shows a bound person's `agedThroughTick` and `firstEncounterTick`, an
+  organization's role composition with its pinned seats, and a line when the retained-pawn count exceeds the soft cap.
+  Read-only; it never repairs custody or episode truth.
 - **Relationship Graph** (Phase 4+): text-based adjacency with standing and trust per edge,
   filtered by actor.

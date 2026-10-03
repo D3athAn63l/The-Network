@@ -418,7 +418,10 @@ no ground connection) stresses the charter paths ([PERFORMANCE](PERFORMANCE.md))
 
 Phase 3 (abstract ↔ physical) will materialize contractors *around* their spatial truth, let them
 act physically, reconcile the pawns, and write back where they actually ended. Spatial state does
-**not** mean a pawn exists: travelling, arriving or working never generates one.
+**not** mean a pawn exists: travelling, arriving or working never generates one. *Phase 3 design:* while a person is physical
+its spatial entry is **frozen**, and the anchor is written **once, by a direct assignment inside the atomic reconciliation
+commit** (the facade methods here contain their own faults, so they are not used inside the commit);
+[PHYSICAL_LIFECYCLE § 12, § 15.6](PHYSICAL_LIFECYCLE.md#12-spatial-integration).
 
 Future invariants recorded now:
 
@@ -429,6 +432,10 @@ Future invariants recorded now:
   (contractor–contractor or with player caravans) may consume spatial truth later. A daily travel
   corridor is deliberately deferred: no consumer needs it yet, and at ~100 contractors proximity is
   cheap to compute when one does.
+- **Spatial overlap creates opportunity, not automatic encounter** *(Phase 3.3 design direction)*. A physical handoff
+  rendezvous is placed from a contractor's anchor and route; a future rival may interfere only with spatial opportunity,
+  plausible knowledge, motive, availability and capability: no omniscient actors, no detection radius, no teleport ambush
+  ([PHYSICAL_LIFECYCLE § 27.7, § 27.9](PHYSICAL_LIFECYCLE.md#277-the-rendezvous)). Nothing of it is implemented.
 
 ## 13. Diagnostics
 

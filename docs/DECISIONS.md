@@ -169,6 +169,9 @@
   (missed signals would corrupt state).
 - **Consequences.** A promotion policy and caps are needed. Released generic pawns become
   vanilla's concern.
+- **Phase 3 design review.** Confirmed and refined by [ADR-048](#adr-048--one-authority-at-a-time-physical-presence-is-an-episode-reconciled-exactly-once)
+  and [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md): the tiers stand; a *named* person is bound when first materialized;
+  `Actor ≠ Person ≠ Pawn`.
 
 ### ADR-014 · Off-map pawn custody via a hidden registry quest (Conditional: S9)
 - **Decision.** One hidden, never-ending Network quest with a Network `QuestScriptDef` root. Its
@@ -184,6 +187,12 @@
   ([RIMWORLD_INTEGRATION § 3.3](RIMWORLD_INTEGRATION.md#33-contingency-patches-analysed-not-adopted)).
 - **Consequences.** Stored pawns are frozen; catch-up happens at materialization (S12). Mod
   removal adds about 2 errors unless the save is prepared for removal.
+- **Phase 3 design review.** Re-audited against the 1.6.9676 assemblies ([PHYSICAL_LIFECYCLE § 7.4](PHYSICAL_LIFECYCLE.md#74-the-registry-reservation-retained-pawns-only),
+  [Appendix E](PHYSICAL_LIFECYCLE.md#appendix-e-what-the-audit-changed-from-the-phase-0-design)). The decision stands and is
+  sharper: reservation is **required** for a retained pawn that would be `Free` (redress chance up to 0.8 per generation);
+  reserve **before** passing to the world (`Notify_PassedToWorld` rewrites a `Free` pawn's faction); the reserved set is
+  only the stored named people; its cost grows with the list length. **Open (S9r):** a registry of vanilla classes only
+  (`QuestPart_ReservePawns`) vs the Network-owned part (the default, because it self-heals on removal).
 
 ### ADR-015 · Sites = vanilla Site + vanilla parts + injected WorldObjectComp (Conditional: S1, S2, S19)
 - **Decision.** Use `WorldObjectDefOf.Site` and vanilla `SitePartDef`s (`ItemStash` + a threat
@@ -658,6 +667,15 @@
   market is player-driven, so most contractors do few jobs and move slowly (see RISKS). The derived `CareerNeed`
   and Tags are the hooks that Phase 4B (alternative compensation), hiring, sponsorship, rivalries and
   legends will consume, with no further change to what is saved. The save grows by about 1.6 %.
+- **Phase 3 amendment note (terminology only; no behaviour change).** Rule 1 keeps one numeric score, but that score is
+  built only from completed work (`ReputationGain`), so in substance it is a **professional-record score** that the code,
+  the UI and the docs call *fame*, and rule 3's advancement gate reads the derived `FameBand`
+  (`CareerPolicy.RequiredFame`). Rule 4 stays true of the *bands* (Fame and Experience are independent), but one number
+  cannot express a low-profile elite, a famous-but-mediocre principal with a competent bodyguard, or an unknown
+  professional new to a region. The intended separation of professional reputation, fame/visibility and capability is
+  recorded in [PHYSICAL_LIFECYCLE § 6.10](PHYSICAL_LIFECYCLE.md#610-professional-reputation-fame-and-capability) for a later
+  focused phase; **nothing is implemented and ADR-046's rules stand.** Phase 3 only forbids physical projection from
+  reading fame ([ADR-050](#adr-050--a-first-projection-never-contradicts-established-network-truth)).
 
 ### ADR-047 · Runtime regression tests are isolated from live gameplay state
 - **Context.** The headless suite proves the logic but not the integration in a running game, and the owner
@@ -728,5 +746,197 @@
   Phase 3 adds its own stepped scenarios and a sandbox delivery port to a runner that is already proven.
   The framework can drift from production (see [RISKS R-27](RISKS.md)) and is itself a surface that needs
   its own headless tests; both are mitigated by calling production services and by the `Runner.*` suite.
-  Honest limit: the in-game suites (`RT-SMOKE-*`, `RT-LIVE-*`) and the Dev actions were compile-checked,
-  not run, in the environment that built them; the first owner run is their first execution.
+  Honest limit (updated after the owner's runs): the in-game suites (`RT-SMOKE-*`, `RT-LIVE-*`), the game host,
+  the colony sentinel and the Dev actions were compile-checked where they were built and have since been
+  **run by the owner in a fresh Dev Quicktest colony and in the real, heavily modded, ongoing colony, with zero
+  runtime FAILs and the live colony (130 contractors, 4,114 silver) unchanged by manual check**
+  ([RUNTIME_TESTING § 15](RUNTIME_TESTING.md#15-owner-observed-runtime-evidence)). That is evidence for this
+  framework in two environments, not a proof of every mod combination or of every RimWorld state; the sentinel
+  remains a bounded tripwire, and the in-progress Cancel path has headless coverage only.
+  Phase 3's physical scenarios are the case this ADR deferred (point 5): they get their own separate,
+  explicit, disposable-environment tier and ADR ([PHYSICAL_LIFECYCLE § 21](PHYSICAL_LIFECYCLE.md#21-runtime-qa-strategy)).
+
+### ADR-048 · One authority at a time; physical presence is an Episode, reconciled exactly once
+- **Status.** Proposed by the Phase 3 design review ([PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md)); implemented in
+  subphases 3.0 to 3.2. Refines ADR-013 and ADR-014; the Phase 0 `Deployment` concept is superseded by the Episode.
+  **Amended** by the Phase 3 amendment pass: rules 3, 6 and 10 are revised (see [PHYSICAL_LIFECYCLE Appendix F](PHYSICAL_LIFECYCLE.md#appendix-f-amendment-log)).
+  **Corrected** by the Phase 3 correction pass: rule 1 (the gate also waits for release) and rule 6 (explicit stage markers
+  and a durable publication outbox) are tightened, no rule changes direction (see [Appendix G](PHYSICAL_LIFECYCLE.md#appendix-g-correction-log)).
+  A **micro-correction** adds to rule 6: a pawn vanilla has already passed to the world is never passed again, and the
+  retained-pawn exit window is an open spike that gates 3.1 ([Appendix G.2](PHYSICAL_LIFECYCLE.md#g2-micro-correction-on-top-of-3f1cbee)).
+- **Context.** Phase 3 crosses from abstract records into real RimWorld pawn state. The failure to avoid is a hidden
+  second authority: a person simulated abstractly while physical, a death overwritten by stale abstract health, a
+  clone, a consequence applied twice, a prisoner abstracted because it is "not spawned". The Phase 3 design audit of the
+  1.6.9676 assemblies showed several Phase 0 assumptions were wrong (death does send `Killed`; `PassToWorld` rewrites a
+  `Free` pawn's faction; a reference to a dead pawn saves `null`; `GeneratePawn` can return someone else's world pawn).
+- **Decision.** Twelve rules.
+  1. **One authority per person:** Abstract, Physical or Vanilla-held. One gate, `CanSimulateAbstractly(person)`, fronts
+     every abstract writer of person state; authority changes only in `Materialize` and `Reconcile`. *(Correction)* The gate
+     is true only with **no episode membership at all**: a person whose episode is Closed but whose **release has not
+     completed** is still not abstractly simulatable, so a half-released person is never advanced by two layers.
+  2. **`Actor ≠ Person ≠ Pawn`.** A crew is never one pawn; an anonymous member is an episode slot; `thingIDNumber` is a
+     binding attribute, never identity.
+  3. **A named person has one pawn for life,** bound at first materialization and never regenerated or rerolled; a
+     lost pawn makes the person `Lost`. **Rank-and-file of a large organization are ephemeral:** a new pawn per episode
+     (`ForceGenerateNewPawn`), released to vanilla, headcount deltas only. **Small recurring organizations concretize
+     progressively** ([ADR-050](#adr-050--a-first-projection-never-contradicts-established-network-truth)): a seat the player has
+     met becomes a named, bound person, bounded by the existing named-people caps.
+  4. **One new durable concept, the Physical Episode,** in the reserved `deployments` slot. It owns *presence facts only*;
+     consequences go through the existing casualty, career, spatial and event services in the existing vocabulary.
+  5. **Provenance is the persisted binding** (pointer saved with `saveDestroyedThings: true`, plus `thingIDNumber`),
+     written **before** the pawn is spawned. Quest tags are a signal-routing aid only. A registry reservation protects a
+     retained pawn that would be `Free` (S9r). No Hediff, no ThingComp, no name or faction matching.
+  6. **Reconciliation is observe → decide → plan → validate → atomic durable commit → flag last → release → follow-up →
+     publish,** idempotent, from *observed* state; signals are wake-ups that only enqueue; `Returned` requires a positive
+     observation, never absence. **The commit is all-or-nothing for the Network's durable state:** a pure, validated plan;
+     a snapshot of exactly the touched set; a restore on any throw; `consequencesApplied` as the last statement; and **no
+     publication, scheduler, vanilla or fault-swallowing call inside it**, because the existing casualty, succession and
+     actor-ending paths interleave exactly those. *(Correction)* Each post-commit stage is idempotent and has its **own
+     explicit durable marker, written last and never inferred from side-effect state** (a removed routing tag is clean-up,
+     not completion evidence; an operation status that a legacy path flips mid-way is not a marker). **Publication progress
+     is durable per event:** the commit stores an ordered outbox and `publishCursor`; an event the existing bus has accepted
+     is never submitted again, no dedupe key is assumed (the bus has none), a throwing consumer is never redispatched, and
+     publication failure never replays a consequence. Atomicity is *demonstrated* by a fault-injection sweep (RT-PHYS-026),
+     not argued. *(Micro-correction)* **`PassToWorld` is never called for a pawn already in `WorldPawns`.** Vanilla's
+     `Pawn.ExitMap`, map removal and site destruction pass the pawn themselves, so a `Returned` member is already a world
+     pawn and RELEASE only normalizes it, proves its reservation and strips routing; the Network calls `PassToWorld` only for
+     a bound pawn that is positively unspawned, not in `WorldPawns` and held by nobody
+     ([§ 7.5](PHYSICAL_LIFECYCLE.md#75-who-may-call-passtoworld-an-observed-world-pawn-is-never-passed-again)). The interval between vanilla's pass and the Network's reservation is **not solved**: spike **S31**
+     chooses the mechanism (reserve while spawned, a synchronous vanilla callback, or a narrow patch, in that order) and
+     **3.1 is blocked until it has been run and owner-reviewed**; 3.0 is not ([§ 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31)).
+  7. **Death is monotonic;** resurrection is observed, never initiated, and never makes a person `Active`.
+  8. **Held people are a persisted custody state** observed by a bounded custody watch; an unsupported custody fails safe
+     into `Quarantined`, never faked.
+  9. **Faction:** one temporary hidden faction per *episode* (vanilla removes it with the episode); the Network
+     relationship and the faction relation are bridged only at seeding and at reconcile.
+  10. **Gear is real and never mirrored** into the abstract tier; Phase 4 gets two separate explicit-record seams, a
+      *Lease* and a *Notable Asset* (ADR-050).
+  11. **No Harmony** for the recommended slice; the three genuine hook gaps (downed, caravan join, resurrection) are
+      bounded polls.
+  12. **Event-driven:** no job, scan or allocation when nobody is physical or held.
+- **Rejected.** Extending `Operation` or `KnownCharacter` to own presence (a visit has no operation; operations are
+  compacted; a character cannot own a group event). A permanent faction per contractor, a shared hidden faction, the
+  origin faction, null faction, guest status. A second pawn-regeneration path ("reproject from a snapshot") for named people
+  (mod-list dependent; a twin if the original lives on). `KeepForever` alone (the pawn stays `Free`: redress, hijack by
+  `PrisonerWillingToJoin`). A Hediff or ThingComp provenance marker (Defs, removal errors, every race). A persisted
+  roster of anonymous individuals. Mirroring Hediffs, inventories or gear into abstract state. *(Amendment)* Treating the
+  commit as "one block of primitive assignments that cannot fail" by calling the existing casualty, succession and
+  actor-ending paths directly (they publish, schedule and swallow faults inline), and publishing inside the transaction.
+  *(Micro-correction)* Calling `PassToWorld` for a pawn vanilla already passed; assuming the Network can reserve a retained
+  pawn "in time" after a vanilla exit without proof; choosing a Harmony patch for the exit window before the vanilla
+  callbacks are shown insufficient.
+  *(Correction)* Inferring a stage's completion from its side effects (a removed tag, a changed status); republishing "keyed"
+  events after a retry (the bus has no idempotency key, so a second `Publish` is a new event that every consumer would
+  process again); letting a Closed-but-unreleased person become abstractly simulatable.
+- **Consequences.** One save-format bump (no data migration; it makes older builds warn instead of silently dropping
+  episode data). A registry whose cost must be measured. Four subphases (3.3 is design direction only) with owner gates.
+  The writer inventory is part of the design and a test. The existing casualty / succession / ending paths are *split*
+  into a pure state half and an effects half, proved identical to the abstract path by a parity test (RT-PHYS-027).
+
+### ADR-049 · Physical runtime QA is a separate, explicit, disposable-environment tier
+- **Status.** Proposed by the Phase 3 design review; implemented in 3.1. Completes ADR-047's deferred point 5.
+- **Context.** ADR-047 made Full Safe Regression safe on a real colony by forbidding spawning, spending, creating and
+  sending. Phase 3's behaviour *is* spawning and creating (real pawns, maps, factions). The two requirements cannot share
+  a suite. The owner validated the safe tier in a fresh Quicktest colony and the real modded colony with zero FAILs; it
+  must not be weakened.
+- **Decision.** Two tiers. **Tier S (safe):** the abstract half of the lifecycle (`RT-PHYS-*`) runs over a scriptable fake
+  `PhysicalWorldPort` and never references the real physical adapter or a pawn-creating API (source-scan enforced).
+  **Tier P (physical):** a separate Dev menu category with a scary label; a **session-only typed arm** (runtime-only,
+  cleared on every load and after each run, never persisted); a **dedicated generated test map by default** (the suite
+  creates and owns it; no existing pawn, map or colonist is touched); a **stronger second gate** (a separate typed
+  confirmation naming the home map) for the few scenarios that fundamentally need a home colony; every created entity tagged
+  `TheNetwork.Test.<runId>`; a blast-radius proof (untagged state unchanged); cleanup of tagged entities only; a preserved
+  failed scenario; its own source folder and scan; and a pawn-level sentinel. Nothing about either tier is saved.
+  **(Amended.)** The guard makes *no inference* about whether a save matters.
+- **Rejected.** Letting Full Safe Regression spawn on a "test" map in the live save (one bug from the owner's colony).
+  Auto-cleanup of anything untagged. A persisted "this save is a test" flag (none is needed). **A heuristic guard**
+  ("low colonist count and low wealth, so probably a test colony"): a legitimate early-game colony looks exactly like that,
+  and the Network must not try to infer whether the player's save matters. Automated save/reload (not safe; the save
+  matrix is an owner checklist).
+- **Consequences.** Two places to maintain; the physical tier needs the owner's explicit, per-session choice to run. There
+  is no disposability detection to get wrong; S22 builds the arm flow and the test-map lifecycle and proves the arm clears.
+
+### ADR-050 · A first projection never contradicts established Network truth
+- **Status.** Proposed by the Phase 3 amendment pass ([PHYSICAL_LIFECYCLE § 4.5, § 6.4–6.10, § 11.2](PHYSICAL_LIFECYCLE.md));
+  persisted shapes declared in 3.0, behaviour implemented in 3.1 (a Solo) and 3.2 (groups). Refines ADR-013 and ADR-048.
+  **Corrected** by the Phase 3 correction pass: rules 2, 3, 4 and 9 (see [Appendix G](PHYSICAL_LIFECYCLE.md#appendix-g-correction-log)).
+- **Context.** Materializing a contractor creates a real RimWorld pawn from vanilla's random generator. Left alone it can
+  contradict what the Network already established: a crack marksman with Shooting 1 or a Brawler trait, a legendary
+  medic who cannot doctor, a "professional veteran team" whose members hate each other on arrival, a five-person crew
+  whose medic is a different human every visit, a contractor who does not age while stored, a famous heir treated as a
+  combat expert. The audit of the 1.6.9676 assemblies showed vanilla gives levers but **no guarantee**: validators are
+  dropped after 100 tries, a kind is saved by def name (so no runtime kinds), an incapability is a consequence of the
+  pawn's identity, biological age freezes while a pawn is suspended, and a pawn's equipment is real.
+- **Decision.** Nine rules.
+  1. **An Operational Role is a durable semantic function,** not a class, perk or bonus, distinct from the organizational
+     `CharacterRole`. It constrains **only what is necessary**; RimWorld's randomness fills everything the Network never
+     established and may never contradict what it did.
+  2. **A role is verified before a pawn is bound.** Request fields and validators are an optimization; an authoritative
+     post-generation check decides. The only correction is the smallest: *raise* a role-defining skill's base level
+     (respecting aptitudes) and re-verify. *(Correction)* **Passion is never a role constraint, preference or correction.**
+     An incapability, a backstory, a trait, a gene, a passion or any other identity is **never** corrected: the candidate
+     is rejected, and after a bounded number of attempts the placement aborts. Roles map to **existing** kinds.
+  3. **An organization has a role composition** (a small template) and each mission picks a **mission composition**; a
+     wrong-role pawn never fills a need. No roster is stored. *(Correction)* The composition is a **pure, versioned function
+     of immutable origin facts** (seed, form class, specialties, `CharacterId`): it may be *stored* lazily to save space, but
+     storing it later never changes what it is, and it never depends on when the player first observed the organization.
+  4. **Progressive concretization.** Rank-and-file of a large organization stay ephemeral; the placed seats of a small
+     recurring organization crystallize into named, bound people, **bounded by the existing named-people caps**, so the
+     Network preserves stories without a giant roster. *(Correction)* Promotion beyond the seat policy needs **strong
+     story evidence** (a material outcome such as capture, recruitment or rescue; being named by the Network; a narrowed
+     battle-log signal): **being present on a player-visible map is not enough** to turn a company rifleman into a persistent
+     person. A performance cap never breaks the identity of a person the player met.
+  5. **Team cohesion is a derived, never-stored band that constrains first generation only** (prevention by construction,
+     a screen against teammates). After binding the Network never writes a pawn's relations, opinions, thoughts, memories
+     or traits: a real fight is real history.
+  6. **Chronological age is derived from the clock; biological age is brought fully current before any observation,**
+     never capped per materialization, through a mechanism chosen by spike S12.
+  7. **Capability is independent of fame, reputation and visibility.** Projection never reads them. (Implemented truth:
+     one score is both the professional record and the "fame" band; the separation is a later focused phase.)
+  8. **Equipment stays abstract unless an exact item matters.** A *Lease* (ownership stays external) and a *Notable Asset*
+     (ownership transfers) are separate future seams; generic equipment is never an inventory; a never-materialized
+     recipient's notable asset is the one case where the Network creates an item.
+  9. **Established truth is immutable and time-independent.** A role or composition *derives* from immutable origin facts
+     by a frozen pure function; lazy persistence only decides *when* it is written, never *what* it is. Experience, new
+     cast, a changed setting or a later observation can change a person's *competence*, never their initial role or an
+     organization's initial composition.
+- **Rejected.** Runtime-created `PawnKindDef`s (not savable); roles as classes, perks or stat bonuses; persisting an exact
+  skill sheet for a never-materialized person; trusting a validator as a guarantee; "fixing" an incapability or swapping a
+  backstory; capping elapsed aging; setting `AgeBiologicalTicks` alone (right digits, no birthday consequences); a persisted
+  roster of company soldiers; releasing an encountered member of a living organization to satisfy a cap; injecting positive
+  memories or relations to make a team like each other (mind control); using fame as a proxy for skill; forcing every exact
+  item through the lease slot. *(Correction)* Correcting passion to satisfy a role; promoting a company member because the
+  player saw them; deriving identity from state that changes after creation or from the moment of first observation.
+- **Consequences.** A bounded retry cost per first creation (measured by S25); a progressive growth of retained pawns that
+  the soak must watch; truthful aging may produce chronic conditions or an unfit person (the abstract consequence, O-12,
+  is a content decision); persisted shapes `opRole`, `firstEncounterTick` and `agedThroughTick` are declared in 3.0 and the
+  composition in 3.2. *(Correction)* The seat-assignment function and an optional explicit `origin` snapshot are the one open
+  item (O-18); the derivation must be a frozen, versioned function so that old saves, new saves and a later settings change
+  agree.
+
+### ADR-051 · Procurement fulfillment may be a physical handoff (Phase 3.3, design direction)
+- **Status.** **Direction only**, proposed by the Phase 3 amendment pass ([PHYSICAL_LIFECYCLE § 27](PHYSICAL_LIFECYCLE.md));
+  nothing is decided beyond the direction, nothing is implemented, and it needs the owner's approval after 3.2.
+- **Context.** Phase 2 delivers by vanilla drop pods (owner-observed: 10,000 Plasteel). The first design review pushed
+  in-person delivery out of 3.0 to 3.2 and suggested "later or Phase 4". It is in fact the first natural consumer of the
+  physical lifecycle and deserves its own subphase and visible seams.
+- **Decision (direction).** (1) Three delivery **modes**, orbital (existing), colony handoff and rendezvous, as a contract
+  term constrained by **capability, logistics and technology, never fame**. (2) **Personnel mobility is not freight
+  capability**: a Solo can procure 10,000 Plasteel through abstract contracted freight that stays abstract until handoff;
+  no persistent vehicles. (3) An optional **per-contract orbital charter** ("Additional Funds for Orbital Delivery"): no
+  surcharge for a contractor with native capability, a temporary capability for this contract otherwise, a higher contract
+  total, never a permanent upgrade. (4) The **physical handoff is an explicit, idempotent staged protocol** (a right-click on
+  a representative; no Harmony needed, S28), **not one atomic transaction**: payment and the movement of real Things are
+  external side effects owned by RimWorld and cannot share the Network's commit. It has exactly-once *semantics* through
+  stages keyed by a persisted transaction id (validate, reserve, charge, transfer with positive transfer evidence, finalize,
+  compensate), each resumable and none repeated; **cargo stays under the contractor's possession until then**; a terminal
+  handoff state is required before normal completion. (5) **Physical reality wins:** robbery, violence
+  and abandonment are legal outcomes the Network records; no ownership locks, no invulnerability. (6) Current
+  Fixer-mediated brokerage and deposit are unchanged; unusual **payment timing is a future Direct Contract term**. (7) A
+  **rival-interception seam** with the rule "spatial overlap creates opportunity, not automatic encounter" (spatial
+  opportunity, plausible knowledge, motive, availability, capability): compatible seams only.
+- **Rejected.** Ownership locks or invulnerable contractors; magical "enter map, reform caravan, take the goods"; persistent
+  trucks, ships or freight simulation; a charter that permanently upgrades a contractor; changing Fixer terms or current
+  Procurement; fame-gated delivery; omniscient or detection-radius rivals; building any of it in 3.0 to 3.2.
+- **Consequences.** A named fourth subphase with its own spikes (S28 to S30) and open questions (O-15); the lifecycle's
+  `Delivery` purpose and the handoff states are designed against the same reconciliation machinery.

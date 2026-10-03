@@ -5,6 +5,15 @@
 > runs in. It complements the headless suite; it does not replace it.
 > Related: [DEBUGGING](DEBUGGING.md), [ARCHITECTURE](ARCHITECTURE.md), [PERFORMANCE](PERFORMANCE.md),
 > [RISKS R-27](RISKS.md), [ADR-047](DECISIONS.md), [IMPLEMENTATION_PHASES § 5C](IMPLEMENTATION_PHASES.md).
+>
+> **Status: merged (PR #6) and owner runtime-validated.** The owner ran Quick smoke, Full safe regression and
+> the Live integration scan in a fresh Dev Quicktest colony and in the real, heavily modded, ongoing colony,
+> with zero runtime FAILs and the live colony unchanged by manual check ([§ 15](#15-owner-observed-runtime-evidence)).
+> That is runtime evidence for *this framework*, not a claim that every mod interaction or every RimWorld state is
+> proven ([§ 16](#16-what-was-and-was-not-validated)). Phase 3's physical scenarios will **not** run in the safe
+> suites: they need their own separate, explicit tier with a **session-only arm** and, by default, **their own generated test
+> map**; the guard never tries to infer whether a save is disposable
+> ([PHYSICAL_LIFECYCLE § 21](PHYSICAL_LIFECYCLE.md#21-runtime-qa-strategy)).
 
 ## Contents
 
@@ -23,7 +32,7 @@
 13. [What is not automated](#13-what-is-not-automated)
 14. [Adding a suite in a later phase](#14-adding-a-suite-in-a-later-phase)
 15. [Owner-observed runtime evidence](#15-owner-observed-runtime-evidence)
-16. [What was and was not validated in this phase](#16-what-was-and-was-not-validated-in-this-phase)
+16. [What was and was not validated](#16-what-was-and-was-not-validated)
 
 ---
 
@@ -268,8 +277,9 @@ the stack total are taken). World-wide: the home-map count and ids, every world 
 and the letter-stack and archive counts. A test that spent silver, spawned or removed cargo, destroyed a world
 object or sent a letter has a realistic chance of being caught. **Not covered:** pawn state, terrain, buildings,
 research, storyteller, relations with factions, anything not listed. The headless suite substitutes a fake host
-fingerprint (payment silver, charges, deliveries) for the colony side; the real adapter is compile-checked and
-will first run in the owner's game.
+fingerprint (payment silver, charges, deliveries) for the colony side; the real adapter was written without a
+game and has since run in the owner's game in both QA environments ([§ 15](#15-owner-observed-runtime-evidence)):
+no FAIL, no false alarm, and the colony's contractor count and silver were unchanged by manual check.
 
 ## 7. Stable IDs and suites
 
@@ -440,14 +450,20 @@ export uses; created on demand). Exporting does not touch the save.
   data type (about 70 types): **about 23 ms once**. The reflective fallback used if expression trees are
   unavailable hashes the same world identically in **about 44 ms**. So a run adds roughly 10 ms per frame to the
   frames it runs in (two captures), for the second or two a run lasts, and nothing at all otherwise. The
-  colony sentinel's cost in the game (silver by beacon, haulable-item hash, world objects) was **not measured**
-  (RimWorld could not be launched): it is bounded (no pawn scan; item hash capped at 100,000 items per map).
+  colony sentinel's cost (silver by beacon, haulable-item hash, world objects) is bounded (no pawn scan; item
+  hash capped at 100,000 items per map) and is **not measured separately**; it is included in the owner's
+  in-game whole-run timings below.
 * **Headless elapsed time** of the sandbox scenarios (production services over a synthetic host, the cost
   of the logic only): Procurement 11 tests ≈ 8 ms, Career 14 ≈ 7 ms, Spatial 8 ≈ 9 ms, all 33 sandbox
-  tests plus INFRA ≈ 23 ms over 7 slices. **The in-game elapsed time of each action was not measured**
-  (RimWorld could not be launched here); it adds the live-state inspection, the fingerprints, and one
-  `Message` and log block per run. Run *Full safe regression* once and read the elapsed time off the
-  summary or the report.
+  tests plus INFRA ≈ 23 ms over 7 slices.
+* **In-game elapsed time, as the runner's own summary reported it to the owner** (the run total, including the
+  live-state inspection and both fingerprints per slice): Quick smoke ≈ 84 ms (fresh Quicktest colony) and
+  ≈ 133 ms (the real modded colony); Full safe regression ≈ 160 ms and ≈ 222 / 96 ms (first / second run in
+  the modded colony); Live integration scan ≈ 3 ms and ≈ 9 ms. These are whole-run times from single
+  owner runs, not a controlled benchmark, and they say nothing about the per-frame cost of the sentinel
+  alone. They do show that a run in a real, heavily modded colony costs a fraction of a second once. The
+  *warm* second run was faster than the first, which is the expected warm-cache effect (the one-time accessor
+  compile and the JIT).
 
 Headless proof (all in `Tests/TheNetwork.Tests/RuntimeRunnerTests.cs`): `Runner.TestsExecuteInStableOrder`,
 `ExceptionBecomesFailureNotCrash`, `StopOnFirstFailureWorks`, `ContinueAfterFailureWorks`,
@@ -493,9 +509,14 @@ By design, not built in this phase and not part of any default suite:
 * **Physical delivery.** The sandbox delivery port records; the live suites only *plan* (RT-LIVE-005). No
   drop pod is launched by a test. The full physical drop-pod path remains a manual, owner-run check (§ 15).
 * **Save / load, quit, restart, reload-a-backup** automation. A save-reload scenario must be run by a person.
-* **Destructive or physical suites.** Anything that spends real silver, spawns real items, creates real
-  world objects or edits the live Network would need its own isolated, explicit, opt-in design and its own
-  ADR; none exists.
+* **Destructive or physical suites.** Anything that spends real silver, spawns real items or pawns, creates
+  real world objects or edits the live Network needs its own isolated, explicit, opt-in tier. None exists yet;
+  Phase 3's is designed (a separate Dev menu, a typed **session-only arm**, a dedicated generated test map by default, a stronger
+  second gate for any home-colony scenario, no inference of "disposable", never part of Quick or Full safe) in
+  [PHYSICAL_LIFECYCLE § 21](PHYSICAL_LIFECYCLE.md#21-runtime-qa-strategy) and [ADR-049](DECISIONS.md).
+* **Cancelling a run that is in progress.** The owner pressed *Cancel current run* after a run had finished
+  (the game showed the normal "no runtime test is running" Message) so the in-progress path has no manual
+  evidence; cancel, cleanup and override restoration are covered headlessly (`Runner.CancelRestoresOverrides`).
 * **Starting, reconciling or repairing the live Network.** The game does that on its first tick; a runtime test
   only asks (§ 6) and reports SKIP when the game has not. Likewise `NetValidator` (it repairs) is never called.
 * **Visual UI.** The tabs and layouts are not exercised.
@@ -520,12 +541,97 @@ By design, not built in this phase and not part of any default suite:
 6. Add the headless coverage of any new runner or sandbox behaviour to `RuntimeRunnerTests.cs`, and keep
    the safe-suite source scan green.
 
-Phase 3's multi-step lifecycle (custody, deployment, in-person delivery, rescue follow-ups) is exactly what
-the stepped cases and the preserved sandbox are for.
+Phase 3's multi-step lifecycle is what the stepped cases and the preserved sandbox are for, in two tiers: the
+**abstract half** (authority transitions, episode bookkeeping, reconciliation, exactly-once, custody rules over
+fake physical ports) runs in the existing safe suites against the sandbox; the **physical half** (real pawns on
+a real map) cannot, and runs only in the separate physical tier
+([PHYSICAL_LIFECYCLE § 21](PHYSICAL_LIFECYCLE.md#21-runtime-qa-strategy)). The safe suites stay safe on a real colony.
+The amendment pass adds to the safe half: a **fault-injection sweep** over the reconciliation commit (a throw after every
+step must leave the deep fingerprint unchanged), a parity test with the abstract casualty path, fame-invariance of
+projection, the truthful-aging contract and the concretization policy (`RT-PHYS-020…028`, 28 cases at that point).
+**The correction pass** adds two safe-tier cases (30 in all): `RT-PHYS-029` (a **release interruption**: a throw after each
+release action, an explicit completion marker, and the authority gate staying closed until release completes) and
+`RT-PHYS-030` (**time-independent identity**: a role or composition never changes because the player first observed it
+years later); it also rewrites `RT-PHYS-014` (**publication interruption**: per-event durable progress, no event submitted
+to the bus twice, a throwing consumer never redispatched), `RT-PHYS-020` (role correction raises only a role-defining
+skill's base level and never touches passion) and `RT-PHYS-023` (a company is not promoted by presence). In the physical
+tier it adds role-constrained creation, truthful aging and concretization on real pawns (`RT-PHYX-011…014`). Nothing is
+implemented and no physical case has been run.
+**The micro-correction** extends `RT-PHYS-029` (the fake port records every `PassToWorld`: a member observed `WorldFree` produces
+none, and a call that violates the three-part precondition is rejected) and adds two physical-tier regressions that are **gated by
+the mandatory spike S31** and **not run**: `RT-PHYX-015` (a retained named pawn leaves by a normal vanilla `ExitMap`: no Network
+`PassToWorld`, no "already here" error, no window in which the pawn is reusable or redressable, RELEASE once, abstract authority
+only after RELEASE, the same `Pawn` after a save/load and a rematerialization) and `RT-PHYX-016` (the map-removal variant, which
+has no `LeftMap`).
 
 ## 15. Owner-observed runtime evidence
 
-Recorded here accurately, and **not** as more than it is.
+Recorded here accurately, and **not** as more than it is. Three observations: the Phase 2.9 runtime validation in
+two environments (§ 15.1 and § 15.2, what they establish in § 15.3), and the earlier legacy procurement run
+that predates Phase 2.9 and is why RT-PROC-007 exists (§ 15.4).
+
+### 15.1 Phase 2.9 owner runtime validation, environment 1: fresh Dev Quicktest colony
+
+> **PHASE 2.9 OWNER RUNTIME VALIDATION: PASS (environment 1 of 2).**
+
+The owner created a fresh Dev Quicktest colony in the real game: a simple base, stockpiles, silver, powered
+infrastructure, a Comms Console and an orbital trade beacon over the payment stockpile. They ran Quick smoke,
+Full safe regression and Live integration scan in turn.
+
+| Run | PASS | FAIL | WARN | SKIP | Elapsed |
+|---|---:|---:|---:|---:|---:|
+| Quick smoke | 12 | 0 | 0 | 0 | ≈ 84 ms |
+| Full safe regression | 49 | 0 | 2 | 0 | ≈ 160 ms |
+| Live integration scan | 10 | 0 | 0 | 0 | ≈ 3 ms |
+
+The two WARNs were the runner's slow-step profiler telemetry, not correctness failures: **RT-PROC-001** (slow
+Network work, ≈ 6.65 ms) and **RT-SPAT-008** (≈ 6.97 ms). They also showed, in a real game, that the corrected
+production-warning capture path surfaces a warning as WARN without failing the run. No Network error or
+exception was observed.
+
+Exercised in an actual game process for the first time: the Dev actions appear and execute; `WorldComponentUpdate`
+pumps the runner; the real `NetworkWorldComponent` / runtime inspection; real Def and catalog access; real
+Comms Console detection; real beacon and payment inspection; real world-graph inspection; real drop-pod
+*planning* (no physical delivery); the live invariant scan; the isolated Procurement, Career and Spatial
+sandboxes; and the RT-INFRA live-state sentinel.
+
+### 15.2 Phase 2.9 owner runtime validation, environment 2: the real, heavily modded, ongoing colony
+
+> **PHASE 2.9 OWNER RUNTIME VALIDATION: PASS (environment 2 of 2).**
+
+The owner then ran the merged build in their real ongoing colony with the full mod list. Manual before-state:
+**130 contractors, 4,114 silver.** They re-checked both after each runtime run, in this order: Quick smoke →
+Full safe regression → Live integration scan → Full safe regression again → *Cancel current run*. Both numbers
+were **unchanged after every step.**
+
+| Run | PASS | FAIL | WARN | SKIP | Elapsed |
+|---|---:|---:|---:|---:|---:|
+| Quick smoke | 12 | 0 | 0 | 0 | ≈ 133 ms |
+| Full safe regression #1 | 50 | 0 | 1 | 0 | ≈ 222 ms |
+| Live integration scan | 10 | 0 | 0 | 0 | ≈ 9 ms |
+| Full safe regression #2 | 51 | 0 | 0 | 0 | ≈ 96 ms |
+
+The single WARN (**RT-SPAT-008**, slow `job:consequence.followup`, ≈ 5.01 ms) was the slow-step telemetry; the
+scenario passed. It did not recur on the second run, consistent with warm caches and the profiler threshold,
+and was not treated as a correctness issue. *Cancel current run* was pressed after the run had already
+finished, so the game showed its normal Message (not a Letter) that no runtime test was running, and live state
+stayed unchanged. Nothing observed by hand: missing or extra silver, test cargo, test contracts, changed
+contractor careers or reputation, fake history, fake gameplay Letters, moved contractors, leftover test world
+objects. No Network error or exception was observed from the runtime suites.
+
+### 15.3 What 15.1 and 15.2 do and do not establish
+
+Established, with the owner's two runs as evidence: the framework runs in a real game without a FAIL; it is safe
+to press in a real colony *as far as the owner's manual checks and the fingerprint sentinel can see*; the game
+host, `ColonySentinel`, the `RT-SMOKE-*` / `RT-LIVE-*` suites and the Dev actions work.
+
+**Not** established, and not claimed: that every possible mod interaction is proven; that every RimWorld state is
+fingerprinted (the sentinel's scope is in § 6: pawns, terrain, buildings and more are not covered); that the
+in-progress *Cancel* path was exercised by hand (it was not; it has headless coverage only); or a formal Phase
+2.5 **S20** result (§ 15.4). The unmeasured per-frame cost of `ColonySentinel` is bounded by the whole-run times
+above, not measured separately.
+
+### 15.4 Owner-observed procurement run (Phase 2 / 2.75)
 
 > **OWNER-OBSERVED RUNTIME PASS: Legacy active procurement → post-update continuation → payment hold →
 > payment recovery → full drop-pod delivery.**
@@ -550,22 +656,32 @@ step; and it is not an automated test. It is the reason RT-PROC-007 exists in th
 *invariant* (payment hold → funds restored → the **same** contract resumes → exact delivery), with the balance
 derived from the generated terms and never the observed 58,335.
 
-## 16. What was and was not validated in this phase
+## 16. What was and was not validated
 
-* **Validated headlessly:** the runner, the plans, the sandbox and all 33 sandbox scenarios (through the real
-  runner against a synthetic live world); that a run against a never-started live Network starts nothing and
-  SKIPs (`UnstartedNetworkIsSkippedNotStarted`); that a fingerprint capture that throws on a running Network
-  FAILS RT-INFRA-001 (`FingerprintExceptionFailsClosed`); that the fingerprint detects a mutation of an
-  existing relation, contract, operation, history record, journal event, knowledge entry, career field,
-  silver or scheduler job without any count changing; that read-only access leaves it unchanged; that the
-  compiled and reflective walkers hash a world identically; that captured warnings surface as WARN with the
-  sink and once-keys restored; the override snapshot; the source scan; the idle and fingerprint cost; the
-  mutation checks (§ 12); and the full pre-existing suite and soaks.
-* **Compile-checked only:** the `RT-SMOKE-*` and `RT-LIVE-*` suites (they need the loaded game), the
-  `GameRuntimeTestHost` and `ColonySentinel` (the RimWorld half of the fingerprint: silver by beacon, cargo,
-  world objects, letters), `RuntimeTestGame`, and the eight Dev Mode actions. The headless suite substitutes a
-  fake host fingerprint for the colony side.
-* **RimWorld could not be launched in the environment this phase was built in.** No claim is made that any
-  of the in-game paths have run in a real game. The first in-game run of *Quick smoke*, then *Live
-  integration scan*, then *Full safe regression* is the owner's first action on this PR, and a green run's
-  exported report is the evidence.
+* **Validated headlessly (when the phase was built):** the runner, the plans, the sandbox and all 33 sandbox
+  scenarios (through the real runner against a synthetic live world); that a run against a never-started live
+  Network starts nothing and SKIPs (`UnstartedNetworkIsSkippedNotStarted`); that a fingerprint capture that
+  throws on a running Network FAILS RT-INFRA-001 (`FingerprintExceptionFailsClosed`); that the fingerprint
+  detects a mutation of an existing relation, contract, operation, history record, journal event, knowledge
+  entry, career field, silver or scheduler job without any count changing; that read-only access leaves it
+  unchanged; that the compiled and reflective walkers hash a world identically; that captured warnings surface
+  as WARN with the sink and once-keys restored; the override snapshot; the source scan; the idle and fingerprint
+  cost; the mutation checks (§ 12); and the full pre-existing suite and soaks. Baseline of the merged build:
+  **315 tests, 20,331 checks, 0 failures.**
+* **Validated by the owner in the running game (§ 15.1, § 15.2):** the `GameRuntimeTestHost`, `ColonySentinel`,
+  `RuntimeTestGame`, the `RT-SMOKE-*` and `RT-LIVE-*` suites and the Dev Mode actions all executed. Quick smoke,
+  Full safe regression and Live integration scan produced **0 runtime FAILs in both environments** (a fresh Dev
+  Quicktest colony and the real, heavily modded, ongoing colony), the slow-step WARNs were profiler telemetry,
+  and the live colony (130 contractors, 4,114 silver in the second environment) was unchanged by manual check.
+* **Still not covered, and not claimed:**
+  * every possible mod interaction (the live scan reads whatever is loaded; the second environment is one mod
+    list);
+  * every RimWorld state: the sentinel is a tripwire for the state listed in § 6, and pawns, terrain, buildings
+    and more are outside it;
+  * the *in-progress* Cancel path by hand (the owner's click arrived after the run had finished); it is covered
+    headlessly;
+  * a formal Phase 2.5 **S20** pass ([spikes/S20](spikes/S20-abstract-spatial-routing.md)) is still *NOT RUN —
+    owner runtime validation required*; the Phase 2.9 runtime pass is a different thing and does not
+    complete it. The runtime tests' RT-SPAT scenarios run in the sandbox over a synthetic world graph and so do
+    not replace S20's real-world-map checks either;
+  * save/load, quit/restart and physical delivery automation ([§ 13](#13-what-is-not-automated)).

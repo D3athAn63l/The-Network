@@ -1,6 +1,6 @@
 # The Network
 
-**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; its in-game validation, S20, pending); Phase 2.75 merged (the contractor career foundation); Phase 2.9 (in-game runtime regression test infrastructure, developer-only) under review**
+**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; the formal in-game S20 checklist has not been run); Phase 2.75 merged (the contractor career foundation); Phase 2.9 merged and owner-runtime-tested (in-game runtime regression test infrastructure, developer-only); Phase 3 (abstract ↔ physical lifecycle) is next: design reviewed and amended, no Phase 3 code yet**
 
 The Network is a persistent, procedural contractor ecosystem that runs behind the normal RimWorld
 game. The player hires outsiders to find and fetch things they cannot easily get themselves. The
@@ -75,7 +75,7 @@ wealth or stat system:
 - **Old saves.** Format 4 keeps every visible fact (each reputation score starts at its band's floor)
   and invents no past: a running operation never earns career credit.
 
-**Phase 2.9 (runtime test infrastructure)** is developer tooling, not gameplay
+**Phase 2.9 (runtime test infrastructure; merged, owner-runtime-tested)** is developer tooling, not gameplay
 ([docs/RUNTIME_TESTING.md](docs/RUNTIME_TESTING.md)). With Dev Mode on, **Dev Mode → The Network → Runtime
 tests: Quick smoke / Full safe regression / Live integration scan** (plus Status, Cancel, Last report, Export
 and Inspect preserved failure) runs stable-ID regression tests inside the running game. The mutable scenarios
@@ -88,14 +88,43 @@ every slice (RT-INFRA-001), and if that check itself fails the run FAILS. It is 
 proof that all of RimWorld is untouched. It costs one null check per frame when idle,
 stores nothing in the save, and uses no Harmony. It complements the headless suite and does not replace it.
 
-Contractor pawns, the contract board, the player as contractor and the social layer are later
-phases ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
+**Phase 3 (abstract ↔ physical lifecycle) is next; its design has been reviewed, amended and corrected, and no Phase 3 code exists**
+([docs/PHYSICAL_LIFECYCLE.md](docs/PHYSICAL_LIFECYCLE.md), [ADR-048 to ADR-051](docs/DECISIONS.md)). The design, audited against
+the 1.6 game assemblies: **one authority per person at a time** (abstract, physical, or held by vanilla); `Actor ≠ Person ≠
+Pawn`; a named contractor keeps **one pawn for life** and ages truthfully while stored; a materialized contractor must never
+contradict what the Network already established (**Operational Roles** and **role composition** constrain only what is necessary;
+RimWorld's randomness fills the rest), small recurring crews keep their recognisable members while large companies stay
+ephemeral (and are never made persistent merely because the player saw them); a physical **Episode** records who is out there
+and is **reconciled exactly once**, atomically, from observed state, with every later stage (release, follow-up, publish)
+carrying its own durable marker; death is final; custody beyond the map is never mistaken for "home"; **no Harmony** for the recommended slice. Four subphases:
+3.0 the abstract foundation (no pawn), 3.1 one controlled physical episode (first real pawn, in a separate, session-armed test
+tier on its own test map), 3.2 custody, rescue and groups (first player-visible content), 3.3 procurement fulfillment / physical
+handoff (**design direction only**). **3.0 may begin once the design is accepted; 3.1 is gated on a mandatory runtime spike (S31, the retained-pawn exit-reservation window) that has not been run.** Full Safe Regression stays safe on a real colony. Open questions and the spikes that settle
+them are listed, not hidden; none has been run.
 
-The headless tests pass (315 tests, including an 18-in-game-year procurement soak and three 20-in-game-year
-career soaks with daily money, capacity, spatial and career invariant checks, and the runtime-runner tests). The owner has run the Phase 2 procurement loop in game,
-normal drop-pod delivery included, and has observed a legacy active procurement continue after an update, go on payment hold, recover and
-deliver in full by vanilla drop pods (an owner-observed runtime pass, [RUNTIME_TESTING § 15](docs/RUNTIME_TESTING.md#15-owner-observed-runtime-evidence); it is **not** the formal S20 checklist). The other runtime spikes, including S20 for spatial continuity,
-have **not** been run yet. RimWorld was not launched while building Phase 2.9: the in-game runtime tests are compile-checked only until the owner's first run. Their records and owner test steps are in [docs/spikes/](docs/spikes/README.md).
+The contract board, the player as contractor and the social layer are later phases
+([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
+
+**Test status.** The headless tests pass (315 tests, 20,331 checks, 0 failures, including an 18-in-game-year
+procurement soak, three 20-in-game-year career soaks with daily money, capacity, spatial and career invariant
+checks, and the runtime-runner tests).
+
+**Owner runtime evidence** ([RUNTIME_TESTING § 15](docs/RUNTIME_TESTING.md#15-owner-observed-runtime-evidence)):
+
+- **Phase 2.9 runtime validation: PASS**, in two real-game environments. In a fresh Dev Quicktest colony: Quick
+  smoke 12 PASS, Full safe regression 49 PASS / 2 WARN, Live integration scan 10 PASS, zero FAIL. In the real,
+  ongoing, heavily modded colony (130 contractors, 4,114 silver, both unchanged by manual check after every
+  run): Quick smoke 12 PASS, Full safe regression 50 PASS / 1 WARN then 51 PASS / 0 WARN, Live integration
+  scan 10 PASS, zero FAIL. The WARNs were slow-step profiler telemetry, not correctness failures. This is
+  evidence for the runtime test framework; it does **not** mean every mod interaction or every RimWorld state is
+  proven, the in-progress Cancel path was not exercised by hand (it has headless coverage), and it is **not** the formal S20 checklist.
+- **Phase 2 / 2.75 procurement:** the owner observed a legacy active procurement continue after an update, go on
+  payment hold, recover when silver was obtained, and deliver in full by vanilla drop pods with no observed
+  errors (10,000 / 10,000 Plasteel; **not** the formal S20 checklist).
+
+**Not yet run:** the formal runtime-spike checklists, including **S20** (Phase 2.5 spatial continuity and charter
+transport), remain *NOT RUN — owner runtime validation required*. Their records and owner steps are in
+[docs/spikes/](docs/spikes/README.md).
 
 ### Build
 
@@ -140,7 +169,8 @@ same change.
 | [docs/EVENTS_AND_HISTORY.md](docs/EVENTS_AND_HISTORY.md) | Network events, history ledger, summaries, reputation, awareness, gossip, legends |
 | [docs/STATE_MACHINES.md](docs/STATE_MACHINES.md) | Intel, opportunity, contract, procurement, offer, operation, custody, actor lifecycles |
 | [docs/SIMULATION.md](docs/SIMULATION.md) | Scheduler, abstract resolver, willingness/refusal, morale, determinism and RNG |
-| [docs/ABSTRACT_PHYSICAL_LIFECYCLE.md](docs/ABSTRACT_PHYSICAL_LIFECYCLE.md) | Contractors moving abstract → physical → abstract without duplication |
+| [docs/PHYSICAL_LIFECYCLE.md](docs/PHYSICAL_LIFECYCLE.md) | **Phase 3 design (normative, not implemented):** authority, identity and progressive concretization, Episodes, provenance, Operational Roles and role composition, team cohesion, truthful aging, custody, atomic reconciliation, save/load, the equipment seams, the Phase 3.3 handoff direction, RimWorld API audit, invariants, subphases |
+| [docs/ABSTRACT_PHYSICAL_LIFECYCLE.md](docs/ABSTRACT_PHYSICAL_LIFECYCLE.md) | The Phase 0 lifecycle design (confirmed in its core; superseded in part by PHYSICAL_LIFECYCLE) |
 | [docs/RIMWORLD_INTEGRATION.md](docs/RIMWORLD_INTEGRATION.md) | What vanilla 1.6 APIs we reuse, avoid or wrap; Harmony policy; runtime spikes |
 | [docs/SAVE_AND_MIGRATION.md](docs/SAVE_AND_MIGRATION.md) | Save layout, `NetworkSaveVersion`, migrations, mod add/remove behaviour |
 | [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | Item catalog, external Def safety, DLC and optional systems |
@@ -186,7 +216,7 @@ same change.
 | Log prefix | `[TheNetwork]` |
 | Def name prefix | `TheNetwork_` |
 | Signal / quest-tag prefix | `TheNetwork.` |
-| Harmony | None. Not required for Phases 1–3 (see [RIMWORLD_INTEGRATION.md § Harmony](docs/RIMWORLD_INTEGRATION.md#3-harmony-policy)) |
+| Harmony | None. Not required for Phases 1–3: the Phase 3 design review found no required lifecycle event that needs it (see [RIMWORLD_INTEGRATION.md § Harmony](docs/RIMWORLD_INTEGRATION.md#3-harmony-policy), [PHYSICAL_LIFECYCLE § 14](docs/PHYSICAL_LIFECYCLE.md#14-event-detection)) |
 | Dependencies | None. Grandmaster21 and RegenNanites were read as references only. The Network does not depend on them or assume they are installed. |
 | Settings | `ModSettings`: preferences, catalog overrides and the global cast (with its own `NetworkSettingsVersion`). Never runtime history. |
 | Access | A usable vanilla Comms Console is required for Network actions (Phase 1). |
