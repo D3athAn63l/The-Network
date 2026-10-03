@@ -225,6 +225,8 @@ namespace TheNetwork.Domain.Physical
             {
                 TierCount t = r.anonymous[i];
                 if (t == null || t.healthy < 0) return CommandResult.Fail("Headcount", "a negative or missing anonymous row");
+                // Bounded accumulation: no row and no running total may pass the episode's cap, so the sums cannot overflow.
+                if (t.healthy > MaxMembers || anonymous + t.healthy > MaxMembers) return CommandResult.Fail("MemberCount", "more than " + MaxMembers + " anonymous members");
                 int sum;
                 anonymousByTier.TryGetValue(t.tier, out sum);
                 anonymousByTier[t.tier] = sum + t.healthy;

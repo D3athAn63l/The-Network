@@ -61,6 +61,15 @@ namespace TheNetwork.Domain.Contractors
         }
 
         /// <summary>
+        /// The status half of who may lead (SIMULATION § 4.5): alive (not Dead or Lost) and free (not Captured or Missing).
+        /// The abstract succession rule adds the authority gate; the physical plan applies it to the status it projects.
+        /// </summary>
+        public static bool MayLead(CharacterStatus s)
+        {
+            return s != CharacterStatus.Dead && s != CharacterStatus.Lost && s != CharacterStatus.Captured && s != CharacterStatus.Missing;
+        }
+
+        /// <summary>
         /// A person POSITIVELY observed back and free (PHYSICAL_LIFECYCLE § 15.3, a physical return), unhurt: a story status of
         /// Missing or Captured resolves to Active, because the observation is authoritative. Any other status is left as it is: an
         /// Active person stays Active, and a Dead or Lost person is never revived by a return (P3-INV-004). An injured return goes

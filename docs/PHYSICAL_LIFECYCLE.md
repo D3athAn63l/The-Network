@@ -1904,6 +1904,12 @@ time. So the design does **not** assume any dedupe feature. Instead:
   repeated for a physical episode unless it resolves an operation. The Phase 2 abstract resolver may keep calling the
   combined path unchanged in 3.0, **provided a parity test proves the split and the combined path produce identical
   durable state for the same `CasualtyReport`** (RT-PHYS-027), so there is one set of rules, not two.
+- **The succession decision reads projected truth.** When the plan decides a lost leader's successor, an episode member is
+  judged by the person the **complete plan** will leave behind, never by a pre-commit status the same plan resolves:
+  `ReconciliationPlanner.EligibleAfterPlan` applies the abstract rule's status test (`FateRules.MayLead`: alive, not
+  captured, not missing) to `ProjectedStatus` (a positive `Returned` resolves `Missing`/`Captured` to `Active`, or to `Wounded`
+  when injured; `NeverPlaced` resolves nothing; `Killed`, `Lost` and `Detached` never lead; `Dead` and `Lost` never change).
+  Nothing is mutated or applied to compute it; the ranking (`FateRules.PlanSuccession`) is unchanged.
 - **Careers.** `CareerService.CommitOutcome` is called only for an operation-linked episode, only at the authoritative
   end (FOLLOW-UP, never inside the physical commit), and is guarded by the existing `careerOutcomeApplied` flag and its
   own plan/snapshot/flag discipline: P3-INV-014.
@@ -3051,6 +3057,13 @@ In a live 3.0 game no episode can exist (planning is refused without an availabl
     `Closed(Reconciled)` episode whose RELEASE, FOLLOW-UP or PUBLISH keeps failing stays `Closed` with that marker false, its people
     linked (gate closed), retried by the watch (slowly past the bound), reported by the validator after 30 days, and never completed
     by inference.
+16. **Succession inside one plan uses projected eligibility** (PR #8 review, FinalV3). A Missing or Captured member whom the same plan
+    positively returns is a succession candidate (as `Active`, or as a living `Wounded` person when injured, which the abstract rule
+    also admits); a `NeverPlaced` member keeps the unresolved pre-plan status; `Killed`, `Lost` and `Detached` members are never
+    candidates; non-members are judged by the abstract rule (status and authority gate). The helper is
+    `ReconciliationPlanner.EligibleAfterPlan` / `ProjectedStatus` over the shared `FateRules.MayLead`, which the abstract
+    `ContractorService.SuccessionEligible` now also calls (the same expression, moved). `CheckPlan` also bounds each anonymous row and
+    the running total at `MaxMembers` (refused `MemberCount`), so the per-tier sums cannot overflow.
 
 ### H.3 Not in 3.0
 

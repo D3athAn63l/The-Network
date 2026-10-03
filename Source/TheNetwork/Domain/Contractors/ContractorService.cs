@@ -912,7 +912,7 @@ namespace TheNetwork.Domain.Contractors
         /// <summary>Who may lead next on the abstract path: alive, not captured or missing, and abstractly simulatable (§ 2.3).</summary>
         private static bool SuccessionEligible(KnownCharacter c)
         {
-            return c.IsAlive && c.status != CharacterStatus.Captured && c.status != CharacterStatus.Missing && AuthorityGate.CanSimulateAbstractly(c);
+            return FateRules.MayLead(c.status) && AuthorityGate.CanSimulateAbstractly(c);
         }
 
         /// <summary>The actor ends (a Solo died, or an organization has nobody left to lead it).</summary>

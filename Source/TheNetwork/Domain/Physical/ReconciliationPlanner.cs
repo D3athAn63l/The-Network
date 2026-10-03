@@ -109,7 +109,7 @@ namespace TheNetwork.Domain.Physical
             if (e.cause.operation.IsValid) p.operation = ctx.operations?.Get(e.cause.operation);
 
             List<FateEntry> fates = new List<FateEntry>();
-            Dictionary<int, MemberOutcome> planned = new Dictionary<int, MemberOutcome>();
+            Dictionary<int, MemberDecision> planned = new Dictionary<int, MemberDecision>();
             Dictionary<Tier, int> anonHealthyBack = new Dictionary<Tier, int>();
             int anonKilled = 0, anonWounded = 0, anonLost = 0;
             MemberDecision soloReturn = null;
@@ -130,7 +130,7 @@ namespace TheNetwork.Domain.Physical
                     KnownCharacter c = d.character;
                     p.Touch(c);
                     if (c == null) continue; // VALIDATE refuses it
-                    planned[c.id.Value] = d.outcome;
+                    planned[c.id.Value] = d;
                     switch (d.outcome)
                     {
                         case MemberOutcome.Killed:
@@ -201,14 +201,11 @@ namespace TheNetwork.Domain.Physical
             OrganizationProfile org = p.org;
             Func<KnownCharacter, bool> eligible = c =>
             {
-                MemberOutcome o;
-                if (planned.TryGetValue(c.id.Value, out o))
-                {
-                    // A member of THIS episode: eligible only if it comes back (or never left), alive and free.
-                    return (o == MemberOutcome.Returned || o == MemberOutcome.NeverPlaced)
-                        && c.IsAlive && c.status != CharacterStatus.Captured && c.status != CharacterStatus.Missing;
-                }
-                return c.IsAlive && c.status != CharacterStatus.Captured && c.status != CharacterStatus.Missing && AuthorityGate.CanSimulateAbstractly(c);
+                // A member of THIS episode is judged by the person this plan will leave behind (projected truth), never by a status
+                // the same plan resolves; anyone else by the ordinary abstract rule.
+                MemberDecision d;
+                if (planned.TryGetValue(c.id.Value, out d)) return EligibleAfterPlan(c, d.outcome, d.woundDays);
+                return FateRules.MayLead(c.status) && AuthorityGate.CanSimulateAbstractly(c);
             };
             Func<Tier, int> healthyOf = t =>
             {
@@ -306,6 +303,35 @@ namespace TheNetwork.Domain.Physical
             p.hasReleaseActions = p.actorEndKey != null;
             if (p.sim != null) p.Add(CommitOpKind.SimDirty);
             return p;
+        }
+
+        /// <summary>
+        /// The story status a named member will have once THIS plan commits, computed without touching the person (projected
+        /// truth): a positive <see cref="MemberOutcome.Returned"/> that is injured becomes Wounded (the shared
+        /// <see cref="FateRules.Wounded"/>), and one that is unhurt resolves Missing or Captured to Active (the shared
+        /// <see cref="FateRules.ReturnedFree"/>). Every other outcome leaves the pre-plan status: NeverPlaced is no return and
+        /// resolves nothing. Dead and Lost never change (P3-INV-004; VALIDATE also refuses such a member).
+        /// </summary>
+        public static CharacterStatus ProjectedStatus(KnownCharacter c, MemberOutcome outcome, int woundDays)
+        {
+            CharacterStatus s = c.status;
+            if (outcome != MemberOutcome.Returned || s == CharacterStatus.Dead || s == CharacterStatus.Lost) return s;
+            if (woundDays > 0) return CharacterStatus.Wounded;
+            return s == CharacterStatus.Missing || s == CharacterStatus.Captured ? CharacterStatus.Active : s;
+        }
+
+        /// <summary>
+        /// "If this reconciliation plan commits, is this member a valid living succession candidate?" Only a member who came back
+        /// (Returned) or never left (NeverPlaced) may lead; Killed, Lost and Detached may not. The status judged is the
+        /// <see cref="ProjectedStatus"/>, by the same rule the abstract path uses (<see cref="FateRules.MayLead"/>), so a Missing
+        /// or Captured person this plan returns is not excluded by the status it resolves, a wounded return is judged as the living
+        /// Wounded person the commit writes, and a NeverPlaced person keeps an unresolved status. The episode's own link is not
+        /// held against its member: it is the link this plan's RELEASE clears.
+        /// </summary>
+        public static bool EligibleAfterPlan(KnownCharacter c, MemberOutcome outcome, int woundDays)
+        {
+            if (c == null || (outcome != MemberOutcome.Returned && outcome != MemberOutcome.NeverPlaced)) return false;
+            return FateRules.MayLead(ProjectedStatus(c, outcome, woundDays));
         }
 
         /// <summary>

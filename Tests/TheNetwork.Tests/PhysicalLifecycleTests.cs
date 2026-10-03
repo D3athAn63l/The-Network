@@ -51,6 +51,11 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Phys.Fix2_DuplicateTierRowsAreAggregated", DuplicateTierRows));
             t.Add(new KeyValuePair<string, Action>("Phys.Fix3_ReturnedMissingOrCapturedIsResolved", ReturnedMissingOrCaptured));
             t.Add(new KeyValuePair<string, Action>("Phys.Fix3_DeadAndLostStayImmutable", DeadAndLostImmutable));
+            t.Add(new KeyValuePair<string, Action>("Phys.FinalV3_ReturnedMissingMemberSucceedsKilledLeader", ReturnedMissingSucceeds));
+            t.Add(new KeyValuePair<string, Action>("Phys.FinalV3_ReturnedCapturedMemberSucceedsKilledLeader", ReturnedCapturedSucceeds));
+            t.Add(new KeyValuePair<string, Action>("Phys.FinalV3_InjuredReturnFollowsTheAbstractWoundedRule", InjuredReturnSucceeds));
+            t.Add(new KeyValuePair<string, Action>("Phys.FinalV3_NeverPlacedResolvesNothing", NeverPlacedResolvesNothing));
+            t.Add(new KeyValuePair<string, Action>("Phys.FinalV3_ProjectedEligibilityMatrix", ProjectedEligibilityMatrix));
         }
 
         // ================================================================== helpers
@@ -1071,6 +1076,13 @@ namespace TheNetwork.Tests
             T.Check(!r.ok && r.reasonKey == "Headcount", "a negative row is malformed and refused, never clamped (" + r + ")");
             Same(before, Print(n), "and changes nothing");
 
+            EpisodeRequest huge = PhysicalRuntimeSuite.Request(org, null);
+            huge.anonymous.Add(new TierCount(Tier.Regular, int.MaxValue));
+            huge.anonymous.Add(new TierCount(Tier.Regular, int.MaxValue));
+            r = L(n).Plan(huge, out e);
+            T.Check(!r.ok && r.reasonKey == "MemberCount", "rows that would overflow the sum are refused by the bound, never wrapped (" + r + ")");
+            Same(before, Print(n), "and change nothing");
+
             EpisodeRequest fits = PhysicalRuntimeSuite.Request(org, null);
             fits.anonymous.Add(new TierCount(Tier.Regular, 2));
             fits.anonymous.Add(new TierCount(Tier.Regular, 3));
@@ -1169,6 +1181,215 @@ namespace TheNetwork.Tests
             d.status = CharacterStatus.Dead;
             PhysicalEpisode none;
             T.Eq("NotAlive", L(n2).Plan(PhysicalRuntimeSuite.Request(solo, new[] { d }), out none).reasonKey, "and a dead person can never join an episode");
+        }
+
+        // ================================================================== FinalV3: projected succession eligibility
+
+        private sealed class SuccessionWorld
+        {
+            public TestNet n;
+            public NetworkActor org;
+            public OrganizationProfile p;
+            public Operation op;
+            public KnownCharacter leader;
+            public KnownCharacter b;
+            public PhysicalEpisode e;
+            public int successions;
+            public int people;
+        }
+
+        /// <summary>
+        /// The real state shape: an operation's abstract Troubled step leaves B Missing or Captured (<paramref name="prior"/>;
+        /// Unharmed leaves B Active) and kills every other known person except the leader, who still leads. B is then the ONLY person
+        /// who could succeed, and the headcount is stocked, so a plan that excluded B by a stale status would promote a Veteran.
+        /// </summary>
+        private static SuccessionWorld SuccessionSetup(int seed, Fate prior)
+        {
+            SuccessionWorld w = new SuccessionWorld { n = new TestNet(seed) };
+            w.org = Make(w.n, ContractorForm.Company, "succession" + seed);
+            w.p = w.org.Get<OrganizationProfile>();
+            w.op = LiveOperation(w.n, w.org);
+            w.leader = Leader(w.n, w.org);
+            T.Check(w.leader != null && w.op.characters.Contains(w.leader.id), "setup: the leader is on the operation");
+            foreach (CharacterId id in w.op.characters)
+            {
+                if (id == w.leader.id) continue;
+                w.b = w.n.ctx.characters.Get(id);
+                break;
+            }
+            T.Check(w.b != null, "setup: a second known person is on the operation");
+            List<int> doomed = new List<int>();
+            foreach (List<CharacterId> pool in new[] { w.p.lieutenants, w.p.knownMembers })
+            {
+                foreach (CharacterId id in pool)
+                {
+                    if (id != w.leader.id && id != w.b.id && !doomed.Contains(id.Value)) doomed.Add(id.Value);
+                }
+            }
+            CasualtyReport r = new CasualtyReport();
+            r.fates.Add(new CharacterFate { character = w.b.id, fate = prior });
+            foreach (int id in doomed) r.fates.Add(new CharacterFate { character = new CharacterId(id), fate = Fate.Killed });
+            w.n.ctx.Contractors.ApplyCasualties(w.org, r, ContractId.None, w.op.id, false);
+            w.p.TierOf(Tier.Veteran).healthy = Math.Max(2, w.p.TierOf(Tier.Veteran).healthy);
+
+            if (prior == Fate.Missing) T.Eq(CharacterStatus.Missing, w.b.status, "setup: B is Missing from the abstract Troubled step");
+            else if (prior == Fate.Captured) T.Eq(CharacterStatus.Captured, w.b.status, "setup: B is Captured from the abstract Troubled step");
+            else T.Eq(CharacterStatus.Active, w.b.status, "setup: B is Active");
+            T.Eq(w.leader.id, w.p.leader, "setup: the leader still leads");
+            foreach (int id in doomed) T.Check(!w.n.ctx.characters.Get(new CharacterId(id)).IsAlive, "setup: nobody else could lead");
+            w.successions = w.p.succession.successions;
+            w.people = w.n.ctx.characters.characters.Count;
+            return w;
+        }
+
+        /// <summary>The leader observed Killed and B positively Returned in the SAME linked episode; RELEASE held open at its first strip.</summary>
+        private static void LeaderKilledBReturns(SuccessionWorld w, float health)
+        {
+            w.e = Begin(w.n, w.org, new[] { w.leader, w.b }, 0, w.op.id);
+            w.n.physical.Die(w.leader.pawn);
+            w.n.physical.ExitNormally(w.b.pawn, 42, health);
+            w.n.physical.ThrowOn("strip");
+            L(w.n).Reconcile(w.e, "found");
+        }
+
+        /// <summary>B leads, from the plan that returned B: one succession, no promoted record, no dissolution, RELEASE unchanged, exactly once.</summary>
+        private static void BLeadsExactlyOnce(SuccessionWorld w, string label)
+        {
+            T.Check(w.e.consequencesApplied && !w.e.releaseApplied, label + ": committed, RELEASE held open");
+            T.Eq(CharacterStatus.Dead, w.leader.status, label + ": the leader is dead");
+            T.Eq(w.b.id, w.p.leader, label + ": B is the new leader");
+            T.Eq(CharacterRole.Leader, w.b.role, label + ": with the leader's role");
+            T.Eq(w.successions + 1, w.p.succession.successions, label + ": exactly one succession");
+            T.Eq(w.people, w.n.ctx.characters.characters.Count, label + ": no generic successor promoted, no record duplicated");
+            T.Check(w.org.IsActive, label + ": the organization did not dissolve");
+            T.Check(w.b.episode == w.e.id && !AuthorityGate.CanSimulateAbstractly(w.b), label + ": B stays physical until RELEASE COMPLETE");
+            L(w.n).FinishPending(w.e);
+            T.Check(w.e.IsComplete, label + ": completes");
+            T.Check(AuthorityGate.CanSimulateAbstractly(w.b) && w.b.custody == CustodyState.Stored && !w.b.episode.IsValid, label + ": abstract only now");
+            CharacterStatus status = w.b.status;
+            L(w.n).Reconcile(w.e, "again");
+            L(w.n).FinishPending(w.e);
+            T.Check(w.p.leader == w.b.id && w.p.succession.successions == w.successions + 1 && w.n.ctx.characters.characters.Count == w.people && w.b.status == status,
+                label + ": exactly once (no second succession, no second status write)");
+        }
+
+        /// <summary>Test A: a Missing member positively returned (unhurt) by the plan that kills the leader is a candidate, and leads.</summary>
+        private static void ReturnedMissingSucceeds()
+        {
+            SuccessionWorld w = SuccessionSetup(9460, Fate.Missing);
+            T.Check(ReconciliationPlanner.EligibleAfterPlan(w.b, MemberOutcome.Returned, 0), "Missing + unhurt return: projected eligible");
+            LeaderKilledBReturns(w, 1f);
+            T.Eq(CharacterStatus.Active, w.b.status, "Missing + unhurt return: B is Active");
+            BLeadsExactlyOnce(w, "Missing");
+        }
+
+        /// <summary>Test B: the same for a Captured member.</summary>
+        private static void ReturnedCapturedSucceeds()
+        {
+            SuccessionWorld w = SuccessionSetup(9461, Fate.Captured);
+            T.Check(ReconciliationPlanner.EligibleAfterPlan(w.b, MemberOutcome.Returned, 0), "Captured + unhurt return: projected eligible");
+            LeaderKilledBReturns(w, 1f);
+            T.Eq(CharacterStatus.Active, w.b.status, "Captured + unhurt return: B is Active");
+            BLeadsExactlyOnce(w, "Captured");
+        }
+
+        /// <summary>
+        /// Test C: an injured return projects Wounded (not Active, not the stale Missing/Captured). The EXISTING abstract rule, shown
+        /// in a twin world where the leader is killed and B wounded in one abstract step, lets a living Wounded person lead; the
+        /// physical plan must reach the same answer.
+        /// </summary>
+        private static void InjuredReturnSucceeds()
+        {
+            foreach (Fate prior in new[] { Fate.Missing, Fate.Captured })
+            {
+                int seed = 9462 + (prior == Fate.Missing ? 0 : 1);
+                string label = prior + " + injured return";
+
+                SuccessionWorld twin = SuccessionSetup(seed, Fate.Unharmed);
+                CasualtyReport both = new CasualtyReport();
+                both.woundDays = 8;
+                both.fates.Add(new CharacterFate { character = twin.leader.id, fate = Fate.Killed });
+                both.fates.Add(new CharacterFate { character = twin.b.id, fate = Fate.Wounded });
+                twin.n.ctx.Contractors.ApplyCasualties(twin.org, both, ContractId.None, twin.op.id, false);
+                T.Eq(CharacterStatus.Wounded, twin.b.status, label + ": abstract twin, B wounded");
+                bool abstractAdmitsWounded = twin.p.leader == twin.b.id;
+                T.Check(abstractAdmitsWounded, label + ": the existing abstract rule lets a living Wounded person lead");
+
+                SuccessionWorld w = SuccessionSetup(seed, prior);
+                T.Eq(CharacterStatus.Wounded, ReconciliationPlanner.ProjectedStatus(w.b, MemberOutcome.Returned, 8), label + ": projected Wounded");
+                T.Eq(abstractAdmitsWounded, ReconciliationPlanner.EligibleAfterPlan(w.b, MemberOutcome.Returned, 8), label + ": projected eligibility matches the abstract rule");
+                int now = w.n.clock.Now;
+                LeaderKilledBReturns(w, 0.5f);
+                T.Eq(CharacterStatus.Wounded, w.b.status, label + ": B is Wounded");
+                T.Check(w.b.woundedUntilTick > now && w.b.woundedUntilTick <= now + 60 * Ticks.PerDay, label + ": with a bounded recovery");
+                T.Eq(abstractAdmitsWounded, w.p.leader == w.b.id, label + ": the physical plan agrees with the abstract rule");
+                int until = w.b.woundedUntilTick;
+                BLeadsExactlyOnce(w, label);
+                T.Eq(until, w.b.woundedUntilTick, label + ": no second recovery");
+            }
+        }
+
+        /// <summary>
+        /// Test D: NeverPlaced is no return. B (Missing) is in the episode but never placed; the leader is placed and killed. B's
+        /// status is not resolved, B is not a candidate, and the existing rule (nobody else alive) promotes a Veteran, unchanged.
+        /// </summary>
+        private static void NeverPlacedResolvesNothing()
+        {
+            SuccessionWorld w = SuccessionSetup(9464, Fate.Missing);
+            T.Check(!ReconciliationPlanner.EligibleAfterPlan(w.b, MemberOutcome.NeverPlaced, 0), "projected: a NeverPlaced Missing person stays ineligible");
+            w.e = Begin(w.n, w.org, new[] { w.b, w.leader }, 0, w.op.id, false);
+            EpisodeMember mb = null, ml = null;
+            foreach (EpisodeMember m in w.e.members)
+            {
+                if (m.character == w.b.id) mb = m;
+                else if (m.character == w.leader.id) ml = m;
+            }
+            T.Check(mb != null && ml != null && w.e.members.IndexOf(mb) < w.e.members.IndexOf(ml), "setup: B is placed first");
+            w.n.physical.ThrowOn("place"); // the first placement (B's) fails; the leader's succeeds
+            L(w.n).Materialize(w.e);
+            T.Check(mb.state != MemberState.Present && ml.state == MemberState.Present && w.e.state == EpisodeState.Open, "setup: the leader placed, B never placed");
+            w.n.physical.Die(w.leader.pawn);
+            L(w.n).Reconcile(w.e, "test");
+            T.Check(w.e.consequencesApplied, "committed");
+            T.Eq(MemberOutcome.NeverPlaced, mb.outcome, "B's outcome is NeverPlaced");
+            T.Eq(CharacterStatus.Missing, w.b.status, "NeverPlaced resolves nothing: B stays Missing");
+            T.Check(w.p.leader != w.b.id, "B does not lead");
+            T.Eq(w.people + 1, w.n.ctx.characters.characters.Count, "nobody else could lead: the existing rule promotes a Veteran");
+            KnownCharacter next = w.n.ctx.characters.Get(w.p.leader);
+            T.Check(next != null && next.IsAlive && next.role == CharacterRole.Leader && w.org.IsActive, "the promoted Veteran leads; no dissolution");
+            T.Eq(w.successions + 1, w.p.succession.successions, "exactly one succession");
+        }
+
+        /// <summary>
+        /// Test E: the projection over every status and outcome. Dead and Lost are never eligible and never change; only a positive
+        /// return resolves Missing/Captured; NeverPlaced keeps the pre-plan status; non-returning outcomes never lead; the status
+        /// half is exactly the abstract rule's; computing a projection writes nothing.
+        /// </summary>
+        private static void ProjectedEligibilityMatrix()
+        {
+            foreach (CharacterStatus s in (CharacterStatus[])Enum.GetValues(typeof(CharacterStatus)))
+            {
+                KnownCharacter c = new KnownCharacter { id = new CharacterId(77), status = s, statusTick = 11 };
+                bool alive = s != CharacterStatus.Dead && s != CharacterStatus.Lost;
+                bool free = s != CharacterStatus.Captured && s != CharacterStatus.Missing;
+                T.Eq(c.IsAlive && free, FateRules.MayLead(s), s + ": MayLead is the abstract rule's status half (alive, not captured, not missing)");
+
+                T.Eq(!alive || free ? s : CharacterStatus.Active, ReconciliationPlanner.ProjectedStatus(c, MemberOutcome.Returned, 0), s + ": unhurt return");
+                T.Eq(alive ? CharacterStatus.Wounded : s, ReconciliationPlanner.ProjectedStatus(c, MemberOutcome.Returned, 6), s + ": injured return");
+                T.Eq(alive, ReconciliationPlanner.EligibleAfterPlan(c, MemberOutcome.Returned, 0), s + ": a returned person may lead iff alive");
+                T.Eq(alive, ReconciliationPlanner.EligibleAfterPlan(c, MemberOutcome.Returned, 6), s + ": also when injured (living Wounded)");
+                T.Eq(s, ReconciliationPlanner.ProjectedStatus(c, MemberOutcome.NeverPlaced, 0), s + ": NeverPlaced resolves nothing");
+                T.Eq(alive && free, ReconciliationPlanner.EligibleAfterPlan(c, MemberOutcome.NeverPlaced, 0), s + ": NeverPlaced is judged by the pre-plan status");
+                foreach (MemberOutcome o in (MemberOutcome[])Enum.GetValues(typeof(MemberOutcome)))
+                {
+                    if (o == MemberOutcome.Returned || o == MemberOutcome.NeverPlaced) continue;
+                    T.Check(!ReconciliationPlanner.EligibleAfterPlan(c, o, 0) && !ReconciliationPlanner.EligibleAfterPlan(c, o, 6), s + " " + o + ": never a candidate");
+                    T.Eq(s, ReconciliationPlanner.ProjectedStatus(c, o, 6), s + " " + o + ": no projected change");
+                }
+                if (!alive) T.Check(!ReconciliationPlanner.EligibleAfterPlan(c, MemberOutcome.Returned, 0) && !ReconciliationPlanner.EligibleAfterPlan(c, MemberOutcome.Returned, 6), s + ": never eligible");
+                T.Check(c.status == s && c.statusTick == 11, s + ": projecting writes nothing");
+            }
+            T.Check(!ReconciliationPlanner.EligibleAfterPlan(null, MemberOutcome.Returned, 0), "no record, no candidate");
         }
 
         private static void SnapshotRestores()

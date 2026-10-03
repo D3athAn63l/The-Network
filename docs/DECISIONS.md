@@ -977,9 +977,13 @@
   14. **A stuck post-commit stage stays pending, not quarantined.** Bounded retries quarantine only before the commit; a
       `Closed(Reconciled)` episode with a failing RELEASE, FOLLOW-UP or PUBLISH keeps that marker false, its people linked and
       blocked, is retried (slowly past the bound) and reported by the validator after 30 days, and is never completed by inference.
+  15. **Succession in a plan reads projected truth** (PR #8 review): an episode member is judged by the status the complete plan
+      will write (`ReconciliationPlanner.EligibleAfterPlan` over `ProjectedStatus` and the shared `FateRules.MayLead`), so a
+      Missing/Captured person the plan positively returns may lead (a wounded return as the living `Wounded` person the abstract
+      rule already admits); `NeverPlaced` resolves nothing; `Killed`/`Lost`/`Detached` never lead; ranking is unchanged.
 - **Rejected.** Inventing a capture, a rescue or a "came home" for a held or unobservable person; writing an operation off because
   a materialization failed; a new availability value that would change refusal texts; inferring any stage's completion from
   operation status, tags or custody; skipping a release action whose precondition failed; re-labelling a committed episode
-  `Quarantined`.
+  `Quarantined`; deciding a succession from a status the same plan resolves, or by temporarily applying the plan.
 - **Consequences.** 3.2 replaces rule 1 with held-person support and adds anonymous members to linked episodes. Rule 9 is the
   only observable difference from the abstract path, and it is in id numbering alone.
