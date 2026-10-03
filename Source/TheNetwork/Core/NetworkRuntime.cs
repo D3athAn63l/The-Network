@@ -100,6 +100,9 @@ namespace TheNetwork.Core
                 contracts = State.contracts,
                 operations = State.operations,
                 consequences = State.consequences,
+                episodes = State.deployments,
+                // Phase 3.0 ships no physical adapter: the fail-closed port refuses every physical action.
+                physicalPort = new Domain.Physical.UnavailablePhysicalWorldPort(),
                 catalog = new LazyCatalog(),
                 comms = new CommsAccessAdapter(),
                 payment = new PaymentAdapter(),
@@ -121,6 +124,7 @@ namespace TheNetwork.Core
             Ctx.Spatial = new Domain.Spatial.SpatialService(Ctx);
             Ctx.FieldLog = new Domain.Contracts.FieldLogService(Ctx);
             Ctx.Career = new Domain.Contractors.CareerService(Ctx);
+            Ctx.Lifecycle = new Domain.Physical.PhysicalLifecycleService(Ctx);
             RegisterContractKinds();
             Ctx.tuning.targetProvider = () => NetworkMod.Settings?.targetContractorCount ?? 100;
 
@@ -151,6 +155,7 @@ namespace TheNetwork.Core
             Scheduler.RegisterKind(JobKinds.ContractorUpkeep, Ctx.Upkeep.UpkeepJob, true, true);
             Scheduler.RegisterKind(JobKinds.PopulationWeekly, Ctx.Upkeep.PopulationJobRun, true, true);
             RegisterPhaseTwoJobs(Scheduler, Ctx);
+            RegisterPhaseThreeJobs(Scheduler, Ctx);
             Scheduler.OnJobFailed = OnJobFailed;
         }
 
@@ -166,6 +171,12 @@ namespace TheNetwork.Core
             scheduler.RegisterKind(JobKinds.OperationCheckpoint, ctx.Operations.RunCheckpoint, true, true);
             scheduler.RegisterKind(JobKinds.OperationTroubled, ctx.Operations.TroubledDeadline, true, true);
             scheduler.RegisterKind(JobKinds.ConsequenceFollowUp, ctx.Consequences.FollowUpJobRun, true, false);
+        }
+
+        /// <summary>Phase 3 lifecycle jobs (shared with the sandbox and the headless harness): the per-episode watch only.</summary>
+        public static void RegisterPhaseThreeJobs(NetScheduler scheduler, DomainContext ctx)
+        {
+            if (ctx.Lifecycle != null) scheduler.RegisterKind(JobKinds.EpisodeWatch, ctx.Lifecycle.WatchJobRun, true, true);
         }
 
         /// <summary>Contract kind rules from XML (NetworkContractKindDef); the built-in Procurement rules otherwise.</summary>

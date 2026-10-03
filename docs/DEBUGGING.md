@@ -135,6 +135,7 @@ the repair is safe.
 | **Lineage** | contract, opportunity and actor lineage graphs are acyclic; depth is within the cap | cut cycles and log |
 | **Roster arithmetic** | `committed ≤ healthy + wounded`; no negative counts | clamp and log |
 | **Money** | ledger sums are consistent with contract states | none (report only) |
+| **Episodes (Phase 3.0)** | episode, binding, custody and stage-marker contradictions ([PHYSICAL_LIFECYCLE § 16.5](PHYSICAL_LIFECYCLE.md#165-migration-and-version-implications-the-number-is-not-chosen-here)): a person `Deployed` with no episode, a link to a missing episode, two incomplete memberships, a shared binding, a publish or release cursor out of bounds, a stage unfinished after 30 days, a `Physical` operation no episode holds, a person on an operation and in another episode | **none: report only** (`EpisodeChecks`); only the derived episode index is rebuilt. Custody, links and markers are never "fixed" |
 | **Caps** | history, journal, legends and characters are within caps; the bound-pawn **soft** cap is reported when exceeded (protected characters are never released to meet it) | schedule a retention sweep; release only unprotected dormant characters |
 
 ## 5. Timing instrumentation
@@ -180,7 +181,10 @@ unless a Dev action starts it (idle cost: one static null check per frame).
   telemetry, was seen in the owner's runs, and is not a failure; it usually does not recur on a second run.
 - **Where the code is.** `Source/TheNetwork/Diagnostics/RuntimeTests/` (runner, sandbox, fingerprint, invariant
   scan, report, game host) and `Suites/` (`RuntimeSmokeSuite`, `RuntimeLiveSuite`, `ProcurementRuntimeSuite`,
-  `CareerRuntimeSuite`, `SpatialRuntimeSuite`).
+  `CareerRuntimeSuite`, `SpatialRuntimeSuite`, and Phase 3.0's `PhysicalRuntimeSuite` over the fake physical port).
+- **Phase 3.0 lifecycle diagnostics.** `ctx.Lifecycle.Describe()` (the port, episode counts and the lifecycle counters: plans,
+  commits and their failures, quarantines, release actions and refused passes, publications), `AuthorityGate.refusedWrites` /
+  `lastRefusal` and `FateRules.refusedDeadWrites` (all 0 in a live 3.0 game), and the validator's episode findings above.
 - **Headless coverage of the runner** is `Tests/TheNetwork.Tests/RuntimeRunnerTests.cs` (filter: `TEST_FILTER=Runner.`).
   The sandbox suites also run headlessly through the real runner against a synthetic live world, so the
   scenarios are checked on every build and only the game-only smoke and live suites need the game.

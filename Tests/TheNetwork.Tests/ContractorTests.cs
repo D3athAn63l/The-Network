@@ -85,7 +85,10 @@ namespace TheNetwork.Tests
             int solos = 0, orgs = 0;
             foreach (NetworkActor a in cs) if (ContractorService.IsSolo(a)) solos++; else orgs++;
             T.Check(solos > 10 && orgs > 10, "a mix of Solos (" + solos + ") and organizations (" + orgs + ")");
-            T.Eq(0, NoPawnFields(), "no pawn or PawnRef field exists on contractor data");
+            T.Eq(0, NoPawnFields(), "no pawn field exists on contractor data, and the only binding is KnownCharacter.pawn (PHYSICAL_LIFECYCLE § 5.3)");
+            int unbound = 0;
+            foreach (KnownCharacter kc in n.ctx.characters.characters) if (kc.pawn == null && !kc.episode.IsValid && kc.custody == CustodyState.Unmaterialized) unbound++;
+            T.Eq(n.ctx.characters.characters.Count, unbound, "and nothing binds a pawn: every character is unbound, unlinked and Unmaterialized");
         }
 
         private static int NoPawnFields()
@@ -97,6 +100,8 @@ namespace TheNetwork.Tests
                 foreach (System.Reflection.FieldInfo f in ty.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
                 {
                     string tn = f.FieldType.FullName ?? "";
+                    // The approved Phase 3 shape: exactly one binding, KnownCharacter.pawn, typed PawnRef. No raw pawn anywhere.
+                    if (ty == typeof(KnownCharacter) && f.Name == "pawn" && tn == typeof(TheNetwork.Domain.Physical.PawnRef).FullName) continue;
                     if (tn.Contains("Verse.Pawn") || f.Name.ToLowerInvariant().Contains("pawnref") || tn.Contains("PawnRef")) bad++;
                 }
             }

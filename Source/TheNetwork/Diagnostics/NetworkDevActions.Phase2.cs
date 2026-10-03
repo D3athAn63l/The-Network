@@ -142,6 +142,11 @@ namespace TheNetwork.Diagnostics
                     return;
                 }
                 KnownCharacter old = rt.State.characters.Get(org.leader);
+                if (old != null && !Domain.Physical.AuthorityGate.Allows(old, "DevForceSuccession"))
+                {
+                    Out("[TheNetwork] " + old.name.Display + " is not abstractly simulatable (" + Domain.Physical.AuthorityGate.AuthorityOf(old) + "): no dev succession.");
+                    return;
+                }
                 if (old != null)
                 {
                     old.status = CharacterStatus.Retired;

@@ -33,6 +33,9 @@ namespace TheNetwork.Domain
         public const string OperationTroubled = Operations.OperationService.TroubledJob;
         public const string ConsequenceFollowUp = Consequences.ConsequenceEngine.FollowUpJob;
 
+        // Phase 3 (PHYSICAL_LIFECYCLE § 15.1): exists only while an episode is incomplete; none in a live 3.0 game.
+        public const string EpisodeWatch = Physical.PhysicalLifecycleService.WatchJob;
+
         public const int SamplePeriod = 2500;
         public const int SweepPeriod = Ticks.PerQuadrum;
     }
@@ -82,6 +85,9 @@ namespace TheNetwork.Domain
         public Contracts.ContractStore contracts;
         public Operations.OperationStore operations;
         public Consequences.ConsequenceStore consequences;
+
+        /// <summary>The Physical Episode store (Phase 3.0). Null in a context that has no lifecycle (the gate then reads character fields only).</summary>
+        public Physical.EpisodeStore episodes;
         public NetworkTuning tuning = new NetworkTuning();
 
         public ICatalog catalog;
@@ -93,6 +99,13 @@ namespace TheNetwork.Domain
 
         /// <summary>The world graph for hidden spatial continuity (Phase 2.5).</summary>
         public ISpatialWorld graph;
+
+        /// <summary>
+        /// How lifecycle code observes and acts on physical truth (Phase 3.0, PHYSICAL_LIFECYCLE § 21.1). The live game uses the
+        /// fail-closed <see cref="Physical.UnavailablePhysicalWorldPort"/>: Phase 3.0 has no real adapter and no production path
+        /// that creates, spawns, moves, reserves or passes a contractor pawn. Tests and the sandbox use a scriptable fake.
+        /// </summary>
+        public Physical.IPhysicalWorldPort physicalPort;
 
         public ActorService Actors;
         public IntelService Intel;
@@ -109,6 +122,9 @@ namespace TheNetwork.Domain
 
         /// <summary>Contractor careers (Phase 2.75): reputation from finished work, contractor funds, equipment advancement, need and Tags.</summary>
         public CareerService Career;
+
+        /// <summary>The abstract ↔ physical lifecycle brain (Phase 3.0): episodes, reconciliation and its post-commit stages.</summary>
+        public Physical.PhysicalLifecycleService Lifecycle;
 
         public int Now => clock.Now;
     }

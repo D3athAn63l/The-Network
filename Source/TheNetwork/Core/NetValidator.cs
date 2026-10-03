@@ -64,6 +64,7 @@ namespace TheNetwork.Core
             CheckScheduler(rt, report);
             CheckSpatial(rt, report);
             CheckCareers(rt, report);
+            CheckEpisodes(rt, report);
             int endedProxies = ctx.Actors.ReconcileFactionProxies();
             if (endedProxies > 0) report.Add(endedProxies + " faction proxies ended (FactionVanished).", true);
             CheckCaps(rt, report);
@@ -89,6 +90,26 @@ namespace TheNetwork.Core
             for (int i = 0; i < s.contracts.contracts.Count; i++) Check(s.contracts.contracts[i].id.Value, "contract", seen, next, report, e => s.contracts.contracts[e].quarantinedReason = "DuplicateId", i);
             for (int i = 0; i < s.contracts.offers.Count; i++) Check(s.contracts.offers[i].id.Value, "offer", seen, next, report, e => s.contracts.offers[e].quarantinedReason = "DuplicateId", i);
             for (int i = 0; i < s.operations.operations.Count; i++) Check(s.operations.operations[i].id.Value, "operation", seen, next, report, e => s.operations.operations[e].quarantinedReason = "DuplicateId", i);
+        }
+
+        /// <summary>
+        /// Phase 3 (PHYSICAL_LIFECYCLE § 16.5): episode, binding and custody contradictions are REPORTED, never repaired: the
+        /// validator does not invent custody, declare anyone Returned, complete a stage or clear a link. Only the derived episode
+        /// index is rebuilt. Empty in a live 3.0 game.
+        /// </summary>
+        private static void CheckEpisodes(NetworkRuntime rt, ValidationReport report)
+        {
+            List<string> findings = new List<string>();
+            Domain.Physical.EpisodeChecks.Report(rt.Ctx, findings);
+            for (int i = 0; i < findings.Count; i++) report.Add(findings[i], false);
+            List<Domain.Physical.PhysicalEpisode> episodes = rt.State.deployments.episodes;
+            HashSet<int> seen = new HashSet<int>();
+            int next = rt.Root.ids.PeekNextId;
+            for (int i = 0; i < episodes.Count; i++)
+            {
+                int id = episodes[i] == null ? 0 : episodes[i].id.Value;
+                if (id >= next) report.Add("Id " + id + " (episode) is not below nextId " + next + ".", false);
+            }
         }
 
         private static void Check(int id, string kind, HashSet<int> seen, int next, ValidationReport report, System.Action<int> quarantine, int index)

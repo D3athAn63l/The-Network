@@ -52,6 +52,10 @@ namespace TheNetwork.Diagnostics.RuntimeTests
         public readonly SandboxSites Sites = new SandboxSites();
         public readonly SandboxDelivery Delivery = new SandboxDelivery();
         public readonly SandboxEventRecorder Events = new SandboxEventRecorder();
+
+        /// <summary>Phase 3.0: the scriptable fake physical port (tokens only; it never touches a pawn, map or WorldPawns).</summary>
+        public readonly FakePhysicalWorldPort Physical = new FakePhysicalWorldPort();
+
         public readonly GridWorldGraph Graph;
 
         private int made;
@@ -83,6 +87,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests
                 intel = new IntelStore(), opportunities = new OpportunityStore(), summaries = Summaries, ledger = Ledger,
                 relations = new RelationStore(), knowledge = new KnowledgeStore(),
                 contracts = new ContractStore(), operations = new OperationStore(), consequences = new ConsequenceStore(),
+                episodes = new Domain.Physical.EpisodeStore(), physicalPort = Physical,
                 catalog = Catalog, comms = Comms, payment = Payment, world = World, sites = Sites, delivery = Delivery, graph = Graph
             };
             Ctx.Actors = new ActorService(Ctx);
@@ -98,6 +103,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             Ctx.Spatial = new Domain.Spatial.SpatialService(Ctx);
             Ctx.FieldLog = new FieldLogService(Ctx);
             Ctx.Career = new CareerService(Ctx);
+            Ctx.Lifecycle = new Domain.Physical.PhysicalLifecycleService(Ctx);
             History = new HistoryService(Ledger, Summaries, Ctx.actors, Ids, Clock, Seed);
 
             // The same jobs the real runtime registers (RegisterPhaseTwoJobs is the production method), on THIS scheduler.
@@ -110,6 +116,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             Scheduler.RegisterKind(JobKinds.ContractorUpkeep, Ctx.Upkeep.UpkeepJob, true, true);
             Scheduler.RegisterKind(JobKinds.PopulationWeekly, Ctx.Upkeep.PopulationJobRun, true, true);
             Core.NetworkRuntime.RegisterPhaseTwoJobs(Scheduler, Ctx);
+            Core.NetworkRuntime.RegisterPhaseThreeJobs(Scheduler, Ctx);
             Bus.Register(ConsumerOrder.History, History, HistoryService.ConsumedKeys);
             Bus.Register(ConsumerOrder.Relationships, Ctx.Relations, RelationService.ConsumedKeys);
             Bus.Register(ConsumerOrder.Consequences, Ctx.Consequences, ConsequenceEngine.ConsumedKeys);

@@ -1,6 +1,12 @@
 # Phase 3 Design: Abstract ↔ Physical Lifecycle
 
-> **Status: DESIGN REVIEW. Nothing in this document is implemented.** Written against `main` `6d0352d`
+> **Status: Phase 3.0 IMPLEMENTED (the abstract foundation over a port; [Appendix H](#appendix-h-phase-30-as-built)); 3.1 to 3.3
+> NOT implemented; 3.1 blocked until spike S31 is run and owner-reviewed.** Phase 3.0 creates **no** RimWorld pawn: the live game
+> holds a fail-closed physical port, so no production path creates, spawns, moves, reserves or passes a contractor pawn. The
+> save format is **5** (Phase 3.0). The design text below is unchanged by the implementation except where Appendix H records a
+> decision the design left open.
+>
+> *Original design status:* **DESIGN REVIEW.** Written against `main` `6d0352d`
 > (Phase 2.9 merged and owner-runtime-validated; save format stays **4**). Every RimWorld fact below was read
 > from the decompiled `Assembly-CSharp 1.6.9676.17735` (file and member named), not recalled; where the code
 > could not settle a question it is marked **OPEN** with the narrowest spike that would. Class and method
@@ -155,7 +161,8 @@ Appendices: [A. RimWorld 1.6 API audit](#appendix-a-rimworld-16-api-audit) ·
 [D. Glossary](#appendix-d-glossary) ·
 [E. What the audit changed from the Phase 0 design](#appendix-e-what-the-audit-changed-from-the-phase-0-design) ·
 [F. Amendment log](#appendix-f-amendment-log) ·
-[G. Correction log](#appendix-g-correction-log)
+[G. Correction log](#appendix-g-correction-log) ·
+[H. Phase 3.0 as built](#appendix-h-phase-30-as-built)
 
 ---
 
@@ -2951,3 +2958,70 @@ strong-evidence company concretization, immutable-origin identity, passion-free 
 
 **Status of the evidence.** The audit rows A50 to A56 are read from the decompiled 1.6.9676 assembly. **S31 has not been run
 and no result is claimed.** The owner's Phase 2.9 runtime validation is unchanged, and formal Phase 2.5 **S20 is still NOT RUN**.
+
+
+## Appendix H: Phase 3.0 as built
+
+Phase 3.0 implements the subphase row of [§ 23](#23-suggested-subphases): the authority gate in front of every abstract writer, the
+Episode store, the reconciliation planner, validator and atomic Applier, the RELEASE / FOLLOW-UP / PUBLISH stages with their
+explicit markers, the `PhysicalWorldPort` with a fail-closed production implementation and a scriptable fake, the validator,
+compaction and prepare-for-removal settle, and the safe-tier `RT-PHYS-001…019` and `025…029`. **It creates no RimWorld pawn, no
+Lord, no faction, no map, no site and no quest; it adds no Harmony; S31 was not run and nothing here chooses an S31 mechanism.**
+In a live 3.0 game no episode can exist (planning is refused without an available port), so every person stays
+`Unmaterialized`, the gate only confirms the abstract state, and the lifecycle costs nothing (no job, no scan).
+
+### H.1 Where each piece lives
+
+| Design element | Implementation |
+|---|---|
+| Episode store in the reserved `deployments` slot (§ 5.3) | `Domain/Physical/EpisodeModel.cs`: `PhysicalEpisode`, `EpisodeMember`, `EpisodeCause`, `PublicationSpec`, `PawnRef` (with `agedThroughTick`), `EpisodeStore` (derived, rebuildable `byId` and incomplete-by-actor indexes); `NetworkState.deployments` |
+| `EntityKind.Deployment = 9` → `Episode` | `Kernel/Ids.cs`: value 9 and prefix `D` unchanged; `EpisodeId`; counted by `NetworkState.MaxEntityId`. The enum is never serialized by name (only the prefix character), so no alias is needed |
+| Character additions | `KnownCharacter.pawn`, `.episode`, `.heldBy`, `.heldSinceTick`, `.opRole` (`OperationalRole.Unset` only), `.firstEncounterTick` |
+| Operation marker | `Operation.physicalEpisode`, `.physicalResolution` (`Found` / `WrittenOff` / `None`), `.physicalSteps` (FOLLOW-UP sub-step bits) |
+| The one gate (§ 3.3 A1) | `Domain/Physical/AuthorityGate.cs`: `CanSimulateAbstractly` (custody `Unmaterialized` / `Stored` **and** no membership link), `Allows` (with a refusal counter), `AuthorityOf`, `SpatialFrozen`, `HasPhysicalPresence`; O(1) |
+| The port (§ 21.1) | `Domain/Physical/PhysicalWorldPort.cs`: `IPhysicalWorldPort`, `UnavailablePhysicalWorldPort` (production: never available, every action throws, observation `Unknown`); `Diagnostics/RuntimeTests/FakePhysicalWorldPort.cs` (tokens, scripted observations, recorded actions, injected faults, its own § 7.5 precondition check) |
+| DECIDE / PLAN / VALIDATE (§ 15.2 steps 2–4) | `Domain/Physical/ReconciliationPlanner.cs` (pure), with the plan vocabulary in `ReconciliationPlan.cs` (a closed `CommitOpKind` set, `ReleasePolicy`, `Publications`) |
+| ATOMIC DURABLE COMMIT (§ 15.2 step 5, § 15.6–15.7) | `Domain/Physical/ReconciliationApplier.cs`: `TouchedSet(plan)`, `Commit` (in-place `Kernel/DurableSnapshot.cs` restore + `CharacterStore.TruncateTo` for a promoted record; `consequencesApplied` last; a deterministic test-only fault point), `Writes(op)` for the coverage proof |
+| One rulebook (§ 15.5) | `Domain/Contractors/FateRules.cs`: the fate, loss-share, morale-descriptor, succession and actor-end rules, called by the abstract `ApplyCasualties` / `RunSuccession` / `EndActor` / `MoraleShiftCheck` **and** by the Applier |
+| RELEASE / FOLLOW-UP / PUBLISH (§ 8.1) | `Domain/Physical/PhysicalLifecycleService.cs` (`FinishPending`); FOLLOW-UP's re-entrant entry is `OperationService.OnPhysicalResolved` |
+| Wake-ups, load pass, removal | `PhysicalLifecycleService.Reconcile` (one entry for every wake-up), the `episode.watch` job (one per incomplete episode, 250 ticks), `OnLoaded` (decides nothing; watches from the first tick), `SettleForRemoval` (called first by `RemovalPreparer`) |
+| Validator (§ 16.5) | `Domain/Physical/EpisodeChecks.cs`, run by `NetValidator.CheckEpisodes`: report-only |
+| Compaction (§ 16.5) | `CompactionService.CompactEpisodes` / `CanCompact`; a contract whose operation an incomplete episode holds is kept |
+| Save format | `SaveMigrations.Current = 5`; `V4ToV5PhysicalLifecycle` changes nothing and invents nothing |
+| Events | `Persist/Events/PhaseThreeEvents.cs`: `Episode.Closed` (`EpisodeEvent`), `KnownCharacter.Vanished` |
+
+### H.2 Decisions the design left open (recorded in ADR-052, for owner review)
+
+1. **DECIDE in 3.0.** `Dead` ⇒ `Killed`; `Gone` ⇒ `Lost`; `WorldFree` **with** exit evidence ⇒ `Returned`. Every held custody
+   (`HeldByPlayer`, `JoinedPlayer`, `Kidnapped`, `HeldByOther`, `InCaravan`) ⇒ `Quarantined(UnsupportedCustody)`, as § 17 prescribes
+   until held people are supported (3.2). Everything else stays `Pending`. `Missing` is not produced by any 3.0 observation.
+2. **Operation-linked episodes** hold named members only (people listed on the operation); the operation's anonymous headcount
+   keeps its own return path. Planning hands the operation over (`OpStatus.Physical`, its Troubled deadline suspended). The commit
+   records `Found` when at least one member `Returned`, `WrittenOff` otherwise; an episode that **placed nobody** or was **detached**
+   records `None`, and FOLLOW-UP returns the operation to `Troubled` and its own abstract deadline (nothing happened, so nothing is
+   decided).
+3. **Availability** reuses the existing `Unavailable` reason ("they cannot be reached"), not a new enum value; no refusal says the
+   person is "busy".
+4. `MemberOutcome.Detached` (value 10) is the per-member result of the removal settle (§ 20's `Closed(Detached)`).
+5. A named member whose pawn was **created in this episode but never placed** keeps its (write-once) binding and becomes `Stored`.
+6. `Lost` sets status and custody `Lost`, counts as "missing" in the casualty event, and ends a Solo with the reason `Lost`.
+7. Anonymous members move from the tier's healthy headcount to the organization's `committed` headcount at Plan, so recruitment
+   never back-fills people who are out.
+8. The commit's "clone of the touched set" is an in-place reflection snapshot of the touched Network objects (episode, ≤ 8
+   characters plus the old and new leader, the actor with its components, at most one operation, the allocator when a record is
+   added) and a truncation of the characters store; a few steps compute from the state the earlier steps left (the loss share, the
+   morale descriptor, the promoted record's id), deterministically.
+9. **Parity** (RT-PHYS-027) is exact for the whole durable world when no record is added. When a successor is **promoted**, the
+   abstract path draws history-record ids before the new person's id (it publishes mid-way) and the commit draws the person's first
+   (it publishes after), so only the id *number* differs; the person, roster, morale, doctrine, events and history are identical.
+10. Narrow guards, unreachable in 3.0 production: `OperationService.Abort` defers on a `Physical` operation, `ProcurementService`'s
+    terminal path does not `Finish` one, and the procurement validator never "repairs" one back onto its abstract jobs.
+11. RELEASE's episode-level steps (an ended actor's upkeep job, its spatial clean-up) are idempotent by observed state, and a fault
+    the spatial facade would swallow is caught by re-checking the settled state before COMPLETE.
+
+### H.3 Not in 3.0
+
+The real adapter, projection, roles beyond `Unset`, composition, concretization, cohesion, tags, the registry quest, Lords,
+temporary factions, maps, sites, held-person support, the rescue content and anything of 3.3; `RT-PHYS-020…024` and `030`; the
+whole physical tier (`RT-PHYX-*`). The re-entrancy of procurement's own `OnRecovered` internals stays a 3.2 item (FOLLOW-UP runs it
+as one guarded sub-step). **The RT-PHYS suite has run headlessly only; it has not been run inside RimWorld.**

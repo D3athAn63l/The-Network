@@ -496,6 +496,8 @@ Invariants and transition details: [ABSTRACT_PHYSICAL_LIFECYCLE § 3–5](ABSTRA
 
 > **Superseded by the Episode** ([PHYSICAL_LIFECYCLE § 5, § 8.1](PHYSICAL_LIFECYCLE.md#5-materialization-model)): states
 > Planned, Open, Closed, Quarantined; one exactly-once flag; consequences applied through existing services. Kept here as the Phase 0 record.
+> **Phase 3.0 implements the Episode machine** (`Domain/Physical`, [PHYSICAL_LIFECYCLE Appendix H](PHYSICAL_LIFECYCLE.md#appendix-h-phase-30-as-built)) over a
+> port; no production path enters it in 3.0.
 > **Amendment:** `Closed(Reconciled)` is reached by an *atomic* durable commit (a pure validated plan, a snapshot-guarded Applier, the flag
 > last); release, follow-up and publish are idempotent post-commit stages, each with its **own explicit durable marker written
 > only after the stage's work completed** (`releaseApplied`, `followUpApplied`, and for publish a durable outbox with a

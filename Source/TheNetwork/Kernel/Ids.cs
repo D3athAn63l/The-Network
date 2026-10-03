@@ -19,7 +19,9 @@ namespace TheNetwork.Kernel
         Contract = 6,
         Offer = 7,
         Operation = 8,
-        Deployment = 9,
+
+        /// <summary>A Physical Episode (Phase 3). Value 9 was reserved as "Deployment" in Phase 0; renamed, value and prefix unchanged.</summary>
+        Episode = 9,
         Lease = 10,
         Obligation = 11,
         Belief = 12,
@@ -41,7 +43,7 @@ namespace TheNetwork.Kernel
                 case EntityKind.Contract: return 'C';
                 case EntityKind.Offer: return 'B';
                 case EntityKind.Operation: return 'P';
-                case EntityKind.Deployment: return 'D';
+                case EntityKind.Episode: return 'D';
                 case EntityKind.Lease: return 'E';
                 case EntityKind.Obligation: return 'F';
                 case EntityKind.Belief: return 'R';
@@ -63,7 +65,7 @@ namespace TheNetwork.Kernel
                 case 'C': return EntityKind.Contract;
                 case 'B': return EntityKind.Offer;
                 case 'P': return EntityKind.Operation;
-                case 'D': return EntityKind.Deployment;
+                case 'D': return EntityKind.Episode;
                 case 'E': return EntityKind.Lease;
                 case 'F': return EntityKind.Obligation;
                 case 'R': return EntityKind.Belief;
@@ -209,6 +211,22 @@ namespace TheNetwork.Kernel
         public override string ToString() => IsValid ? "P" + Value : "P-";
     }
 
+    /// <summary>One Physical Episode (Phase 3, PHYSICAL_LIFECYCLE § 5.3). Drawn from the shared counter like every other kind.</summary>
+    public readonly struct EpisodeId : IEquatable<EpisodeId>
+    {
+        public readonly int Value;
+        public EpisodeId(int value) { Value = value; }
+        public static readonly EpisodeId None = default(EpisodeId);
+        public bool IsValid => Value > 0;
+        public EntityRef Ref => new EntityRef(EntityKind.Episode, Value);
+        public bool Equals(EpisodeId other) => Value == other.Value;
+        public override bool Equals(object obj) => obj is EpisodeId o && o.Value == Value;
+        public override int GetHashCode() => Value;
+        public static bool operator ==(EpisodeId a, EpisodeId b) => a.Value == b.Value;
+        public static bool operator !=(EpisodeId a, EpisodeId b) => a.Value != b.Value;
+        public override string ToString() => IsValid ? "D" + Value : "D-";
+    }
+
     /// <summary>
     /// A reference to any Network entity (event subjects, history participants). The kind is a
     /// validation and readability aid; IDs are unique across kinds. Persisted as the compact string
@@ -256,5 +274,6 @@ namespace TheNetwork.Kernel
         public ContractId AsContract => Kind == EntityKind.Contract ? new ContractId(Id) : ContractId.None;
         public OfferId AsOffer => Kind == EntityKind.Offer ? new OfferId(Id) : OfferId.None;
         public OperationId AsOperation => Kind == EntityKind.Operation ? new OperationId(Id) : OperationId.None;
+        public EpisodeId AsEpisode => Kind == EntityKind.Episode ? new EpisodeId(Id) : EpisodeId.None;
     }
 }

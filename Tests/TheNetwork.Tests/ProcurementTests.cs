@@ -1252,13 +1252,14 @@ namespace TheNetwork.Tests
             foreach (AssemblyName r in net.GetReferencedAssemblies()) T.Check(r.Name.IndexOf("Harmony", StringComparison.OrdinalIgnoreCase) < 0, "no Harmony reference (" + r.Name + ")");
             foreach (Type t in net.GetTypes())
             {
-                T.Check(t.Name != "PawnRef", "no PawnRef type");
+                // Phase 3.0 declares the binding SHAPE (PHYSICAL_LIFECYCLE § 5.3) in the physical-lifecycle namespace only; nothing binds it.
+                T.Check(t.Name != "PawnRef" || t.Namespace == "TheNetwork.Domain.Physical", "no PawnRef type outside the Phase 3 lifecycle (" + t.FullName + ")");
                 T.Check(t.Name.IndexOf("Encounter", StringComparison.Ordinal) < 0, "no encounter faction machinery (" + t.Name + ")");
                 T.Check(t.Name.IndexOf("Rumor", StringComparison.Ordinal) < 0 && t.Name.IndexOf("Gossip", StringComparison.Ordinal) < 0, "no rumors or gossip (" + t.Name + ")");
                 T.Check(t.Name.IndexOf("Registry", StringComparison.Ordinal) < 0 || t.Name == "ContractKindRegistry", "no registry quest (" + t.Name + ")");
                 foreach (FieldInfo f in t.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
                 {
-                    T.Check(f.FieldType.Name != "Pawn", "no Pawn fields (" + t.Name + "." + f.Name + ")");
+                    T.Check(f.FieldType.Name != "Pawn" || (t.Name == "PawnRef" && f.Name == "pawn"), "no Pawn fields but the binding's own pointer (" + t.Name + "." + f.Name + ")");
                 }
             }
             TestNet n = World(10);

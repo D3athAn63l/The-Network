@@ -941,3 +941,33 @@
   Procurement; fame-gated delivery; omniscient or detection-radius rivals; building any of it in 3.0 to 3.2.
 - **Consequences.** A named fourth subphase with its own spikes (S28 to S30) and open questions (O-15); the lifecycle's
   `Delivery` purpose and the handoff states are designed against the same reconciliation machinery.
+
+### ADR-052 · Phase 3.0 implementation choices for the lifecycle foundation
+- **Status.** **Deviation / clarification, for owner review.** Recorded by the Phase 3.0 implementation. None changes an approved
+  principle of ADR-048 (one authority per person, the Episode owns presence only, exactly-once reconciliation with explicit
+  stage markers); each settles a point [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md) left open or makes it concrete. Listed with its
+  code locations in [PHYSICAL_LIFECYCLE Appendix H](PHYSICAL_LIFECYCLE.md#appendix-h-phase-30-as-built).
+- **Context.** Phase 3.0 builds the lifecycle brain over a port, with no RimWorld pawn. A few decisions had to be made to write it.
+- **Decision.**
+  1. **Held custody is quarantined until 3.2.** DECIDE maps `Dead` ⇒ `Killed`, `Gone` ⇒ `Lost`, `WorldFree` with exit evidence ⇒
+     `Returned`; `HeldByPlayer`, `JoinedPlayer`, `Kidnapped`, `HeldByOther` and `InCaravan` ⇒ `Quarantined(UnsupportedCustody)`
+     (§ 17); anything else stays `Pending`. No 3.0 observation yields `Missing`.
+  2. **Operation-linked episodes are named-only**, hand the operation over (`OpStatus.Physical`, its deadline suspended), and
+     record `Found` / `WrittenOff`. An episode that placed nobody or was detached records `None`, and FOLLOW-UP returns the
+     operation to `Troubled` and its own deadline: nothing physical happened, so nothing is decided for it.
+  3. **The unavailable reason** reuses `Availability.Unavailable` ("they cannot be reached"); no refusal text says "busy".
+  4. **`MemberOutcome.Detached`** (value 10) is the removal-settle outcome of a member that was not terminal.
+  5. **A named member created but never placed** keeps its write-once binding and becomes `Stored`.
+  6. **`Lost`** sets status and custody `Lost`, is counted as missing in the casualty event, and ends a Solo with reason `Lost`.
+  7. **Anonymous members** are moved to the organization's checked-out (`committed`) headcount while out.
+  8. **The commit's snapshot** is an in-place reflection snapshot of exactly the touched Network objects plus a truncation of the
+     characters store (for a promoted record); the vocabulary of the commit is a closed enum of durable assignments.
+  9. **Parity** with the abstract casualty path is exact unless a successor is promoted, where only the new person's id number
+     differs (the abstract path publishes, and so draws history-record ids, before it creates the person; the commit after).
+  10. **Narrow guards** (unreachable in 3.0 production): a `Physical` operation is never aborted, finished by a contract's terminal
+      path, or "repaired" by the procurement validator; its episode's FOLLOW-UP resolves it.
+- **Rejected.** Inventing a capture, a rescue or a "came home" for a held or unobservable person; writing an operation off because
+  a materialization failed; a new availability value that would change refusal texts; inferring any stage's completion from
+  operation status, tags or custody.
+- **Consequences.** 3.2 replaces rule 1 with held-person support and adds anonymous members to linked episodes. Rule 9 is the
+  only observable difference from the abstract path, and it is in id numbering alone.

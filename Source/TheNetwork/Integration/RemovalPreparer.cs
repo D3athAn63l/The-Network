@@ -26,6 +26,12 @@ namespace TheNetwork.Integration
             if (!rt.EnsureStarted()) return "The Network failed to start this session (see the log); nothing was changed. It can be removed without preparation.";
             int sites = 0, searches = 0, refunded = 0, tags = 0, contracts = 0;
 
+            // Phase 3 (PHYSICAL_LIFECYCLE § 20): Planned / Open / Quarantined episodes settle FIRST, through the ordinary commit
+            // (terminal observations apply, anything else is Detached, nothing is invented; RELEASE and FOLLOW-UP run, nothing is
+            // published), so a linked operation is back on its own path before contracts are voided. No pawn is touched here
+            // beyond the port's release actions. None exist in a live 3.0 game.
+            int episodes = rt.Ctx.Lifecycle?.SettleForRemoval() ?? 0;
+
             List<IntelRequest> requests = new List<IntelRequest>(rt.State.intel.requests);
             for (int i = 0; i < requests.Count; i++)
             {
@@ -76,7 +82,7 @@ namespace TheNetwork.Integration
             rt.Root.preparedForRemoval = true;
             StateVersion.Bump();
             string summary = "TheNetwork_RemovalSummary".Translate(sites, searches + contracts, refunded).Resolve();
-            NetLog.Info(LogCategory.Save, "Prepared for removal: " + sites + " sites unbound, " + searches + " searches invalidated, " + contracts + " contracts voided (" + refunded + " silver refunded), " + tags + " extra tags removed.");
+            NetLog.Info(LogCategory.Save, "Prepared for removal: " + sites + " sites unbound, " + searches + " searches invalidated, " + contracts + " contracts voided (" + refunded + " silver refunded), " + tags + " extra tags removed, " + episodes + " physical episodes settled.");
             return summary;
         }
 
@@ -97,6 +103,8 @@ namespace TheNetwork.Integration
             }
             rt.Root.preparedForRemoval = false;
             NetValidator.Run(rt, ValidationMode.Full);
+            // Settled episodes stay Closed; a stage they still owe (their publication) resumes from its marker.
+            rt.Ctx.Lifecycle?.OnLoaded();
             NetLog.Info(LogCategory.Save, "Resumed The Network after a removal preparation.");
         }
     }

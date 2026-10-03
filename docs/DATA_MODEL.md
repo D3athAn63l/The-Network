@@ -46,7 +46,7 @@
 | `ContractId` | `C` | Contract |
 | `OfferId` | `B` | Offer (bid) |
 | `OperationId` | `P` | Operation |
-| `DeploymentId` | `D` | Deployment (the Phase 0 name; it becomes the Episode id, value unchanged, [PHYSICAL_LIFECYCLE § 5.3](PHYSICAL_LIFECYCLE.md#53-the-persisted-data-candidate-shapes)) |
+| `EpisodeId` | `D` | Physical Episode (Phase 3.0; `EntityKind.Episode = 9`, the Phase 0 `Deployment` value and prefix unchanged, [PHYSICAL_LIFECYCLE § 5.3](PHYSICAL_LIFECYCLE.md#53-the-persisted-data-candidate-shapes)) |
 | `LeaseId` | `E` | EquipmentLease |
 | `ObligationId` | `F` | Obligation (favor or debt) |
 | `BeliefId` | `R` | Belief / rumor (Phase 5) |
@@ -823,7 +823,9 @@ it explains WHERE; the checkpoints stay the timeline and the resolver decides WH
 > [PHYSICAL_LIFECYCLE § 5.3](PHYSICAL_LIFECYCLE.md#53-the-persisted-data-candidate-shapes). `EquipmentLease` is **one of two**
 > Phase 4 equipment seams (a *Lease* keeps ownership external; a *Notable Asset* transfers it and is owned by the person, not
 > stored in `leases`): [§ 11.2](PHYSICAL_LIFECYCLE.md#112-the-future-equipment-seam-not-built-a-lease-is-not-a-notable-asset).
-> Nothing here is implemented.
+> **Phase 3.0 implements** the Episode shapes, the `KnownCharacter` additions, `PawnRef` (with `agedThroughTick`) and the
+> operation's physical marker exactly as § 5.3 lists them (save format 5; `OrganizationProfile.composition` is 3.2 and not
+> added); see [PHYSICAL_LIFECYCLE Appendix H](PHYSICAL_LIFECYCLE.md#appendix-h-phase-30-as-built). The `leases` slot stays reserved.
 
 **The Phase 0 `Deployment` and `EquipmentLease` pseudo-schemas that stood here have been removed.** They were superseded
 by the Phase 3 design and would mislead an implementation, so they are not kept even as history (the git history has them).

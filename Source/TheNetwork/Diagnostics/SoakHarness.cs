@@ -585,6 +585,7 @@ namespace TheNetwork.Diagnostics
                 cast = new WorldCastSnapshot(), actors = new ActorStore(), characters = new CharacterStore(), intel = new IntelStore(),
                 opportunities = new OpportunityStore(), summaries = summaries, ledger = ledger, relations = new RelationStore(), knowledge = new KnowledgeStore(),
                 contracts = new ContractStore(), operations = new OperationStore(), consequences = new ConsequenceStore(),
+                episodes = new Domain.Physical.EpisodeStore(), physicalPort = new Domain.Physical.UnavailablePhysicalWorldPort(),
                 catalog = catalog, comms = new Comms(), payment = payment, world = world, sites = new Sites { graph = graph }, delivery = new Delivery(),
                 graph = graph
             };
@@ -602,6 +603,8 @@ namespace TheNetwork.Diagnostics
             ctx.Spatial = new Domain.Spatial.SpatialService(ctx);
             ctx.FieldLog = new FieldLogService(ctx);
             ctx.Career = new CareerService(ctx);
+            // The production configuration of Phase 3.0: the lifecycle exists over the fail-closed port, so the soak proves it costs nothing.
+            ctx.Lifecycle = new Domain.Physical.PhysicalLifecycleService(ctx);
             HistoryService history = new HistoryService(ledger, summaries, ctx.actors, ids, clock, seed);
             scheduler.RegisterKind(JobKinds.ContractorUpkeep, ctx.Upkeep.UpkeepJob, true, true);
             scheduler.RegisterKind(JobKinds.PopulationWeekly, ctx.Upkeep.PopulationJobRun, true, true);
@@ -609,6 +612,7 @@ namespace TheNetwork.Diagnostics
             scheduler.RegisterKind(JobKinds.OppWarn, ctx.Opportunities.WarnJob, true, true);
             scheduler.RegisterKind(JobKinds.OppClose, ctx.Opportunities.CloseJob, true, true);
             Core.NetworkRuntime.RegisterPhaseTwoJobs(scheduler, ctx);
+            Core.NetworkRuntime.RegisterPhaseThreeJobs(scheduler, ctx);
             // Retention, as in a game: history sweeps and compaction every quadrum.
             Core.NetworkState state = new Core.NetworkState
             {

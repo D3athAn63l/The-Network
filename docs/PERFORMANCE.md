@@ -205,8 +205,11 @@ summaries or edges in O(1), or knowledge books in O(64) at most.
    concurrent physical episodes, with the idle (nobody physical) cost measured separately and required to be
    near zero. Compare TPS with and without The Network on the same save (the prepared-removal path).
    Budgets and the required measurements are in [PHYSICAL_LIFECYCLE § 18](PHYSICAL_LIFECYCLE.md#18-performance).
-   **Phase 3 design budgets (targets, nothing measured yet; no Phase 3 code exists).** Nobody physical and nobody
-   vanilla-held: **zero** (no job, no per-tick work). An Open episode (≤ 8 people): one `episode.watch` job every 250
+   **Phase 3 design budgets (targets; Phase 3.0 measured only the idle case).** Nobody physical and nobody
+   vanilla-held: **zero** (no job, no per-tick work). *Phase 3.0 (implemented over a fake port):* the soaks run with the
+   lifecycle wired in its production configuration (fail-closed port) and produce output identical to the pre-3.0 build; no
+   `episode.watch` job ever exists, the authority gate is an O(1) read of the person's own record, and the episode index
+   lookup behind "an open episode counts as a job" is one dictionary probe. An Open episode (≤ 8 people): one `episode.watch` job every 250
    ticks (≈ 15 hash/contains operations per person); held people: one global `custody.watch` every 2,500 ticks, only
    while someone is held; signals O(1); reconcile < 1 ms. The one cost that is **not** ours to bound is the registry
    reservation: vanilla evaluates `IsReservedByAnyQuest` (quests × parts × `List<Pawn>.Contains`) for each

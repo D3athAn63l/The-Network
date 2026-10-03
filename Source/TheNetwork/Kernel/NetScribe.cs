@@ -236,6 +236,13 @@ namespace TheNetwork.Kernel
             if (IsLoading) id = new OperationId(v);
         }
 
+        public static void Look(ref EpisodeId id, string label)
+        {
+            int v = id.Value;
+            Scribe_Values.Look(ref v, label, 0);
+            if (IsLoading) id = new EpisodeId(v);
+        }
+
         public static void Look(ref EntityRef r, string label)
         {
             string s = r.IsValid ? r.ToString() : null;

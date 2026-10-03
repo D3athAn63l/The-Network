@@ -72,6 +72,29 @@ if grep -rnE "\.EnsureStarted\(|\.StartNow\(|\bRunStartup\(|\b(rt|runtime|Runtim
 fi
 echo "ok"
 
+echo "### Source scan: the Phase 3.0 lifecycle creates no pawn, Lord, faction, quest, map or thing, and uses no Harmony (PHYSICAL_LIFECYCLE § 23)"
+# Scoped to the new physical-lifecycle code (older phases' vanilla usage is not affected). The fake port may NAME an action
+# (PassToWorld) for test semantics; it can never reach the real API, which this scan forbids by its vanilla type names.
+PHYS="Source/TheNetwork/Domain/Physical Source/TheNetwork/Domain/Contractors/FateRules.cs Source/TheNetwork/Diagnostics/RuntimeTests/FakePhysicalWorldPort.cs Source/TheNetwork/Diagnostics/RuntimeTests/Suites/PhysicalRuntimeSuite.cs"
+if grep -rnE "\b(PawnGenerator|GeneratePawn|GenSpawn|WorldPawns|LordMaker|MakeNewLord|FactionGenerator|NewGeneratedFaction|HarmonyLib|0Harmony|ThingMaker|QuestGen|BirthAbsTicks)\b|Find\." $PHYS | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' ; then
+  echo "FAIL: physical-lifecycle code reaches a real physical API" >&2; exit 1
+fi
+echo "ok"
+
+echo "### Source scan: the reconciliation commit (Applier) and the shared fate rules are pure (RT-PHYS-027)"
+if grep -nE "ctx\.bus|\.Publish\(|[Ss]cheduler|NetLog|Verse\.|Rand\.|System\.Random|UnityEngine|physicalPort|Port\." Source/TheNetwork/Domain/Physical/ReconciliationApplier.cs Source/TheNetwork/Domain/Contractors/FateRules.cs | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' ; then
+  echo "FAIL: the atomic commit references a bus, scheduler, port, log, vanilla API or random source" >&2; exit 1
+fi
+echo "ok"
+
+echo "### Source scan: production holds only the fail-closed physical port; the fake exists in the safe test code only"
+if grep -rln "FakePhysicalWorldPort" Source/TheNetwork --include=*.cs | grep -v "^Source/TheNetwork/Diagnostics/RuntimeTests/" ; then
+  echo "FAIL: production code names the fake physical port" >&2; exit 1
+fi
+grep -q "physicalPort = new Domain.Physical.UnavailablePhysicalWorldPort()" Source/TheNetwork/Core/NetworkRuntime.cs || { echo "FAIL: the live runtime does not hold the fail-closed physical port" >&2; exit 1; }
+echo "ok"
+
+REPO="$(pwd)"
 OUT="${TEST_OUT:-$(mktemp -d)}"
 EXTRA=()
 if [ ! -f "$MANAGED/netstandard.dll" ]; then
@@ -85,4 +108,4 @@ dotnet build Tests/TheNetwork.Tests/TheNetwork.Tests.csproj -c Release -nologo -
 cp "$MANAGED"/*.dll "$OUT/" 2>/dev/null || true
 cp -r Tests/Fixtures "$OUT/"
 echo "### Running tests"
-(cd "$OUT" && mono TheNetwork.Tests.exe "${TEST_FILTER:-}")
+(cd "$OUT" && THENETWORK_REPO="$REPO" mono TheNetwork.Tests.exe "${TEST_FILTER:-}")

@@ -80,6 +80,7 @@ namespace TheNetwork.Core
             }
             if (finished) removed += CompactContracts(now, Budget - removed, ref finished);
             if (finished) removed += CompactLooseOpportunities(now, Budget - removed, ref finished);
+            if (finished) removed += CompactEpisodes(now, Budget - removed, ref finished);
             if (ctx?.Relations != null) removed += ctx.Relations.Compact();
             if (ctx?.Knowledge != null) removed += ctx.Knowledge.Compact();
             if (removed > 0) StateVersion.Bump();
@@ -107,6 +108,8 @@ namespace TheNetwork.Core
                     if (child != null && !child.IsTerminal) childrenDone = false;
                 }
                 if (!childrenDone) continue;
+                // An episode that is not complete still owes this contract's operation its FOLLOW-UP (PHYSICAL_LIFECYCLE § 16.5).
+                if (HeldByIncompleteEpisode(c)) continue;
                 for (int k = 0; k < c.offers.Count; k++)
                 {
                     Offer o = state.contracts.Get(c.offers[k]);
@@ -125,6 +128,59 @@ namespace TheNetwork.Core
                 removed++;
             }
             return removed;
+        }
+
+        private bool HeldByIncompleteEpisode(Contract c)
+        {
+            List<Domain.Physical.PhysicalEpisode> episodes = state.deployments.episodes;
+            for (int i = 0; i < episodes.Count; i++)
+            {
+                Domain.Physical.PhysicalEpisode e = episodes[i];
+                if (e == null || e.IsComplete) continue;
+                if (e.cause.contract == c.id || c.operations.Contains(e.cause.operation)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Closed Physical Episodes (PHYSICAL_LIFECYCLE § 16.5), a year after closing, ONLY when every post-commit stage completed
+        /// (RELEASE, FOLLOW-UP, PUBLISH: the outbox is empty) and no character still references them. An episode with pending
+        /// lifecycle work is never compacted; the episode store never becomes an unbounded journal.
+        /// </summary>
+        private int CompactEpisodes(int now, int budget, ref bool finished)
+        {
+            List<Domain.Physical.PhysicalEpisode> episodes = state.deployments.episodes;
+            if (episodes.Count == 0) return 0;
+            HashSet<int> linked = new HashSet<int>();
+            for (int i = 0; i < state.characters.characters.Count; i++)
+            {
+                Domain.Actors.KnownCharacter ch = state.characters.characters[i];
+                if (ch != null && ch.episode.IsValid) linked.Add(ch.episode.Value);
+            }
+            int removed = 0;
+            List<Domain.Physical.PhysicalEpisode> copy = new List<Domain.Physical.PhysicalEpisode>(episodes);
+            for (int i = 0; i < copy.Count; i++)
+            {
+                if (removed >= budget)
+                {
+                    finished = false;
+                    break;
+                }
+                Domain.Physical.PhysicalEpisode e = copy[i];
+                if (!CanCompact(e, now, linked)) continue;
+                state.deployments.Remove(e);
+                removed++;
+            }
+            return removed;
+        }
+
+        /// <summary>The compaction rule for one episode (public for the tests).</summary>
+        public static bool CanCompact(Domain.Physical.PhysicalEpisode e, int now, HashSet<int> linkedEpisodes)
+        {
+            if (e == null || e.state != Domain.Physical.EpisodeState.Closed || !e.consequencesApplied) return false;
+            if (!e.releaseApplied || !e.followUpApplied || !e.PublishDone || e.publications.Count > 0) return false;
+            if (e.closedTick < 0 || now - e.closedTick < KeepTicks) return false;
+            return linkedEpisodes == null || !linkedEpisodes.Contains(e.id.Value);
         }
 
         /// <summary>Opportunities with no lead (consequence follow-ups, debug sites) closed over a year ago.</summary>

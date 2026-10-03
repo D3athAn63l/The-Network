@@ -2233,7 +2233,7 @@ namespace TheNetwork.Tests
             System.IO.File.Delete(path);
             foreach (NetworkActor a in state.actors.actors) T.Eq(0, a.reputation.score, "a version-3 file has no score");
             MigrationContext mc = new MigrationContext();
-            T.Eq(4, SaveMigrations.Run(state, 3, mc, 0), "3 → 4");
+            T.Eq(5, SaveMigrations.Run(state, 3, mc, 0), "3 → 4 (→ 5)");
             T.Eq(0, state.diagnostics.failedMigrations.Count, "no migration failed");
             T.Check(mc.log.Exists(l => l.Contains("band floors")), "and says what it did");
             int checkedBands = 0;
@@ -2370,17 +2370,17 @@ namespace TheNetwork.Tests
             NetworkState state = LoadFile(path);
             System.IO.File.Delete(path);
             MigrationContext mc = new MigrationContext();
-            T.Eq(4, SaveMigrations.Run(state, 1, mc, 0), "a version-1 save runs the whole chain to 4");
+            T.Eq(5, SaveMigrations.Run(state, 1, mc, 0), "a version-1 save runs the whole chain to 5");
             T.Eq(0, state.diagnostics.failedMigrations.Count, "no migration failed");
-            T.Check(mc.log.Exists(l => l.Contains("PhaseTwoStores")) && mc.log.Exists(l => l.Contains("SpatialContinuity")) && mc.log.Exists(l => l.Contains("ContractorCareers")), "1→2, 2→3 and 3→4 all ran, in order");
-            int i1 = mc.log.FindIndex(l => l.Contains("PhaseTwoStores")), i2 = mc.log.FindIndex(l => l.Contains("SpatialContinuity")), i3 = mc.log.FindIndex(l => l.Contains("ContractorCareers"));
-            T.Check(i1 < i2 && i2 < i3, "in order");
+            T.Check(mc.log.Exists(l => l.Contains("PhaseTwoStores")) && mc.log.Exists(l => l.Contains("SpatialContinuity")) && mc.log.Exists(l => l.Contains("ContractorCareers")) && mc.log.Exists(l => l.Contains("PhysicalLifecycle")), "1→2, 2→3, 3→4 and 4→5 all ran, in order");
+            int i1 = mc.log.FindIndex(l => l.Contains("PhaseTwoStores")), i2 = mc.log.FindIndex(l => l.Contains("SpatialContinuity")), i3 = mc.log.FindIndex(l => l.Contains("ContractorCareers")), i4 = mc.log.FindIndex(l => l.Contains("PhysicalLifecycle"));
+            T.Check(i1 < i2 && i2 < i3 && i3 < i4, "in order");
             foreach (NetworkActor a in state.actors.actors) T.Eq(CareerPolicy.FameFor(a.reputation.score), a.reputation.fame, "band and score agree after the chain");
             // Running the final step a second time is harmless (the version gate prevents it in a game).
             MigrationContext again = new MigrationContext();
-            T.Eq(4, SaveMigrations.Run(state, 4, again, 0), "a current save runs nothing");
+            T.Eq(5, SaveMigrations.Run(state, 5, again, 0), "a current save runs nothing");
             T.Eq(0, again.log.Count, "and logs nothing");
-            T.Eq(4, SaveMigrations.Registry[SaveMigrations.Registry.Count - 1].To, "the chain ends at 4");
+            T.Eq(5, SaveMigrations.Registry[SaveMigrations.Registry.Count - 1].To, "the chain ends at 5 (Phase 3.0: bumped exactly once)");
         }
     }
 }

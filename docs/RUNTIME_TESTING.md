@@ -358,6 +358,35 @@ thing. A new behaviour gets a new ID. A plan with a duplicate or empty ID is ref
 | RT-SPAT-007 | losing the provider after the outbound charter degrades safely |
 | RT-SPAT-008 | the Last Known Location agrees with the hidden spatial truth |
 
+**Physical lifecycle, abstract half — `RT-PHYS-*` (sandbox, Phase 3.0, over the fake `PhysicalWorldPort`)**
+
+Every case runs the production `PhysicalLifecycleService`, planner, Applier and stages in the sandbox; the fake port only hands out
+tokens and answers scripted observations. No case can reach a pawn, thing, map, faction, WorldPawns, silver, letter or the live
+Network. The cases [PHYSICAL_LIFECYCLE § 21.1](PHYSICAL_LIFECYCLE.md#211-tier-s-the-abstract-half-safe-headless-and-in-game-over-a-fake-port)
+marks headless-only (007, 011, 015, 027, 028) are in the headless suite (`Phys.*`); 020–024 and 030 belong to 3.1/3.2.
+
+| ID | Checks |
+|---|---|
+| RT-PHYS-001 | one person materializes exactly once (custody `Deployed`, one membership, one binding) |
+| RT-PHYS-002 | the same person cannot materialize twice, including while a closed episode's RELEASE is pending (P3-INV-001) |
+| RT-PHYS-003 | a normal exit reconciles exactly once under duplicate wake-ups (signal, watch, load, dev) |
+| RT-PHYS-004 | rematerialization reuses the same binding (token), never a new pawn (P3-INV-006) |
+| RT-PHYS-005 | a physical wound becomes the abstract recovery truth (`woundedUntilTick` or a wounded bucket) once |
+| RT-PHYS-006 | physical death is final: no abstract availability or resurrection, even with abstract jobs running (P3-INV-004) |
+| RT-PHYS-008 | held, unknown or absent is never `Returned` (P3-INV-005, -010) |
+| RT-PHYS-009 | a group member's death changes that member only; tier conservation holds (P3-INV-007) |
+| RT-PHYS-010 | map removal cannot silently erase a person |
+| RT-PHYS-012 | an unsupported custody quarantines; the pawn is untouched, the person blocked |
+| RT-PHYS-013 | a reconcile that throws restores the exact durable state; the retry applies once |
+| RT-PHYS-014 | publication resumes at its cursor; nothing accepted is published twice; a throwing consumer is not redispatched (P3-INV-025) |
+| RT-PHYS-016 | a person is never owned by an episode and an operation at once (ADR-039 extended) |
+| RT-PHYS-017 | the spatial anchor is frozen while physical and written once at close (P3-INV-009) |
+| RT-PHYS-018 | prepare-for-removal settles every open episode; no tag left; nothing deleted |
+| RT-PHYS-019 | the validator reports episode contradictions and repairs none |
+| RT-PHYS-025 | truthful aging asks for the full, uncapped interval (1, 10, 70 years; rare = frequent) (P3-INV-022) |
+| RT-PHYS-026 | commit fault sweep: a throw after every step restores the fingerprint; coverage proof; applied once (P3-INV-023) |
+| RT-PHYS-029 | release interruption keeps the gate closed until COMPLETE; zero `PassToWorld` for `WorldFree`; an invalid request is rejected (P3-INV-029, -031) |
+
 **Infrastructure — `RT-INFRA-*` (appended to every run)**
 
 | ID | Checks |
@@ -369,7 +398,7 @@ thing. A new behaviour gets a new ID. A plan with a duplicate or empty ID is ref
 | RT-INFRA-004 | every sandbox was discarded or deliberately preserved |
 
 **Plans.** *Quick smoke* = RT-SMOKE-001..008. *Live integration scan* = RT-LIVE-001..006.
-*Full safe regression* = smoke + live + the 33 sandbox scenarios (47 tests) + the INFRA checks.
+*Full safe regression* = smoke + live + the 52 sandbox scenarios (66 tests) + the INFRA checks.
 
 ## 8. How to run
 
@@ -455,7 +484,8 @@ export uses; created on demand). Exporting does not touch the save.
   in-game whole-run timings below.
 * **Headless elapsed time** of the sandbox scenarios (production services over a synthetic host, the cost
   of the logic only): Procurement 11 tests ≈ 8 ms, Career 14 ≈ 7 ms, Spatial 8 ≈ 9 ms, all 33 sandbox
-  tests plus INFRA ≈ 23 ms over 7 slices.
+  tests plus INFRA ≈ 23 ms over 7 slices. Phase 3.0 adds Physical 19 ≈ 30 ms (the 70-year aging and the fault sweep dominate);
+  all 52 sandbox tests plus INFRA ≈ 60 ms over 9 slices.
 * **In-game elapsed time, as the runner's own summary reported it to the owner** (the run total, including the
   live-state inspection and both fingerprints per slice): Quick smoke ≈ 84 ms (fresh Quicktest colony) and
   ≈ 133 ms (the real modded colony); Full safe regression ≈ 160 ms and ≈ 222 / 96 ms (first / second run in
@@ -540,6 +570,10 @@ By design, not built in this phase and not part of any default suite:
    magic constant copied from one run.
 6. Add the headless coverage of any new runner or sandbox behaviour to `RuntimeRunnerTests.cs`, and keep
    the safe-suite source scan green.
+
+**Phase 3.0 status:** the safe-tier `RT-PHYS-001…019` and `025…029` are **implemented** (the in-game-safe ones in the sandbox suite
+`PhysicalRuntimeSuite`, part of *Full safe regression*; the headless-only ones in `Tests/TheNetwork.Tests/PhysicalLifecycleTests.cs`).
+They have run headlessly; **they have not yet been run inside RimWorld**. No `RT-PHYX-*` case exists.
 
 Phase 3's multi-step lifecycle is what the stepped cases and the preserved sandbox are for, in two tiers: the
 **abstract half** (authority transitions, episode bookkeeping, reconciliation, exactly-once, custody rules over
@@ -667,7 +701,8 @@ derived from the generated terms and never the observed 58,335.
   unchanged; that the compiled and reflective walkers hash a world identically; that captured warnings surface
   as WARN with the sink and once-keys restored; the override snapshot; the source scan; the idle and fingerprint
   cost; the mutation checks (§ 12); and the full pre-existing suite and soaks. Baseline of the merged build:
-  **315 tests, 20,331 checks, 0 failures.**
+  **315 tests, 20,331 checks, 0 failures.** Phase 3.0 adds the 19 `RT-PHYS` sandbox cases and 18 headless `Phys.*` tests:
+  **334 tests, 22,155 checks, 0 failures**, all headless (not yet run in the game).
 * **Validated by the owner in the running game (§ 15.1, § 15.2):** the `GameRuntimeTestHost`, `ColonySentinel`,
   `RuntimeTestGame`, the `RT-SMOKE-*` and `RT-LIVE-*` suites and the Dev Mode actions all executed. Quick smoke,
   Full safe regression and Live integration scan produced **0 runtime FAILs in both environments** (a fresh Dev
