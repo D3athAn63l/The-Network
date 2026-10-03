@@ -37,8 +37,11 @@ namespace TheNetwork.Core
         /// 3 = Phase 2.5 (contractor spatial state, operation spatial plans, contract Field Logs).
         /// 4 = Phase 2.75 (reputation score beneath the fame band, the career record, the operation career
         /// flags, the contractor-money attribution on contract ledgers).
+        /// 5 = Phase 3.0 (the Physical Episode store in the reserved <c>deployments</c> slot, the character binding and custody
+        /// fields, the operation's physical marker). The bump changes no data: it makes an older build warn ("saved by a
+        /// newer Network") instead of silently dropping episode data at its next save (PHYSICAL_LIFECYCLE § 16.5).
         /// </summary>
-        public const int Current = 4;
+        public const int Current = 5;
 
         /// <summary>The oldest save version this build can migrate (SAVE_AND_MIGRATION § 6).</summary>
         public const int MinimumSupported = 1;
@@ -47,7 +50,8 @@ namespace TheNetwork.Core
         {
             new V1ToV2PhaseTwoStores(),
             new V2ToV3SpatialContinuity(),
-            new V3ToV4ContractorCareers()
+            new V3ToV4ContractorCareers(),
+            new V4ToV5PhysicalLifecycle()
         };
 
         /// <summary>
@@ -169,6 +173,37 @@ namespace TheNetwork.Core
                 if (!op.IsFinished) running++;
             }
             ctx.log.Add(actors + " reputation scores set to their band floors; " + contractors + " contractors' careers start with their resolved jobs as legacy; " + running + " running operations stay career-ineligible.");
+        }
+    }
+
+    /// <summary>
+    /// 4 → 5 (Phase 3.0, PHYSICAL_LIFECYCLE § 16.4–16.5). Invents nothing. A version-4 save has no Physical Episode, no
+    /// contractor pawn and no episode membership: the <c>deployments</c> slot was an empty reserved node and loads as an
+    /// empty store; every new character field (binding, episode link, held state, operational role, first encounter) is
+    /// absent and keeps its neutral default (no pawn, no episode, not held, Unset, never met), which is correct because
+    /// nobody was ever materialized and every saved custody is Unmaterialized. Nothing is rewritten: no fake episode,
+    /// encounter, injury, custody or role history; careers, reputation, money, spatial state and operations are untouched.
+    /// </summary>
+    public sealed class V4ToV5PhysicalLifecycle : INetworkMigration
+    {
+        public int From => 4;
+        public int To => 5;
+        public string Name => "PhysicalLifecycle";
+        public string Subsystem => "episodes";
+
+        public void Apply(NetworkState state, MigrationContext ctx)
+        {
+            int characters = state.characters.characters.Count;
+            int unusual = 0;
+            for (int i = 0; i < characters; i++)
+            {
+                Domain.Actors.KnownCharacter c = state.characters.characters[i];
+                if (c == null) continue;
+                // A version-4 build never wrote custody; anything else is reported, never "repaired" into a story.
+                if (c.custody != Domain.Actors.CustodyState.Unmaterialized || c.episode.IsValid || (c.pawn != null && c.pawn.IsBound)) unusual++;
+            }
+            ctx.log.Add(characters + " known characters stay abstract (custody Unmaterialized, no binding, no episode); "
+                + state.deployments.Count + " episodes loaded" + (unusual > 0 ? "; " + unusual + " characters carry unexpected physical fields (reported, not changed)" : "") + ".");
         }
     }
 }

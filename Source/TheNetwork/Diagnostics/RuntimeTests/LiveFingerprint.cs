@@ -139,6 +139,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             f.AddStore(hasher, "relations", ctx.relations);
             f.AddStore(hasher, "knowledge", ctx.knowledge);
             f.AddStore(hasher, "consequences", ctx.consequences);
+            f.AddStore(hasher, "episodes", ctx.episodes);
             f.AddStore(hasher, "history", ctx.ledger);
             f.AddStore(hasher, "summaries", ctx.summaries);
             if (journal != null) f.AddStore(hasher, "journal", journal);

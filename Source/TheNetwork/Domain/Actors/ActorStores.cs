@@ -109,6 +109,25 @@ namespace TheNetwork.Domain.Actors
             KnownCharacter c;
             return id.IsValid && byId.TryGetValue(id.Value, out c) ? c : null;
         }
+
+        public int Count => characters.Count;
+
+        /// <summary>
+        /// Undoes additions made after <paramref name="count"/> records existed: the membership half of a guarded commit's
+        /// restore (PHYSICAL_LIFECYCLE § 15.6 "promotions and ids"), so a rolled-back promotion leaves no record behind and the
+        /// store itself never has to be snapshotted. Records that existed before are untouched.
+        /// </summary>
+        public void TruncateTo(int count)
+        {
+            if (count < 0 || count >= characters.Count) return;
+            for (int i = characters.Count - 1; i >= count; i--)
+            {
+                KnownCharacter c = characters[i];
+                characters.RemoveAt(i);
+                KnownCharacter indexed;
+                if (c != null && c.id.IsValid && byId.TryGetValue(c.id.Value, out indexed) && ReferenceEquals(indexed, c)) byId.Remove(c.id.Value);
+            }
+        }
     }
 
     public enum CastEntryKind : byte

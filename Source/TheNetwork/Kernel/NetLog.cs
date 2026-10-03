@@ -26,7 +26,8 @@ namespace TheNetwork.Kernel
         Contracts,
         Operations,
         Delivery,
-        Spatial
+        Spatial,
+        Physical
     }
 
     public enum NetLogLevel { Verbose, Info, Warning, Error }

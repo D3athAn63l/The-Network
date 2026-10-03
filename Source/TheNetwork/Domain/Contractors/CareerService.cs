@@ -480,6 +480,8 @@ namespace TheNetwork.Domain.Contractors
             if (sim == null || !ContractorService.IsNpcContractor(a) || !a.IsActive) return AdvancementBlock.NotActive;
             // A live commitment needs the current equipment truth (the operation's inputs read it).
             if (sim.commitments.Count > 0) return AdvancementBlock.Committed;
+            // An open (or not yet completed) physical episode counts as a job (PHYSICAL_LIFECYCLE § 2.3, § 8.3).
+            if (Physical.AuthorityGate.HasPhysicalPresence(ctx, a)) return AdvancementBlock.Committed;
             int tier = sim.equipment.tier;
             if (tier >= CareerPolicy.MaxTier) return AdvancementBlock.TopTier;
             cost = CareerPolicy.UpgradeCost(tier);

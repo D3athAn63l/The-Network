@@ -676,10 +676,10 @@ namespace TheNetwork.Tests
 
         private static void MigrationVersion()
         {
-            T.Eq(4, SaveMigrations.Current, "save format 4 (Phase 2.75)");
+            T.Eq(5, SaveMigrations.Current, "save format 5 (Phase 3.0; 4 was Phase 2.75)");
             NetworkState state = new NetworkState();
             MigrationContext mc = new MigrationContext();
-            T.Eq(4, SaveMigrations.Run(state, 2, mc, 0), "2 → 3 → 4 runs the chain");
+            T.Eq(5, SaveMigrations.Run(state, 2, mc, 0), "2 → 3 → 4 → 5 runs the chain");
             T.Check(mc.log.Exists(l => l.Contains("SpatialContinuity")), "the spatial migration is logged");
             T.Check(mc.log.Exists(l => l.Contains("ContractorCareers")), "and so is the career migration");
             T.Eq(0, state.diagnostics.failedMigrations.Count, "and does not fail");

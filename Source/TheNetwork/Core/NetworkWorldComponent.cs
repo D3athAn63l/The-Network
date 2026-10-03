@@ -259,6 +259,9 @@ namespace TheNetwork
             int anchored = ctx.Spatial.InitializeAll();
             if (anchored > 0) NetLog.Info(LogCategory.Spatial, "Anchored " + anchored + " contractors in the world (hidden spatial state).");
             ValidationReport report = NetValidator.Run(runtime, ValidationMode.OnLoad);
+            // Phase 3: incomplete Physical Episodes are watched from the first tick (none exist in a live 3.0 game). Nothing is
+            // decided, generated or spawned at load (PHYSICAL_LIFECYCLE § 16.2).
+            ctx.Lifecycle?.OnLoaded();
             ScheduleSweeps();
             SystemEvent loaded = EventFactory.Make<SystemEvent>(EventKeys.NetworkLoaded, Importance.Minor);
             loaded.count1 = report.Findings.Count;

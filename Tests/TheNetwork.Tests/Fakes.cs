@@ -282,6 +282,7 @@ namespace TheNetwork.Tests
         public readonly FakeSites sites = new FakeSites();
         public readonly FakeDelivery delivery = new FakeDelivery();
         public readonly RecordingConsumer recorder = new RecordingConsumer();
+        public readonly TheNetwork.Diagnostics.RuntimeTests.FakePhysicalWorldPort physical = new TheNetwork.Diagnostics.RuntimeTests.FakePhysicalWorldPort();
         public readonly HistoryLedger ledger = new HistoryLedger();
         public readonly SummaryStore summaries = new SummaryStore();
         public NetScheduler scheduler;
@@ -309,6 +310,7 @@ namespace TheNetwork.Tests
                 relations = new TheNetwork.Domain.Relations.RelationStore(), knowledge = new TheNetwork.Domain.Knowledge.KnowledgeStore(),
                 contracts = new TheNetwork.Domain.Contracts.ContractStore(), operations = new TheNetwork.Domain.Operations.OperationStore(),
                 consequences = new TheNetwork.Domain.Consequences.ConsequenceStore(),
+                episodes = new TheNetwork.Domain.Physical.EpisodeStore(), physicalPort = physical,
                 catalog = cat, comms = comms, payment = pay, world = world, sites = sites, delivery = delivery, graph = graph
             };
             ctx.Actors = new ActorService(ctx);
@@ -324,6 +326,7 @@ namespace TheNetwork.Tests
             ctx.Spatial = new TheNetwork.Domain.Spatial.SpatialService(ctx);
             ctx.FieldLog = new TheNetwork.Domain.Contracts.FieldLogService(ctx);
             ctx.Career = new TheNetwork.Domain.Contractors.CareerService(ctx);
+            ctx.Lifecycle = new TheNetwork.Domain.Physical.PhysicalLifecycleService(ctx);
             history = new HistoryService(ledger, summaries, ctx.actors, ids, clock, seed);
             scheduler.RegisterKind(JobKinds.IntelRound, ctx.Intel.RunRound, true, true);
             scheduler.RegisterKind(JobKinds.IntelClose, ctx.Intel.CloseJob, true, true);
@@ -334,6 +337,7 @@ namespace TheNetwork.Tests
             scheduler.RegisterKind(JobKinds.ContractorUpkeep, ctx.Upkeep.UpkeepJob, true, true);
             scheduler.RegisterKind(JobKinds.PopulationWeekly, ctx.Upkeep.PopulationJobRun, true, true);
             TheNetwork.Core.NetworkRuntime.RegisterPhaseTwoJobs(scheduler, ctx);
+            TheNetwork.Core.NetworkRuntime.RegisterPhaseThreeJobs(scheduler, ctx);
             bus.Register(ConsumerOrder.History, history, HistoryService.ConsumedKeys);
             bus.Register(ConsumerOrder.Relationships, ctx.Relations, TheNetwork.Domain.Relations.RelationService.ConsumedKeys);
             bus.Register(ConsumerOrder.Consequences, ctx.Consequences, TheNetwork.Domain.Consequences.ConsequenceEngine.ConsumedKeys);

@@ -221,6 +221,8 @@ namespace TheNetwork.Domain.Contractors
         private void HealCharacter(KnownCharacter c, int now)
         {
             if (c == null || c.status != CharacterStatus.Wounded || c.woundedUntilTick > now) return;
+            // Recovery runs once (§ 10.6): never abstractly while the person is physical, held, or awaiting release.
+            if (!Physical.AuthorityGate.Allows(c, "HealCharacter")) return;
             c.status = CharacterStatus.Active;
             c.statusTick = now;
             c.woundedUntilTick = -1;

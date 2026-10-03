@@ -231,8 +231,11 @@ namespace TheNetwork.Domain.Actors
 
     /// <summary>
     /// An individual who matters (DATA_MODEL § 5): Fixers, Solo contractors, organization leaders,
-    /// lieutenants and notable members. Records only: no pawn, custody Unmaterialized. Wounds, capture
-    /// and death are record states in Phase 2. Pawn binding (PawnRef) is Phase 3 and deliberately absent.
+    /// lieutenants and notable members. Wounds, capture and death are record states. Phase 3.0 declares the
+    /// approved physical-lifecycle shape (PHYSICAL_LIFECYCLE § 5.3): <see cref="pawn"/> (the write-once binding),
+    /// <see cref="episode"/> (the exclusive membership, cleared only at RELEASE COMPLETE), <see cref="heldBy"/> +
+    /// <see cref="heldSinceTick"/>, <see cref="opRole"/> and <see cref="firstEncounterTick"/>. In 3.0 nothing binds a real
+    /// pawn: production has no path that creates one, so every character stays custody Unmaterialized.
     /// </summary>
     public sealed class KnownCharacter : IExposable
     {
@@ -256,6 +259,23 @@ namespace TheNetwork.Domain.Actors
         /// <summary>When the status last changed.</summary>
         public int statusTick;
 
+        /// <summary>The one pawn of this person, for life (§ 7). Null until a first materialization binds it.</summary>
+        public Physical.PawnRef pawn;
+
+        /// <summary>The exclusive episode membership: set at Plan, cleared only when that episode's RELEASE completes (§ 3.3 A1).</summary>
+        public EpisodeId episode;
+
+        /// <summary>What vanilla holds this person as while custody is OutOfCustody (§ 8.2).</summary>
+        public Physical.HeldKind heldBy = Physical.HeldKind.None;
+
+        public int heldSinceTick = -1;
+
+        /// <summary>The operational role (§ 6.6), distinct from the organizational <see cref="role"/>. Unset in Phase 3.0.</summary>
+        public Physical.OperationalRole opRole = Physical.OperationalRole.Unset;
+
+        /// <summary>When the player first physically met this person (§ 4.5); −1 = never. Not written in Phase 3.0.</summary>
+        public int firstEncounterTick = -1;
+
         public bool IsAlive => status != CharacterStatus.Dead && status != CharacterStatus.Lost;
 
         /// <summary>Can take part in work right now.</summary>
@@ -277,6 +297,12 @@ namespace TheNetwork.Domain.Actors
             Scribe_Values.Look(ref woundedUntilTick, "woundedUntil", -1);
             Scribe_Values.Look(ref deathCauseKey, "deathCause");
             Scribe_Values.Look(ref statusTick, "statusTick", 0);
+            Scribe_Deep.Look(ref pawn, "pawn");
+            NetScribe.Look(ref episode, "episode");
+            NetScribe.LookEnum(ref heldBy, "heldBy", Physical.HeldKind.None);
+            Scribe_Values.Look(ref heldSinceTick, "heldSince", -1);
+            NetScribe.LookEnum(ref opRole, "opRole", Physical.OperationalRole.Unset);
+            Scribe_Values.Look(ref firstEncounterTick, "firstEncounter", -1);
             if (Scribe.mode == LoadSaveMode.LoadingVars && name == null) name = new NameSnapshot();
         }
     }

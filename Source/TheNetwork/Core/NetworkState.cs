@@ -27,7 +27,8 @@ namespace TheNetwork.Core
         public OpportunityStore opportunities = new OpportunityStore();
         public Domain.Contracts.ContractStore contracts = new Domain.Contracts.ContractStore();
         public Domain.Operations.OperationStore operations = new Domain.Operations.OperationStore();
-        public ReservedStore deployments = new ReservedStore();
+        /// <summary>The Physical Episode store (Phase 3), in the slot reserved since Phase 1 (label unchanged).</summary>
+        public Domain.Physical.EpisodeStore deployments = new Domain.Physical.EpisodeStore();
         public ReservedStore leases = new ReservedStore();
         public HistoryLedger history = new HistoryLedger();
         public SummaryStore summaries = new SummaryStore();
@@ -56,7 +57,7 @@ namespace TheNetwork.Core
             Store(ref opportunities, "opportunities", "opportunities", failures);
             Store(ref contracts, "contracts", "contracts", failures);
             Store(ref operations, "operations", "operations", failures);
-            Store(ref deployments, "deployments", null, failures);
+            Store(ref deployments, "deployments", "episodes", failures);
             Store(ref leases, "leases", null, failures);
             Store(ref history, "history", "history", failures);
             Store(ref summaries, "summaries", "history", failures);
@@ -85,8 +86,8 @@ namespace TheNetwork.Core
         /// <summary>
         /// The highest id in use by any entity that draws from the shared allocator (<c>ids.NextId()</c>):
         /// actors, known characters, intel requests, leads, opportunities, history records, contracts,
-        /// offers and operations. A new entity kind that draws an id must be added here (a test checks
-        /// every kind).
+        /// offers, operations and physical episodes. A new entity kind that draws an id must be added here (a test
+        /// checks every kind).
         /// </summary>
         public int MaxEntityId()
         {
@@ -100,6 +101,7 @@ namespace TheNetwork.Core
             for (int i = 0; i < contracts.contracts.Count; i++) max = Math.Max(max, contracts.contracts[i].id.Value);
             for (int i = 0; i < contracts.offers.Count; i++) max = Math.Max(max, contracts.offers[i].id.Value);
             for (int i = 0; i < operations.operations.Count; i++) max = Math.Max(max, operations.operations[i].id.Value);
+            max = Math.Max(max, deployments.MaxId());
             return max;
         }
 
@@ -127,6 +129,7 @@ namespace TheNetwork.Core
             opportunities.RebuildIndex();
             contracts.RebuildIndex();
             operations.RebuildIndex();
+            deployments.RebuildIndex();
             summaries.RebuildIndex();
         }
     }

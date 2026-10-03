@@ -23,7 +23,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             return new RuntimeTestPlan(LiveName).AddRange(RuntimeLiveSuite.Cases(host));
         }
 
-        /// <summary>The isolated scenarios (procurement, careers, spatial): production services in scratch worlds. Runs in any host.</summary>
+        /// <summary>The isolated scenarios (procurement, careers, spatial, the Phase 3.0 lifecycle over a fake port): production services in scratch worlds. Runs in any host.</summary>
         public static RuntimeTestPlan SandboxOnly(IRuntimeTestHost host)
         {
             return new RuntimeTestPlan(SandboxName).AddRange(SandboxCases(host));
@@ -44,6 +44,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             foreach (RuntimeTestCase c in ProcurementRuntimeSuite.Cases(host)) yield return c;
             foreach (RuntimeTestCase c in CareerRuntimeSuite.Cases(host)) yield return c;
             foreach (RuntimeTestCase c in SpatialRuntimeSuite.Cases(host)) yield return c;
+            foreach (RuntimeTestCase c in PhysicalRuntimeSuite.Cases(host)) yield return c;
         }
     }
 }

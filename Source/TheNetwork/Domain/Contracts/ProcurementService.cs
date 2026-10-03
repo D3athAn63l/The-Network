@@ -867,7 +867,8 @@ namespace TheNetwork.Domain.Contracts
             ctx.scheduler.Cancel(DecisionJob, c.id.Value);
             ctx.scheduler.Cancel(DeliveryJob, c.id.Value);
             Operation op = CurrentOperation(c);
-            if (op != null && !op.IsFinished && op.outcome != null && op.status != OpStatus.Troubled) ctx.Operations.Finish(op);
+            // A Troubled (or Physical: owned by an open episode) operation is not finished from here; its own resolution does that.
+            if (op != null && !op.IsFinished && op.outcome != null && op.status != OpStatus.Troubled && op.status != OpStatus.Physical) ctx.Operations.Finish(op);
             ContractEvent e = NewEvent(eventKey, importance, c);
             PruneClosed(c);
             ctx.FieldLog?.Close(c);

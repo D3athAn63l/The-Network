@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using TheNetwork.Domain.Actors;
+using TheNetwork.Domain.Physical;
 using TheNetwork.Kernel;
 using TheNetwork.Persist;
 using TheNetwork.Persist.Events;
@@ -484,7 +485,7 @@ namespace TheNetwork.Domain.Contractors
             if (org == null)
             {
                 KnownCharacter c = ctx.characters.Get(a.bindings.embodies);
-                people = c != null && c.IsAvailable ? 3.5f * (0.5f + sim.skill) : 0f;
+                people = c != null && c.IsAvailable && AuthorityGate.CanSimulateAbstractly(c) ? 3.5f * (0.5f + sim.skill) : 0f;
             }
             else
             {
@@ -493,7 +494,7 @@ namespace TheNetwork.Domain.Contractors
                 for (int i = 0; i < org.knownMembers.Count; i++)
                 {
                     KnownCharacter c = ctx.characters.Get(org.knownMembers[i]);
-                    if (c != null && c.IsAvailable) people += c.id == org.leader ? 4f : 3f;
+                    if (c != null && c.IsAvailable && AuthorityGate.CanSimulateAbstractly(c)) people += c.id == org.leader ? 4f : 3f;
                 }
                 people *= 0.7f + 0.6f * sim.skill;
             }
@@ -565,6 +566,8 @@ namespace TheNetwork.Domain.Contractors
             {
                 KnownCharacter c = Embodied(a);
                 if (c == null || !c.IsAlive) return Availability.Ended;
+                // Physical, held by vanilla, or with a release still pending: not "busy", simply not available (§ 2.3).
+                if (!AuthorityGate.CanSimulateAbstractly(c)) return Availability.Unavailable;
                 if (c.status == CharacterStatus.Wounded) return Availability.Recovering;
                 if (c.status != CharacterStatus.Active) return Availability.Unavailable;
             }
@@ -592,7 +595,7 @@ namespace TheNetwork.Domain.Contractors
             for (int i = 0; i < org.knownMembers.Count; i++)
             {
                 KnownCharacter c = ctx.characters.Get(org.knownMembers[i]);
-                if (c != null && c.IsAvailable && !busy.Contains(c.id)) n++;
+                if (c != null && c.IsAvailable && !busy.Contains(c.id) && AuthorityGate.CanSimulateAbstractly(c)) n++;
             }
             return n;
         }
@@ -680,7 +683,7 @@ namespace TheNetwork.Domain.Contractors
             OrganizationProfile org = a.Get<OrganizationProfile>();
             if (org == null)
             {
-                if (a.bindings.embodies.IsValid && !busy.Contains(a.bindings.embodies)) f.characters.Add(a.bindings.embodies);
+                if (a.bindings.embodies.IsValid && !busy.Contains(a.bindings.embodies) && AuthorityGate.CanSimulateAbstractly(ctx.characters.Get(a.bindings.embodies))) f.characters.Add(a.bindings.embodies);
             }
             else
             {
@@ -699,7 +702,7 @@ namespace TheNetwork.Domain.Contractors
                 for (int i = 0; i < org.knownMembers.Count; i++)
                 {
                     KnownCharacter c = ctx.characters.Get(org.knownMembers[i]);
-                    if (c == null || !c.IsAvailable || busy.Contains(c.id) || f.characters.Contains(c.id)) continue;
+                    if (c == null || !c.IsAvailable || busy.Contains(c.id) || f.characters.Contains(c.id) || !AuthorityGate.CanSimulateAbstractly(c)) continue;
                     bool isLeader = c.id == org.leader;
                     bool goes = isLeader ? (small || danger > 0.55f) : (small || org.lieutenants.Contains(c.id) || danger > 0.4f);
                     if (goes) f.characters.Add(c.id);
@@ -707,7 +710,7 @@ namespace TheNetwork.Domain.Contractors
                 if (f.Headcount == 0)
                 {
                     KnownCharacter l = ctx.characters.Get(org.leader);
-                    if (l != null && l.IsAvailable && !busy.Contains(l.id)) f.characters.Add(l.id);
+                    if (l != null && l.IsAvailable && !busy.Contains(l.id) && AuthorityGate.CanSimulateAbstractly(l)) f.characters.Add(l.id);
                 }
             }
             sim?.MarkDirty();
@@ -805,14 +808,14 @@ namespace TheNetwork.Domain.Contractors
                 CharacterFate f = r.fates[i];
                 KnownCharacter c = ctx.characters.Get(f.character);
                 if (c == null || f.fate == Fate.Unharmed) continue;
+                // An abstract writer never advances a physical, held or unreleased person (§ 3.3 A1, P3-INV-002).
+                if (!AuthorityGate.Allows(c, "ApplyCasualties")) continue;
                 bool isLeader = org != null ? c.id == org.leader : c.id == a.bindings.embodies;
                 switch (f.fate)
                 {
                     case Fate.Killed:
                         killed++;
-                        SetStatus(c, CharacterStatus.Dead);
-                        c.diedTick = ctx.Now;
-                        c.deathCauseKey = "Operation";
+                        FateRules.Killed(c, ctx.Now, "Operation");
                         PublishCharacter(EventKeys.CharacterKilled, isLeader ? Importance.Major : Importance.Notable, a, c, contract, op, isLeader);
                         if (isLeader && org != null)
                         {
@@ -822,17 +825,16 @@ namespace TheNetwork.Domain.Contractors
                         break;
                     case Fate.Wounded:
                         wounded++;
-                        SetStatus(c, CharacterStatus.Wounded);
-                        c.woundedUntilTick = ctx.Now + Math.Max(2, r.woundDays) * Ticks.PerDay;
+                        FateRules.Wounded(c, ctx.Now, r.woundDays);
                         break;
                     case Fate.Captured:
                         captured++;
-                        SetStatus(c, CharacterStatus.Captured);
+                        FateRules.Captured(c, ctx.Now);
                         if (isLeader && org != null) leaderLost = true;
                         break;
                     case Fate.Missing:
                         missing++;
-                        SetStatus(c, CharacterStatus.Missing);
+                        FateRules.Missing(c, ctx.Now);
                         if (isLeader && org != null) leaderLost = true;
                         break;
                 }
@@ -846,8 +848,7 @@ namespace TheNetwork.Domain.Contractors
                 e.captured = captured;
                 e.missing = missing;
                 ctx.bus.Publish(e);
-                int headBefore = org == null ? 1 : org.Healthy + org.Wounded + org.Committed + org.knownMembers.Count + killed + captured + missing;
-                float lossShare = headBefore == 0 ? 1f : (killed + captured + missing) / (float)headBefore;
+                float lossShare = FateRules.LossShare(org, killed, captured, missing);
                 if (sim != null) MoraleModel.Shock(sim, lossShare, leaderLost, ctx.Now);
             }
             else if (sim != null && success)
@@ -856,11 +857,7 @@ namespace TheNetwork.Domain.Contractors
             }
             if (sim != null)
             {
-                sim.opsCompleted++;
-                if (org != null) sim.opsSincePromotion++;
-                // Survivors learn from the work, a little more from success.
-                sim.skill = Clamp(sim.skill + (success ? 0.012f : 0.006f), 0f, 1f);
-                sim.MarkDirty();
+                FateRules.OperationBookkeeping(sim, org != null, success);
                 MoraleShiftCheck(a, sim);
             }
             if (org == null)
@@ -874,11 +871,6 @@ namespace TheNetwork.Domain.Contractors
             }
         }
 
-        private void SetStatus(KnownCharacter c, CharacterStatus s)
-        {
-            c.status = s;
-            c.statusTick = ctx.Now;
-        }
 
         /// <summary>
         /// Minimal succession (SIMULATION § 4.5): a living lieutenant first, then the best living Known
@@ -889,61 +881,24 @@ namespace TheNetwork.Domain.Contractors
         {
             OrganizationProfile org = a?.Get<OrganizationProfile>();
             if (org == null || a.status != ActorStatus.Active) return;
+            // The decision and the durable steps are the shared rule set (FateRules), in the order they have always run;
+            // only the events are published here, at the same points as before.
+            FateRules.SuccessionPlan plan = FateRules.PlanSuccession(a, org, ctx.characters, oldLeaderId, SuccessionEligible, t => FateRules.PeekHealthy(org, t), Pools);
+            FateRules.ApplyProbes(org, plan);
+            KnownCharacter next = plan.next;
+            if (plan.promote)
+            {
+                next = FateRules.ApplyPromotion(a, org, plan, ctx.ids, ctx.characters, ctx.Now);
+                PublishCharacter(EventKeys.CharacterPromoted, Importance.Notable, a, next, ContractId.None, OperationId.None, false);
+            }
             KnownCharacter old = ctx.characters.Get(oldLeaderId);
-            KnownCharacter next = null;
-            for (int pass = 0; pass < 2 && next == null; pass++)
-            {
-                List<CharacterId> pool = pass == 0 ? org.lieutenants : org.knownMembers;
-                for (int i = 0; i < pool.Count; i++)
-                {
-                    KnownCharacter c = ctx.characters.Get(pool[i]);
-                    if (c == null || c.id == oldLeaderId || !c.IsAlive || c.status == CharacterStatus.Captured || c.status == CharacterStatus.Missing) continue;
-                    if (next == null || c.notability > next.notability) next = c;
-                }
-            }
-            if (next == null)
-            {
-                Tier? from = null;
-                for (int t = (int)Tier.Veteran; t >= 0 && from == null; t--)
-                {
-                    if (org.TierOf((Tier)t).healthy > 0) from = (Tier)t;
-                }
-                if (from != null)
-                {
-                    org.TierOf(from.Value).healthy--;
-                    NetRng rng = new NetRng(a.seed, "succession", org.succession.successions);
-                    CastGenerator names = new CastGenerator(Pools, NetHash.Combine(a.seed, "names.succession"), () => null, null);
-                    next = NewPerson(names, rng, CharacterRole.Member, a.id, 0.3f);
-                    ctx.characters.Add(next);
-                    if (org.knownMembers.Count < OrganizationProfile.MaxKnownMembers) org.knownMembers.Add(next.id);
-                    PublishCharacter(EventKeys.CharacterPromoted, Importance.Notable, a, next, ContractId.None, OperationId.None, false);
-                }
-            }
-            org.lieutenants.Remove(oldLeaderId);
-            if (old != null && !old.IsAlive) org.knownMembers.Remove(oldLeaderId);
+            FateRules.ApplyOldLeaderExit(org, ctx.characters, oldLeaderId);
             if (next == null)
             {
                 EndActor(a, "NoSuccessor");
                 return;
             }
-            org.lieutenants.Remove(next.id);
-            if (!org.knownMembers.Contains(next.id) && org.knownMembers.Count < OrganizationProfile.MaxKnownMembers) org.knownMembers.Add(next.id);
-            next.role = CharacterRole.Leader;
-            next.notability = Clamp(next.notability + 0.1f, 0f, 1f);
-            if (old != null && old.IsAlive) old.role = CharacterRole.Member;
-            org.leader = next.id;
-            org.succession.successions++;
-            org.succession.lastSuccessionTick = ctx.Now;
-            ContractorSimulation sim = a.Get<ContractorSimulation>();
-            if (sim != null)
-            {
-                MoraleModel.Shock(sim, 0.1f, true, ctx.Now);
-                // A new leader nudges the group's habits a little (bounded; SIMULATION § 4.3).
-                NetRng drift = new NetRng(a.seed, "succession.doctrine", org.succession.successions);
-                sim.doctrine.caution = Clamp(sim.doctrine.caution + drift.Range(-0.03f, 0.03f), 0.02f, 0.98f);
-                sim.doctrine.greed = Clamp(sim.doctrine.greed + drift.Range(-0.03f, 0.03f), 0.02f, 0.98f);
-                sim.MarkDirty();
-            }
+            FateRules.ApplyNewLeader(a, org, ctx.characters, plan, next, ctx.Now);
             ContractorEvent e = EventFactory.Make<ContractorEvent>(EventKeys.LeaderSucceeded, Importance.Notable, a.id.Ref, next.id.Ref);
             e.actor = a.id;
             e.actorName = a.name.Display;
@@ -954,15 +909,17 @@ namespace TheNetwork.Domain.Contractors
             ctx.bus.Publish(e);
         }
 
+        /// <summary>Who may lead next on the abstract path: alive, not captured or missing, and abstractly simulatable (§ 2.3).</summary>
+        private static bool SuccessionEligible(KnownCharacter c)
+        {
+            return FateRules.MayLead(c.status) && AuthorityGate.CanSimulateAbstractly(c);
+        }
+
         /// <summary>The actor ends (a Solo died, or an organization has nobody left to lead it).</summary>
         public void EndActor(NetworkActor a, string reasonKey)
         {
             if (a == null || a.status != ActorStatus.Active) return;
-            a.status = ActorStatus.Dissolved;
-            a.endedTick = ctx.Now;
-            a.endReasonKey = reasonKey;
-            ContractorProfile p = a.Get<ContractorProfile>();
-            if (p != null) p.suspended = true;
+            FateRules.ActorEnded(a, reasonKey, ctx.Now);
             ctx.scheduler.Cancel(UpkeepJob, a.id.Value);
             ctx.Spatial?.OnActorEnded(a);
             ContractorEvent e = EventFactory.Make<ContractorEvent>(EventKeys.ContractorEnded, Importance.Major, a.id.Ref);
@@ -976,11 +933,9 @@ namespace TheNetwork.Domain.Contractors
         public void MoraleShiftCheck(NetworkActor a, ContractorSimulation sim)
         {
             MoraleDescriptor before = sim.morale.descriptor;
-            MoraleDescriptor after = MoraleModel.Evaluate(sim, before);
+            MoraleDescriptor after = FateRules.NextDescriptor(sim);
             if (after == before) return;
-            sim.morale.descriptor = after;
-            sim.morale.descriptorTick = ctx.Now;
-            sim.MarkDirty();
+            FateRules.SetDescriptor(sim, after, ctx.Now);
             ContractorEvent e = EventFactory.Make<ContractorEvent>(EventKeys.MoraleShifted, Importance.Minor, a.id.Ref);
             e.actor = a.id;
             e.actorName = a.name.Display;

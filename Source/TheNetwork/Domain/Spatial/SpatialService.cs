@@ -128,6 +128,9 @@ namespace TheNetwork.Domain.Spatial
         public int lklFallback;
         public int faults;
 
+        /// <summary>Catch-ups and relocations skipped because a Solo's person is not abstract (Phase 3; 0 in a live 3.0 game).</summary>
+        public int frozen;
+
         /// <summary>Journeys made later than committed because the contractor could not cover the route sooner (never faster).</summary>
         public int lateArrivals;
 
@@ -333,6 +336,12 @@ namespace TheNetwork.Domain.Spatial
             catch (Exception ex) { Fault("end", OpKey(op), ex, 0); }
         }
 
+        /// <summary>Drops a derived route cache entry (runtime only; the next journey builds its own). Used after a physical anchor write.</summary>
+        public void ForgetRoute(NetworkActor a)
+        {
+            if (a != null) routes.Remove(a.id.Value);
+        }
+
         public void OnActorEnded(NetworkActor a)
         {
             try { OnActorEndedCore(a); }
@@ -481,6 +490,12 @@ namespace TheNetwork.Domain.Spatial
         public void CatchUp(NetworkActor a)
         {
             if (a == null || a.status != ActorStatus.Active) return;
+            // A Solo's whereabouts ARE its person's: frozen while that person is physical, held or awaiting release (§ 12.1).
+            if (Physical.AuthorityGate.SpatialFrozen(ctx, a))
+            {
+                counters.frozen++;
+                return;
+            }
             ContractorSimulation sim = a.Get<ContractorSimulation>();
             if (sim == null) return;
             if (!sim.spatial.IsInitialized && !EnsureInitializedCore(a)) return;
@@ -764,6 +779,11 @@ namespace TheNetwork.Domain.Spatial
         {
             ContractorSimulation sim = a?.Get<ContractorSimulation>();
             if (sim == null || !GraphReady) return false;
+            if (Physical.AuthorityGate.SpatialFrozen(ctx, a))
+            {
+                counters.frozen++;
+                return false;
+            }
             SpatialState s = sim.spatial;
             if (!s.IsInitialized || s.destination != null || s.operation.IsValid || sim.commitments.Count > 0) return false;
             if (s.status != SpatialStatus.Idle && s.status != SpatialStatus.Blocked) return false;

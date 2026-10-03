@@ -26,7 +26,7 @@ namespace TheNetwork.Domain.Operations
         Running = 0,
         Delayed = 1,
         Troubled = 2,
-        Physical = 3,   // reserved for Phase 3 deployments; never entered in Phase 2
+        Physical = 3,   // held by a Physical Episode (Phase 3); never entered by gameplay before 3.2 (no episode exists in a live 3.0 game)
         Resolved = 4,
         Aborted = 5
     }
@@ -306,6 +306,19 @@ namespace TheNetwork.Domain.Operations
         /// <summary>Hidden geography (Phase 2.5); null for operations from an older save.</summary>
         public OperationSpatialPlan spatial;
 
+        /// <summary>
+        /// Phase 3 (PHYSICAL_LIFECYCLE § 5.3 "operation marker"): the physical episode now holding this operation's people
+        /// (its status is <see cref="OpStatus.Physical"/> meanwhile), and the episode's result, written by that episode's
+        /// atomic commit. The operation's own resolution then runs as the episode's FOLLOW-UP through the re-entrant
+        /// <c>OperationService.OnPhysicalResolved</c>; never entered by production gameplay in Phase 3.0.
+        /// </summary>
+        public EpisodeId physicalEpisode;
+
+        public Physical.PhysicalResolution physicalResolution;
+
+        /// <summary>The sub-steps of <c>OnPhysicalResolved</c> already done (bit flags): each runs exactly once, so a retry repeats nothing.</summary>
+        public int physicalSteps;
+
         public bool IsFinished => status == OpStatus.Aborted || phase == OpPhase.Done;
 
         public Checkpoint Find(string key)
@@ -348,6 +361,9 @@ namespace TheNetwork.Domain.Operations
             Scribe_Values.Look(ref careerEligible, "careerEligible", false);
             Scribe_Values.Look(ref careerOutcomeApplied, "careerApplied", false);
             Scribe_Deep.Look(ref spatial, "spatial");
+            NetScribe.Look(ref physicalEpisode, "physicalEpisode");
+            NetScribe.LookEnum(ref physicalResolution, "physicalResolution", Physical.PhysicalResolution.None);
+            Scribe_Values.Look(ref physicalSteps, "physicalSteps", 0);
             if (Scribe.mode == LoadSaveMode.LoadingVars && (badPhase || badStatus) && quarantinedReason == null)
             {
                 quarantinedReason = badPhase ? "MalformedEnum:phase" : "MalformedEnum:status";

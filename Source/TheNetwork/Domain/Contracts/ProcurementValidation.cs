@@ -124,6 +124,9 @@ namespace TheNetwork.Domain.Contracts
                 return 0;
             }
             if (op.IsFinished || op.quarantinedReason != null) return 0;
+            // A Physical operation belongs to its episode (PHYSICAL_LIFECYCLE § 15.4): its jobs are suspended on purpose, and the
+            // episode checks report on it. Never "repaired" back onto the abstract path here.
+            if (op.status == OpStatus.Physical) return 0;
             if (op.status == OpStatus.Troubled)
             {
                 if (!sch.Has(OperationService.TroubledJob, op.id.Value))

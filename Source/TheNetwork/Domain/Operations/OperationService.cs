@@ -250,7 +250,9 @@ namespace TheNetwork.Domain.Operations
             if (ContractorService.IsSolo(a))
             {
                 KnownCharacter self = ctx.Contractors.Embodied(a);
-                return self != null && self.IsAlive && self.status != CharacterStatus.Captured && self.status != CharacterStatus.Missing;
+                // Physical, held, or with a release pending: not abstractly there (PHYSICAL_LIFECYCLE § 2.3).
+                return self != null && self.IsAlive && self.status != CharacterStatus.Captured && self.status != CharacterStatus.Missing
+                    && Physical.AuthorityGate.CanSimulateAbstractly(self);
             }
             return true;
         }
@@ -448,6 +450,13 @@ namespace TheNetwork.Domain.Operations
         public void Abort(Operation op, string reasonKey)
         {
             if (op == null || op.IsFinished) return;
+            // A Physical operation's people belong to its episode: it is resolved by that episode's FOLLOW-UP
+            // (OnPhysicalResolved), never aborted from under it (PHYSICAL_LIFECYCLE § 15.4). Unreachable in Phase 3.0 production.
+            if (op.status == OpStatus.Physical)
+            {
+                physicalAbortsDeferred++;
+                return;
+            }
             NetworkActor a = ctx.actors.Get(op.contractor);
             bool wasTroubled = op.status == OpStatus.Troubled;
             if (op.outcome == null)
@@ -496,7 +505,7 @@ namespace TheNetwork.Domain.Operations
                 {
                     CharacterFate f = op.outcome.fates[i];
                     KnownCharacter kc = ctx.characters.Get(f.character);
-                    if (f.fate == Fate.Missing && kc != null && kc.status == CharacterStatus.Missing)
+                    if (f.fate == Fate.Missing && kc != null && kc.status == CharacterStatus.Missing && Physical.AuthorityGate.Allows(kc, "TroubledDeadline"))
                     {
                         kc.status = CharacterStatus.Wounded;
                         kc.statusTick = ctx.Now;
@@ -522,6 +531,90 @@ namespace TheNetwork.Domain.Operations
                 if (c != null && !c.IsTerminal) ctx.Procurement.OnWrittenOff(c, op);
             }
             StateVersion.Bump();
+        }
+
+        // ================================================================== physical follow-up (Phase 3)
+
+        /// <summary>Sub-steps of <see cref="OnPhysicalResolved"/> (bits of <see cref="Operation.physicalSteps"/>).</summary>
+        public const int PhysForces = 1, PhysRecovered = 2, PhysCareer = 4, PhysFinish = 8, PhysEnded = 16, PhysContract = 32, PhysReverted = 64;
+
+        /// <summary>Aborts refused because the operation belongs to an open episode (diagnostics; 0 in a live 3.0 game).</summary>
+        public int physicalAbortsDeferred;
+
+        /// <summary>Test-only (never persisted, never set by production): throw after this many sub-steps of the next follow-up.</summary>
+        public int physicalStepFaultAfter = -1;
+
+        /// <summary>
+        /// The FOLLOW-UP of an episode linked to this operation (PHYSICAL_LIFECYCLE § 15.5): the operation's OWN resolution, run
+        /// through its existing guarded entry points, from the result the episode's commit recorded in
+        /// <see cref="Operation.physicalResolution"/>. Found ⇒ the existing found branch (ReturnForces, recovered, the contract's
+        /// OnRecovered); WrittenOff ⇒ the written-off branch (ReturnForces, the career result, Finish, a Solo's end, the contract's
+        /// OnWrittenOff); None (the episode placed nobody, or was detached) ⇒ the operation goes back to Troubled and its own
+        /// abstract deadline, which the episode had suspended.
+        ///
+        /// DELIBERATELY RE-ENTRANT: each sub-step runs once, recorded in <see cref="Operation.physicalSteps"/> only after it
+        /// returned normally (and each is also guarded by its own existing flag), and the status stays <see cref="OpStatus.Physical"/>
+        /// until the LAST step, so a throw half-way never makes the operation look resolved and a re-run repeats nothing. The
+        /// episode's <c>followUpApplied</c> marker, not this status, says whether FOLLOW-UP is complete. The Phase 2 path
+        /// (<see cref="TroubledDeadline"/>) is unchanged. Never entered by production gameplay in Phase 3.0.
+        /// </summary>
+        public void OnPhysicalResolved(Operation op)
+        {
+            if (op == null || op.status != OpStatus.Physical) return; // already resolved: a re-run is a no-op
+            Contract c = ctx.contracts.Get(op.contract);
+            NetworkActor a = ctx.actors.Get(op.contractor);
+            int faultAfter = physicalStepFaultAfter;
+            physicalStepFaultAfter = -1;
+            int done = 0;
+            switch (op.physicalResolution)
+            {
+                case Physical.PhysicalResolution.Found:
+                    PhysStep(op, PhysForces, ref done, faultAfter, () => ReturnForces(op, a, true));
+                    PhysStep(op, PhysRecovered, ref done, faultAfter, () =>
+                    {
+                        op.phase = OpPhase.Delivering;
+                        Checkpoint ret = op.Find(Checkpoint.Return);
+                        if (ret != null) ret.done = true;
+                        ctx.Spatial?.OnTroubledRecovered(op);
+                    });
+                    PhysStep(op, PhysContract, ref done, faultAfter, () =>
+                    {
+                        if (c != null && !c.IsTerminal) ctx.Procurement.OnRecovered(c, op);
+                    });
+                    break;
+                case Physical.PhysicalResolution.WrittenOff:
+                    PhysStep(op, PhysForces, ref done, faultAfter, () => ReturnForces(op, a, false));
+                    PhysStep(op, PhysCareer, ref done, faultAfter, () => ctx.Career?.CommitOutcome(op, true));
+                    PhysStep(op, PhysFinish, ref done, faultAfter, () => Finish(op));
+                    PhysStep(op, PhysEnded, ref done, faultAfter, () =>
+                    {
+                        if (a != null && ContractorService.IsSolo(a) && !ContractorCanWork(a)) ctx.Contractors.EndActor(a, "LostContact");
+                    });
+                    PhysStep(op, PhysContract, ref done, faultAfter, () =>
+                    {
+                        if (c != null && !c.IsTerminal) ctx.Procurement.OnWrittenOff(c, op);
+                    });
+                    break;
+                default:
+                    PhysStep(op, PhysReverted, ref done, faultAfter, () =>
+                    {
+                        if (!op.IsFinished) ctx.scheduler.Schedule(TroubledJob, Math.Max(ctx.Now + 1, op.troubledDeadlineTick), op.id.Value);
+                    });
+                    op.status = OpStatus.Troubled; // back on its own abstract path: the LAST step
+                    StateVersion.Bump();
+                    return;
+            }
+            op.status = OpStatus.Resolved; // the LAST durable step
+            StateVersion.Bump();
+        }
+
+        private static void PhysStep(Operation op, int bit, ref int done, int faultAfter, Action step)
+        {
+            if ((op.physicalSteps & bit) != 0) return;
+            if (faultAfter >= 0 && done >= faultAfter) throw new InvalidOperationException("Injected follow-up fault after " + done + " sub-steps");
+            step();
+            op.physicalSteps |= bit;
+            done++;
         }
 
         /// <summary>Dev: runs the next checkpoint now (its due tick is moved to now; the same code path runs).</summary>
