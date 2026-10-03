@@ -256,7 +256,8 @@ where everyone was killed, captured or missing teaches the contractor nothing (A
 
 - The leader is always a Known Character (a record; it becomes a pawn only when physically
   needed). *Phase 3 (design): the abstract roster stays headcounts by tier and the abstract resolver is **not** role-aware.
-  An organization additionally gets a small persisted **role composition** used only to choose and constrain physical
+  An organization additionally has a small **role composition** (a pure function of immutable origin facts, stored lazily; it
+  never depends on when anyone first looked) used only to choose and constrain physical
   projection, and a small recurring organization's physically met seats become Known Characters
   ([PHYSICAL_LIFECYCLE § 4.5, § 6.7](PHYSICAL_LIFECYCLE.md#45-progressive-concretization)).*
 - **When the leader is killed or captured:** succession runs immediately inside the event

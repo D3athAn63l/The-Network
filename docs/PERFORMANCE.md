@@ -220,5 +220,10 @@ summaries or edges in O(1), or knowledge books in O(64) at most.
    evidence is ≤ 8 play-log / battle-log lookups per reconcile; role-composition apportionment is O(≤ 8). Forbidden: a per-tick
    aging job for stored pawns; scanning the play log per tick. The soak also reports **retained-pawn growth under progressive
    concretization** (R-36) and the *R* × *W* registry cost ([PHYSICAL_LIFECYCLE § 18](PHYSICAL_LIFECYCLE.md#18-performance)).
+   **Added by the correction pass (targets, nothing measured):** the publication outbox is ≲ 12 compact specs per episode and a
+   cursor, written once at commit and advanced only while publishing; release is ≤ 8 members × ≤ 4 actions, each advancing a
+   persisted step; the finish-pending pass runs at load and from the episode watch only while a stage is unfinished, so an
+   idle game pays nothing; narrowed encounter-evidence lookups happen only at reconcile for the non-seat members of a
+   large organization.
 4. **Regression gate**: the timing report (see [DEBUGGING § 5](DEBUGGING.md#5-timing-instrumentation))
    is attached to each phase's PR, with the p50, p95 and max per job kind.

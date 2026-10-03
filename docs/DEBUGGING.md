@@ -207,8 +207,9 @@ These are dev-mode windows, shipped with the phase that introduces each subsyste
 - **Physical Episode Monitor** (Phase 3, designed in
   [PHYSICAL_LIFECYCLE § 8, § 15](PHYSICAL_LIFECYCLE.md#15-reconciliation-algorithm)): each episode's people (named or
   concretized seat, the seat's operational role), the observed state of each pawn, the authority, the pending outcome and the
-  reconciliation trace: the commit's `attempts` / `lastError`, and the **post-commit stage markers** (release done,
-  follow-up done, `publishedTick`). It also shows a bound person's `agedThroughTick` and `firstEncounterTick`, an
+  reconciliation trace: the commit's `attempts` / `lastError`, and the **post-commit stage markers** (`releaseApplied`
+  with each member's `releaseStep`, `followUpApplied`, the outbox with its `publishCursor`, `publishedTick`), plus whether
+  the authority gate is still held closed by an unfinished release. It also shows a bound person's `agedThroughTick` and `firstEncounterTick`, an
   organization's role composition with its pinned seats, and a line when the retained-pawn count exceeds the soft cap.
   Read-only; it never repairs custody or episode truth.
 - **Relationship Graph** (Phase 4+): text-based adjacency with standing and trust per edge,

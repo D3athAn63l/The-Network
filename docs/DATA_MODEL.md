@@ -335,6 +335,10 @@ When a generic member becomes a Known Character, and how custody works, is defin
 > ([PHYSICAL_LIFECYCLE § 4.3](PHYSICAL_LIFECYCLE.md#43-the-questions-answered)). Phase 3 adds only `pawn` (a `PawnRef`, with
 > `agedThroughTick`), `episode`, `heldBy` + `heldSinceTick`, **`opRole`** (an *operational* role, distinct from the
 > organizational `role` above) and `firstEncounterTick`; an organization gains a small **role composition** template.
+> `opRole` and `composition` may be *stored* lazily (old saves carry none), but each is a pure, versioned function of
+> **immutable origin facts** (`seed`, the form class from `capacity`, `ContractorProfile.specialties`, `CharacterId`): storing
+> one later never changes what it is, and it never depends on when the player first looked
+> ([PHYSICAL_LIFECYCLE § 6.6.5](PHYSICAL_LIFECYCLE.md#665-identity-comes-from-immutable-origin-facts-never-from-when-the-player-first-looks)).
 > Nothing is implemented.
 
 ---
@@ -814,7 +818,8 @@ it explains WHERE; the checkpoints stay the timeline and the resolver decides WH
 
 > **Phase 3 design review:** the `Deployment` below is replaced by the Physical Episode; the candidate persisted shapes
 > (`PhysicalEpisode`, `EpisodeMember`, the `KnownCharacter` additions `pawn`/`episode`/`heldBy`/`opRole`/`firstEncounterTick`,
-> `PawnRef` with `agedThroughTick`, `OrganizationProfile.composition`) are in
+> `PawnRef` with `agedThroughTick`, `OrganizationProfile.composition`, and the episode's explicit stage markers
+> `releaseApplied` / `followUpApplied`, the per-member `releaseStep`, and the publication outbox with `publishCursor`) are in
 > [PHYSICAL_LIFECYCLE § 5.3](PHYSICAL_LIFECYCLE.md#53-the-persisted-data-candidate-shapes). `EquipmentLease` is **one of two**
 > Phase 4 equipment seams (a *Lease* keeps ownership external; a *Notable Asset* transfers it and is owned by the person, not
 > stored in `leases`): [§ 11.2](PHYSICAL_LIFECYCLE.md#112-the-future-equipment-seam-not-built-a-lease-is-not-a-notable-asset).

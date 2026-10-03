@@ -548,8 +548,15 @@ a real map) cannot, and runs only in the separate physical tier
 ([PHYSICAL_LIFECYCLE § 21](PHYSICAL_LIFECYCLE.md#21-runtime-qa-strategy)). The safe suites stay safe on a real colony.
 The amendment pass adds to the safe half: a **fault-injection sweep** over the reconciliation commit (a throw after every
 step must leave the deep fingerprint unchanged), a parity test with the abstract casualty path, fame-invariance of
-projection, the truthful-aging contract and the concretization policy (`RT-PHYS-020…028`, 28 cases in all), and in the
-physical tier role-constrained creation, truthful aging and concretization on real pawns (`RT-PHYX-011…014`).
+projection, the truthful-aging contract and the concretization policy (`RT-PHYS-020…028`, 28 cases at that point).
+**The correction pass** adds two safe-tier cases (30 in all): `RT-PHYS-029` (a **release interruption**: a throw after each
+release action, an explicit completion marker, and the authority gate staying closed until release completes) and
+`RT-PHYS-030` (**time-independent identity**: a role or composition never changes because the player first observed it
+years later); it also rewrites `RT-PHYS-014` (**publication interruption**: per-event durable progress, no event submitted
+to the bus twice, a throwing consumer never redispatched), `RT-PHYS-020` (role correction raises only a role-defining
+skill's base level and never touches passion) and `RT-PHYS-023` (a company is not promoted by presence). In the physical
+tier it adds role-constrained creation, truthful aging and concretization on real pawns (`RT-PHYX-011…014`). Nothing is
+implemented and no physical case has been run.
 
 ## 15. Owner-observed runtime evidence
 

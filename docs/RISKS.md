@@ -35,15 +35,15 @@
 | R-26 | Contractor careers run away, double-credit, contradict themselves or bloat the save | Medium | Medium | Phase 2.75 soaks |
 | R-27 | The in-game runtime test framework damages a live colony, leaks overrides, hangs, lies, or becomes a second architecture | High | Low | Phase 2.9 (headless `Runner.*`, mutation checks) + the owner's in-game runs in two environments (0 FAILs) |
 | R-28 | An abstract writer keeps simulating a physical person (an authority leak) | Critical | Medium | Phase 3.0 (`RT-PHYS-011`, the gate) |
-| R-29 | Exactly-once reconciliation fails under duplicate, late or missing wake-ups, or a throw mid-commit | High | Medium | Phase 3.0 (`RT-PHYS-003/013/014`) |
+| R-29 | Exactly-once reconciliation fails under duplicate, late or missing wake-ups, a throw mid-commit, or a retried publication | High | Medium | Phase 3.0 (`RT-PHYS-003/013/014`) |
 | R-30 | The registry reservation is unworkable or too costly (*R* × *W* per tick) | High | Medium | Phase 3.1 (S9r) |
 | R-31 | Observation gaps (downed, caravan join, resurrection, map-removal pawns, dropped signals) lose a person | High | Medium | Phase 3.1/3.2 (S21) |
 | R-32 | The physical test tier damages a real colony | Critical | Low | Phase 3.1 (S22) |
 | R-33 | Pawn creation on a heavily modded list fails, is slow, spams relations or yields a wrong race | Medium | High | Phase 3.1 (S23) |
 | R-34 | An unprepared removal strands reserved, suspended pawns (only if the vanilla-only registry is chosen) | Medium | Low | Phase 3.1 (S9r, S6) |
-| R-35 | A first projection contradicts established truth (a role), or the role machinery over-constrains generation | High | Medium | Phase 3.1 (S25) |
-| R-36 | Identity vs retention: progressive concretization outgrows the retained-pawn cap, or the cap replaces a person the player met | Medium | Medium | Phase 3.2 (S27) |
-| R-37 | The reconciliation commit crosses services and is half-applied | Critical | Medium | Phase 3.0 (`RT-PHYS-026/027/028`) |
+| R-35 | A first projection contradicts established truth (a role), the role machinery over-constrains generation, or a role / composition depends on when it was first observed | High | Medium | Phase 3.1 (S25) |
+| R-36 | Identity vs retention: progressive concretization outgrows the retained-pawn cap, a company is promoted by mere presence, or the cap replaces a person the player met | Medium | Medium | Phase 3.2 (S27) |
+| R-37 | The reconciliation commit crosses services and is half-applied, or a post-commit stage is inferred complete from its side effects | Critical | Medium | Phase 3.0 (`RT-PHYS-026/027/028/029`) |
 | R-38 | Truthful aging has side effects (chronic conditions, an unfit person, an unsafe catch-up API) | Medium | Medium | Phase 3.1 (S12) |
 | R-39 | Team cohesion is infeasible, over-trusted, or drifts into sanitizing real social history | Low | Medium | Phase 3.2 (S26) |
 | R-40 | Reputation, fame and capability stay conflated and leak into projection | Medium | Medium | design now; a later focused phase |
@@ -431,18 +431,25 @@
 - **Mitigation.** One central question, `CanSimulateAbstractly(person)`, in front of every writer in the inventory
   ([PHYSICAL_LIFECYCLE § 2.3](PHYSICAL_LIFECYCLE.md#23-the-writer-inventory-every-abstract-site-that-must-honour-authority));
   authority changes only in `Materialize` and `Reconcile`; a validator finding for a custody/episode mismatch;
-  a static test that enumerates the writers.
-- **Proven by.** Phase 3.0: `RT-PHYS-011` (the gate is complete), `RT-PHYS-002/006/016`, mutation checks (a writer
-  bypassing the gate must fail a named test).
+  a static test that enumerates the writers. *(Correction)* The gate also stays **closed while any episode membership
+  remains**, including a Closed episode whose release has not completed, so a half-released person is never advanced by two
+  layers (P3-INV-029).
+- **Proven by.** Phase 3.0: `RT-PHYS-011` (the gate is complete), `RT-PHYS-002/006/016`, `RT-PHYS-029` (the gate across a
+  release interruption), mutation checks (a writer bypassing the gate must fail a named test).
 
 ## R-29 · Exactly-once reconciliation fails (Phase 3)
 - **Failure modes.** A death signal, a poll, a map removal, a load pass and a dev action each apply the consequence;
   or a throw leaves half of it applied; or the flag is set before the mutation.
 - **Mitigation.** *observe → decide → plan → validate → atomic durable commit → flag last → release → follow-up → publish*;
-  set-once member outcomes; `consequencesApplied` as the last statement of a **snapshot-guarded** commit; keyed publish-only
-  retries; the Closed gate; markers for every post-commit stage ([§ 15](PHYSICAL_LIFECYCLE.md#15-reconciliation-algorithm)).
-  *Amended:* the first revision called the commit "primitive assignments that cannot fail"; see R-37.
-- **Proven by.** Phase 3.0: `RT-PHYS-003/013/014/026/028`; mutation checks (flag first; reconcile inline in a handler).
+  set-once member outcomes; `consequencesApplied` as the last statement of a **snapshot-guarded** commit; the Closed gate;
+  an explicit durable marker for every post-commit stage; and **publication from a durable outbox under a persisted
+  per-event cursor**, so the existing bus (which has no dedupe key and assigns a new sequence number on every `Publish`)
+  is never asked to accept an event twice and a consumer is never replayed
+  ([§ 15](PHYSICAL_LIFECYCLE.md#15-reconciliation-algorithm)).
+  *Amended:* the first revision called the commit "primitive assignments that cannot fail" (see R-37), and the second
+  assumed "keyed" events could be republished, which the real bus does not support.
+- **Proven by.** Phase 3.0: `RT-PHYS-003/013/014/026/028`; mutation checks (flag first; reconcile inline in a handler; a
+  retry that re-submits an accepted event).
 
 ## R-30 · The registry reservation is unworkable or too costly (Phase 3)
 - See R-15 and [PHYSICAL_LIFECYCLE § 7.4](PHYSICAL_LIFECYCLE.md#74-the-registry-reservation-retained-pawns-only). Cost
@@ -491,21 +498,27 @@
   poor, that generation fails, loops or spikes a frame. A request validator is trusted as a guarantee although vanilla
   **drops validators from the 100th try**.
 - **Mitigation.** Request fields and validators as an optimization; an **authoritative post-generation verification** while
-  the candidate is still unbound and unspawned; the smallest correction (raise role-defining skills only, respecting
-  aptitudes); an incapability is never corrected (it is identity) and the candidate is rejected; a bounded attempt count then
+  the candidate is still unbound and unspawned; the smallest correction (raise a role-defining skill's **base level** only,
+  respecting aptitudes, then re-verify; **never passion**, trait, backstory, gene or incapability); an incapability is
+  identity and the candidate is rejected; the role and an organization's composition derive from **immutable origin facts**
+  by a frozen pure function, never from the moment of first observation (P3-INV-030); a bounded attempt count then
   an abort that persists nothing; roles map to *existing* kinds only (`Pawn.kindDef` is saved by def name)
   ([§ 6.8](PHYSICAL_LIFECYCLE.md#68-role-constrained-creation-validate-then-the-smallest-correction), ADR-050).
-- **Proven by.** Spike **S25**; `RT-PHYS-020/021` (pure verdict and correction), `RT-PHYX-011` on real pawns.
+- **Proven by.** Spike **S25**; `RT-PHYS-020/021` (pure verdict and correction), `RT-PHYS-030` (time-independent identity),
+  `RT-PHYX-011` on real pawns.
 
 ## R-36 · Identity versus retention (Phase 3)
 - **Failure modes.** Progressive concretization retains every placed seat of small organizations, so the retained-pawn count
   grows past the soft cap; or the cap tempts the Network to release a person the player has met and later put a *stranger* in
   that seat; or a persistent roster of company soldiers appears by accident.
 - **Mitigation.** Concretization is **bounded by the existing named-people caps** (1 leader + ≤ 2 lieutenants + ≤ 6 known
-  members); rank-and-file of large organizations stay ephemeral; the cap is a *performance* policy that releases only never-
-  encountered people and those with no living seat, and is **exceeded rather than break identity**
+  members); rank-and-file of large organizations stay ephemeral and are promoted only by **strong story evidence** (a
+  material outcome, being named by the Network, a narrowed battle-log signal), **never by presence alone**, so a company does
+  not slowly turn into a persistent roster; the cap is a *performance* policy that releases only never-encountered people and
+  those with no living seat, and is **exceeded rather than break identity**
   ([§ 4.5](PHYSICAL_LIFECYCLE.md#45-progressive-concretization)).
-- **Proven by.** `RT-PHYS-023`, `RT-PHYX-014`, the Phase 3 soak (retained-pawn growth); spike **S27** (encounter evidence).
+- **Proven by.** `RT-PHYS-023`, `RT-PHYX-014`, the Phase 3 soak (retained-pawn growth); spike **S27** (encounter evidence,
+  including the reliability of the narrowed log tests).
 
 ## R-37 · The reconciliation commit crosses services and is half-applied (Phase 3)
 - **Failure modes.** The existing casualty, succession and actor-ending paths interleave durable mutation with inline
@@ -515,10 +528,14 @@
   on retry.
 - **Mitigation.** A pure, validated plan; a **snapshot of exactly the touched set** restored on any throw; the flag as the
   last statement; **no publication, scheduler, vanilla or fault-swallowing call inside the commit**; idempotent post-commit
-  stages with markers and a finish-pending pass; a split (not a call) of the existing paths with a parity test
-  ([§ 15.2, 15.6](PHYSICAL_LIFECYCLE.md#156-failure-semantics-of-the-commit-service-by-service), ADR-048).
+  stages, each with an **explicit durable marker written last and never inferred from side effects** (a removed tag, a
+  changed status), and a finish-pending pass that reads only those markers; a durable publication outbox with a per-event
+  cursor; a split (not a call) of the existing paths with a parity test
+  ([§ 15.2, 15.6](PHYSICAL_LIFECYCLE.md#156-failure-semantics-of-the-commit-service-by-service), ADR-048). The linked
+  operation's follow-up (`OnPhysicalResolved`) must be re-entrant because the legacy `TroubledDeadline` flips status mid-way.
 - **Proven by.** Phase 3.0: `RT-PHYS-026` (a fault-injection sweep over every step, using the existing `LiveFingerprint`),
-  `RT-PHYS-027` (purity and parity), `RT-PHYS-028` (interruption between stages); mutation checks.
+  `RT-PHYS-027` (purity and parity), `RT-PHYS-028` (interruption between stages), `RT-PHYS-029` (release interruption and the
+  authority gate), `RT-PHYS-014` (publication interruption); mutation checks.
 
 ## R-38 · Truthful aging has side effects (Phase 3)
 - **Failure modes.** A stored contractor catches up many years at once: chronic age-related conditions appear, the person is
@@ -551,13 +568,14 @@
 - **Proven by.** `RT-PHYS-022` now; the later phase's own tests.
 
 ## R-41 · Handoff exploits (Phase 3.3, design direction)
-- **Failure modes.** Contractual cargo is duplicated (items in the contractor's hands and delivered by the transaction);
+- **Failure modes.** Contractual cargo is duplicated (items in the contractor's hands and delivered by the handoff);
   ownership is ambiguous between contractor and player; a "form caravan / job complete" path takes goods that were never
   paid for; a failure after the charge leaves the player charged and empty-handed; a robbery is blocked by an invented
   ownership lock.
-- **Mitigation.** Cargo stays under vanilla possession of the contractor party until **one explicit, exactly-once
-  transaction** planned and validated like a reconciliation; the real-world side effects are ordered like today's delivery
-  (plan, charge, hand over; failure after the charge takes the existing refund path); a terminal handoff state is required
-  before normal completion; **no ownership locks and no invulnerability** (physical reality wins)
+- **Mitigation.** Cargo stays under vanilla possession of the contractor party until an explicit, **idempotent staged
+  protocol** with exactly-once *semantics* (not one atomic commit: payment and Thing movement are external side effects):
+  validate, reserve under a persisted transaction id, charge, transfer with positive transfer evidence, finalize, and a
+  compensating path; the order is like today's delivery (plan, charge, hand over; failure after the charge takes the
+  existing refund path); a terminal handoff state is required before normal completion; **no ownership locks and no invulnerability** (physical reality wins)
   ([§ 27](PHYSICAL_LIFECYCLE.md#27-phase-33-procurement-fulfillment-and-physical-handoff-design-direction), ADR-051).
 - **Proven by.** Spikes **S28 to S30**; handoff scenarios `RT-PHYX-030+` (pay, decline, rob, abandon). Not before 3.3 is approved.

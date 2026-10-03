@@ -250,7 +250,10 @@ External defs are stored as defName strings, so repair is a **string remap**:
 
 > **Phase 3 design review (not implemented):** the first Phase 3 build adds one format bump with no data change (the new
 > `KnownCharacter` fields `pawn`, `episode`, `heldBy`, `opRole`, `firstEncounterTick`, the binding's `agedThroughTick` and, later,
-> `OrganizationProfile.composition` default correctly, and the reserved `deployments` slot loads empty) so that an older build
+> `OrganizationProfile.composition` default correctly, and the reserved `deployments` slot loads empty; the episode itself
+> declares its **explicit stage markers** `releaseApplied` / `followUpApplied`, the per-member `releaseStep`, and the
+> publication outbox with `publishCursor`, all of them inside the one reserved slot; `opRole` and `composition` are a pure
+> function of immutable origin facts, so an old save that carries none derives the same value later that it would derive now) so that an older build
 > **warns instead of silently dropping episode data** (whether later released subphases bump again is open, O-11; no number is
 > chosen and the format is still 4); the minimum new persisted truth and the migration/validator/compaction rules are
 > [PHYSICAL_LIFECYCLE § 16.4–16.5](PHYSICAL_LIFECYCLE.md#164-the-minimum-new-persisted-truth); removal with physical pawns

@@ -22,6 +22,16 @@
 > and listed in [Appendix F](#appendix-f-amendment-log). Nothing here is implemented, no runtime spike has been
 > run, and the save format is still **4**.
 
+> **Correction pass (design only, on top of `4062957`).** Seven further findings are corrected, none of which touches the
+> approved architecture: the **release** stage now has an explicit durable completion marker and holds the authority
+> gate closed until it is written; **publication** progress is durable per event so the real `NetworkEventBus` is never
+> asked to accept an event twice; **concretization** of a large company needs strong evidence (presence alone promotes
+> nobody); **role and composition identity** derive from immutable origin facts, never from when the player first
+> looked; **role correction** never touches passion (or any other vanilla-owned fact); and the **Phase 3.3 handoff** is
+> an idempotent staged protocol, not one atomic commit. Every changed statement is edited in place and listed in
+> [Appendix G](#appendix-g-correction-log). Nothing here is implemented, no runtime spike has been run, and the save
+> format is still **4**.
+
 ## The decisions on one page
 
 1. **One authority at a time, per person.** A person is *Abstract* (the Network record is truth), *Physical*
@@ -50,7 +60,12 @@
    ([§ 15](#15-reconciliation-algorithm)). The commit is all-or-nothing for the Network's durable state (a pure
    plan, a snapshot of the exact small touched set, a restore on any throw, the flag **last**) and contains **no**
    publication, scheduler or vanilla effect, because the existing casualty, succession and actor-ending paths
-   interleave exactly those. "Not spawned" is never evidence of anything ([§ 9](#9-custody-model)).
+   interleave exactly those. Each later stage (release, follow-up, publish) has its **own explicit durable marker,
+   written only after that stage's work completed and never inferred from a side effect** (a removed tag, a changed
+   status); publication progress is durable **per event**, so an event the bus accepted is never submitted again; and a
+   person whose episode is Closed is **not** abstractly simulatable until release has completed
+   ([§ 3.3](#33-operational-rules), [§ 8.1](#81-the-episode-machine-durable)). "Not spawned" is never evidence of anything
+   ([§ 9](#9-custody-model)).
 7. **Death is monotonic.** A physical death is final; resurrection by another mod is observed, never initiated,
    and never makes the person `Active` again ([§ 10](#10-death-and-injury)).
 8. **Only identity-defining truth survives abstraction, and age is truthful.** Permanent physical truth stays on
@@ -126,7 +141,8 @@ Appendices: [A. RimWorld 1.6 API audit](#appendix-a-rimworld-16-api-audit) ·
 [C. Interaction classification](#appendix-c-interaction-classification) ·
 [D. Glossary](#appendix-d-glossary) ·
 [E. What the audit changed from the Phase 0 design](#appendix-e-what-the-audit-changed-from-the-phase-0-design) ·
-[F. Amendment log](#appendix-f-amendment-log)
+[F. Amendment log](#appendix-f-amendment-log) ·
+[G. Correction log](#appendix-g-correction-log)
 
 ---
 
@@ -224,7 +240,7 @@ primitive assignments"; [§ 15.6](#156-failure-semantics-of-the-commit-service-b
 | Site | What it does to a person today | Phase 3 rule |
 |---|---|---|
 | `ContractorService.AvailabilityOf` (`:559`) | derives availability from `status` | physical/held ⇒ a new unavailable reason; **no refusal text may say the person is simply "busy"** |
-| `ContractorService.Checkout` / `Occupied` (`:666`, `:679`) | picks `knownMembers` for an operation; excludes people already on one | exclude people in a Planned/Open episode or held by vanilla ([ADR-039](DECISIONS.md) extended) |
+| `ContractorService.Checkout` / `Occupied` (`:666`, `:679`) | picks `knownMembers` for an operation; excludes people already on one | exclude people with any episode membership (Planned, Open, or Closed with release pending) or held by vanilla ([ADR-039](DECISIONS.md) extended) |
 | `ContractorService.Strength` (`:476`) | counts available people | physical/held people do not count as available |
 | `ContractorService.ApplyCasualties` (`:794`) | writes `status`, `diedTick`, morale shock, `opsCompleted++`, skill gain, succession, `EndActor` | physical outcomes reuse the *fate* handling, **not** the per-operation bookkeeping ([§ 15](#15-reconciliation-algorithm)) |
 | `ContractorService.RunSuccession` (`:888`) | skips `Captured`/`Missing`/dead | also skips physical and held people |
@@ -304,11 +320,18 @@ physical episode changes them only through events published after reconciliation
 ### 3.3 Operational rules
 
 - **A1. A single gate.** `CanSimulateAbstractly(person)` (candidate name `AuthorityGate`) is true only for custody
-  `Unmaterialized` or `Stored` with no Planned/Open episode membership. Every site in
+  `Unmaterialized` or `Stored` **and no episode membership at all**. The `episode` link is set at Plan and cleared **only when
+  the release of the episode that owns the person's transition has completed** (`releaseApplied`, [§ 8.1](#81-the-episode-machine-durable)),
+  so a Planned episode, an Open one, **and a Closed one whose release is still pending** all keep the gate closed. Returning to
+  `Stored` durable truth does **not** permit abstract advancement until the physical release transition is complete
+  (P3-INV-029). (Anonymous slots hold no per-person abstract state; their headcount returns in the commit and a pending
+  release of such a pawn cannot cause double simulation.) Every site in
   [§ 2.3](#23-the-writer-inventory-every-abstract-site-that-must-honour-authority) calls it. A new abstract writer
   of person state that does not call it is a review failure and a validator finding.
 - **A2. Authority changes only in two places:** `Materialize` (abstract → physical) and `Reconcile` (physical →
-  abstract or held). Nothing else assigns `custody`.
+  abstract or held). Nothing else assigns `custody`. The *return* to abstract authority **completes at release completion**,
+  not at the reconciliation commit: the commit decides the outcome and writes `Stored`, but the gate reopens only when
+  RELEASE has run to the end.
 - **A3. Absence of evidence never transfers authority.** Physical → abstract requires a *positive* terminal
   observation ([§ 9](#9-custody-model), P3-INV-005, P3-INV-010).
 - **A4. The Network never reaches into a physical pawn to make it match the record.** It does not heal a pawn
@@ -407,34 +430,47 @@ lives (P3-INV-020), and the number of named seats never exceeds the organization
 |---|---|---|---|
 | **Solo** (1) | the one person: named and bound at first materialization | none | one actor, one character, one pawn |
 | **Duo / small crew** (≲ 6 living) | named and bound | **every placed person crystallizes at first placement** into a seat, up to the named caps | the player *meets* them; five people never turn into strangers |
-| **Team / mid-size** (≲ 12) | named and bound | persons whose seat is **role-defining** for the composition (the Medic, the Marksman) crystallize at first placement; the rest only by evidence | continuity where it is visible, economy elsewhere |
-| **Company** (larger) | named people only (leader, lieutenants, known members) | **rank-and-file stay ephemeral**; promotion by evidence ([§ 4.5.3](#453-encounter-evidence-observed-at-reconciliation-never-scanned)) | repeated detachments need no giant roster |
+| **Team / mid-size** (≲ 12) | named and bound | persons whose seat is **role-defining** for the composition (the Medic, the Marksman) crystallize at first placement (the seat policy); **every other member only by strong story evidence**, never by presence | continuity where it is visible, economy elsewhere |
+| **Company** (larger) | named people only (leader, lieutenants, known members) | **rank-and-file stay ephemeral. Presence on a player-visible map is NOT enough**; promotion only by **strong** story evidence ([§ 4.5.3](#453-encounter-evidence-presence-is-not-promotion-observed-at-reconciliation-never-scanned)) | repeated detachments need no giant roster |
 
 Size is the organization's **actual living headcount** at the moment of placement, not its `ContractorForm` label (a
 crew that grew into a company is a company). Thresholds are **OPEN O-2** (tuning, soak). A *Solo* always concretizes.
 
-#### 4.5.3 Encounter evidence (observed at reconciliation, never scanned)
+#### 4.5.3 Encounter evidence: presence is not promotion (observed at reconciliation, never scanned)
 
-Concretization by evidence uses facts the Network can read cheaply for the ≤ 8 members of one episode, at the plan
-step. None of them requires a scan, a per-tick check or a persisted log.
+The evidence is read cheaply for the ≤ 8 members of one episode, at the plan step. None of it needs a scan, a per-tick check
+or a persisted log. **There are two different questions, and presence answers only the first.**
 
-| Evidence | Observed through (verified in 1.6.9676) |
+* **Seat policy (small organizations).** For a Solo, a Duo or a small recurring crew the **seat policy itself is
+  sufficient**: a physically placed member (present on a *player-visible* map, the home map or a map a player pawn
+  occupies; a dev or test map does not count) crystallizes into a seat, up to the named caps. This is the **presence
+  signal, P0, and it is used for nothing else.**
+* **Promotion by strong story evidence (everyone else).** For the rank-and-file of a **large organization**, and for the
+  non-role seats of a mid-size team, **simple presence is never enough.** P0 alone must **not** promote an anonymous
+  company member: otherwise six riflemen sent to a player-visible rendezvous would all become persistent, and repeated
+  visits would quietly build the roster this design forbids. Promotion needs at least one **strong** signal:
+
+| Strong evidence (any one promotes) | Observed through (verified in 1.6.9676) |
 |---|---|
-| **E0 presence** | the member was `Present` on a **player-visible map** (the home map, or a map a player pawn occupies) for the episode's observed span; a dev/test map is **not** an encounter |
-| **E1 interacted or fought with someone who matters** | `Find.PlayLog.AnyEntryConcerns(pawn)` and `Find.BattleLog.AnyEntryConcerns(pawn)` (both public; vanilla's own `WorldPawnGC` uses them for `InPlayLog` / `InBattleLog`, `WorldPawnGC.cs:226–232`) |
-| **E2 vanilla already holds a stake** | the pawn would be kept by vanilla's world-pawn GC for a relationship, an active tale or "ever a colonist" (`WorldPawnGC.GetCriticalPawnReason`, public `AccumulatePawnGCDataImmediate`) |
-| **E3 a material outcome** | captured, recruited, rescued, enslaved; downed a colonist or was downed by one and survived (the member's `ObservedKind` and faction transition) |
-| **E4 the Network names them** | the plan itself decides to name the person in an event or letter |
+| **S1 a material outcome** | captured, arrested, enslaved, recruited, rescued: the member's `ObservedKind` and guest / faction state |
+| **S2 individually named** | the plan *deliberately* names this person in a Network event or letter (a rescued survivor, a captor's prisoner); a count in an aggregate line ("three riflemen fell") names nobody |
+| **S3 combat with the player's side** | a **narrowed** `BattleLog` test: some `Battle.Entries` entry whose `GetConcerns()` includes **both** this pawn **and** a pawn of the player's faction (or a player-hosted pawn). All three members are public (`BattleLog.Battles`, `Battle.Entries`, `LogEntry.GetConcerns()`). Vanilla's `BattleLog.AnyEntryConcerns(pawn)` is **not** used: it is true for *any* fight, including one against raiders, animals or another faction, that has nothing to do with the player |
+| **S4 a continuing vanilla stake that is not a log** | a relationship with a player-side pawn, or `EverBeenColonistOrTameAnimal` (the non-log reasons of `WorldPawnGC.GetCriticalPawnReason`; the `InPlayLog`, `InBattleLog` and `InActiveTale` reasons are **excluded** as too broad) |
 
-`PlayLog.AnyEntryConcerns` is O(log entries) per call; with ≤ 8 members at reconcile it is negligible and **never
-runs per tick**. Which of these are cheap and reliable in a heavily modded game is **spike S27**.
+| Supporting evidence (never sufficient alone) | Why |
+|---|---|
+| a **narrowed** `PlayLog` test: an entry (`PlayLog.AllEntries`, `LogEntry.GetConcerns()`) concerning this pawn **and** a player-faction pawn | it removes internal chatter between the contractor's own people and chatter with other factions, but it **cannot tell chitchat from a consequential interaction**: the interaction kind (`PlayLogEntry_Interaction.intDef`) is `protected`, not public. So it counts only **together with** a second, independent strong signal, unless S27 finds a public way to identify consequential kinds. Vanilla's `PlayLog.AnyEntryConcerns(pawn)` is **not** used: it is true for any conversation with anyone |
+
+Both narrowed tests walk a bounded log once per member at reconcile (≤ 8 members) and **never run per tick**. Whether they
+are reliable and cheap in a heavily modded game, and whether any public signal separates consequential interactions from
+chatter, is **spike S27**.
 
 #### 4.5.4 Retention and the performance cap
 
 The soft cap of ≈ 150 retained pawns is a **performance policy, not permission to break identity**. When it is
 exceeded the order of release is:
 
-1. people **never encountered** (E0–E4 all false: bound, but only ever placed on a test or dev map). Nobody has ever seen
+1. people **never encountered** (never placed on a player-visible map and no strong evidence: bound, but only ever placed on a test or dev map). Nobody has ever seen
    them, so nothing visible is contradicted: such a person is excluded from mission selection (`neverRematerialize`), the
    seat counts as abstract again, and the record stays as history. **No second pawn is ever generated for the same person;**
 2. people who **no longer have a living seat**: members of a dissolved organization, `Retired` people. Releasing a
@@ -448,18 +484,20 @@ stranger.
 
 #### 4.5.5 Promotion of rank-and-file
 
-Promotion is for anyone not crystallized by the size policy but whom the evidence says matters (a company soldier the
-player captured, a rescued survivor named in a letter). It happens **in the plan**, before the pawn is released:
-the plan contains the new `KnownCharacter` (record, binding, operational role from the slot) so the promotion commits
-**atomically with everything else** ([§ 15](#15-reconciliation-algorithm)). The organization's named caps bound
-*seat-based* crystallization. A **held** person is never refused a record because a cap is full: the Network must
-always be able to track a prisoner, a recruit or a kidnapped person it created (the record carries `org`; whether it
-also joins the `knownMembers` list when full is **OPEN O-2**).
+Promotion is for anyone not crystallized by the seat policy whom **strong** story evidence (S1 to S4, § 4.5.3) says matters:
+a company soldier the player captured or recruited, a rescued survivor named in a letter, a rifleman who fought the player's
+colonists. Presence on a player-visible map **is not** such evidence. Promotion happens **in the plan**, before the pawn is
+released: the plan contains the new `KnownCharacter` (record, binding, operational role from the slot), so the promotion
+commits **atomically with everything else** ([§ 15](#15-reconciliation-algorithm)). The organization's named caps bound
+*seat-based* crystallization. A **held** person is never refused a record because a cap is full: the Network must always be
+able to track a prisoner, a recruit or a kidnapped person it created (the record carries `org`; whether it also joins the
+`knownMembers` list when full is **OPEN O-2**). Because strong evidence is rare by construction, a company that visits a
+hundred times promotes a handful of people, not a roster.
 
 #### 4.5.6 A worked example
 
 ```
- Crew "Kestrel" (5 living)  composition: Leader 1 · Rifleman 2 · Medic 1 · Heavy 1
+ Crew "Kestrel" (5 living)  composition: Leader 1 · Rifleman 2 · Medic 1 · Heavy 1      [seat policy: presence suffices]
  Visit 1 — mission composition: Leader, Medic, Rifleman
     Leader   → K41 "Halvard Voss"      already named                              → pawn #5120 (bound)
     Medic    → NEW K44 "Mara Teng"     placed on the player's map ⇒ crystallized  → pawn #5301 (bound)
@@ -470,17 +508,20 @@ also joins the `knownMembers` list when full is **OPEN O-2**).
     Rifleman → NEW K46                 crystallized now (the second Rifleman seat was still abstract)
     Heavy    → NEW K47                 crystallized now
 
- Company "Ironvale" (40 living): leader, 2 lieutenants and 3 known members are named.
- A detachment of 6 riflemen is placed: 6 ephemeral slots, released afterwards. The one the player captured is
- promoted (E3) into a record + binding in the plan; the other five vanish from Network state. No roster of 40.
+ Company "Ironvale" (40 living): leader, 2 lieutenants and 3 known members are named.   [presence is NOT enough]
+ Visit A: a detachment of 6 riflemen stands at a player-visible rendezvous: 6 ephemeral slots, released afterwards.
+          Presence alone promotes NOBODY: 0 new persistent people.
+ Visit B, C, D…: the same, with new anonymous riflemen each time: still 0.
+ Visit E: the player captures one rifleman (S1) and a letter names a rescued survivor (S2): exactly those 2 are promoted
+          into a record + binding in the plan; the other 4 and 5 vanish from Network state. No roster of 40.
 ```
 
 #### 4.5.7 What it persists
 
-`KnownCharacter.firstEncounterTick` (−1 = never; set at reconcile when E0–E4 holds; drives § 4.5.4) and
-`EpisodeMember.seatRole`. Nothing else. A concretized seat is an ordinary `KnownCharacter`; the composition itself
-is the organization's persisted role template ([§ 6.7](#67-organization-and-mission-composition)).
-
+`KnownCharacter.firstEncounterTick` (−1 = never; set at reconcile when the **seat policy** crystallized the person by
+presence on a player-visible map, or when **strong evidence** promoted them; drives § 4.5.4) and `EpisodeMember.seatRole`.
+Nothing else. A concretized seat is an ordinary `KnownCharacter`; the composition itself is the organization's persisted
+role template ([§ 6.7](#67-organization-and-mission-composition)).
 
 ---
 
@@ -531,8 +572,11 @@ them are a *deployment* of troops. The name is not frozen.)
 | `state` | `Planned → Open → Closed`, or `Quarantined` ([§ 8](#8-lifecycle-state-machine)) |
 | `createdTick`, `openedTick`, `closedTick`, `closeReasonKey` | lifecycle ticks and why it ended |
 | `consequencesApplied: bool` | set as the **last statement of the guarded commit**, after every other durable assignment succeeded (a restore on any throw also restores its old value); the exactly-once flag ([§ 15](#15-reconciliation-algorithm)) |
-| `committedTick: int` | when the durable commit succeeded (diagnostics; the *finish-pending pass* resumes the post-commit stages from the markers below) |
-| `publishedTick: int` | set after the post-commit stages finish publishing; a retry after a throw during publish republishes the *deterministic, keyed* events and **never** reapplies a consequence ([§ 15.2](#152-the-steps)). The other post-commit stages have markers too: *release done* = no member carries the episode tag; *follow-up done* = the linked operation has left `OpStatus.Physical` |
+| `committedTick: int` | when the durable commit succeeded (diagnostics; the *finish-pending pass* resumes each post-commit stage from its **explicit marker**, below) |
+| `releaseApplied: bool`, `releasedTick: int` | the **RELEASE completion marker**: false after the commit, written **last**, only after every release action of every member and the episode-level actions succeeded. Tag removal is routing cleanup and is **never** completion evidence ([§ 8.1](#81-the-episode-machine-durable)) |
+| `followUpApplied: bool` | the **FOLLOW-UP completion marker** (for an episode linked to an operation): written only after the operation's re-entrant resolution returned normally ([§ 15.5](#155-reuse-of-the-existing-services-no-parallel-rules)) |
+| `publications: List<PublicationSpec>`, `publishCursor: int` | the **outbox**: the ordered, bounded (≲ 12) compact typed specs written by the commit, and the number the event bus has **accepted**. Cleared when PUBLISH completes ([§ 15.2](#152-the-steps)) |
+| `publishedTick: int` | the **PUBLISH completion marker**: written only after the final spec was accepted by the bus. A retry resumes at `publishCursor`; an accepted event is **never** submitted again and a consequence is **never** reapplied ([§ 15.2](#152-the-steps)) |
 | `attempts: int`, `lastError: string` | bounded reconcile retries, then `Quarantined` |
 | `where: {tile: TileRef, mapId: int}` | context only; **not** the actor's location |
 | `faction: FactionRef?` | the temporary encounter faction, if any |
@@ -546,12 +590,13 @@ them are a *deployment* of troops. The name is not frozen.)
 | `character: CharacterId` | none for an anonymous slot |
 | `slot: int`, `tier: Tier`, `seatRole` | the slot's index, tier and the **operational role of the seat it fills** ([§ 6.6](#66-operational-roles)) |
 | `pawn: PawnRef` | the binding ([§ 7](#7-physical-provenance)) |
+| `releaseStep: byte` | how many of this member's ordered release actions have **succeeded** (the RELEASE cursor; [§ 8.1](#81-the-episode-machine-durable)) |
 | `state` | `Planned → Created → Present → Done` |
 | `outcome` | `Pending` until `Done`, then **set once**: `Returned`, `Killed`, `HeldByPlayer`, `JoinedPlayer`, `Kidnapped`, `HeldByOther`, `Missing`, `Lost`, `NeverPlaced` |
 | `observed: ObservedKind`, `observedTick` | last classification and when (diagnostics and the long-open warning) |
 
 **`KnownCharacter` additions:** `pawn: PawnRef` (null when no pawn exists), `episode: EpisodeId` (the exclusive
-open membership), `heldBy: HeldKind` + `heldSinceTick` (what vanilla holds them as), `opRole` (the **operational
+membership: set at Plan and cleared **only when that episode's RELEASE completes**, so a returned person stays non-abstract until then), `heldBy: HeldKind` + `heldSinceTick` (what vanilla holds them as), `opRole` (the **operational
 role**, one byte, [§ 6.6](#66-operational-roles); distinct from the existing organizational `role`) and
 `firstEncounterTick` (−1 = never met; [§ 4.5](#45-progressive-concretization)). Nothing else: not gender, not age, not
 appearance, not skills, not traits.
@@ -561,9 +606,10 @@ name (a sanity check), `boundTick`. Write-once per character. Plus **`agedThroug
 pawn's *biological* age has been brought current; the one piece of bookkeeping truthful aging needs
 ([§ 6.4](#64-truthful-aging-of-a-retained-pawn)). It is updated only by that catch-up and when a pawn becomes `Stored`.
 
-**Organization addition (3.2):** `OrganizationProfile.composition`: a small list of (`role`, `weight`) that is the
-organization's persisted **role template**, *established at first use* and then never regenerated
-([§ 6.7](#67-organization-and-mission-composition)); absent in old saves and meaning "not yet established".
+**Organization addition (3.2):** `OrganizationProfile.composition`: a small list of (`role`, `count`) that is the
+organization's persisted **role template**, **derived from immutable origin facts** and stored eagerly for new actors or
+lazily for old ones (never regenerated, [§ 6.6.5](#665-identity-comes-from-immutable-origin-facts-never-from-when-the-player-first-looks),
+[§ 6.7](#67-organization-and-mission-composition)); absent in old saves and meaning "not yet stored", **not** "not yet decided".
 
 **Operation marker:** when an episode resolves a Troubled operation, one durable marker records the result
 (`found` / `writtenOff`) in the same commit; the operation's own resolution then runs afterwards through its
@@ -729,8 +775,9 @@ decided.)
 
 #### 6.6.2 What persists
 
-The role (one byte, `KnownCharacter.opRole`) is established when a person is created or crystallized and is
-**durable semantic truth**. An episode slot carries `seatRole`. **No skill sheet, passion list or trait list is
+The role (one byte, `KnownCharacter.opRole`) is **derived from immutable origin facts** ([§ 6.6.5](#665-identity-comes-from-immutable-origin-facts-never-from-when-the-player-first-looks)):
+at `Instantiate` for a new actor, at the creating event for a person created later, lazily (but identically) for a
+record that predates it. It is **durable semantic truth**. An episode slot carries `seatRole`. **No skill sheet, passion list or trait list is
 persisted for a person who has never materialized** (N13). After the first materialization the **pawn is the detailed
 truth**: the role is never re-projected, and a later change in the pawn's skills does not revoke it.
 
@@ -741,17 +788,21 @@ function of the person's *capability band* (§ 6.5).
 
 | Role | Must hold (hard) | Role-defining skill floor | Preferred (soft) | Left to vanilla |
 |---|---|---|---|---|
-| Leader | not barred from Social work; if the organization is combat-oriented, not barred from violence | Social | Social passion | everything else |
-| Marksman | capable of violence **and** of Shooting; no trait that bars its weapon class (vanilla's **Brawler** refuses ranged weapons: `FloatMenuOptionProvider_Equip.cs:55`, and raises `Alert_BrawlerHasRangedWeapon`) | Shooting (a high floor) | Shooting passion; a ranged kind | Melee, everything unrelated |
+| Leader | not barred from Social work; if the organization is combat-oriented, not barred from violence | Social | none | everything else |
+| Marksman | capable of violence **and** of Shooting; no trait that bars its weapon class (vanilla's **Brawler** refuses ranged weapons: `FloatMenuOptionProvider_Equip.cs:55`, and raises `Alert_BrawlerHasRangedWeapon`) | Shooting (a high floor) | a ranged kind (kind selection only) | Melee, passions, everything unrelated |
 | Rifleman | capable of violence and Shooting | Shooting (a lower floor) | a ranged kind | the rest |
 | Heavy | capable of violence | Shooting **or** Melee | heavy weapon / armor utility (kind selection) | Social, Cooking, … |
 | Breacher | capable of violence | Melee **or** Shooting | melee / armor utility | the rest |
-| Medic | able to doctor: `Medicine` not totally disabled, not barred from Caring | Medicine | Medicine passion | combat skills |
+| Medic | able to doctor: `Medicine` not totally disabled, not barred from Caring | Medicine | none | combat skills, passions |
 | Scout | able to move | none required | a light kit | the rest |
 | Engineer / Technician | not barred from the specialty's work (crafting, construction, intellectual) | the specialty skill | | the rest |
 | Logistician | not barred from hauling work | none required | | the rest |
 | Negotiator | not barred from Social work | Social | | the rest |
 | Specialist | whatever the actor's named specialty requires | per specialty | | the rest |
+
+**Passion is never a role constraint, a role preference or a correction.** A pawn may be an elite Marksman with no passion
+for Shooting: the *skill* satisfies the identity requirement; passion is incidental personality and randomness, and belongs
+to RimWorld.
 
 Illustrative capability-band → skill-floor shape (**example only, OPEN O-8**): Green none · Experienced 4 · Seasoned
 7 · Veteran 10 · Elite 13 · Legendary 16. Only the role-defining skills are floored; a Heavy needs no Social at all.
@@ -762,6 +813,53 @@ No role grants anything. It is consulted exactly once per person, at first creat
 a candidate ([§ 6.8](#68-role-constrained-creation-validate-then-the-smallest-correction)); it is read for no other
 purpose except choosing a mission composition ([§ 6.7](#67-organization-and-mission-composition)).
 
+#### 6.6.5 Identity comes from immutable origin facts, never from when the player first looks
+
+The first revision said an organization's composition (and a person's role) is *established at first use* from "the actor's
+own durable facts (seed, form, specialties, doctrine, experience)". Two of those inputs **evolve**. An actor that has
+spent ten years gaining experience and drifting its doctrine would then receive a *different* initial composition than the
+same actor first looked at in year 1: its professional identity would depend on **the player's observation timing**. That
+is withdrawn.
+
+> **LAZY STORAGE ≠ OBSERVATION-DEPENDENT IDENTITY.** A role or composition may be *created* lazily (for save size and
+> migration simplicity), but it must be a **pure function of immutable origin facts**, so the answer is identical whether
+> it is first used in year 1 or year 10. (P3-INV-030)
+
+**What an actor actually keeps** (audited in the code at `main` `6d0352d`):
+
+| Fact | Immutable? | Retained for | An input? |
+|---|---|---|---|
+| `NetworkActor.seed` | yes: assigned once in `Instantiate` (`ContractorService.cs:205`) | every actor | **yes** |
+| `NetworkActor.foundedTick`, `provenance` (`source`, `templateId`, `importedTick`) | yes: written only at `Instantiate` | every actor | identifies the actor; not a content input |
+| `ContractorProfile.specialties` | **immutable in practice**: written once at `Instantiate` (`:209`), nothing else writes it | every contractor | **yes** |
+| `OrganizationProfile.capacity` (3 / 7 / 14 / 32 for Duo / Crew / Team / Company) | **immutable in practice**: assigned once in `BuildRoster` (`:358–361`). *The `ContractorForm` label itself is not stored on the actor*; capacity is its durable proxy | organizations | **yes**, as the *form class* |
+| the cast-snapshot template (form, starting experience, doctrine style, specialties, mobility) | immutable for the world (`WorldCastSnapshot`: "authoritative for this save") | **global-cast actors only**, via the entry whose `actor == a.id` | usable only for them: **not a uniform source** |
+| a **world-generated newcomer's template** | n/a | **not retained anywhere**: `CreateWorldGenerated` builds it from the generator's pools, instantiates it and discards it (`:176–178`); regenerating it would depend on mod-dependent pools | **no** |
+| `CharacterId`, `KnownCharacter.createdTick` | yes | every named person | yes |
+| **mutable, never inputs:** `ContractorSimulation.skill` and the experience band, `doctrine` (it drifts at succession, `:943–944`), `equipment` (tier, condition, specialties copy), `morale`, `funds`, `career`, `reputation` (score and fame), the headcount tiers, `CharacterRole` (it changes at succession, `:931–933`), `notability`, `status` | **no** | | **no** |
+
+**The derivation inputs (frozen).** An organization's composition: `{actor.seed, the form class from capacity,
+ContractorProfile.specialties}`. A Solo's role: `{actor.seed, ContractorProfile.specialties}`. An origin-era named person of
+an organization (created in `Instantiate`: `createdTick == foundedTick`): `{the organization's composition, CharacterId}`
+through a fixed deterministic assignment ordered by `CharacterId`, **never** by a mutable rank, notability or status.
+A person created *later* (a succession promotion, a crystallized seat, a promotion by evidence) gets the role of the seat it
+fills **at its creation**, inside the atomic plan: a creation event, recorded, not an observation. Characters are never
+removed today (no compaction touches them); origin-era people must stay that way. The exact assignment function is a 3.1/3.2
+detail (**OPEN O-18**); the *contract* is the input list and the purity.
+
+**Eager for new actors, lazy for old ones.** An actor created after Phase 3 ships derives and persists its composition and
+roles **at `Instantiate`**, with the template in hand: no timing exposure at all. An actor from an older save is derived
+**lazily from the immutable inputs above**, so the result is the same in year 1 or year 10. **The function is pure and
+versioned and a shipped version never changes its output for the same inputs** (a better function is a new version, applied
+only to actors created after it; an unstamped composition is version 1); that removes the last dependency, on the build.
+
+**Where experience still matters.** *Which roles* an organization or person is does not depend on experience. *How good they
+are within the role* does: the projection's capability band reads the **current** experience, so a veteran organization's
+Marksman is a better shot than a green one's ([§ 6.5](#65-projection-inputs-capability--effect)). Career progression may later
+improve competence, add or remove role capacity through an **explicit, recorded evolution event**, or change mission
+eligibility; none of that is designed here, and first-use observation must never silently rewrite who the organization
+always was. The same principle governs a Solo's and every known person's `opRole`.
+
 ### 6.7 Organization and mission composition
 
 A company is **not** "spawn twenty random people". RimWorld already uses composition-like ideas (raid groups,
@@ -769,18 +867,21 @@ trader caravans, visitors); the Network adopts the *idea* without depending on t
 
 #### 6.7.1 Organization composition: what the organization broadly contains
 
-A small, persisted **role template** (≤ 8 `(role, count)` entries at full strength), *established at first use* by a
-pure, deterministic generator from the actor's own durable facts (seed, form, specialties, doctrine, experience) and
-then **never regenerated**: once the Network has said or used "a crew of five with a medic", that is established
-truth. Examples:
+A small, persisted **role template** (≤ 8 `(role, count)` entries at full strength), produced by a pure, deterministic,
+versioned function of the actor's **immutable origin facts only** (seed, the form class from capacity, the original
+specialties; **not** doctrine, experience, fame, funds or morale, which evolve: [§ 6.6.5](#665-identity-comes-from-immutable-origin-facts-never-from-when-the-player-first-looks))
+and **never regenerated**: once the Network has said or used "a crew of five with a medic", that is established truth,
+and it would have been the same answer in year 1 or year 10. Examples:
 
 ```
  5-person crew:                   Leader 1 · Rifleman 2 · Medic 1 · Heavy 1
  8-person technical salvage team: Leader 1 · Security 2 · Technician 2 · Medic 1 · Logistics 2
 ```
 
-It is **not** a roster: no anonymous person is stored. Existing actors have no template; it is created lazily at
-first use, so old saves migrate by doing nothing (the field is absent ⇒ "not yet established").
+It is **not** a roster: no anonymous person is stored. A new actor stores it at `Instantiate`; an existing actor has no stored
+template and derives it **lazily from the same immutable inputs**, so old saves migrate by doing nothing (the field is absent
+⇒ "not yet stored", and the lazy derivation cannot give a different answer later). A world-generated newcomer's *template*
+is not retained, which is why the inputs are the facts the *actor* keeps, not the template.
 
 #### 6.7.2 Pinned seats and apportionment
 
@@ -849,12 +950,13 @@ Project(person):                               // 3.1+; pure helpers in 3.0
   abort the placement: member NeverPlaced, nothing persisted, one log line (role, kind, failed clause)
 ```
 
-**`Correct` is the smallest legal correction, and it is deliberately tiny:** it may **raise** a role-defining skill's
-base level so the *effective* level reaches the floor (and may set a minor passion the role prefers), because skills
-are numbers inside vanilla's own generation noise, exactly what a kind's `skills` range does natively. It may **not**
-lower anything, and it may **never** touch a backstory, trait, gene, hediff, age, gender, name or **incapability**: a
-candidate that is incapable of the role's work is *rejected*, never "fixed". Because the candidate is unbound and
-unspawned, nobody has observed it; the correction falsifies no history.
+**`Correct` corrects only what MUST be true; everything else belongs to RimWorld.** The *only* allowed correction is to
+**raise a role-defining skill's base level** (and only that skill) by exactly enough that its *effective* level (base plus
+aptitudes, `GetLevel()`) reaches the required floor, then **re-verify**. Skills are numbers inside vanilla's own generation
+noise, which is exactly what a kind's `skills` range does natively. **Not allowed:** lowering any skill; changing a
+**passion**; a trait, backstory, gene, **incapability**, hediff, age, gender or name; a relationship; ideology beyond the
+already-approved generation-request constraints. A candidate incapable of the role's work is *rejected*, never "fixed".
+Because the candidate is unbound and unspawned, nobody has observed it; the correction falsifies no history.
 
 **The cost is bounded** (K outer attempts, each at most vanilla's own 120) and is **S25's** to measure on a heavily
 modded list; if it spikes, a group's creation is spread across ticks (one pawn per tick). The role → existing-kind
@@ -1068,18 +1170,50 @@ commit is a synchronous, **all-or-nothing** step and every post-commit stage is 
 |---|---|---|---|
 | **Planned** | members chosen; named members' custody is already `Deployed`; pawns are being created and bound | physical (reserved for the episode) | → Open when ≥ 1 member is `Present`; → Closed(NeverPlaced) if none is |
 | **Open** | at least one pawn exists in play | physical | → Closed(Reconciled) when every member is `Done`; → Quarantined |
-| **Closed** | terminal. `consequencesApplied` is true (Reconciled) or nothing physical ever happened (NeverPlaced/Detached) | abstract, held or dead per member outcome | none |
+| **Closed** | terminal. `consequencesApplied` is true (Reconciled) or nothing physical ever happened (NeverPlaced/Detached) | abstract, held or dead per member outcome, **but a Reconciled member is not abstractly simulatable until RELEASE COMPLETE** | none |
 | **Quarantined** | the Network cannot reconcile safely (an invariant broke, an unsupported custody was observed, retries exhausted) | **blocked from abstraction**; pawns untouched | → Closed by a later successful reconcile; never auto-resolved to "returned" |
 
-`Closed(Reconciled)` is reached by the atomic durable commit ([§ 15](#15-reconciliation-algorithm)). What remains
-afterwards is **not** a set of extra persisted states: each post-commit stage carries its own marker, and a *finish-pending
-pass* (at load and from the episode watch) resumes whichever stage is unfinished, exactly once per stage:
+`Closed(Reconciled)` is reached by the atomic durable commit ([§ 15](#15-reconciliation-algorithm)). Three stages remain.
+Each has an **explicit durable completion marker, written only after every operation of the stage has succeeded**, and a
+marker is **never inferred from side-effect state** (a removed tag, a changed status, a spawned pawn): a stage that stopped
+half-way can look complete from the outside, and the marker exists precisely to prevent that. A *finish-pending pass* (at
+load and from the episode watch) resumes whichever stage's marker is unset.
 
-| Post-commit stage | Marker that says it is done | If interrupted |
-|---|---|---|
-| **RELEASE** (vanilla side: strip tags, pass pawns to the world, normalize named pawns, scheduler clean-up) | no member carries the episode tag; scheduler/derived data repaired by the validator | the pass finds a `Closed` episode whose members still carry its tag and finishes the release |
-| **FOLLOW-UP** (the linked operation's own resolution, through its existing guarded entry points) | the operation has left `OpStatus.Physical` | the pass finds a `Physical` operation whose episode is `Closed(Reconciled)` and runs the entry point, which is guarded by the operation's existing flags |
-| **PUBLISH** (events, history, letters) | `publishedTick` is set | republish the deterministic, keyed events; **never** reapply a consequence |
+| Stage | Marker (durable, on the episode; false after the commit, set **last**) | Progress detail | If interrupted |
+|---|---|---|---|
+| **RELEASE** (vanilla side and runtime clean-up) | `releaseApplied` (+ `releasedTick`) | `EpisodeMember.releaseStep`: how many of that member's ordered release actions have succeeded | resume each member at its cursor; every action is idempotent and guarded by *observed* state; the marker stays false, and the authority gate stays closed ([§ 3.3 A1](#33-operational-rules)) |
+| **FOLLOW-UP** (the linked operation's own resolution) | `followUpApplied` (only for an episode linked to an operation) | none: the entry point must itself be re-entrant ([§ 15.5](#155-reuse-of-the-existing-services-no-parallel-rules)) | re-run the re-entrant entry point; the marker is set only after it returned normally |
+| **PUBLISH** (events, history, letters) | `publishedTick` | `publishCursor`: how many specs of the persisted `publications` outbox the bus has **accepted** | resume at the cursor; an event the bus accepted is **never** submitted again ([§ 15.2](#152-the-steps)) |
+
+**The release actions** are an ordered list that is a pure function of the member's persisted outcome and kind, so it is
+never itself stored; only the cursor is.
+
+| Member | Release actions, in order |
+|---|---|
+| named, `Returned` | **normalize** (S12) → **reserve** in the registry → **pass to the world** (`Decide`) → strip the episode tag |
+| anonymous, `Returned` | **pass to the world** (`Decide`) → strip the episode tag |
+| `Killed`, held (`HeldByPlayer`, `JoinedPlayer`, `Kidnapped`, `HeldByOther`), `Missing`, `Lost` | strip the episode tag only (vanilla owns the pawn or corpse; a lost pawn has nothing to strip) |
+| `NeverPlaced` with a bound but unspawned pawn | pass to the world (`Decide`) → strip the episode tag; with no pawn: nothing |
+| **episode level**, after every member | cancel an ended actor's upkeep job and `Spatial.OnActorEnded` (both are also repaired by the validator) → **COMPLETE** |
+
+**COMPLETE** is the only RELEASE step that writes Network truth beyond cursors: a bounded block of total assignments
+(clear every named member's `episode` link, set `releaseApplied` and `releasedTick`), guarded like the commit (restored if
+it throws).
+
+**Rules.**
+
+1. **Each action is idempotent by *observed* vanilla state** (`WorldPawns.Contains`, registry membership, the presence of a
+   temporary hediff, the presence of a tag), so a re-run after a throw part-way through an action repeats no completed
+   effect. The cursor advances only after the action returned normally.
+2. **Tag removal is routing cleanup. It is never the authority for completion.** (The first revision made "no member carries
+   the episode tag" the marker for RELEASE; a throw after the tag strip but before the reserve or the pass would have looked
+   complete after a reload.)
+3. **The commit does not clear `character.episode`** (except in the no-release-action case of rule 5). The link stays until
+   COMPLETE, which is how a returned person stays non-abstract while their release is pending
+   ([§ 3.3 A1](#33-operational-rules), P3-INV-029).
+4. **No vanilla release operation is ever inside the atomic commit** ([§ 15.6](#156-failure-semantics-of-the-commit-service-by-service)).
+5. A commit whose plan has **no** release actions (nothing physical ever existed) performs COMPLETE's assignments inside the
+   commit itself (clears the links, sets `releaseApplied`), because there is no vanilla step left for the link to wait on.
 
 ### 8.2 The character custody machine (durable; reuses the persisted `CustodyState`)
 
@@ -1515,7 +1649,7 @@ Reconcile(episode):                         // main thread; never re-entrant (a 
                 member results · character deltas (status, custody, held, binding, wound days, first encounter) ·
                 CasualtyReport / fates · headcount / committed deltas · succession spec · actor-end spec ·
                 promotions (new records, § 4.5.5) · spatial anchor · equipment-condition step · operation marker ·
-                RELEASE actions · FOLLOW-UP actions · keyed event specs
+                RELEASE actions · FOLLOW-UP actions · the ordered PUBLICATION specs (the outbox)
               the plan is a pure function of its inputs; it may throw; nothing has been applied
   4 VALIDATE  the COMPLETE plan, still before anything changes (throws PlanInvalid ⇒ nothing touched):
                 every member belongs to this episode · character.episode == episode.id · custody == Deployed · the actor
@@ -1526,29 +1660,63 @@ Reconcile(episode):                         // main thread; never re-entrant (a 
                 Applier.Apply(plan)         // a flat, ordered list of TOTAL assignments: no service call, no bus, no
                                             //   scheduler, no vanilla call, no randomness, no logging that can throw
                 episode.state = Closed ; member outcomes ; episode.committedTick
+                episode.publications = the outbox ; publishCursor = 0 ; releaseApplied = (no release actions) ;
+                followUpApplied = (no linked operation)                         // the stage markers start FALSE
                 episode.consequencesApplied = true                              // the LAST statement inside the try
               catch: restore the snapshot; attempts++; lastError; return        // the flag was never set: state is exactly as before
-  6 RELEASE   idempotent, self-healing, never un-flags:
-                vanilla side  — strip tags · anonymous pawns PassToWorld(Decide) · named pawns normalize → RESERVE → pass (§ 7.4)
-                runtime side  — cancel the actor's upkeep job · Spatial.OnActorEnded (both are repaired by the validator if skipped)
+              NOTE: character.episode is NOT cleared here (unless there are no release actions, § 8.1 rule 5); custody = Stored
+                    already, but the gate stays closed (§ 3.3 A1)
+  6 RELEASE   vanilla side and runtime clean-up; idempotent, state-guarded, never un-flags (§ 8.1):
+                for each member, from its releaseStep: perform the next action; advance releaseStep ONLY after it returned
+                  named Returned: normalize → RESERVE → pass to the world (Decide) → strip the episode tag (§ 7.4)
+                  anonymous Returned: pass to the world (Decide) → strip the episode tag
+                  everything else: strip the episode tag
+                then the episode-level actions (upkeep job, Spatial.OnActorEnded)
+                then COMPLETE: clear the named members' episode links; releaseApplied = true; releasedTick = now
   7 FOLLOW-UP the linked operation's own resolution, through its EXISTING guarded entry points (found / written off:
-              ReturnForces, OnRecovered, CommitOutcome(op, true), Finish, OnWrittenOff): idempotent by op status and its own flags
-  8 PUBLISH   events / history / letters built from the plan's KEYED specs, each in its own guard; a failure logs and continues;
-              episode.publishedTick = now after the loop. A throw here NEVER reapplies a consequence
+              ReturnForces, OnRecovered, CommitOutcome(op, true), Finish, OnWrittenOff), which must be RE-ENTRANT (§ 15.5);
+              followUpApplied = true ONLY after the entry point returned normally
+  8 PUBLISH   for each spec from publishCursor, in order:
+                build the typed event from the spec ; bus.Publish(event)        // the EXISTING bus; no dedupe key is assumed
+                the bus ACCEPTED it iff it assigned a sequence number           // evt.seq != 0
+                publishCursor = i + 1                                           // persisted before the next spec
+              after the last spec: publishedTick = now ; clear the outbox
+              a consumer's failure is contained by the bus and is NEVER redispatched; it never moves the cursor back
 ```
 
 A **process crash cannot split stage 5**: it is one synchronous block and a save cannot interleave inside it. The only
 hazards are an *exception* (handled by the restore) and *re-entrancy* (handled by the gate and the runtime guard).
-Stages 6–8 may be interrupted by a load; each has a marker ([§ 8.1](#81-the-episode-machine-durable)) and the
-finish-pending pass resumes it.
+Stages 6 to 8 may be interrupted by a load; each has its own explicit marker ([§ 8.1](#81-the-episode-machine-durable)) and
+the finish-pending pass resumes it. **No marker is ever inferred from side-effect state.**
+
+**The publication protocol, and why "keyed events" were not enough.** The first revision said the plan carried *keyed event
+specs* that could be republished after an interruption. That does not match the actual bus
+(`Source/TheNetwork/Kernel/Events.cs`, `NetworkEventBus.Publish`): every call assigns a **new** sequence number
+(`ids.NextEventSeq()`), appends to the journal, bumps `StateVersion`, dispatches every consumer, **contains** a consumer's
+exception and never redispatches it, and has **no idempotency key**. Republishing events A and B after C failed would
+create two brand-new events and run history, relationships, the Consequence Engine and every other consumer a second
+time. So the design does **not** assume any dedupe feature. Instead:
+
+1. The commit writes the ordered, bounded **outbox** of compact typed publication specs (≲ 12, each enough to build the typed
+   event) onto the episode as durable data, with `publishCursor = 0`. Specs are stored, not re-derived: a regenerated list
+   could differ after a tuning change between save and load.
+2. PUBLISH submits spec *i*, and **only after `Publish` returns** persists `publishCursor = i + 1`, then submits *i + 1*.
+3. On load or retry it resumes at `publishCursor`. **An event the bus accepted is never submitted again.**
+4. *Accepted* means the bus assigned the event object a sequence number, which is the first thing `Publish` does. A throw from
+   `Publish` before that leaves `seq == 0` and the spec may be retried; **any other** throw counts as accepted (at-most-once
+   is preferred to a duplicate: a lost history line is cosmetic, a replayed consumer is not).
+5. A consumer that threw is **not** replayed: the bus's own rule stands, and the cursor already passed that spec.
+6. PUBLISH runs from a top-level job, never from inside a consumer (a re-entrant `Publish` is only queued by the bus).
+7. `publishedTick` is written, and the outbox cleared, only after the final spec was accepted. Physical consequences are
+   never touched by PUBLISH, so a publication failure can never replay one.
 
 | If it throws in … | State left behind | Recovery |
 |---|---|---|
 | 1–4 | nothing changed (`attempts++`, `lastError`) | retried by the watch with backoff; after the bound ⇒ `Quarantined` |
 | **5** | **nothing: the snapshot is restored and the flag was never set** | retried; the plan is recomputed from observation, so the retry decides from the world as it is *now* |
-| 6 | consequences applied (`Closed`) | the finish-pending pass finishes the release from the tags; scheduler and derived data are repaired by the existing validator |
-| 7 | consequences applied; the operation is still `Physical` | the pass runs the guarded entry point again; it is idempotent by status and flags |
-| 8 | consequences applied; `publishedTick` unset | republish the keyed events; **never** reapply |
+| 6, after *k* of *n* actions | consequences applied (`Closed`); `releaseStep` records exactly what succeeded; **`releaseApplied` is false and the authority gate is closed** | the finish-pending pass resumes at the cursor; no completed action repeats; the person becomes abstract only when COMPLETE has run |
+| 7 | consequences applied; `followUpApplied` false | the pass re-runs the re-entrant entry point; the marker is set only on a normal return |
+| 8, after *k* of *n* specs | consequences applied; `publishCursor = k` | resume at *k*: the first *k* events are **not** re-published and allocate **no** new sequence number |
 
 ### 15.3 Observation → outcome → abstract effect
 
@@ -1572,7 +1740,7 @@ finish-pending pass resumes it.
 |---|---|
 | `Killed` signal **and** the watch poll **and** the quest part's `Notify_PawnKilled` all fire | all three call `Reconcile`; the first closes the episode; the others hit the gate |
 | the map is removed while members are still `Present` | the comp wakes a reconcile; members are observed; the result is `Returned` / `Missing` / `Lost` from *state*, once |
-| a save/load lands between commit and release, follow-up or publish | `Closed` is persisted with `consequencesApplied`; the finish-pending pass resumes each unfinished stage from its marker ([§ 8.1](#81-the-episode-machine-durable)) |
+| a save/load lands between commit and release, follow-up or publish | `Closed` is persisted with `consequencesApplied`; the finish-pending pass resumes each unfinished stage from its **explicit marker** (`releaseApplied`, `followUpApplied`, `publishCursor` / `publishedTick`), never from side-effect state ([§ 8.1](#81-the-episode-machine-durable)); events already accepted by the bus are not submitted again |
 | contract/operation reaches a terminal state while an episode is open | the operation is `OpStatus.Physical`; it waits for the episode's `OnPhysicalResolved` (§ 15.5); its own deadline job is cancelled |
 | reconcile is called by a dev action twice | the gate |
 
@@ -1592,11 +1760,23 @@ finish-pending pass resumes it.
 - **A rescue replaces `TroubledDeadline`'s dice, not its branches.** When the episode resolves a Troubled operation,
   `OperationService` gains `OnPhysicalResolved(op, found)` that runs the existing *found* branch (`ReturnForces`,
   `OnRecovered`) or *written-off* branch (`CommitOutcome(op, true)`, `Finish`, `OnWrittenOff`) as the FOLLOW-UP stage.
+- **FOLLOW-UP must be re-entrant, and its marker is explicit** *(found by the correction pass)*. The first pass said the
+  stage was idempotent because the operation's status guards it. It is not safe to infer from status: the existing
+  `OperationService.TroubledDeadline` writes the status **mid-way** through its branch (status first, then
+  `ReturnForces` / `CommitOutcome` / `Finish` / the event), so a throw between two of its steps leaves a status that no longer
+  says "unresolved" while part of the work is undone, the same hazard as inferring RELEASE from a removed tag.
+  Therefore: (a) `OnPhysicalResolved` keeps the operation in its `Physical` status until its **last** durable step;
+  (b) each of its sub-steps is guarded by that sub-step's own existing flag (`careerOutcomeApplied`, the committed-forces
+  return, the `Finish` guard), so re-running it repeats nothing; (c) `followUpApplied` on the episode is set **only after
+  `OnPhysicalResolved` returned normally**, and is the only thing the finish-pending pass reads to decide whether FOLLOW-UP
+  remains. The Phase 2 abstract path (`TroubledDeadline`) is **not changed** by this design; the re-entrancy test of the new
+  entry point (a throw after each sub-step, then a re-run: money, career, forces and events apply once) is a **3.2
+  deliverable** of the rescue work and adds no new `RT-PHYS` id.
 - **Spatial.** `Spatial.OnPhysicalEpisodeClosed(actor, tile)` is a **reporting or throwing** entry used by the Applier:
   the existing facade methods catch every fault and return a default (`SpatialService.OnActorEnded`, `IncidentTile`,
   `IsAtWork`), and a *swallowed* fault inside a commit would be an invisible partial apply ([§ 12.2](#122-leaving-it-reconcile-writes-the-anchor-once)).
 - **History and letters.** New event keys (`Episode.Opened/Closed`, `Character.CapturedByPlayer`, …) go through the
-  existing bus, **published after the commit**, built from keyed specs; letters are a `LetterConsumer` concern as
+  existing bus, **published after the commit**, built from the plan's `PublicationSpec`s and sent by the PUBLISH stage under its durable cursor ([§ 15.2](#152-the-steps)); letters are a `LetterConsumer` concern as
   today.
 
 ### 15.6 Failure semantics of the commit, service by service
@@ -1613,9 +1793,9 @@ multi-step resolution (FOLLOW-UP through its existing guarded entry point) · **
 | **Headcount** | `OrganizationProfile.TierOf(t).{healthy, wounded}`, `Committed`, `woundedRecovery` buckets (`AddWounded`, `:770–785`): plain integer arithmetic | D | in the Applier; **conservation validated in PLAN** (§ 5.1) so the arithmetic cannot go negative | the `OrganizationProfile` snapshot |
 | **Custody and binding** | none yet (`custody` is never written today); new `pawn`, `episode`, `heldBy`, `heldSinceTick`, `firstEncounterTick`, `opRole` | D | plain fields in the Applier; the binding is write-once, so a restore returns it to its prior value | the character snapshots |
 | **Spatial anchor** | the facade methods **contain their own faults** and return a default (`SpatialService.cs:336–340`, `:346–360`): a fault there is *silent* | D (S for `OnActorEnded`) | a **direct assignment** of the anchor, status and `lastUpdateTick` in the Applier (no travel, no job); the facade is never used inside the commit | the `SpatialState` snapshot |
-| **Operation state** | the operation's resolution (`ReturnForces`, `OnRecovered`, `CommitOutcome(op, true)`, `Finish`, `OnWrittenOff`) spans contracts, payments, comms and careers | X | one **D marker** on the operation (the episode's result) in the Applier; the resolution itself is FOLLOW-UP | marker restored with the snapshot if the commit failed; FOLLOW-UP retried if the commit succeeded (idempotent by `OpStatus` and the operation's own flags) |
+| **Operation state** | the operation's resolution (`ReturnForces`, `OnRecovered`, `CommitOutcome(op, true)`, `Finish`, `OnWrittenOff`) spans contracts, payments, comms and careers | X | one **D marker** on the operation (the episode's result) in the Applier; the resolution itself is FOLLOW-UP | marker restored with the snapshot if the commit failed; FOLLOW-UP re-run if the commit succeeded, **guarded by `followUpApplied` and by a re-entrant entry point** (not by `OpStatus` alone, [§ 15.5](#155-reuse-of-the-existing-services-no-parallel-rules)) |
 | **Career outcome** | `CareerService.CommitOutcome` (`:297`) already does plan → snapshot → commit → flag → publish and is guarded by `careerOutcomeApplied` | X | **not in the commit**; called from FOLLOW-UP | its own retry (the validator re-applies a missing result), unchanged (P3-INV-014) |
-| **Event publication** | `ctx.bus.Publish` dispatches **synchronously to every consumer** (history, letters, the Consequence Engine …); a consumer can itself mutate state and schedule jobs | P | **never inside the commit**: running foreign code mid-transaction would break atomicity. After the flag, each keyed event in its own guard | logged and skipped; **never** replays a consequence; a lost or duplicated history line is a cosmetic defect, not a state defect |
+| **Event publication** | `ctx.bus.Publish` dispatches **synchronously to every consumer** (history, letters, the Consequence Engine …); a consumer can itself mutate state and schedule jobs | P | **never inside the commit**: running foreign code mid-transaction would break atomicity. The commit writes only the **outbox**; after the flag each spec is submitted once, with durable per-event progress (`publishCursor`) | a consumer's failure is contained by the bus and **never redispatched**; an accepted event is **never** submitted again (the bus has no dedupe key, so none is assumed); **never** replays a consequence |
 | **Promotions and ids** | `ctx.characters.Add` and `IdAllocator.NextId()` (a plain counter) | D | in the Applier; the **allocator is part of the touched set** whenever the plan adds a record | the snapshot restores the counter |
 
 `TouchedSet(plan)` is computed by **one** function from the plan: the episode, the ≤ 8 member characters, the actor's
@@ -1658,7 +1838,7 @@ owner; our `PawnRef` is a non-owning reference.
 | dead, corpse exists | the corpse holds the pawn | `Closed(Reconciled)` or `Open` + `Dead` pending | reconcile reads `pawn.Dead` ⇒ `Killed` once |
 | dead, no corpse (world pawn) | `WorldPawns.pawnsDead` (saved with `saveDestroyedThings`) | binding saved with `saveDestroyedThings: true` | `Killed`; if GC already discarded it, the **persisted** death (written at the time) is the truth |
 | its map is being removed | `MapDeiniter` passes pawns to the world during the removal; saves do not interleave with a tick | `Open` | members observed as world pawns ⇒ `Returned` / held / `Lost` |
-| `Closed`, release not finished | the pawn's owner | `Closed` + `consequencesApplied` | the load pass finishes the release |
+| `Closed`, release not finished | the pawn's owner | `Closed` + `consequencesApplied`, `releaseApplied = false`, per-member `releaseStep` | the finish-pending pass resumes each member at its cursor; the person stays **non-abstract** (the gate is closed) until `releaseApplied` |
 | `Planned` (a crash or save between create and spawn) | an unspawned generated pawn is **not saved** unless something holds it | `Planned` + `Created` members | members whose pointer resolves ⇒ treated as `Present`; none ⇒ `Closed(NeverPlaced)`, custody reverted |
 | `Stored` (between episodes) | `WorldPawns` (`pawnsAlive` or `pawnsMothballed`, saved `Deep`) | `custody = Stored`, binding, `agedThroughTick` | the runtime registry is rebuilt from the characters store in `FinalizeInit` (§ 16.3); the truthful age catch-up runs at the next observation ([§ 6.4](#64-truthful-aging-of-a-retained-pawn)); nothing is aged at load |
 
@@ -1685,9 +1865,9 @@ single source of truth; the quest only asks. (If the Network is absent, the part
 |---|---|---|
 | the episode store (members included) | the reserved `deployments` slot (`ReservedStore` → `EpisodeStore`, same label) | load an empty store |
 | `KnownCharacter.pawn`, `.episode`, `.heldBy`, `.heldSinceTick`, `.firstEncounterTick` | the characters store | absent ⇒ defaults (no pawn, no episode, not held, never met), which is **correct**: nobody has ever been materialized, and every saved `custody` is `0 = Unmaterialized` |
-| `KnownCharacter.opRole` (operational role, one byte) | the characters store | absent ⇒ *unset*: **established at first use** (first projection or first display) from the person's durable facts, then persisted ([§ 6.6](#66-operational-roles)). No migration pass touches 130 contractors |
+| `KnownCharacter.opRole` (operational role, one byte) | the characters store | absent ⇒ *not yet stored*: **derived lazily from immutable origin facts**, so the value is the same whenever it is first needed ([§ 6.6.5](#665-identity-comes-from-immutable-origin-facts-never-from-when-the-player-first-looks)); new actors store it at `Instantiate`. No migration pass touches 130 contractors |
 | `PawnRef.agedThroughTick` | inside the binding | written with the binding; n/a for old saves (no binding exists) |
-| `OrganizationProfile.composition` (the role template, ≤ 8 entries) | the actor component | absent ⇒ *not yet established*: created at first use, never regenerated ([§ 6.7](#67-organization-and-mission-composition)); 3.2 |
+| `OrganizationProfile.composition` (the role template, ≤ 8 entries, with a 1-byte `derivationVersion`) | the actor component | absent ⇒ *not yet stored*: derived lazily from immutable origin facts (identical in year 1 or year 10), stored eagerly for new actors, never regenerated ([§ 6.7](#67-organization-and-mission-composition)); 3.2 |
 | one operation marker (the episode's result for an `OpStatus.Physical` operation) | `Operation` | absent ⇒ none; `OpStatus.Physical` never occurs in an old save |
 | `PhysicalEpisode.committedTick`, `EpisodeMember.seatRole` | the episode store | new with the store |
 | a new entity-id kind | `EntityKind.Deployment` renamed `Episode` (value 9), added to `NetworkState.MaxEntityId` and its test | n/a |
@@ -1712,10 +1892,10 @@ anything about the physical test tier.
 - **Validator.** New findings are **report-and-quarantine**, never repair-by-guessing: a character `Deployed` with no
   open episode; an episode member whose character does not point back; two members sharing a pawn; an `Open` episode
   older than the long-open threshold; a `Stored` character with no pawn; a `Dead` character that is not `Released`; an
-  episode with `consequencesApplied` but no `committedTick`, or an `Open` episode with `consequencesApplied`; a concretized
+  episode with `consequencesApplied` but no `committedTick`, or an `Open` episode with `consequencesApplied`; a `Closed` episode with `releaseApplied` while a member character still carries `episode` (or the reverse: a character released from `episode` while the marker is false); a `Closed` episode whose `releaseApplied`, `followUpApplied` or publication is unfinished beyond the long-open threshold (**reported, never completed by guessing**); a concretized
   seat whose character is not in the organization.
   The existing `NetValidator` repairs *derived* data; it must not "fix" custody.
-- **Compaction.** `Closed` episodes are compacted a year after closing **only if** no character still references
+- **Compaction.** `Closed` episodes are compacted a year after closing **only if** `releaseApplied`, `followUpApplied` (when linked) and `publishedTick` are all set **and** no character still references
   them; a character with a bound pawn or `OutOfCustody` is never compacted.
 - **Old-save + new-build.** A world with 130 contractors loads, every character `Unmaterialized`, the store empty:
   behaviour is identical to Phase 2.9 until something materializes.
@@ -1737,7 +1917,9 @@ Prefer **fail safe, preserve truth, quarantine and diagnose, retry idempotently*
 | provenance binding cannot be written | pawn generated, binding failed | do **not** spawn; drop the unreferenced pawn (nothing holds it) and abort | spawn an unbound pawn |
 | episode saved halfway (`Planned`) | `Planned` | load pass: resolvable pointers ⇒ `Present`; none ⇒ `NeverPlaced` | regenerate |
 | reconcile threw **before or inside the commit** (stages 1–5) | `Open`, **nothing committed**: a throw inside the commit restores the snapshot and the flag was never set | retry with backoff; the plan is recomputed from observation; after the bound `Quarantined` | partial apply; double-apply |
-| a post-commit stage threw (release, follow-up, publish: stages 6–8) | `Closed(Reconciled)`; the unfinished stage's marker is unset | the finish-pending pass resumes that stage only; a publish failure republishes keyed events | reapply a consequence |
+| RELEASE threw after *k* of *n* actions (stage 6) | `Closed(Reconciled)`; `releaseStep` = exactly what succeeded; **`releaseApplied` false; the gate closed** | the finish-pending pass resumes at the cursor; completed actions are not repeated; the person turns abstract only after COMPLETE | treat a missing tag as "released"; reapply a consequence; let abstract systems advance the person |
+| FOLLOW-UP threw (stage 7) | `Closed(Reconciled)`; `followUpApplied` false | re-run the re-entrant entry point | infer completion from `OpStatus` |
+| PUBLISH threw or was interrupted after *k* of *n* specs (stage 8) | `Closed(Reconciled)`; `publishCursor = k` | resume at *k*; the first *k* events are not re-published | re-`Publish` an event the bus accepted; replay a consumer; reapply a consequence |
 | the spatial write inside the commit fails | the commit throws and is restored | retried | skip it silently (the existing facade would) |
 | role or cohesion verification fails for every attempt | candidate pawns dropped; episode `Planned` | placement aborted: member `NeverPlaced`, custody reverted, one log line (role, kind, failed clause) | spawn a contradicting pawn; relax the role; loop forever |
 | the truthful age catch-up fails or leaves the person unfit | binding intact; `agedThroughTick` unchanged | the placement aborts `NeverPlaced` with a diagnostic; retried later; the person is neither mutated nor deleted | place a pawn whose age is not current |
@@ -1884,23 +2066,25 @@ real adapter and the fake exercise the same services.
 | RT-PHYS-011 | **the authority gate is complete**: a static test enumerates every abstract writer in [§ 2.3](#23-the-writer-inventory-every-abstract-site-that-must-honour-authority) and fails if one bypasses it | ✔ | — |
 | RT-PHYS-012 | an **unsupported custody** observed in 3.1 ⇒ `Quarantined`, pawn untouched, person blocked (no faked capture) | ✔ | ✔ |
 | RT-PHYS-013 | **reconcile that throws** leaves no half-applied state; the retry applies once | ✔ | ✔ |
-| RT-PHYS-014 | **publish that throws** republishes only; consequences are not reapplied | ✔ | ✔ |
+| RT-PHYS-014 | **publication progress is per event and durable**: with three specs, the first one or two submitted and then an interruption, the resume publishes **only** the rest; the already-submitted events are **not** re-`Publish`ed and the bus allocates **no** duplicate sequence number; a consumer that threw is **not** redispatched; consequence and career state are never reapplied (P3-INV-025) | ✔ | ✔ |
 | RT-PHYS-015 | a **`Planned` episode found at load** resolves by evidence (resolvable ⇒ `Present`, none ⇒ `NeverPlaced`), never by regeneration | ✔ | — |
 | RT-PHYS-016 | **operation exclusivity**: a person in an episode cannot be checked out for an operation, and vice-versa (ADR-039 extended) | ✔ | ✔ |
 | RT-PHYS-017 | **spatial**: the person's anchor is frozen while physical and written once at close (P3-INV-009) | ✔ | ✔ |
 | RT-PHYS-018 | **prepare-for-removal (settle)** leaves no episode `Open`, no tag, no reservation; nothing deleted | ✔ | ✔ |
 | RT-PHYS-019 | **validator** reports (and does not repair) custody/episode inconsistencies | ✔ | ✔ |
-| RT-PHYS-020 | **role verdict and the smallest correction** (pure functions over fake candidates): a candidate incapable of the role's work is rejected; a skill-only shortfall is corrected through the base level (aptitudes respected) and re-verified; nothing else is ever modified (P3-INV-017) | ✔ | ✔ |
+| RT-PHYS-020 | **role verdict and the smallest correction** (pure functions over fake candidates): a candidate incapable of the role's work is rejected; a role-skill shortfall is corrected by raising **only that skill's** base level through aptitudes and re-verified; **passion is unchanged**, every unrelated skill, trait, backstory, gene, hediff, age, gender and name is unchanged, and no skill is lowered (P3-INV-017) | ✔ | ✔ |
 | RT-PHYS-021 | **established truth beats randomness**: the projection request honours every durable statement (name snapshot, role, the organization's composition); anything not established stays unset (P3-INV-018) | ✔ | ✔ |
+| RT-PHYS-030 | **time-independent identity**: derive a composition (and a Solo's role) from the immutable origin facts at year 1; advance the actor's experience, doctrine, fame and funds for years; a fresh derivation from the **same** origin facts gives the **identical** composition and role, while the projected *competence* (the capability band) may differ; a source scan proves the derivation reads no mutable field and that nothing writes `seed`, `specialties` or `capacity` after `Instantiate` (P3-INV-030) | ✔ | ✔ |
 | RT-PHYS-022 | **fame invariance** (a property test): changing `FameBand`, the reputation score or visibility changes no projection request, role choice or mission composition (P3-INV-019) | ✔ | ✔ |
-| RT-PHYS-023 | **concretization by size**: a five-person crew's placed seats persist and are reused (the same record, never a stranger); a 40-person company's rank-and-file stay ephemeral and leave no roster; named seats never exceed the caps; an encountered member is never released under the cap (P3-INV-020) | ✔ | ✔ |
+| RT-PHYS-023 | **concretization by size and by evidence**: (a) a five-person crew's placed seats persist and are reused (the same record, never a stranger); (b) a company's anonymous detachment placed on a player-visible map creates **zero** new persistent rank-and-file by presence alone, repeated visits included; (c) a **captured, recruited or individually named** member *does* crystallize; (d) a member whose only signal is the broad `AnyEntryConcerns` (internal chatter, a fight with raiders) does **not**; (e) named seats never exceed the caps; an encountered member is never released under the cap (P3-INV-020) | ✔ | ✔ |
 | RT-PHYS-024 | **cohesion is initial-only**: the screen is a pure function applied at first projection; a source scan proves no Network code writes the relations, opinions, thoughts, memories or traits of a bound pawn (P3-INV-021) | ✔ | — |
 | RT-PHYS-025 | **truthful aging contract** (over the fake port): the catch-up requested equals the full elapsed interval since `agedThroughTick`, uncapped, for 1, 10 and 70 game-years; a rarely met person ages exactly as a frequently met one; `BirthAbsTicks` is never written (P3-INV-022) | ✔ | ✔ |
 | RT-PHYS-026 | **commit fault-injection sweep**: a throw injected after every Applier step leaves the deep fingerprint unchanged and the flag false; the fault-free run applies once; a re-run is a no-op ([§ 15.7](#157-how-atomicity-is-demonstrated-a-phase-30-deliverable); P3-INV-023) | ✔ | ✔ |
 | RT-PHYS-027 | **commit purity and parity**: the Applier references no bus, scheduler, vanilla or random source (source scan); for the same `CasualtyReport` it yields durable state identical to the abstract casualty path (P3-INV-024) | ✔ | — |
-| RT-PHYS-028 | **finish-pending after interruption**: a save/load between commit and release, release and follow-up, follow-up and publish resumes each stage exactly once; a publish that throws never reapplies a consequence (P3-INV-025) | ✔ | — (no save automation) |
+| RT-PHYS-028 | **finish-pending after interruption**: a save/load between commit and release, release and follow-up, follow-up and publish resumes each stage from its explicit marker exactly once; no marker is inferred from side-effect state (P3-INV-025) | ✔ | — (no save automation) |
+| RT-PHYS-029 | **release interruption and the authority gate**: the durable reconcile succeeds; a throw is injected after *each* release action; `releaseApplied` stays false until COMPLETE; the finish-pending pass resumes at the cursor with no duplicate normalize, reserve or pass-to-world; across a save/load, abstract upkeep, spatial, procurement and recovery **stay blocked** (`CanSimulateAbstractly` false) until COMPLETE, and only then true (P3-INV-029) | ✔ | ✔ (no save automation for the reload step) |
 
-These **28** IDs extend the Phase 2.9 stable-ID discipline (never renumbered, never reused; a new behaviour gets a new
+These **30** IDs extend the Phase 2.9 stable-ID discipline (never renumbered, never reused; a new behaviour gets a new
 ID) and the suite plugs into `RuntimeTestPlans.FullSafe` unchanged. **Full Safe Regression remains safe on a real
 colony: read-only live state, mutable scenarios only in the sandbox** (P3-INV-013, enforced by the existing source scan,
 extended to forbid the real physical adapter and any pawn-creating API in `RuntimeTests/Suites/`).
@@ -1953,7 +2137,7 @@ persisted field · the source scan.
 ### 21.3 What Phase 3 adds to the Phase 2.9 infrastructure
 
 A fake `PhysicalWorldPort` in the sandbox (it hands out pawn *tokens*, records the catch-up and creation requests it is
-given, and lets a test script what `Observe` returns); the 28-case `RT-PHYS-*` suite; extensions to the safe-suite source
+given, and lets a test script what `Observe` returns); the 30-case `RT-PHYS-*` suite; extensions to the safe-suite source
 scan (no real adapter, no pawn-creating API, and now **no bus, scheduler or vanilla reference inside the commit's
 Applier**); the separate physical tier with its session arm, guard, sentinel and scan; headless `Runner.*` tests for the
 guard and the blast-radius proof; the **fault-injection sweep** that reuses the existing `LiveFingerprint`; and the
@@ -1970,7 +2154,7 @@ The smallest implementation that proves the whole lifecycle without dragging in 
 multiple organizations, transport pods or twelve encounter types:
 
 ```
- ONE existing Solo contractor (embodied KnownCharacter, custody Unmaterialized, operational role established at first use)
+ ONE existing Solo contractor (embodied KnownCharacter, custody Unmaterialized, operational role derived from immutable origin facts)
    ─► Dev action (physical tier: session-armed, on the suite's OWN test map): "Materialize … as a visitor"   [cause = Dev, flagged]
    ─► Plan: gate checks · episode Planned · custody Deployed · temporary faction created
    ─► Create the pawn ONCE as a role-constrained projection: ForceGenerateNewPawn · request fields + validators ·
@@ -2029,10 +2213,10 @@ split would only add review overhead.
 
 | Subphase | Content | Proof | Owner gate |
 |---|---|---|---|
-| **3.0 Authority and episode foundation** (no RimWorld pawn) | `EpisodeStore`, `PawnRef` (with `agedThroughTick`), the character fields (`pawn`, `episode`, `heldBy`, `opRole`, `firstEncounterTick`), `AuthorityGate` and its call sites, **the reconciliation planner, validator and the atomic Applier**, the physical-apply split of the casualty/succession/ending paths, the `PhysicalWorldPort` + scriptable fake, the validator, compaction, prepare-for-removal settle, `RT-PHYS-001…019` and **025–028**, the save-version bump + no-op migration | headless suite (incl. the fault-injection sweep and the parity test) + soaks + the **safe** runtime tier in the owner's real colony. **Zero new risk to a real save.** | review the abstract core before any pawn exists |
-| **3.1 The controlled physical episode** (the slice) | the real `PhysicalWorldPort` adapter, **role-constrained projection for a Solo**, **truthful aging catch-up**, binding, tags, `SignalBridge` routes, the visit Lord, the temporary faction, the registry quest, store-time normalization, the **physical test tier with its session arm and own test map**, `RT-PHYS-020…022`, `RT-PHYX-001…012`, a read-only Episode Monitor | the physical tier on the suite's own test map; the owner's save/load checklist | review real pawns before any content |
+| **3.0 Authority and episode foundation** (no RimWorld pawn) | `EpisodeStore`, `PawnRef` (with `agedThroughTick`), the character fields (`pawn`, `episode`, `heldBy`, `opRole`, `firstEncounterTick`), `AuthorityGate` and its call sites, **the reconciliation planner, validator and the atomic Applier**, the physical-apply split of the casualty/succession/ending paths, the `PhysicalWorldPort` + scriptable fake, the validator, compaction, prepare-for-removal settle, `RT-PHYS-001…019` and **025–029**, the save-version bump + no-op migration | headless suite (incl. the fault-injection sweep and the parity test) + soaks + the **safe** runtime tier in the owner's real colony. **Zero new risk to a real save.** | review the abstract core before any pawn exists |
+| **3.1 The controlled physical episode** (the slice) | the real `PhysicalWorldPort` adapter, **role-constrained projection for a Solo**, **truthful aging catch-up**, binding, tags, `SignalBridge` routes, the visit Lord, the temporary faction, the registry quest, store-time normalization, the **physical test tier with its session arm and own test map**, `RT-PHYS-020…022` and `030`, `RT-PHYX-001…012`, a read-only Episode Monitor | the physical tier on the suite's own test map; the owner's save/load checklist | review real pawns before any content |
 | **3.2 Custody, rescue and groups** | held-person observation (arrest, recruit, enslave, kidnap, caravan, pod), the custody watch, **group materialization, organization role composition and mission composition, anonymous vs concretized people, promotion, team cohesion**, the **rescue** episode for a Troubled operation (site holder, `OpStatus.Physical`, `OnPhysicalResolved`), the Last Known Location with survivors/captives, the events, `RT-PHYS-023…024`, `RT-PHYX-013…014`, `RT-PHYX-020+` | physical tier + owner play | **first player-visible content** |
-| **3.3 Procurement fulfillment / physical handoff** (**design direction only**, [§ 27](#27-phase-33-procurement-fulfillment-and-physical-handoff-design-direction)) | delivery-mode selection and capability, per-contract orbital charter, freight vs personal carry, the colony handoff and rendezvous episodes, the explicit handoff transaction, the robbery / betrayal consequence hook, future-rivalry seams | decided when 3.2 has merged and been reviewed | owner review before any implementation |
+| **3.3 Procurement fulfillment / physical handoff** (**design direction only**, [§ 27](#27-phase-33-procurement-fulfillment-and-physical-handoff-design-direction)) | delivery-mode selection and capability, per-contract orbital charter, freight vs personal carry, the colony handoff and rendezvous episodes, the explicit handoff (an idempotent staged protocol), the robbery / betrayal consequence hook, future-rivalry seams | decided when 3.2 has merged and been reviewed | owner review before any implementation |
 
 No player-as-contractor board, no NPC-issued market, no full rival simulation in any of them.
 
@@ -2088,7 +2272,7 @@ R-11, R-13, R-15 point here.
 | R-38 | **Truthful aging has side effects:** a decades-long gap yields chronic conditions or an unfit person; the catch-up API misbehaves on a non-ticking pawn; the abstract record disagrees with the pawn | full uncapped catch-up through the vanilla mothball path (S12); refuse an unfit placement with a diagnostic; O-12 owns the abstract consequence | 3.1 (S12) |
 | R-39 | **Team cohesion is infeasible or over-trusted** (opinion of an unspawned candidate; friction lists are mod-dependent) or drifts into sanitizing real social history | a derived band; screening only at first generation; never writing relations; a best-effort fallback the owner decides | 3.2 (S26) |
 | R-40 | **Reputation, fame and capability stay conflated** and leak into projection (fame treated as skill; equipment gated on visibility) | P3-INV-019 + RT-PHYS-022; terminology corrections now; the separation in a later focused phase | design now; later phase |
-| R-41 | **Handoff exploits (3.3):** cargo duplication, ownership ambiguity between contractor and player, a "reform caravan" loophole, a double charge | cargo stays under vanilla possession until **one** explicit, exactly-once transaction; physical reality wins; the existing money ledgers; S28–S30 | 3.3 |
+| R-41 | **Handoff exploits (3.3):** cargo duplication, ownership ambiguity between contractor and player, a "reform caravan" loophole, a double charge | cargo stays under vanilla possession until an explicit, **idempotent staged handoff** with exactly-once semantics and positive transfer evidence (never one atomic commit over the Network, silver and real `Thing`s); physical reality wins; the existing money ledgers; S28–S30 | 3.3 |
 | R-19 (existing) | the audit is build-specific (`1.6.9676.17735`); a 1.6.x update can move internals | every cited API is listed ([Appendix A](#appendix-a-rimworld-16-api-audit)); the physical tier re-checks them | every release |
 
 ---
@@ -2111,7 +2295,7 @@ Do **not** read an OPEN item as a decision. Each names the narrowest experiment.
 | S24 | The save/load matrix ([§ 16.1](#161-save-at-every-point)) on real saves | no save automation exists | owner-assisted checklist, one row per scenario | 3.1 |
 | **S25** | **Role-constrained creation** ([§ 6.8](#68-role-constrained-creation-validate-then-the-smallest-correction)): how often validators reach their 100-try cap; the cost of K attempts on a heavy mod list; the role → existing-kind mapping; modded races that cannot satisfy a role; whether `Dispose` of a rejected candidate leaves residue in vanilla caches (ideo membership, faction) | mod-dependent; the validator tail is a vanilla fall-through | generate N pawns per role across a heavy list with and without modded races; assert every returned pawn satisfies its role; measure attempts and time; check for residue after dropping rejected candidates | 3.1 |
 | **S26** | **Team cohesion** ([§ 6.9](#69-team-cohesion)): is `OpinionOf` meaningful for an unspawned candidate (situational thoughts may need a map); how often generated crews are hostile; which traits and ideologies cause friction | not statically provable | generate N crews per band; record pairwise opinions both ways; test the screen; check that `FixedIdeo` removes ideological friction | 3.2 |
-| **S27** | **Encounter evidence** ([§ 4.5.3](#453-encounter-evidence-observed-at-reconciliation-never-scanned)): are `PlayLog.AnyEntryConcerns`, `BattleLog.AnyEntryConcerns` and the GC-reason check cheap and reliable for ≤ 8 members, in a heavily modded game; what "player-visible map" is in code | the methods are public; their reliability under mods is unknown | scripted encounters (a conversation, a fight, a capture); assert each evidence flag; time the lookups | 3.2 |
+| **S27** | **Encounter evidence** ([§ 4.5.3](#453-encounter-evidence-presence-is-not-promotion-observed-at-reconciliation-never-scanned)): are the **narrowed** BattleLog and PlayLog tests (entries whose `GetConcerns()` include this pawn **and** a player-faction pawn) cheap and reliable for ≤ 8 members in a heavily modded game; is there any public signal that separates a consequential interaction from chatter (the kind is `protected`); the non-log GC reasons; what "player-visible map" is in code | the methods are public; their reliability under mods is unknown | scripted encounters (a conversation, a fight, a capture); assert each evidence flag; time the lookups | 3.2 |
 | **S28** | **A right-click command on a contractor representative without Harmony** (3.3): `FloatMenuMakerMap` builds its provider list by reflection over every non-abstract `FloatMenuOptionProvider` subclass (`FloatMenuMakerMap.cs:12–23`), so a subclass in our assembly needs no Def and no patch | verified structurally, not behaviourally | a provider that adds one option on a tagged pawn; cheap `TargetPawnValid`; absent after mod removal | 3.3 |
 | **S29** | **Physical cargo at a handoff** (3.3): the representation of contractor-held cargo (faction-owned items in carrier pawns' inventories, a pack animal, a container), and what vanilla does with it when the map is removed or the carriers die | not statically provable | a scripted handoff on the test map: pay, decline, rob, abandon; assert exactly-once transfer and no duplication | 3.3 |
 | **S30** | **A rendezvous site** (3.3): a temporary `MapParent` for a meetup; caravan arrival and departure; retention and removal of the map; the player leaving without completing | needs real maps | a rendezvous on the test map; the player's caravan arrives, transacts, declines, leaves | 3.3 |
@@ -2122,11 +2306,12 @@ Do **not** read an OPEN item as a decision. Each names the narrowest experiment.
 | O-14 | A long-suspended pregnancy; Ideology/Royalty titles on generated pawns | edge | S23 | 3.2 |
 | O-8 | The capability band → role-skill-floor table, and whether a composition seat carries a **grade** (the elite-bodyguard case, [§ 6.10](#610-professional-reputation-fame-and-capability)) | tuning; the model question is deferred | S25 + playtest | 3.1 / later |
 | O-9 | Whether an *observed physical loss* needs a per-role `vacant` count, or the abstract apportionment suffices ([§ 6.7.2](#672-pinned-seats-and-apportionment)); whether the abstract resolver should ever become role-aware | only shown to matter by a visible contradiction | the soak and playtest | 3.2 |
-| O-10 | The **publish dedupe** mechanism: a deterministic event key rejected by History, or a pending-event list ([§ 15.6](#156-failure-semantics-of-the-commit-service-by-service)) | a cosmetic defect either way, but it should be decided | 3.0 design review | 3.0 |
+| O-10 | *(Resolved in the correction pass: the bus has no dedupe key, so none is assumed; publication uses a persisted outbox and a per-event cursor, [§ 15.2](#152-the-steps).)* Residual: the exact compact shape of `PublicationSpec` (a flattened union able to build each typed event) | the shape is an implementation detail with a bounded size | 3.0 design review | 3.0 |
 | O-11 | The format-bump policy across released subphases ([§ 16.5](#165-migration-and-version-implications-the-number-is-not-chosen-here)) | a release decision | the owner | 3.0 |
 | O-12 | What truthful aging means for the **abstract** record (a contractor who is 70 and chronically unfit: retire, remain Active but un-materializable, or die of age) | a content / lifecycle decision | the owner | 3.1 / later |
 | O-15 | Freight capability model, the charter-fee economics (a pass-through sink or contractor income), and handoff time windows ([§ 27](#27-phase-33-procurement-fulfillment-and-physical-handoff-design-direction)) | design | 3.3 design review | 3.3 |
 | O-17 | The separation of professional reputation, visibility and regional scope: the later focused phase's design and migration ([§ 6.10](#610-professional-reputation-fame-and-capability)) | design | a focused phase before compensation work | later |
+| O-18 | The exact **seat-assignment function** for an origin-era organization's named people, whether to capture an explicit immutable `origin` snapshot on new actors (form, specialties) instead of relying on `capacity` and `specialties` being immutable in practice, and the guard that keeps them so; a world-generated newcomer retains no template ([§ 6.6.5](#665-identity-comes-from-immutable-origin-facts-never-from-when-the-player-first-looks)) | the contract (inputs and purity) is frozen; the function and the snapshot are detail | 3.1 / 3.2 design | 3.1 |
 | **Harmony** | Is Harmony truly avoidable for every required event? | **Yes for 3.1 and 3.2** (§ 14.2); the three hook gaps are polls | if S21 fails: document the one method, specify a postfix, **do not implement** | — |
 
 ---
@@ -2143,13 +2328,13 @@ ADR-049 and risks R-28 to R-34 are recorded.
 **The amendment pass** adds: all ten amendments are folded into this one document and the other docs agree (no
 competing statement survives; [Appendix F](#appendix-f-amendment-log) lists what changed and what became invalid) ·
 the pawn-generation, aging, opinion and float-menu APIs are audited from the decompiled source ·
-P3-INV-017 … 028, RT-PHYS-020 … 028, S25 … S30 and O-8 … O-17 are recorded · the current `FameBand` / `PublicReputation`
+P3-INV-017 … 028, RT-PHYS-020 … 028, S25 … S30 and O-8 … O-17 are recorded (the correction pass below extends these to P3-INV-030, RT-PHYS-030 and O-18) · the current `FameBand` / `PublicReputation`
 conflation is identified as *implemented truth* versus *future design* · **S20 is still NOT RUN, the Phase 2.9 owner
 runtime pass is preserved unchanged, and no code, DLL, Harmony, save field or save version changed.**
 
 ### 26.2 Phase 3 as a whole (definition of done)
 
-1. P3-INV-001 … 028 (those that apply to the implemented subphases) hold in the headless suite, the safe runtime tier and the physical tier.
+1. P3-INV-001 … 030 (those that apply to the implemented subphases) hold in the headless suite, the safe runtime tier and the physical tier.
 2. A person is never advanced by two layers; the gate is complete (RT-PHYS-011).
 3. Every episode ends in a terminal outcome per member, exactly once; no scenario reconciles twice or never.
 4. Save/load at every row of [§ 16.1](#161-save-at-every-point) passes the owner's checklist; load never generates, spawns or destroys.
@@ -2164,8 +2349,8 @@ runtime pass is preserved unchanged, and no code, DLL, Harmony, save field or sa
 
 | Subphase | Done when |
 |---|---|
-| 3.0 | the 23 `RT-PHYS` cases of this stage (001–019, 025–028) pass headless, **including the fault-injection sweep (a throw after every Applier step restores the exact fingerprint) and the parity test with the abstract casualty path**; the safe in-game tier is green in the owner's colony with **no change to the colony** (the fingerprint covers the new store); the save bumps once and old saves load unchanged; the validator, compaction and prepare-for-removal settle are tested; mutation checks (an abstract writer bypassing the gate; a reconcile that flags first; a publication, scheduler or vanilla call inside the Applier; a restore that omits the id allocator; a signal handler that reconciles inline; `Dead` overwritten) are each caught by a named test |
-| 3.1 | the slice in § 22 runs on the physical tier's own test map with the blast-radius proof green and the session arm behaving as specified; the rematerialization shows the same `Pawn`, **truthfully older**; `RT-PHYS-020…022` and `RT-PHYX-001…012` pass; S9r, S10, S12, S14, S21, S22, S23, S24, S25 are recorded as PASS/PARTIAL/FAIL with their consequences |
+| 3.0 | the 24 `RT-PHYS` cases of this stage (001–019, 025–029) pass headless, **including the fault-injection sweep (a throw after every Applier step restores the exact fingerprint), the parity test with the abstract casualty path, the release-interruption test (the gate stays closed until release COMPLETE) and the publication-interruption test (no event submitted twice, no consumer replayed)**; the safe in-game tier is green in the owner's colony with **no change to the colony** (the fingerprint covers the new store); the save bumps once and old saves load unchanged; the validator, compaction and prepare-for-removal settle are tested; mutation checks (an abstract writer bypassing the gate; a reconcile that flags first; a publication, scheduler or vanilla call inside the Applier; a restore that omits the id allocator; a signal handler that reconciles inline; `Dead` overwritten) are each caught by a named test |
+| 3.1 | the slice in § 22 runs on the physical tier's own test map with the blast-radius proof green and the session arm behaving as specified; the rematerialization shows the same `Pawn`, **truthfully older**; `RT-PHYS-020…022`, `RT-PHYS-030` (time-independent identity and role correction) and `RT-PHYX-001…012` pass; S9r, S10, S12, S14, S21, S22, S23, S24, S25 are recorded as PASS/PARTIAL/FAIL with their consequences |
 | 3.2 | the held-person matrix and the rescue scenario pass in the physical tier; a Troubled operation with a rescue episode never also resolves abstractly; a five-person crew's members are the same people on a second visit while a company keeps no roster (`RT-PHYS-023`, `RT-PHYX-014`); the cohesion probe is recorded (S26, `RT-PHYS-024`); S27 is recorded; the soak numbers are attached |
 | 3.3 | **design direction only**: accepted by the owner; nothing is implemented, and S28–S30 are not run until a 3.3 stage is approved |
 
@@ -2239,7 +2424,13 @@ lifecycle) and the *cargo as real items under their possession* (S29 decides whe
 | purpose | speed and reliability, less physical drama |
 | money | a typed line inside the **existing** quote → deposit/balance → ledger machinery (so exactly-once, refund-on-void and clawback apply as for any contract money); whether the fee is contractor income or a pass-through sink is **OPEN O-15** |
 
-### 27.6 The physical handoff transaction
+### 27.6 The physical handoff: an idempotent staged protocol, not one atomic commit
+
+> **The rule to freeze.** Network-durable state may be atomic ([§ 15](#15-reconciliation-algorithm)). **RimWorld payment and
+> moving real `Thing`s are external side effects**: they cannot take part in the same in-memory all-or-nothing commit as the
+> Network's durable data. A physical handoff is therefore an **idempotent multi-stage transaction protocol with exactly-once
+> semantics**, recovered **stage by stage**, never an imaginary cross-system ACID transaction. The exact protocol is **not
+> frozen** here and Phase 3.3 stays design direction only; **S29** settles the physical cargo semantics.
 
 ```
  Scheduled ─► Staged  (representatives and cargo present; cargo under the CONTRACTOR's possession)
@@ -2247,18 +2438,29 @@ lifecycle) and the *cargo as real items under their possession* (S29 decides whe
                  └─► AwaitingTransaction ─► Settled(Paid | Declined | Robbed | Abandoned | ContractorLost | Void)
 ```
 
-1. **Cargo ownership stays with the contractor / contract until the transaction.** In vanilla terms the cargo is
+1. **Cargo ownership stays with the contractor / contract until the handoff completes (positive transfer evidence).** In vanilla terms the cargo is
    *faction-owned items carried by the contractor party* (S29). The player's "form caravan / job complete" flows can only
    take the **player's** possessions, so **no special lock is needed**: the goods were never the player's.
-2. **The transaction is deliberate and explicit**: most likely a right-click command on a contractor representative.
+2. **The handoff is deliberate and explicit**: most likely a right-click command on a contractor representative.
    In 1.6 this needs **no Harmony and no Def**: `FloatMenuMakerMap` builds its provider list by reflection over every
    non-abstract `FloatMenuOptionProvider` subclass (`FloatMenuMakerMap.cs:12–23`), and `GetOptionsFor(Pawn, …)` is
    public (S28). One confirmation shows the contract, the balance due and the cargo.
-3. **One atomic Network commit.** Payment (existing payment port and ledger), ownership transfer (the real items handed
-   to the player's side) and the contract's delivery state are *planned and validated* as in [§ 15](#15-reconciliation-algorithm).
-   The real-world side effects are ordered like today's delivery: **plan first** (representative present, cargo present,
-   the player able to receive), **charge**, **hand over**; a failure after the charge takes the existing refund path.
-   `Settled` is reached **exactly once** (P3-INV-026).
+3. **An idempotent staged protocol** (direction, stage names not frozen). The ordering follows today's delivery rule, "the
+   balance is charged only once a drop plan exists; money never moves for goods that cannot land":
+
+   | Stage | What happens | Durable evidence |
+   |---|---|---|
+   | **1 VALIDATE** | the representative exists; the cargo still exists; its identity and count match the committed payload; the player can pay; the destination can receive. Nothing changes | none |
+   | **2 RESERVE / PLAN** | freeze the attempt under a **transaction id**; no money or item moves yet | the frozen attempt |
+   | **3 CHARGE** | the existing payment port and ledger, **exactly once** | the ledger record that the charge happened |
+   | **4 TRANSFER REAL CARGO** | the real vanilla `Thing` ownership / placement change | **positive transfer evidence**: the observed items are now on the player's side |
+   | **5 FINALIZE** | the contract's delivery state moves terminal **exactly once**, and only after positive transfer evidence | the terminal state |
+   | **6 COMPENSATE** | if the transfer fails *after* the charge: a typed, existing refund / recovery path | the typed record |
+
+   Each stage has its own durable marker and is resumable, like [§ 8.1](#81-the-episode-machine-durable). **Never charge again
+   on a retry; never duplicate items; never mark delivered without positive physical transfer evidence.** `Settled` is
+   reached exactly once (P3-INV-026), by staged recovery, not by one commit spanning the Network, the player's silver and
+   real `Thing`s.
 4. **A terminal handoff state is required** before the contract's normal job-complete behaviour exists for that cargo.
    "Enter the map, immediately reform the caravan, magically take the contractual goods" fails by construction.
 5. **Physical reality wins** (P3-INV-027). The player may choose violence or robbery: the cargo can be taken normally;
@@ -2268,7 +2470,7 @@ lifecycle) and the *cargo as real items under their possession* (S29 decides whe
 6. Outcomes (hooks only): **Paid** → delivered · **Declined** → the contractor leaves with the goods, per the existing
    `AwaitingPayment` semantics · **Robbed** → a contract failure with a distinct cause · **Abandoned** (the player never
    arrives or leaves; a time-out) → the existing grace · **ContractorLost** → the existing failure paths.
-7. After the transaction the contractor may leave through the visit Lord's exit; using colony comms or rest is future
+7. After the handoff the contractor may leave through the visit Lord's exit; using colony comms or rest is future
    content, not designed here.
 
 ### 27.7 The rendezvous
@@ -2310,7 +2512,7 @@ scheduling time, bounded, never a per-tick scan**. All of it belongs to later co
 
 | Reuses | Adds (design only) |
 |---|---|
-| the Episode, the authority gate, identity, role and mission composition, concretization (a representative who returns is the same person), atomic reconciliation, `IDelivery` (orbital), the payment port and ledgers, `SpatialState`, the site/timeout pattern, Knowledge | a delivery-mode contract term, a derived freight capability, a typed charter-fee line, the `Delivery` episode purpose and its handoff states, the right-click provider, the rendezvous site, events (`Delivery.HandoffSettled`, `Player.BetrayedContractor`) |
+| the Episode, the authority gate, identity, role and mission composition, concretization (a representative who returns is the same person), atomic reconciliation of the *people* (the handoff itself is a staged protocol), `IDelivery` (orbital), the payment port and ledgers, `SpatialState`, the site/timeout pattern, Knowledge | a delivery-mode contract term, a derived freight capability, a typed charter-fee line, the `Delivery` episode purpose and its handoff states, the right-click provider, the rendezvous site, events (`Delivery.HandoffSettled`, `Player.BetrayedContractor`) |
 
 ### 27.11 Gates
 
@@ -2365,7 +2567,7 @@ component callback or a bounded poll provides it. Risk is after the recommended 
 | A36 | Constrain a generated pawn | `PawnGenerationRequest`: `MustBeCapableOfViolence`, `ForcedTraits`, `ProhibitedTraits`, `ValidatorPreGear`, `ValidatorPostGear`, `FixedIdeo`, `ForcedXenotype`, `AllowedXenotypes`, `BiologicalAgeRange`, `FixedBiologicalAge`, `OnlyUseForcedBackstories`, `ForceNoBackstory` (`PawnGenerationRequest.cs:31–149`) | public properties; `MustBeCapableOfViolence` is enforced by discarding the candidate (`PawnGenerator.cs:967`); validators run before gear (`:1009`) and after gear (`:1023`) | Yes | the request is transient | Med | use as an optimization; **always re-verify** the returned pawn |
 | A37 | The generation retry loop | `PawnGenerator.GenerateNewPawnInternal` (`:681–724`) | up to 120 tries; scenario requirements ignored from try 70; **validators ignored from try 100** (each with a `Log.Error`); `null` after 120 | Yes | n/a | **High** | a validator is never a guarantee ([§ 6.8](#68-role-constrained-creation-validate-then-the-smallest-correction)) |
 | A38 | Kind-level constraints, and why roles map to existing kinds | `PawnKindDef.skills` (`List<SkillRange>`), `requiredWorkTags`, `minBestSkillLevel`, `minTotalSkillLevels`, `forcedTraits`, `disallowedTraits(WithDegree)`, `weaponTags`, `weaponMoney`, `apparelTags`, `apparelMoney`, `techHediffsMoney`, `itemQuality` (`PawnKindDef.cs:33–291`); `Scribe_Defs.Look(ref kindDef, "kindDef")` (`Pawn.cs:4571`) | enforced inside generation (`PawnGenerator.cs:973–1002`); **the kind is saved by def name** | Yes | a runtime-created kind would not resolve at load | **High** | choose among **existing** kinds only; never create kinds |
-| A39 | Skills and passions | `PawnGenerator.GenerateSkills`, `FinalLevelOfSkill` (`:1846–2015`); `SkillRecord.Level`, `GetLevel(includeAptitudes)`, `Aptitude`, `passion`, `TotallyDisabled`, `Notify_SkillDisablesChanged` (`SkillRecord.cs:15,56–66,85,334,408`) | **the `Level` getter returns base + aptitudes, the setter writes the base level clamped to 0–20**; `passion` is a public field; a kind's `skills` range re-rolls an out-of-range value | Yes | saved with the pawn | Med | correction targets the effective level through the base, raise only |
+| A39 | Skills and passions | `PawnGenerator.GenerateSkills`, `FinalLevelOfSkill` (`:1846–2015`); `SkillRecord.Level`, `GetLevel(includeAptitudes)`, `Aptitude`, `passion`, `TotallyDisabled`, `Notify_SkillDisablesChanged` (`SkillRecord.cs:15,56–66,85,334,408`) | **the `Level` getter returns base + aptitudes, the setter writes the base level clamped to 0–20**; `passion` is a public field; a kind's `skills` range re-rolls an out-of-range value | Yes | saved with the pawn | Med | correction targets the effective level through the base, **raise only, only a role-defining skill; never passion** (public, but deliberately left to RimWorld) |
 | A40 | Backstory, traits, incapabilities | `PawnBioAndNameGenerator.cs:112–115,180–186`; `Pawn_StoryTracker.Childhood/Adulthood` setters (`:47–70`); `TraitSet.GainTrait/RemoveTrait` (`:258,325`); `Pawn.WorkTagIsDisabled`, `CombinedDisabledWorkTags`, `Notify_DisabledWorkTypesChanged` (`Pawn.cs:4513–4525`) | the generator honours `kind.requiredWorkTags`; the story setters clear **only** `backstoriesCache`; trait add/remove refresh caches themselves | Yes | saved with the pawn | Med | **never correct an incapability** (it is identity); reject the candidate |
 | A41 | Weapon preference and the Brawler trait | `PawnWeaponGenerator.TryGenerateWeaponFor` (`:55–92`); `TraitDefOf.Brawler` uses in `FloatMenuOptionProvider_Equip.cs:55`, `Alert_BrawlerHasRangedWeapon.cs:17`, `Building_OutfitStand.cs:748` | the weapon comes from the kind's `weaponTags` / `weaponMoney`; none if violence is disabled; no ranged weapon if Shooting is disabled; **no Brawler check in the generator**: vanilla only refuses to equip and raises an alert | Yes | n/a | Med | role → kind mapping (O-3); a Marksman prohibits Brawler |
 | A42 | Disposing of a rejected candidate | `PawnGenerator.DiscardGeneratedPawn` (**private**, `:1109`) → `WorldPawns.PassToWorld(pawn, Discard)`; `GeneratePawn` does not register a returned pawn in `WorldPawns`; `Faction.Notify_PawnJoined` only informs ideology membership (`Faction.cs:890–900`) | vanilla discards its own rejects; a candidate the Network rejects after `GeneratePawn` returned is an unreferenced, unspawned object | Yes | an unspawned, unreferenced pawn is not saved | Med | S25 checks for residue |
@@ -2374,7 +2576,7 @@ component callback or a bounded poll provides it. Risk is after the recommended 
 | A45 | Ideology at generation | `PawnGenerationRequest.FixedIdeo`; `PawnGenerator.cs:898–913` | `FixedIdeo` sets the ideology; else the faction's; else weighted random | Yes | saved with the pawn | Low | match the organization's existing ideology (Ideology only) |
 | A46 | The age model | `Pawn_AgeTracker.AgeChronologicalTicks` (derived), `BirthAbsTicks`, `AgeBiologicalTicks`, `AgeTickMothballed(int)`, `BiologicalTicksPerTick`, `BirthdayBiological` (`Pawn_AgeTracker.cs:87–127,236–269,486–496,585–696`) | chronological = `TicksAbs − BirthAbsTicks` (truthful by construction); biological is an accumulator; the `AgeBiologicalTicks` setter runs **no birthday**; `AgeTickMothballed` crosses **every** birthday | Yes | `ageBiologicalTicks` and `birthAbsTicks` are saved | Med | S12; the contract of [§ 6.4](#64-truthful-aging-of-a-retained-pawn) |
 | A47 | Suspension freezes aging | `Pawn.TickInterval` (`Pawn.cs:1626–1727`), `Pawn.TickMothballed` (`:1743–1749`), `Need.IsFrozen` (`Need.cs:63–68`), `WorldPawns.RemovePawn` partial catch-up (`:236–253`) | a suspended pawn skips biological aging, health, jobs and needs; vanilla catches up a *mothballed* (not suspended) pawn on removal | Yes | n/a | Med | catch-up before any observation, full and uncapped |
-| A48 | Encounter evidence | `PlayLog.AnyEntryConcerns(Pawn)` (`PlayLog.cs:81`), `BattleLog.AnyEntryConcerns(Pawn)` (`BattleLog.cs:74`), `WorldPawnGC.GetCriticalPawnReason` (`WorldPawnGC.cs:174–247`) | public; vanilla's own `InPlayLog` / `InBattleLog` GC reasons | Yes | the logs are saved by vanilla | Low | S27 |
+| A48 | Encounter evidence | `PlayLog.AnyEntryConcerns(Pawn)` (`PlayLog.cs:81`), `BattleLog.AnyEntryConcerns(Pawn)` (`BattleLog.cs:74`); public `PlayLog.AllEntries` (`:12`), `BattleLog.Battles` (`:14`), `Battle.Entries` (`Battle.cs:43`), `LogEntry.GetConcerns()` (`LogEntry.cs:114`); `PlayLogEntry_Interaction.intDef` / `initiator` / `recipient` are `protected`; `WorldPawnGC.GetCriticalPawnReason` (`WorldPawnGC.cs:174–247`) | `AnyEntryConcerns` is true for **any** entry (internal chatter, a fight with raiders), so it is too broad to promote anyone; a *narrowed* test over `GetConcerns()` (this pawn **and** a player-faction pawn) is expressible from public members; the **interaction kind is not public**, so a PlayLog entry cannot be classified as consequential vs chitchat | Yes | the logs are saved by vanilla | Low | S27; BattleLog narrowed = strong, PlayLog narrowed = supporting only |
 | A49 | A right-click command without Harmony | public abstract `FloatMenuOptionProvider` (`GetOptionsFor(Pawn, FloatMenuContext)`); `FloatMenuMakerMap` builds `providers` by `AllSubclassesNonAbstract()` + `Activator.CreateInstance` (`FloatMenuMakerMap.cs:12–23`) | any subclass in any loaded assembly is instantiated; no Def, no patch | Yes | nothing saved | Low | 3.3 (S28); keep `TargetPawnValid` O(1) |
 
 ---
@@ -2399,18 +2601,20 @@ component callback or a bounded poll provides it. Risk is after the recommended 
 | P3-INV-014 | **Exactly-once of money and career effects** is unchanged: a physical episode that resolves an operation reuses `careerOutcomeApplied` and the existing ledgers | reuse of the existing flags | the existing soaks + RT-PHYS-013 |
 | P3-INV-015 | **Bounded work:** no per-tick scan; jobs exist only while an episode or a held person exists | scheduler discipline | idle-cost test; the soak |
 | P3-INV-016 | A person in an episode is **occupied**: it cannot be checked out for an operation, and an operation's committed person cannot be planned into an episode | `Occupied` extended | RT-PHYS-016 |
-| **P3-INV-017** | **Role truth survives projection:** a pawn is bound to a person with an Operational Role only if its generated state satisfies the role's necessary constraints; a failing candidate is rejected, minimally corrected (role skills only) or the placement aborts. A contradicting pawn is never bound | the verification step of § 6.8 (authoritative; a pure verdict) | RT-PHYS-020; RT-PHYX-011 |
+| **P3-INV-017** | **Role truth survives projection:** a pawn is bound to a person with an Operational Role only if its generated state satisfies the role's necessary constraints; a failing candidate is rejected, corrected only by **raising a role-defining skill's base level** (never lowering anything; **never** a passion, trait, backstory, gene, incapability, hediff, age, gender, name or relationship) or the placement aborts. A contradicting pawn is never bound | the verification step of § 6.8 (authoritative; a pure verdict) | RT-PHYS-020; RT-PHYX-011 |
 | **P3-INV-018** | **Established truth beats randomness:** a first projection honours every durable statement the Network has made about the person or organization; anything never established is vanilla-random and is **not** persisted merely because a pawn now exists | the request builder reads durable facts only; no skill sheet is stored | RT-PHYS-021 |
 | **P3-INV-019** | **Fame is not capability:** no projection, role, composition, equipment-kind or cohesion decision reads `FameBand`, the reputation score or visibility | the projection inputs of § 6.5; a source scan of the projection folder | RT-PHYS-022 |
-| **P3-INV-020** | **Concretization is bounded and monotone:** named seats never exceed the existing named-people caps; a person the player has **encountered** is never silently replaced by another human in the same seat; rank-and-file of a large organization never accumulate a roster; an encountered member of a living organization is never released for a performance cap | the policy of § 4.5 | RT-PHYS-023 |
+| **P3-INV-020** | **Concretization is bounded and monotone:** named seats never exceed the existing named-people caps; a person the player has **encountered** is never silently replaced by another human in the same seat; **presence alone never promotes** the rank-and-file of a large organization (or the non-seat members of a mid-size one): only strong story evidence does, so they never accumulate a roster; an encountered member of a living organization is never released for a performance cap | the policy and the evidence table of § 4.5 | RT-PHYS-023 |
 | **P3-INV-021** | **Cohesion constrains first projection only:** after binding, no Network code writes a pawn's relations, opinions, thoughts, memories or traits | the screen is a pure function applied before binding; a source scan | RT-PHYS-024 |
 | **P3-INV-022** | **Truthful aging:** chronological age is never altered (`BirthAbsTicks` is never written); biological age is brought current by the **full** elapsed interval since `agedThroughTick`, uncapped, before any observation | § 6.4; the catch-up request | RT-PHYS-025; RT-PHYX-006, 012 |
 | **P3-INV-023** | **Atomic durable commit:** the Network-durable effects of one episode's reconciliation are all-or-nothing: a throw at any step restores the exact prior state with the flag unset; `consequencesApplied` is set last | validation before mutation; the Applier with snapshot and restore | RT-PHYS-013, 026 |
 | **P3-INV-024** | **Commit purity:** the commit contains no publication, scheduler, vanilla or random effect and calls no fault-swallowing facade; those run after the flag | a source scan of the Applier; the classification of § 15.6 | RT-PHYS-027 |
-| **P3-INV-025** | **Post-commit stages are idempotent and self-finishing, and publication never replays a consequence** | stage markers; the finish-pending pass; keyed events | RT-PHYS-014, 028 |
-| **P3-INV-026** | *(3.3, design)* **A handoff is one explicit transaction:** contractual cargo stays under the contractor's / contract's possession until a terminal handoff state; the payment and the transfer commit exactly once; "form caravan" cannot take cargo that was never the player's | vanilla possession + one exactly-once transaction | design; S29 |
+| **P3-INV-025** | **Post-commit stages are idempotent and self-finishing, each with an explicit durable completion marker written only after the stage's work completed (never inferred from side-effect state such as a removed tag or a changed status); publication progress is per-event and durable, so an event the bus has accepted is never submitted again, no consumer is replayed, and no consequence is reapplied** | `releaseApplied` / `followUpApplied` / `publishCursor` + `publishedTick`; the finish-pending pass; the persisted outbox | RT-PHYS-014, 028, 029 |
+| **P3-INV-026** | *(3.3, design)* **A handoff has exactly-once semantics through an idempotent staged protocol, not a single atomic commit:** contractual cargo stays under the contractor's / contract's possession until positive transfer evidence; the charge and the real-`Thing` transfer are *external side effects* recovered stage by stage (never charged twice, never duplicated, never marked delivered without positive physical transfer evidence); Network-durable parts may be atomic, but no one commit spans the Network, the player's silver and real `Thing`s; "form caravan" cannot take cargo that was never the player's | vanilla possession + staged, marker-guarded recovery over the existing ledgers | design; S29 |
 | **P3-INV-027** | *(3.3, design)* **No ownership locks, no invulnerability:** physical reality wins; robbery, violence and abandonment are legal outcomes the Network records | no bespoke locks | design |
 | **P3-INV-028** | **The physical test tier is armed per session and never inferred:** the arm is runtime-only, cleared on load and after a run; the Network never decides that a save is disposable; spawning APIs exist only in the physical tier's folder | the guard and a source scan | the headless guard tests |
+| **P3-INV-029** | **Authority waits for release:** returning to `Stored` durable truth does not permit abstract advancement until the physical release transition is complete: `CanSimulateAbstractly` requires no episode membership, and the `episode` link is cleared only by RELEASE completion | the gate; COMPLETE as the only clearer; the commit never clears the link | RT-PHYS-029, 011 |
+| **P3-INV-030** | **Identity comes from immutable origin facts:** an organization's role composition and a person's `opRole` are pure functions of facts that never change after `Instantiate` (seed, form class from capacity, original specialties, `CharacterId`); lazy *storage* never makes identity depend on when the player first looks; experience, doctrine, fame, funds, morale and career affect projected competence, never the initial role or composition | the derivation inputs of § 6.6.5; a versioned pure function; a source scan | RT-PHYS-030 |
 
 ---
 
@@ -2434,7 +2638,7 @@ component callback or a bounded poll provides it. Risk is after the recommended 
 | Recovery | **NEW AUTHORITY RULE** | physical → abstract recovery mapping; recovery runs once |
 | Organization roster | **NEW AUTHORITY RULE** | headcount conservation; returned/lost applied once; a role template and concretized seats (3.2) |
 | `KnownCharacter` | **MAJOR RISK** | the identity binding, custody, operational role and encounter are the riskiest new truth |
-| Runtime test infrastructure | SMALL INTEGRATION + a **new tier** | fake port, `RT-PHYS` (28 cases), the session-armed physical tier on its own test map (§ 21) |
+| Runtime test infrastructure | SMALL INTEGRATION + a **new tier** | fake port, `RT-PHYS` (30 cases), the session-armed physical tier on its own test map (§ 21) |
 | Compaction | SMALL INTEGRATION | Closed episodes; never a character with a pawn or held |
 | Save migration | SMALL INTEGRATION (consequential) | the first Phase 3 build bumps once; the downgrade hazard is why; later-subphase policy is O-11 |
 | Prepare-for-removal | **NEW AUTHORITY RULE** (+ MAJOR RISK) | settle, clear the registry, strip pawn tags; never delete (§ 20) |
@@ -2468,14 +2672,15 @@ component callback or a bounded poll provides it. Risk is after the recommended 
 | **Role composition** | the **organization composition**: a persisted role template (what an organization broadly contains); the **mission composition** is the per-episode subset a purpose needs |
 | **Seat** | one role position of a composition; *abstract* until a living `KnownCharacter` is pinned to it (*concretized*) |
 | **Concretization (crystallization)** | an abstract seat or episode slot becoming a named, bound person, by size policy or by encounter evidence; bounded and monotone |
-| **Encounter evidence** | cheap, observed-at-reconcile facts (E0–E4) that a person mattered: presence on a player-visible map, play/battle-log entries, a vanilla stake, a material outcome, being named |
+| **Encounter evidence** | cheap, observed-at-reconcile facts that a person mattered. *Presence* on a player-visible map drives the **small-organization seat policy only**; **strong** evidence (a material outcome, being individually named, combat with the player's side, a non-log vanilla stake) promotes everyone else; a narrowed play-log entry is supporting only |
 | **Cohesion (band)** | a derived, never stored semantic of an organization's internal stability; constrains only the first generation of a member |
 | **Professional reputation / Fame (visibility) / Capability** | what the work market thinks of a *track record* / how widely one is *known* / what one can actually *do*; correlated, not equivalent ([§ 6.10](#610-professional-reputation-fame-and-capability)) |
 | **Truthful aging** | chronological age derived from the clock; biological age brought fully current before observation, never capped |
 | **Applier / ReconciliationPlan** | the bounded mutation layer and the immutable, validated plan it executes inside one snapshot-guarded commit |
-| **Finish-pending pass** | the load-time and watch-time pass that resumes an unfinished post-commit stage (release, follow-up, publish) from its marker |
+| **Finish-pending pass** | the load-time and watch-time pass that resumes an unfinished post-commit stage (release, follow-up, publish) from its **explicit durable marker** (and, within a stage, its cursor): never from side-effect state |
+| **Outbox** | the ordered, bounded list of compact typed publication specs the commit writes, with `publishCursor` counting what the event bus has accepted |
 | **Lease / Notable Asset** | the two future durable equipment relationships: *lent, ownership external* vs *permanently granted, ownership transferred* |
-| **Handoff / Freight / Rendezvous** | (3.3, design) the explicit physical transaction that transfers contractual cargo / the cargo-moving capability, distinct from personnel mobility / a physical meetup site |
+| **Handoff / Freight / Rendezvous** | (3.3, design) the explicit, **idempotent staged protocol** (not one atomic commit) that transfers contractual cargo / the cargo-moving capability, distinct from personnel mobility / a physical meetup site |
 
 ---
 
@@ -2537,3 +2742,40 @@ event-driven performance rule, and the Phase 2.9 owner-validation record, **is u
 **Status of the evidence.** The amendments add API-audit rows A36–A49 from the decompiled 1.6.9676.17735 assembly. **No
 runtime spike was run**; S12, S22, S25–S30 are *planned*. The owner's Phase 2.9 runtime validation is unchanged, and
 formal Phase 2.5 **S20 is still NOT RUN**.
+
+---
+
+## Appendix G: Correction log
+
+The seven findings of the final design-correction pass (on top of `4062957`), where each landed, and **which earlier
+statement it invalidated**. The pass changes **documents only**. The approved architecture and every amendment concept
+(Actor ≠ Person ≠ Pawn, one authority at a time, the Physical Episode, Operational Roles, role and mission composition,
+progressive concretization, team cohesion, truthful aging, reputation / fame / capability as future design, Lease vs
+Notable Asset, the Phase 3.3 direction, the separate physical test tier, the reconciliation plan with an atomic
+durable commit, no Harmony by default, no hidden exact inventory, no ordinary physical caravans) **is unchanged**, as is
+everything the brief lists to keep (one pawn for life, the `ForceGenerateNewPawn` audit, post-generation role
+verification, validators as an optimization and not a guarantee, incapabilities rejected, existing `PawnKindDef`s only,
+cohesion at first projection only, the same pawn retained, chronological age never falsified, uncapped biological aging,
+S12 choosing the mechanism, Lease ≠ Notable Asset, generic gear abstract, the test map and session arm, an Episode that
+owns presence only, consequences separate from publication, monotonic death, a held person never returned, positive
+evidence, no per-tick scans).
+
+| # | Finding | Where it landed | Statements it invalidated | New OPEN items |
+|---|---|---|---|---|
+| 1 | **RELEASE completion was inferred from a removed routing tag** | § 8.1 (three stages, explicit markers, release-action table), § 15.2, § 5.3 (`releaseApplied`, `releasedTick`, `EpisodeMember.releaseStep`), § 16.1, § 16.5, § 17, App. B 025, RT-PHYS-028/029 | Amendment pass § 8.1 and § 15.2 (stage table and failure row 6): the RELEASE marker was "no member carries the episode tag", and a release interrupted mid-way was finished "from the tags". Now: the tag is **routing clean-up only**; completion is `releaseApplied`, written last (the rule "no vanilla release inside the commit" is kept) | none |
+| 2 | **PUBLISH retry was not idempotent with the real `NetworkEventBus`** | § 15.2 (outbox, `publishCursor`, acceptance rule, failure table), § 5.3 (`publications`, `publishCursor`, `publishedTick`), § 15.4, § 15.5 (specs), § 15.6, § 16.1, § 17, App. B 025, RT-PHYS-014 | Amendment pass § 8.1, § 15.2 (stage 8), § 15.5 and § 5.3 (`publishedTick`): "republish the deterministic, keyed events" after an interruption (the bus has no dedupe key and a second `Publish` is a second event with a new sequence number). No dedupe key is assumed; `publishedTick` is written only after the final spec | O-10 resolved (residual: the shape of `PublicationSpec`) |
+| 3 | **Authority could return to abstract before RELEASE completed** | § 3.3 A1/A2, § 5.3 (`KnownCharacter.episode`), § 8.1, § 15.2 stage 5 note, App. B **029**, RT-PHYS-029 | § 3.3 A1 (amendment pass): "true only for custody `Unmaterialized` or `Stored` with no Planned/Open episode membership", which let a person whose episode had just Closed (consequences applied, release unfinished) become abstractly simulatable. Now: the gate is false while **any** episode membership remains, including a Closed episode whose release is pending; the link is cleared only at release COMPLETE | none |
+| 4 | **Concretization of a large company was too easy** (presence promoted) | § 4.5.2–4.5.7 (presence is not promotion; strong evidence S1–S4; worked example), App. B 020, RT-PHYS-023 | § 4.5.3 (amendment pass): an evidence ladder E0 (presence) … E4 in which presence on a player-visible map and a broad `PlayLog` / `BattleLog.AnyEntryConcerns` match could promote a rank-and-file member of a company. Now: the seat policy (small crews) still concretizes on presence, but **large / mid non-seat members need strong story evidence**; presence alone and a broad log match never promote | S27 (extended: reliability of the narrowed log tests) |
+| 5 | **Role / composition identity could depend on when the player first looked** | § 6.6.2, **§ 6.6.5 (new)**, § 6.7.1, § 5.3 (composition wording), § 16.4, § 22.1, O-18, ADR-050, App. B **030**, RT-PHYS-030 | § 6.6–6.7, § 5.3 and § 16.4 (amendment pass) and ARCHITECTURE § 6.7: the role / composition was "*established at first use*", with "absent ⇒ not yet established / unset", leaving the derivation inputs unstated; a derivation that read the live `OrganizationProfile`, the live cast or a world-generated template at *first use* would change with time. Now: a **frozen pure function of immutable origin facts**; lazy storage is an optimization of *when* it is written, never of *what* it is | O-18 (the seat-assignment function; an optional explicit `origin` snapshot; a guard that keeps `specialties` and `capacity` immutable) |
+| 6 | **Role correction touched passion** | § 6.6.3 (table), § 6.8 (Correct), RT-PHYS-020, App. B 017, ADR-050, A39 | § 6.8 (amendment pass): `Correct` "may set a minor passion the role prefers", and a "Preferred" passion column in the § 6.6.3 role table. Now: the only permitted correction is to raise a role-defining skill's **base** level through aptitudes and re-verify; **passion is never a constraint, preference or correction** | none |
+| 7 | **The Phase 3.3 handoff was described as one atomic transaction** | § 27.6 (idempotent staged protocol), § 27.10, § 23, glossary, R-41, App. B 026, ADR-051 | § 27.6, R-41 and P3-INV-026 (amendment pass): "the physical handoff transaction", "one explicit, exactly-once transaction" across the Network, silver and real Things. Payment and Thing movement are external side effects of different owners and cannot be one atomic commit. Now: an idempotent multi-stage protocol with a transaction id, positive transfer evidence and a compensating path; still **design direction only** | S28–S30 unchanged |
+
+**A newly discovered issue (documented, not expanded into a redesign).** The same inference hazard exists one stage
+later: FOLLOW-UP (the linked operation's own resolution) was said to be idempotent because the operation's status guards
+it, but the existing `OperationService.TroubledDeadline` flips the status mid-way. The correction is minimal and local to
+the *new* entry point: an explicit `followUpApplied` marker and a re-entrancy requirement on `OnPhysicalResolved`
+([§ 15.5](#155-reuse-of-the-existing-services-no-parallel-rules)). The Phase 2 abstract path is not changed.
+
+**Status of the evidence.** No new API audit rows were needed beyond the public log members already audited
+(`PlayLog`, `BattleLog`, `LogEntry.GetConcerns`) and the `NetworkEventBus` read from the repository itself. **No runtime
+spike was run.** The owner's Phase 2.9 runtime validation is unchanged, and formal Phase 2.5 **S20 is still NOT RUN**.

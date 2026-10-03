@@ -360,23 +360,26 @@ hold **who may exist in new worlds**; each world holds **what happened to them i
   **Phase 3 is a design only** ([PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md), [ADR-048](DECISIONS.md)); nothing below is
   implemented. Identity is `Actor ≠ Person ≠ Pawn`; a named person keeps one pawn for life; rank-and-file of a *large*
   organization are ephemeral episode slots while a *small* recurring organization concretizes its placed seats into named,
-  bound people ([PHYSICAL_LIFECYCLE § 4.5](PHYSICAL_LIFECYCLE.md#45-progressive-concretization)). A first projection never
+  bound people ([PHYSICAL_LIFECYCLE § 4.5](PHYSICAL_LIFECYCLE.md#45-progressive-concretization)); *presence alone* promotes
+  nobody in a large organization (a material outcome or a named story is required). A first projection never
   contradicts established truth: Operational Roles, role composition, team cohesion and truthful aging
-  ([ADR-050](DECISIONS.md)).
+  ([ADR-050](DECISIONS.md)); a role or composition derives from **immutable origin facts**, never from when the player first
+  looked ([PHYSICAL_LIFECYCLE § 6.6.5](PHYSICAL_LIFECYCLE.md#665-identity-comes-from-immutable-origin-facts-never-from-when-the-player-first-looks)).
 - **Persistent (design).** `CharacterStore` (`KnownCharacter` records, plus `pawn`, `episode`, `heldBy`, `opRole`,
   `firstEncounterTick`; `PawnRef` carries `agedThroughTick`), the `EpisodeStore` in the already-reserved `deployments` slot
-  (the Phase 0 `DeploymentStore`, renamed), `OrganizationProfile.composition` (a small role template, established at first
-  use, 3.2), and the reserved `LeaseStore` (one of **two** Phase 4 equipment seams: a *Notable Asset* is owned by the person,
+  (the Phase 0 `DeploymentStore`, renamed; it also carries the explicit per-stage markers, the publication outbox and its
+  cursor), `OrganizationProfile.composition` (a small role template, *stored* lazily in 3.2 but a pure function of immutable
+  origin facts, so storing it never changes what it is), and the reserved `LeaseStore` (one of **two** Phase 4 equipment seams: a *Notable Asset* is owned by the person,
   not stored in `leases`).
 - **Runtime cache.** `thingIDNumber → (episode, member)`, `CharacterId → member`, and the registry of stored pawns
   (all rebuilt from the stores in `FinalizeInit`).
 - **Public surface (candidate names).** `AuthorityGate.CanSimulateAbstractly(person)`, `Episodes.Plan/Materialize`,
   `Episodes.Reconcile(episode)` (a pure `ReconciliationPlan`, validation, a snapshot-guarded `Applier`, then the
-  post-commit stages), `Characters.Promote(...)`, pure policy functions (role verdict and correction, composition
+  post-commit stages release, follow-up and publish, each with its own durable marker), `Characters.Promote(...)`, pure policy functions (role verdict and correction, composition
   apportionment, concretization policy, cohesion screen); the real RimWorld work sits behind a `PhysicalWorldPort` with a
   scriptable fake for the safe test tier.
 - **Emits.** `Episode.Opened/Closed`, `KnownCharacterPromoted`, `…Killed`, `…CapturedByPlayer`, `…Defected`, `…Lost`,
-  `Contractor.Rescued` (published after the commit).
+  `Contractor.Rescued` (published after the commit from a durable outbox, one event at a time under a persisted cursor).
 - **Consumes.** Tagged signals via `SignalBridge` (wake-ups only), the site comp's map callbacks, the registry quest
   part's kill/discard notifications, and `OperationResolved`.
 - **Detail.** [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md) (normative); the Phase 0 text
@@ -760,6 +763,7 @@ that audited the 1.6.9676 assemblies; no Phase 3 code exists. The architectural 
    plan → validate → ATOMIC commit       Release · Reserve · Age       safe runtime tier and the headless suite
    (Applier, snapshot-guarded) →
    flag → release → follow-up → publish
+   (each stage: explicit marker; publish: outbox + cursor)
  pure policy: role verdict · composition ·
    concretization · cohesion screen
  existing services apply consequences
@@ -768,8 +772,9 @@ that audited the 1.6.9676 assemblies; no Phase 3 code exists. The architectural 
 ```
 
 Rules that bound it: one authority per person; `Actor ≠ Person ≠ Pawn`; reconciliation exactly once from observed
-state **and atomic for the Network's durable data** (no publication, scheduler or vanilla effect inside the commit);
-a first projection never contradicts established truth; no Harmony; no work when nobody is physical; physical tests are a
+state **and atomic for the Network's durable data** (no publication, scheduler or vanilla effect inside the commit; each
+later stage has an explicit durable marker written last, publication progress is durable per event so the event bus is never
+asked to accept one twice, and a person is not abstractly simulatable again until release has completed); a first projection never contradicts established truth; no Harmony; no work when nobody is physical; physical tests are a
 separate, session-armed tier on its own test map ([ADR-048](DECISIONS.md), [ADR-049](DECISIONS.md),
 [ADR-050](DECISIONS.md)). Phase 3.3 (procurement fulfillment by physical handoff) is design direction only
 ([ADR-051](DECISIONS.md), [PHYSICAL_LIFECYCLE § 27](PHYSICAL_LIFECYCLE.md#27-phase-33-procurement-fulfillment-and-physical-handoff-design-direction)).
