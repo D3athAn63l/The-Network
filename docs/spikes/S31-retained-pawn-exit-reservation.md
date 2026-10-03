@@ -30,7 +30,7 @@ between physical exit and `Stored` authority.** The mechanism is not. Candidates
 | Game assemblies | `Assembly-CSharp 1.6.9676.17735` (owner-provided, external reference only) |
 | Vanilla XML | the owner's `zRim_Source_XMLs` (Core, Royalty, Ideology, Biotech, Anomaly, Odyssey defs), read for the def audit in § 4 |
 | Save format | **5, unchanged.** The spike adds no Network state; everything it leaves in a save is vanilla data carrying an S31 marker |
-| Headless coverage | `S31.*` tests prove the arm, the markers, the checkpoint codec, the pass/fail rules and the source isolation. **They are not a runtime result.** |
+| Headless coverage | `S31.*` tests prove the arm, the markers, the checkpoint codec, the pass/fail rules, the disposal ownership rule and the source isolation. **They are not a runtime result.** |
 
 ## 3. What the 1.6 source says (read before building; still to be confirmed at runtime)
 
@@ -94,6 +94,13 @@ It never reserves, unreserves or changes anything.
 destructive action**); destructive actions refuse without it; the test map by default and only; every created object carries an S31
 marker; the cleanup acts only on marked objects; a failed scenario is left as it is for inspection.
 
+**Disposal ownership (fail-closed):** the only S31 helper that removes a pawn, `S31World.TryDispose`, checks ownership itself before it
+changes anything (`S31Ownership.MayDispose`). It refuses, and leaves the pawn exactly as it is, unless the pawn carries one of the four S31
+**pawn** tags (`TheNetwork_S31_Probe`, `_Decoy`, `_FactionLeader`, `_PressurePawn`). A name, a faction or another S31 marker never counts.
+It also refuses a pawn the player's faction holds, and one spawned anywhere but the S31 test map. A refusal is logged with the pawn's
+identity and state. The cleanup uses it for every pawn and reports each refusal as preserved. A shell scan and a headless test check that
+nothing in the spike removes, destroys or discards a pawn any other way.
+
 ## 5. Scenarios and pass criteria
 
 Every scenario prints a block `[TheNetwork][S31] ===== Scenario X … RESULT: PASS | FAIL | INCONCLUSIVE =====`. **INCONCLUSIVE is never
@@ -101,13 +108,35 @@ PASS.** Timings: hold 900 ticks, exit timeout 20,000, stored observation 900, a 
 
 | | Scenario | Pass criteria (all required) |
 |---|---|---|
-| **A** | **Normal vanilla exit** (critical path): 1 probe, reserved while spawned, holds, then walks off the edge | while spawned and reserved: not suspended, situation `None`, keeps its Lord, biological age advances, needs change, it moves and has jobs, faction unchanged, ≥ 600 ticks observed · immediately after the pass (the synchronous `LeftMap` snapshot): same thing id, name, kind; in `WorldPawns`; still reserved; situation **`ReservedByQuest`** (never `Free`); faction unchanged at the pass; apparel unchanged; not dead/destroyed/discarded · stored ≥ 600 ticks: stays reserved and `ReservedByQuest`; faction only its own temporary one or **null** after vanilla removes that faction (§ 13.2), never another · no "already here" error |
+| **A** | **Normal vanilla exit** (critical path): 1 probe, reserved while spawned, holds, then walks off the edge | while spawned and reserved: not suspended, situation `None`, keeps its Lord, biological age advances, needs change, it moves and has jobs, faction unchanged, ≥ 600 ticks observed · the **synchronous `LeftMap` observation** was obtained (missing → INCONCLUSIVE, see below) · immediately after the pass (that `LeftMap` snapshot): same thing id, name, kind; in `WorldPawns`; still reserved; situation **`ReservedByQuest`** (never `Free`); faction unchanged at the pass; apparel unchanged; not dead/destroyed/discarded · stored ≥ 600 ticks: stays reserved and `ReservedByQuest`; faction only its own temporary one or **null** after vanilla removes that faction (§ 13.2), never another · no "already here" error |
 | **B** | **Map removal** with the probe still on the map: `Game.DeinitAndRemoveMap` (the call `MapParent.CheckRemoveMapNow` makes) | as A, observed on the line after `DeinitAndRemoveMap` returns; **confirms no `LeftMap`** (an observed `LeftMap` is reported as an audit deviation); records that the temporary faction is not queued for removal (no `Notify_PawnLeftMap`). Afterwards re-create the test map |
 | **C** | **Injured exit**: one vanilla `Bruise` (severity 3, no bleeding) on a leg before the exit | as A, plus the injury ages while reserved and spawned (health ticks) and survives the pass unchanged |
 | **D** | **Save/load window** (owner-assisted): after A, write a checkpoint, save, quit to menu, reload | the arm is **false** when the reloaded game is first seen; exactly one S31 reservation quest, `Ongoing`, hidden, with its part; per checkpoint: exactly one pawn with that thing id and name, in `WorldPawns`, reserved, `ReservedByQuest`, same faction (or still null), same apparel |
 | **E** | **Four probes leave together** | A's criteria for **each** probe independently; each is in the reservation part exactly once; no unmarked pawn in it; distinct thing ids |
-| **F** | **Populated pool / redress pressure**: 1 reserved probe + 6 **unreserved** decoys of the same faction exit; then 9 `PawnGenerator.GeneratePawn` requests matching that faction with `minChanceToRedressWorldPawn = 1` | the probe is **never** returned and never appears in the `Free` set; **positive control:** at least one decoy is redressed (else INCONCLUSIVE); the GC's kept set keeps the probe (reason recorded) |
+| **F** | **Populated pool / redress pressure**: 1 reserved probe + 6 **unreserved** decoys of the same faction exit; then 9 `PawnGenerator.GeneratePawn` requests matching that faction with `minChanceToRedressWorldPawn = 1` | the probe is **never** returned and never appears in the `Free` set; **positive control:** at least one decoy is redressed (else INCONCLUSIVE); the GC's kept set keeps the probe (reason recorded); **every returned pawn is accounted for by proof** (see below): any unexpected pawn is a FAIL |
 | **G** | **Rematerialize the same pawn** (from A's stored probe), then exit again | the **same object** returns (same thing id and name, one object with that id and that name: no twin), no generation call, `SpawnSetup` takes it out of `WorldPawns` (no second insertion), reserved and not suspended while spawned again, apparel unchanged, faction = the new episode's temporary faction; then A's criteria for the second exit |
+
+**The synchronous `LeftMap` observation is required for a normal exit (A, C, E, F, G).** It is the only observation taken inside the
+exit window itself (vanilla sends it in `Pawn.ExitMap` right after its pass). If the read-only observer did not record it for a probe, the
+scenario is **INCONCLUSIVE**, never PASS and never FAIL, and must be re-run. The first-frame snapshot after the exit is still taken,
+logged, checked by the after-pass rules and quoted in that INCONCLUSIVE line for diagnosis. M1 may look healthy there, but a later frame
+is not the instant S31 must prove. **B is unchanged:** a map removal sends no `LeftMap` to these pawns, so its absence is expected there.
+The line after `DeinitAndRemoveMap` is B's evidence, and a `LeftMap` that does appear on map removal is reported as an audit deviation.
+
+**Scenario F accounts for every pawn its requests return, by proof, never by faction or name.** The harness takes one vanilla thing id
+just before each request and one just after; vanilla's thing-id counter is monotonic, so these two "fences" bracket every id issued
+during the request (each request uses up two ids; nothing is made with them).
+
+- **The probe:** preserved, and the run FAILS (CRITICAL).
+- **A listed decoy that still carries its decoy tag:** disposed through `TryDispose`. This is the positive control.
+- **A pawn proven new for this request:** its thing id lies strictly between the two fences, and it has no quest tags and is not spawned.
+  It is tagged `TheNetwork_S31_PressurePawn` **first**, then disposed through `TryDispose`, and counted as newly generated.
+- **Anything else:** for example an older id (an existing world pawn), a pawn with other quest tags, or an S31 pawn that is neither the
+  probe nor a decoy. It is **preserved untouched**: not tagged, not removed from `WorldPawns`, not destroyed, not discarded. The run
+  FAILS with that pawn's identity and state in the log (`UNEXPECTED: … PRESERVED untouched`), and the pressure stops at that request.
+  Vanilla's own redress code may already have taken such a pawn out of `WorldPawns` before returning it; the harness does not undo or add
+  to that. Inspect it, and do not save over a save you care about.
+- **A request that returns no pawn:** INCONCLUSIVE.
 
 **Deliberate limits** (recorded in the verdicts):
 
@@ -140,11 +169,14 @@ PASS.** Timings: hold 900 ticks, exit timeout 20,000, stored observation 900, a 
 
 **Reading the result:** each block says PASS, FAIL or INCONCLUSIVE, then lists every failure, gap and note. Any **FAIL** in A–G means
 **M1 is not accepted** as tested; do not re-run with changes inside M1, record it and an M2 pass follows. **INCONCLUSIVE** means re-run
-that scenario (for example longer, or after fixing a broken test map).
+that scenario (for example longer, or after fixing a broken test map). A normal-exit scenario whose block says the expected synchronous
+`LeftMap` observation was NOT obtained is INCONCLUSIVE for that reason alone; re-run it, and keep the first-frame line it quotes. A
+scenario F block with an `UNEXPECTED` failure means vanilla returned a pawn the spike cannot prove is its own. That pawn was left exactly
+as vanilla returned it: copy its line, and do not save over a save you care about.
 
 **Log lines to capture:** every line starting `[TheNetwork][S31]`, in particular the `===== … RESULT` blocks, the `vanilla signal
 TheNetwork_S31_Probe.LeftMap` lines, the `exited:` and `after map removal:` lines, `temporary faction … was removed by vanilla`, the
-`CLEANUP` block, and any red error mentioning `already here` or the S31 pawns.
+`CLEANUP` block, any `disposal REFUSED` or `UNEXPECTED` warning, and any red error mentioning `already here` or the S31 pawns.
 
 ## 7. Results (to fill after the owner's run)
 
@@ -166,9 +198,10 @@ TheNetwork_S31_Probe.LeftMap` lines, the `exited:` and `after map removal:` line
 | Cleanup leftovers | NOT RUN | |
 
 **M1 decision rule.** M1 may be accepted only if **all** of these are green: reserved-while-spawned behaves normally (A, C) · no
-unreserved `Free` window at a normal exit (A, C, E, G) · none at a map removal (B) · save/load keeps reservation and identity (D) ·
-several pawns work (E) · redress pressure cannot select the pawn (F) · the same pawn rematerializes (G) · faction integrity holds for the
-Phase 3.1 context (A, B, C, E, G: never a rewrite to another faction) · no duplicate `PassToWorld` and no "already here" error (all).
+unreserved `Free` window at a normal exit, shown by the synchronous `LeftMap` observation (A, C, E, G) · none at a map removal (B) ·
+save/load keeps reservation and identity (D) · several pawns work (E) · redress pressure cannot select the pawn, and returns nothing
+unexpected (F) · the same pawn rematerializes (G) · faction integrity holds for the Phase 3.1 context (A, B, C, E, G: never a rewrite to
+another faction) · no duplicate `PassToWorld` and no "already here" error (all).
 If any criterion fails, **M1 is not accepted**: record the failed criterion here and continue with an M2 pass; C-4 only after M1 and
 M2 both fail, by ADR.
 
@@ -179,5 +212,8 @@ M2 both fail, by ADR.
 - The real timing of the temporary faction's removal after the exit, and that no other system rewrites a null-faction **reserved** pawn.
 - Whether the hidden quest shows anywhere in the UI, and whether the vanilla root behaves inertly for its whole life.
 - Save/load of `QuestPart_ReservePawns` references to world pawns (by reference) and of the spike-only world object.
+- Whether the read-only observer receives the `LeftMap` signal for every probe in this mod list (a miss makes the scenario INCONCLUSIVE).
+- That scenario F's requests return only decoys and newly generated pawns. The thing-id fences assume vanilla's single monotonic
+  thing-id counter. A mod that hands out thing ids another way would make proven-new pawns look unexpected: preserved, and the run fails.
 - **Removing the spike build:** run **S31 — Cleanup** first. A save that still holds the S31 test map cannot resolve the spike-only
   def without this build (vanilla drops such a world object on load).

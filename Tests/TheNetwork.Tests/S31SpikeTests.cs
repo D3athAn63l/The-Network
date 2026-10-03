@@ -27,6 +27,9 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("S31.CriteriaAfterThePass", CriteriaAfterPass));
             t.Add(new KeyValuePair<string, Action>("S31.CriteriaStoredAndFaction", CriteriaStored));
             t.Add(new KeyValuePair<string, Action>("S31.CriteriaRedressNeedsAPositiveControl", CriteriaRedress));
+            t.Add(new KeyValuePair<string, Action>("S31.DisposalIsFailClosedOnOwnership", DisposalFailClosed));
+            t.Add(new KeyValuePair<string, Action>("S31.PressureReturnsAreClassifiedByProof", PressureReturns));
+            t.Add(new KeyValuePair<string, Action>("S31.MissingLeftMapIsInconclusive", MissingLeftMap));
             t.Add(new KeyValuePair<string, Action>("S31.CriteriaRematerializationAndLoad", CriteriaRematerializeAndLoad));
             t.Add(new KeyValuePair<string, Action>("S31.HarnessLivesOnlyInTheSpikeScope", SourceScope));
             t.Add(new KeyValuePair<string, Action>("S31.SafeSuitesCannotInvokeS31", SafeSuitesCannotInvoke));
@@ -174,7 +177,7 @@ namespace TheNetwork.Tests
 
         private static void Markers()
         {
-            string[] all = { S31Ids.ProbeTag, S31Ids.DecoyTag, S31Ids.LeaderTag, S31Ids.ManifestTag, S31Ids.PoolQuestTag, S31Ids.MapPrefix, S31Ids.FactionPrefix, S31Ids.CheckpointPrefix };
+            string[] all = { S31Ids.ProbeTag, S31Ids.DecoyTag, S31Ids.LeaderTag, S31Ids.PressureTag, S31Ids.ManifestTag, S31Ids.PoolQuestTag, S31Ids.MapPrefix, S31Ids.FactionPrefix, S31Ids.CheckpointPrefix };
             foreach (string m in all) T.Check(S31Ids.IsMarker(m), "every S31 marker carries the S31 root (" + m + ")");
             T.Eq(all.Length, all.Distinct().Count(), "markers are distinct");
             T.Check(!S31Ids.IsMarker(null) && !S31Ids.IsMarker("Quest12.pawn") && !S31Ids.IsMarker("TheNetwork") && !S31Ids.IsMarker("TheNetwork.S31"), "vanilla-style and Network tags are not S31 markers");
@@ -308,10 +311,10 @@ namespace TheNetwork.Tests
             T.Eq(S31Outcome.Inconclusive, gv.Outcome, "no observation after the pass is INCONCLUSIVE");
 
             S31Verdict lm = new S31Verdict("t");
-            S31Criteria.LeftMap(lm, "p", false, at);
+            S31Criteria.LeftMap(lm, "p", false, at, null);
             T.Check(lm.notes.Any(x => x.Contains("AUDIT DEVIATION")), "a LeftMap on map removal is reported as an audit deviation");
             S31Verdict lm2 = new S31Verdict("t");
-            S31Criteria.LeftMap(lm2, "p", false, null);
+            S31Criteria.LeftMap(lm2, "p", false, null, null);
             T.Check(lm2.notes.Any(x => x.Contains("confirmed: no LeftMap")) && lm2.Outcome == S31Outcome.Pass, "no LeftMap on map removal is confirmed, not failed");
 
             S31Verdict ah = new S31Verdict("t");
@@ -360,17 +363,208 @@ namespace TheNetwork.Tests
         private static void CriteriaRedress()
         {
             S31Verdict ok = new S31Verdict("t");
-            S31Criteria.Redress(ok, 9, 6, 6, 0, 0, 3);
+            S31Criteria.Redress(ok, 9, 6, 6, 0, 0, 3, null, 0);
             T.Eq(S31Outcome.Pass, ok.Outcome, "decoys redressed, probe never: PASS");
             S31Verdict sel = new S31Verdict("t");
-            S31Criteria.Redress(sel, 9, 6, 5, 1, 0, 3);
+            S31Criteria.Redress(sel, 9, 6, 5, 1, 0, 3, null, 0);
             T.Check(sel.Outcome == S31Outcome.Fail && sel.failures.Any(x => x.Contains("CRITICAL")), "the probe returned by PawnGenerator FAILS");
             S31Verdict inFree = new S31Verdict("t");
-            S31Criteria.Redress(inFree, 9, 6, 6, 0, 2, 3);
+            S31Criteria.Redress(inFree, 9, 6, 6, 0, 2, 3, null, 0);
             T.Eq(S31Outcome.Fail, inFree.Outcome, "the probe in the Free set FAILS");
             S31Verdict noControl = new S31Verdict("t");
-            S31Criteria.Redress(noControl, 9, 6, 0, 0, 0, 9);
+            S31Criteria.Redress(noControl, 9, 6, 0, 0, 0, 9, null, 0);
             T.Check(noControl.Outcome == S31Outcome.Inconclusive && noControl.gaps.Any(x => x.Contains("positive control")), "no decoy redressed: INCONCLUSIVE (the pressure was not shown to be real)");
+        }
+
+        // ================================================================== fail-closed disposal (review finding 1)
+
+        private static bool May(IList<string> tags, bool spawned = false, bool onTestMap = false, bool playerHeld = false)
+        {
+            string reason;
+            bool ok = S31Ownership.MayDispose(tags, spawned, onTestMap, playerHeld, out reason);
+            T.Check(ok == (reason == null), "a refusal always carries its reason");
+            return ok;
+        }
+
+        private static void DisposalFailClosed()
+        {
+            // 1. An unmarked pawn is refused, whatever else it carries: no tag, vanilla tags, an S31-looking NAME used as a tag, or an S31
+            //    marker that is not a pawn tag (quest / map / faction / checkpoint markers never make a pawn S31's).
+            T.Check(!May(null) && !May(new List<string>()), "a pawn without quest tags is refused");
+            T.Check(!May(new List<string> { "Quest3.lodgers", "Quest9.raid" }), "a pawn with only vanilla quest tags is refused");
+            T.Check(!May(new List<string> { S31Ids.ProbeNick + "A-1", S31Ids.DecoyNick + "F-2", S31Ids.FactionName + "A" }), "S31 names are not ownership");
+            T.Check(!May(new List<string> { S31Ids.ManifestTag, S31Ids.PoolQuestTag, S31Ids.IntTag(S31Ids.MapPrefix, 3), S31Ids.IntTag(S31Ids.FactionPrefix, 4), S31Ids.CheckpointPrefix + "x" }),
+                "an S31 marker that is not a pawn tag is refused");
+            T.Check(!May(new List<string> { S31Ids.ProbeTag + "x", "x" + S31Ids.DecoyTag, S31Ids.MarkerRoot }), "near-miss tags are refused (exact pawn tags only)");
+            string reason;
+            S31Ownership.MayDispose(new List<string> { "Quest3.lodgers" }, false, false, false, out reason);
+            T.Check(reason != null && reason.Contains("ownership not proven"), "the refusal says ownership is not proven");
+
+            // 2. A marked S31 pawn is eligible; 6. decoy disposal stays allowed.
+            foreach (string tag in S31Ownership.PawnTags) T.Check(May(new List<string> { "Quest3.lodgers", tag }), "an S31 pawn tag makes the pawn disposable (" + tag + ")");
+            T.Check(May(new List<string> { S31Ids.DecoyTag }), "a known decoy stays disposable");
+            T.Check(May(new List<string> { S31Ids.ProbeTag }, true, true), "an S31 pawn spawned on the S31 test map is disposable");
+            T.Check(!May(new List<string> { S31Ids.ProbeTag }, true, false), "an S31 pawn spawned on any other map is refused");
+            T.Check(!May(new List<string> { S31Ids.ProbeTag }, false, false, true), "an S31 pawn the player holds is refused");
+            T.Eq(4, S31Ownership.PawnTags.Length, "four pawn tags: probe, decoy, faction leader, pressure pawn");
+            foreach (string tag in S31Ownership.PawnTags) T.Check(S31Ids.IsMarker(tag), "each pawn tag is an S31 marker, so the marker-scoped cleanup finds it (" + tag + ")");
+
+            // The only destructive pawn helper checks ownership itself, BEFORE anything destructive, and the unguarded helper is gone.
+            string world = Code(File.ReadAllText(Path.Combine(SourceRoot, "Diagnostics/Spikes/S31/S31World.cs")));
+            Match body = Regex.Match(world, @"public static bool TryDispose\(Pawn p, out string reason\)\s*\{(?<b>.*?)\n        \}", RegexOptions.Singleline);
+            T.Check(body.Success, "S31World.TryDispose exists");
+            string b = body.Groups["b"].Value;
+            int check = b.IndexOf("S31Ownership.MayDispose(", StringComparison.Ordinal);
+            int[] destructive = { b.IndexOf("f.leader = null", StringComparison.Ordinal), b.IndexOf("RemovePawn(", StringComparison.Ordinal), b.IndexOf(".Destroy(", StringComparison.Ordinal), b.IndexOf(".Discard(", StringComparison.Ordinal) };
+            T.Check(check >= 0 && destructive.All(i => i > check), "TryDispose decides ownership before it changes anything");
+            T.Check(Regex.IsMatch(b, @"if \(!S31Ownership\.MayDispose\([^\n]*\)\)\s*\{[^}]*return false;", RegexOptions.Singleline), "a refusal returns before any change");
+            // 8. The cleanup stays marker-scoped: every destructive pawn call in the spike lives inside TryDispose, and the cleanup acts only
+            //    on MarkedPawns().
+            string spike = string.Join("\n", Sources().Where(InSpike).Select(f => Code(File.ReadAllText(f))).ToArray());
+            string outside = spike.Replace(b, "");
+            T.Check(!Regex.IsMatch(outside, @"\.Discard\s*\(|RemovePawn\s*\(|\.Destroy\s*\(\s*DestroyMode"), "no pawn is removed, destroyed or discarded outside TryDispose");
+            T.Check(!Regex.IsMatch(spike, @"S31World\.Dispose\s*\(|\bvoid Dispose\s*\(Pawn"), "the unguarded Dispose helper is gone");
+            string spikeRun = Code(File.ReadAllText(Path.Combine(SourceRoot, "Diagnostics/Spikes/S31/S31Spike.cs")));
+            Match cleanup = Regex.Match(spikeRun, @"public static void Cleanup\(\)\s*\{(?<b>.*?)\n        \}", RegexOptions.Singleline);
+            T.Check(cleanup.Success && cleanup.Groups["b"].Value.Contains("foreach (Pawn p in S31World.MarkedPawns())"), "the cleanup acts only on S31-marked pawns");
+            T.Check(cleanup.Success && Regex.Matches(cleanup.Groups["b"].Value, @"S31World\.TryDispose\(p, out refused\)").Count == 2
+                && Regex.Matches(cleanup.Groups["b"].Value, @"disposal refused").Count == 2, "both cleanup disposals go through TryDispose and report a refusal as preserved");
+            T.Check(world.Contains("S31Ids.CarriesMarker(p.questTags)"), "MarkedPawns() selects by S31 marker only");
+        }
+
+        private static S31PressureReturn Classify(bool returned, bool isProbe, bool inDecoys, IList<string> tags, int id, bool spawned, out string why)
+        {
+            return S31Ownership.ClassifyPressureReturn(returned, isProbe, inDecoys, tags, id, 1000, 1040, spawned, out why);
+        }
+
+        private static void PressureReturns()
+        {
+            string why;
+            // 7. The probe is preserved, whatever else is true of it.
+            T.Eq(S31PressureReturn.Probe, Classify(true, true, false, new List<string> { S31Ids.ProbeTag }, 7, false, out why), "the probe is the probe");
+            T.Eq(S31PressureReturn.Probe, Classify(true, true, false, null, 1001, false, out why), "even with a fresh-looking id");
+            T.Eq(S31PressureAction.PreserveProbe, S31Ownership.ActionFor(S31PressureReturn.Probe), "the probe is preserved, never disposed");
+            S31Verdict sel = new S31Verdict("t");
+            S31Criteria.Redress(sel, 9, 6, 5, 1, 0, 3, null, 0);
+            T.Check(sel.Outcome == S31Outcome.Fail && sel.failures.Any(x => x.Contains("CRITICAL")), "and the run FAILS");
+
+            // 6. A known decoy is disposed; a listed decoy that lost its tag is not proven and is preserved.
+            T.Eq(S31PressureReturn.KnownDecoy, Classify(true, false, true, new List<string> { S31Ids.DecoyTag }, 12, false, out why), "a listed, tagged decoy");
+            T.Eq(S31PressureAction.Dispose, S31Ownership.ActionFor(S31PressureReturn.KnownDecoy), "is disposed");
+            T.Eq(S31PressureReturn.Unexpected, Classify(true, false, true, null, 12, false, out why), "a listed decoy without its tag is not proven");
+
+            // 3. An unknown, unmarked returned pawn is NOT treated as newly generated: an existing id is an existing pawn.
+            S31PressureReturn old = Classify(true, false, false, null, 12, false, out why);
+            T.Eq(S31PressureReturn.Unexpected, old, "an unmarked pawn with an id from before the request is unexpected");
+            T.Check(why != null && why.Contains("not issued during this request"), "and the reason names the id fence (" + why + ")");
+            T.Eq(S31PressureAction.PreserveAndFail, S31Ownership.ActionFor(old), "it is preserved, and the run fails");
+            T.Check(S31Ownership.ActionFor(old) != S31PressureAction.MarkThenDispose && S31Ownership.ActionFor(old) != S31PressureAction.Dispose, "it is never marked or disposed");
+            T.Eq(S31PressureReturn.Unexpected, Classify(true, false, false, null, 1000, false, out why), "the 'before' fence id itself is not inside the request");
+            T.Eq(S31PressureReturn.Unexpected, Classify(true, false, false, null, 1040, false, out why), "nor the 'after' fence id");
+            T.Eq(S31PressureReturn.Unexpected, Classify(true, false, false, null, 5000, false, out why), "an id after the request is not proven either");
+            T.Eq(S31PressureReturn.Unexpected, Classify(true, false, false, new List<string> { "Quest3.lodgers" }, 1001, false, out why), "a fresh id that already carries a quest tag is not proven");
+            T.Eq(S31PressureReturn.Unexpected, Classify(true, false, false, new List<string> { S31Ids.LeaderTag }, 30, false, out why), "an S31 pawn that is neither the probe nor a decoy is unexpected too");
+            T.Eq(S31PressureReturn.Unexpected, Classify(true, false, false, null, 1001, true, out why), "a spawned return is not proven new");
+            T.Eq(S31PressureReturn.NoPawn, Classify(false, false, false, null, -1, false, out why), "no pawn returned");
+            T.Eq(S31PressureAction.Nothing, S31Ownership.ActionFor(S31PressureReturn.NoPawn), "nothing to act on");
+
+            // 4. An unexpected return FAILS with an explicit reason that carries what vanilla returned.
+            S31Verdict uv = new S31Verdict("t");
+            S31Criteria.Redress(uv, 4, 6, 3, 0, 0, 0, new List<string> { "request 4: t=9 [identity] #12 Smith (Villager) inWorldPawns=False (not issued during this request)" }, 0);
+            T.Eq(S31Outcome.Fail, uv.Outcome, "an unexpected returned pawn FAILS scenario F");
+            T.Check(uv.failures.Any(x => x.Contains("UNEXPECTED") && x.Contains("#12 Smith") && x.Contains("PRESERVED untouched")), "the failure names the pawn and says it was preserved");
+            S31Verdict nv = new S31Verdict("t");
+            S31Criteria.Redress(nv, 9, 6, 6, 0, 0, 2, null, 1);
+            T.Eq(S31Outcome.Inconclusive, nv.Outcome, "a request that returned no pawn is INCONCLUSIVE, not PASS");
+
+            // 5. A genuinely new pawn is proven by the fences, then tagged, and only then disposable.
+            T.Eq(S31PressureReturn.NewForRequest, Classify(true, false, false, null, 1001, false, out why), "an id issued inside the request, no tags, not spawned: new");
+            T.Eq(S31PressureReturn.NewForRequest, Classify(true, false, false, new List<string>(), 1039, false, out why), "an empty tag list is no tag");
+            T.Eq(S31PressureAction.MarkThenDispose, S31Ownership.ActionFor(S31PressureReturn.NewForRequest), "a new pawn is marked, then disposed");
+            List<string> tags = null;
+            T.Check(!May(tags), "unmarked, the new pawn is not yet disposable");
+            S31Ownership.MarkPressurePawn(ref tags);
+            T.Check(tags != null && tags.Contains(S31Ids.PressureTag) && May(tags), "marked, it is");
+            S31Ownership.MarkPressurePawn(ref tags);
+            T.Eq(1, tags.Count, "marking is idempotent");
+            // Nothing in the classifier reads the faction: faction matching never makes a pawn disposable.
+            T.Check(!typeof(S31Ownership).GetMethod("ClassifyPressureReturn").GetParameters().Any(x => x.Name.IndexOf("faction", StringComparison.OrdinalIgnoreCase) >= 0), "the classification never looks at the faction");
+
+            // The runtime path does exactly this, in this order, and stops on an unexpected return.
+            string run = Code(File.ReadAllText(Path.Combine(SourceRoot, "Diagnostics/Spikes/S31/S31Spike.cs")));
+            Match ap = Regex.Match(run, @"private void ApplyPressure\(\)\s*\{(?<b>.*?)\n        \}", RegexOptions.Singleline);
+            T.Check(ap.Success, "ApplyPressure exists");
+            string a = ap.Groups["b"].Value;
+            int fenceA = a.IndexOf("Find.UniqueIDsManager.GetNextThingID()", StringComparison.Ordinal);
+            int gen = a.IndexOf("PawnGenerator.GeneratePawn(req)", StringComparison.Ordinal);
+            int fenceB = a.IndexOf("Find.UniqueIDsManager.GetNextThingID()", gen + 1, StringComparison.Ordinal);
+            T.Check(fenceA >= 0 && gen > fenceA && fenceB > gen, "the request is fenced by two thing ids");
+            T.Check(a.Contains("S31Ownership.ClassifyPressureReturn(") && a.Contains("S31Ownership.ActionFor("), "every return goes through the classifier");
+            Match mark = Regex.Match(a, @"case S31PressureAction\.MarkThenDispose:(?<c>.*?)break;", RegexOptions.Singleline);
+            T.Check(mark.Success && mark.Groups["c"].Value.IndexOf("S31Ownership.MarkPressurePawn(ref r.questTags)", StringComparison.Ordinal) >= 0
+                && mark.Groups["c"].Value.IndexOf("S31Ownership.MarkPressurePawn(ref r.questTags)", StringComparison.Ordinal) < mark.Groups["c"].Value.IndexOf("S31World.TryDispose(r", StringComparison.Ordinal),
+                "a new pawn is marked BEFORE its disposal");
+            Match keep = Regex.Match(a, @"case S31PressureAction\.PreserveAndFail:(?<c>.*?)break;", RegexOptions.Singleline);
+            T.Check(keep.Success && !Regex.IsMatch(keep.Groups["c"].Value, @"TryDispose|questTags|SetFaction|RemovePawn|Destroy|Discard") && keep.Groups["c"].Value.Contains("stop = true"),
+                "an unexpected pawn is left untouched and the pressure stops");
+            Match probe = Regex.Match(a, @"case S31PressureAction\.PreserveProbe:(?<c>.*?)break;", RegexOptions.Singleline);
+            T.Check(probe.Success && !probe.Groups["c"].Value.Contains("TryDispose"), "the probe is never disposed");
+            T.Check(!Regex.IsMatch(a, @"\.Faction\b|faction\s*==|==\s*faction"), "no return is judged by its faction");
+        }
+
+        // ================================================================== LeftMap evidence (review finding 2)
+
+        private static void MissingLeftMap()
+        {
+            S31Snap before = Spawned(2000, 99, 0.7f, 200000);
+            S31Snap atSignal = Stored(2001, 40);
+            S31Snap frame = Stored(2002, 40);
+            frame.step = "first frame after the exit";
+
+            // 1. Expected and observed: no gap from this criterion.
+            S31Verdict seen = new S31Verdict("t");
+            S31Criteria.LeftMap(seen, "p", true, atSignal, frame);
+            T.Check(seen.gaps.Count == 0 && seen.failures.Count == 0 && seen.Outcome == S31Outcome.Pass, "an observed LeftMap adds no gap");
+            T.Check(seen.notes.Any(x => x.Contains("LeftMap arrived after vanilla's pass")), "and is recorded");
+
+            // 2. Expected and missing: INCONCLUSIVE, never PASS, never FAIL.
+            S31Verdict missing = new S31Verdict("t");
+            S31Criteria.LeftMap(missing, "p", true, null, frame);
+            T.Eq(S31Outcome.Inconclusive, missing.Outcome, "a missing expected LeftMap is INCONCLUSIVE");
+            T.Eq(0, missing.failures.Count, "it does not FAIL M1 by itself");
+            string g = missing.gaps.FirstOrDefault() ?? "";
+            T.Check(g.Contains("NOT obtained") && g.Contains("first-frame snapshot was still captured") && g.Contains("M1 may look healthy") && g.Contains("re-run"),
+                "the gap says the first frame was captured, M1 may look healthy, the exit window is unproven, and to re-run (" + g + ")");
+            S31Verdict none = new S31Verdict("t");
+            S31Criteria.LeftMap(none, "p", true, null, null);
+            T.Eq(S31Outcome.Inconclusive, none.Outcome, "missing with no first frame either: INCONCLUSIVE");
+
+            // 3. Map removal with a LeftMap: still an audit deviation (diagnostic), not a verdict change.
+            S31Verdict dev = new S31Verdict("t");
+            S31Criteria.LeftMap(dev, "p", false, atSignal, null);
+            T.Check(dev.notes.Any(x => x.Contains("AUDIT DEVIATION")) && dev.Outcome == S31Outcome.Pass, "an unexpected LeftMap on map removal stays an audit deviation");
+            // 4. Map removal without a LeftMap: acceptable.
+            S31Verdict rm = new S31Verdict("t");
+            S31Criteria.LeftMap(rm, "p", false, null, frame);
+            T.Check(rm.gaps.Count == 0 && rm.Outcome == S31Outcome.Pass && rm.notes.Any(x => x.Contains("confirmed: no LeftMap")), "no LeftMap on map removal is not a gap");
+
+            // 5. The first-frame fallback still feeds the after-pass check and the diagnostics, but cannot turn missing evidence into PASS.
+            S31Verdict fallback = new S31Verdict("t");
+            S31Criteria.AfterPass(fallback, "p", before, frame);
+            T.Eq(S31Outcome.Pass, fallback.Outcome, "a healthy first frame passes the after-pass check on its own");
+            S31Criteria.LeftMap(fallback, "p", true, null, frame);
+            T.Eq(S31Outcome.Inconclusive, fallback.Outcome, "but with the synchronous LeftMap missing the scenario is INCONCLUSIVE, not PASS");
+            T.Check(fallback.gaps.Any(x => x.Contains(frame.Line())), "the first-frame snapshot is quoted for diagnosis");
+            S31Verdict proven = new S31Verdict("t");
+            S31Criteria.AfterPass(proven, "p", before, atSignal);
+            S31Criteria.LeftMap(proven, "p", true, atSignal, frame);
+            T.Eq(S31Outcome.Pass, proven.Outcome, "with the synchronous observation the same pawn PASSES");
+
+            // The runtime keeps the first frame separately and passes it; only a map removal does not expect LeftMap.
+            string run = Code(File.ReadAllText(Path.Combine(SourceRoot, "Diagnostics/Spikes/S31/S31Spike.cs")));
+            T.Check(run.Contains("firstFrame[id] = frame;"), "the first frame after a normal exit is kept for diagnosis");
+            T.Check(run.Contains("S31Criteria.LeftMap(verdict, who, kind != Kind.MapRemoval, observer?.First(\"LeftMap\", id, startTick), frameAfter);"),
+                "LeftMap is expected for every normal exit and not for the map removal");
         }
 
         private static void CriteriaRematerializeAndLoad()

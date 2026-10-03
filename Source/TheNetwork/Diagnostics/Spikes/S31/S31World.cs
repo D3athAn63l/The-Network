@@ -425,13 +425,39 @@ namespace TheNetwork.Diagnostics.Spikes.S31
 
         // ================================================================== disposal (spike-owned pawns only)
 
-        /// <summary>Removes a spike-owned pawn the way WorldPawns' own discard does (destroy, then discard). Never called on an unmarked pawn.</summary>
-        public static void Dispose(Pawn p)
+        /// <summary>
+        /// The ONLY destructive pawn helper in S31. It checks ownership itself (S31Ownership.MayDispose: an S31 pawn tag, not held by the
+        /// player, not spawned outside the test map) BEFORE touching anything; a refused pawn is left exactly as it is and reported. An
+        /// owned pawn is removed the way WorldPawns' own discard does (destroy, then discard), after clearing a faction-leader reference to it.
+        /// </summary>
+        public static bool TryDispose(Pawn p, out string reason)
         {
-            if (p == null) return;
+            if (p == null)
+            {
+                reason = "no pawn";
+                return false;
+            }
+            bool spawned = p.Spawned;
+            bool playerHeld = p.Faction != null && p.Faction.IsPlayer || p.HostFaction != null && p.HostFaction.IsPlayer;
+            if (!S31Ownership.MayDispose(p.questTags, spawned, spawned && p.Map == TestMap, playerHeld, out reason))
+            {
+                Warn("disposal REFUSED for " + Identify(p) + ": " + reason + "; preserved untouched");
+                return false;
+            }
+            foreach (Faction f in Find.FactionManager.AllFactionsListForReading) if (f.leader == p) f.leader = null;
             if (Find.WorldPawns.Contains(p)) Find.WorldPawns.RemovePawn(p);
             if (!p.Destroyed) p.Destroy(DestroyMode.Vanish);
             if (!p.Discarded) p.Discard(true);
+            return true;
+        }
+
+        /// <summary>Read-only identity and state of any pawn, for a report (an unexpected pressure return, a refused disposal).</summary>
+        public static string Identify(Pawn p)
+        {
+            if (p == null) return "no pawn";
+            Faction f = p.Faction;
+            return Snap(p, "identity").Line() + " name=\"" + (p.Name?.ToStringFull ?? "?") + "\" factionName=\"" + (f?.Name ?? "none") + "\" factionDef=" + (f?.def?.defName ?? "none")
+                + " questTags=[" + (p.questTags == null ? "" : string.Join(", ", p.questTags.ToArray())) + "]";
         }
     }
 

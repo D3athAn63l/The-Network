@@ -377,7 +377,8 @@ namespace TheNetwork.Diagnostics.Spikes.S31
 
         /// <summary>
         /// Removes only S31-marked state: S31 pawns (on the S31 test map or in WorldPawns), the S31 quests, the S31 test map, and asks vanilla
-        /// to drop S31 temporary factions. A pawn that vanilla holds in any other way is preserved and reported, never forced.
+        /// to drop S31 temporary factions. A pawn that vanilla holds in any other way is preserved and reported, never forced. Every pawn
+        /// removal goes through S31World.TryDispose, which re-checks ownership and preserves anything it cannot prove is S31's.
         /// </summary>
         public static void Cleanup()
         {
@@ -398,8 +399,9 @@ namespace TheNetwork.Diagnostics.Spikes.S31
                 {
                     if (p.Map == testMap)
                     {
-                        S31World.Dispose(p);
-                        removed.Add(who + " (spawned on the S31 test map)");
+                        string refused;
+                        if (S31World.TryDispose(p, out refused)) removed.Add(who + " (spawned on the S31 test map)");
+                        else kept.Add(who + ": disposal refused (" + refused + "); preserved");
                     }
                     else kept.Add(who + ": spawned on a map that is not the S31 test map (" + p.Map + "); preserved");
                     continue;
@@ -414,9 +416,9 @@ namespace TheNetwork.Diagnostics.Spikes.S31
                     WorldPawnSituation s = Find.WorldPawns.GetSituation(p);
                     if (s == WorldPawnSituation.ReservedByQuest || s == WorldPawnSituation.Free || s == WorldPawnSituation.FactionLeader || s == WorldPawnSituation.Dead)
                     {
-                        foreach (Faction f in Find.FactionManager.AllFactionsListForReading) if (f.leader == p) f.leader = null;
-                        S31World.Dispose(p);
-                        removed.Add(who + " (world pawn, " + s + ")");
+                        string refused;
+                        if (S31World.TryDispose(p, out refused)) removed.Add(who + " (world pawn, " + s + ")");
+                        else kept.Add(who + ": world pawn (" + s + "), disposal refused (" + refused + "); preserved");
                     }
                     else kept.Add(who + ": world pawn held by vanilla as " + s + "; preserved");
                     continue;
@@ -521,6 +523,7 @@ namespace TheNetwork.Diagnostics.Spikes.S31
         private readonly Dictionary<int, List<S31Snap>> storedSamples = new Dictionary<int, List<S31Snap>>();
         private readonly Dictionary<int, S31Snap> lastSpawned = new Dictionary<int, S31Snap>();
         private readonly Dictionary<int, S31Snap> afterPass = new Dictionary<int, S31Snap>();
+        private readonly Dictionary<int, S31Snap> firstFrame = new Dictionary<int, S31Snap>();
         private readonly Dictionary<int, int> passTick = new Dictionary<int, int>();
         private readonly Dictionary<int, int> factionAtPass = new Dictionary<int, int>();
         private readonly HashSet<int> diedOnMap = new HashSet<int>();
@@ -536,7 +539,8 @@ namespace TheNetwork.Diagnostics.Spikes.S31
 
         // scenario F
         private bool pressureDone;
-        private int requests, decoysRedressed, probeSelected, probeInFree, newlyGenerated;
+        private int requests, decoysRedressed, probeSelected, probeInFree, newlyGenerated, noPawnReturns;
+        private readonly List<string> unexpectedReturns = new List<string>();
 
         // scenario G
         private S31Snap gStored, gSpawned;
@@ -753,9 +757,10 @@ namespace TheNetwork.Diagnostics.Spikes.S31
                         S31Snap sig = observer?.First("LeftMap", id, startTick);
                         S31Snap frame = S31World.Snap(p, "first frame after the exit");
                         afterPass[id] = sig ?? frame;
+                        firstFrame[id] = frame;
                         passTick[id] = t;
                         factionAtPass[id] = lastSpawned.ContainsKey(id) ? lastSpawned[id].factionId : frame.factionId;
-                        order.Add("t=" + t + " " + Who(p) + " left the map" + (sig != null ? " (LeftMap observed synchronously at t=" + sig.tick + ")" : " (no LeftMap observed)"));
+                        order.Add("t=" + t + " " + Who(p) + " left the map" + (sig != null ? " (LeftMap observed synchronously at t=" + sig.tick + ")" : " (no LeftMap observed: this scenario will be INCONCLUSIVE)"));
                         S31World.Log(Who(p) + " exited: " + (sig != null ? "at LeftMap: " + sig.Line() + " || " : "") + "first frame: " + frame.Line());
                         S31Spike.Step(p, "exited at tick " + t, null);
                     }
@@ -836,8 +841,11 @@ namespace TheNetwork.Diagnostics.Spikes.S31
 
         /// <summary>
         /// Scenario F: faction-matched generation requests with a forced redress chance. They can only consider Free world pawns of the
-        /// pool faction (S31 pawns only). The decoys are the positive control; the probe must never be returned. A real GC pass is NOT
-        /// forced (it would discard unrelated world pawns); the probe's GC verdict is read from the same accumulation the pass uses.
+        /// pool faction (S31 pawns only). The decoys are the positive control; the probe must never be returned. Every return is classified
+        /// by proof (S31Ownership.ClassifyPressureReturn), never by faction: a known decoy is disposed, a pawn proven new for the request
+        /// (its thing id issued between two fence ids taken around the request) is tagged S31 first and then disposed, and anything else is
+        /// preserved untouched, FAILS the run and stops the pressure. A real GC pass is NOT forced (it would discard unrelated world
+        /// pawns); the probe's GC verdict is read from the same accumulation the pass uses.
         /// </summary>
         private void ApplyPressure()
         {
@@ -845,31 +853,56 @@ namespace TheNetwork.Diagnostics.Spikes.S31
             Pawn probe = probes[0];
             int freeDecoys = decoys.Count(d => Find.WorldPawns.Contains(d) && Find.WorldPawns.GetSituation(d) == WorldPawnSituation.Free);
             verdict.Note("before the pressure: " + freeDecoys + " of " + decoys.Count + " decoys are Free world pawns; the probe is " + Find.WorldPawns.GetSituation(probe));
-            requests = decoys.Count + 3;
+            int planned = decoys.Count + 3;
             PawnGenerationRequest req = new PawnGenerationRequest(probe.kindDef, faction, PawnGenerationContext.NonPlayer, null, forceGenerateNewPawn: false,
                 allowDead: false, allowDowned: true, canGeneratePawnRelations: false, allowGay: true, allowPregnant: true, allowAddictions: true,
                 minChanceToRedressWorldPawn: 1f, developmentalStages: DevelopmentalStage.Adult);
-            for (int i = 0; i < requests; i++)
+            for (int i = 0; i < planned; i++)
             {
+                // The fences: vanilla thing ids are one monotonic counter, so an id strictly between these two was issued during this request.
+                int fenceBefore = Find.UniqueIDsManager.GetNextThingID();
                 Pawn r = PawnGenerator.GeneratePawn(req);
-                if (r == probe)
+                int fenceAfter = Find.UniqueIDsManager.GetNextThingID();
+                requests++;
+                string why, refused;
+                S31PressureReturn kindOfReturn = S31Ownership.ClassifyPressureReturn(r != null, r != null && r == probe, r != null && decoys.Contains(r), r?.questTags,
+                    r?.thingIDNumber ?? -1, fenceBefore, fenceAfter, r != null && r.Spawned, out why);
+                bool stop = false;
+                switch (S31Ownership.ActionFor(kindOfReturn))
                 {
-                    probeSelected++;
-                    S31World.Warn("CRITICAL: request " + (i + 1) + " returned the RESERVED probe " + Who(probe) + " (preserved, not disposed)");
-                }
-                else if (decoys.Contains(r))
-                {
-                    decoysRedressed++;
-                    S31World.Log("request " + (i + 1) + " redressed decoy " + Who(r) + " (positive control); disposing it");
-                    S31World.Dispose(r);
-                }
-                else
-                {
-                    newlyGenerated++;
-                    S31World.Dispose(r);
+                    case S31PressureAction.PreserveProbe:
+                        probeSelected++;
+                        S31World.Warn("CRITICAL: request " + (i + 1) + " returned the RESERVED probe " + Who(probe) + " (preserved, not disposed)");
+                        break;
+                    case S31PressureAction.Dispose:
+                        decoysRedressed++;
+                        S31World.Log("request " + (i + 1) + " redressed decoy " + Who(r) + " (positive control); disposing it");
+                        if (!S31World.TryDispose(r, out refused)) verdict.Fail("the disposal of redressed decoy " + Who(r) + " was refused (" + refused + "); preserved");
+                        break;
+                    case S31PressureAction.MarkThenDispose:
+                        newlyGenerated++;
+                        S31Ownership.MarkPressurePawn(ref r.questTags);
+                        S31World.Log("request " + (i + 1) + " generated new pawn #" + r.thingIDNumber + " (id issued between fences " + fenceBefore + " and " + fenceAfter + "); tagged " + S31Ids.PressureTag + ", disposing it");
+                        if (!S31World.TryDispose(r, out refused)) verdict.Fail("the disposal of new pressure pawn #" + r.thingIDNumber + " was refused (" + refused + "); preserved");
+                        break;
+                    case S31PressureAction.PreserveAndFail:
+                        string identity = S31World.Identify(r) + " (" + why + ")";
+                        unexpectedReturns.Add("request " + (i + 1) + ": " + identity);
+                        S31World.Warn("UNEXPECTED: request " + (i + 1) + " returned a pawn whose ownership is NOT proven: " + identity + ". PRESERVED untouched; the pressure stops here");
+                        stop = true;
+                        break;
+                    default:
+                        noPawnReturns++;
+                        S31World.Warn("request " + (i + 1) + " returned no pawn");
+                        break;
                 }
                 if (Find.WorldPawns.GetPawnsBySituation(WorldPawnSituation.Free).Contains(probe)) probeInFree++;
                 Add(storedSamples, probe.thingIDNumber, S31World.Snap(probe, "after redress request " + (i + 1)));
+                if (stop)
+                {
+                    verdict.Note("the pressure stopped after request " + requests + " of " + planned + " (an unexpected pawn was returned)");
+                    break;
+                }
             }
             Dictionary<Pawn, string> kept = Find.WorldPawns.gc.AccumulatePawnGCDataImmediate();
             string reason;
@@ -900,7 +933,9 @@ namespace TheNetwork.Diagnostics.Spikes.S31
                 S31Snap at;
                 afterPass.TryGetValue(id, out at);
                 S31Criteria.AfterPass(verdict, who, before, at);
-                S31Criteria.LeftMap(verdict, who, kind != Kind.MapRemoval, observer?.First("LeftMap", id, startTick));
+                S31Snap frameAfter;
+                firstFrame.TryGetValue(id, out frameAfter);
+                S31Criteria.LeftMap(verdict, who, kind != Kind.MapRemoval, observer?.First("LeftMap", id, startTick), frameAfter);
                 List<S31Snap> stored;
                 storedSamples.TryGetValue(id, out stored);
                 int own;
@@ -924,7 +959,7 @@ namespace TheNetwork.Diagnostics.Spikes.S31
                     verdict.Note("cross-talk check: " + probes.Count + " probes, each reserved exactly once, independent before and after the exit");
                 }
             }
-            if (kind == Kind.Redress) S31Criteria.Redress(verdict, requests, decoys.Count, decoysRedressed, probeSelected, probeInFree, newlyGenerated);
+            if (kind == Kind.Redress) S31Criteria.Redress(verdict, requests, decoys.Count, decoysRedressed, probeSelected, probeInFree, newlyGenerated, unexpectedReturns, noPawnReturns);
             if (kind == Kind.Rematerialize) S31Criteria.Rematerialized(verdict, gStored, gSpawned, gIdCount, gNickCount, gSameRef);
             S31Criteria.NoAlreadyHere(verdict, S31World.LinesSince(mark, "already here"));
             if (kind != Kind.Redress)
