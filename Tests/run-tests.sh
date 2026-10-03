@@ -94,6 +94,22 @@ fi
 grep -q "physicalPort = new Domain.Physical.UnavailablePhysicalWorldPort()" Source/TheNetwork/Core/NetworkRuntime.cs || { echo "FAIL: the live runtime does not hold the fail-closed physical port" >&2; exit 1; }
 echo "ok"
 
+echo "### Source scan: spike S31 is dev-only, armed, runtime-only and isolated (PHYSICAL_LIFECYCLE § 7.6, § 21.2)"
+S31="Source/TheNetwork/Diagnostics/Spikes/S31"
+# Real creation APIs exist in the spike folder and nowhere else in the mod.
+if grep -rnE "\b(PawnGenerator|GeneratePawn|GenSpawn|LordMaker|MakeNewLord|FactionGenerator|NewGeneratedFaction|WorldObjectMaker|GetOrGenerateMap|DeinitAndRemoveMap|HediffMaker)\b|QuestManager\.Add\b" Source/TheNetwork --include=*.cs | grep -v "^$S31/" | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' ; then
+  echo "FAIL: a real creation API is used outside the S31 spike folder" >&2; exit 1
+fi
+# The harness saves nothing of its own, never calls PassToWorld, never forces a GC pass, and implements no physical port.
+if grep -rnE "Scribe_|IExposable|ExposeData|GameComponent|WorldComponent|MapComponent|PassToWorld[[:space:]]*\(|(RunGC|PawnGCPass|WorldPawnGCTick)[[:space:]]*\(|IPhysicalWorldPort|PhysicalLifecycleService|EpisodeRequest|physicalPort" $S31 | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' ; then
+  echo "FAIL: the S31 harness persists state, passes a pawn itself, forces a GC pass or touches the physical port" >&2; exit 1
+fi
+# The safe runtime suites never reach the spike.
+if grep -rnE "Spikes|S31Spike|S31Run" Source/TheNetwork/Diagnostics/RuntimeTests | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' ; then
+  echo "FAIL: a safe runtime suite references the S31 spike" >&2; exit 1
+fi
+echo "ok"
+
 REPO="$(pwd)"
 OUT="${TEST_OUT:-$(mktemp -d)}"
 EXTRA=()
