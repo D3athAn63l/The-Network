@@ -60,6 +60,8 @@ namespace TheNetwork
         public override void WorldComponentUpdate()
         {
             Diagnostics.RuntimeTests.RuntimeTestGame.PumpFrame(this);
+            // Spike S31 (dev only, armed; PHYSICAL_LIFECYCLE § 7.6): one static null check while no S31 run is active.
+            Diagnostics.Spikes.S31.S31Spike.PumpFrame();
         }
 
         public override void ExposeData()

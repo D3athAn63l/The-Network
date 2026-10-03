@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    SPIKE S31 ONLY (dev): the world object of the dedicated S31 test map. A plain MapParent with no comps, not a player home and
+    no incident targets, so vanilla neither removes its map, nor times it out, nor sends raids while the spike observes its pawns.
+    No vanilla WorldObjectDef qualifies (docs/spikes/S31-retained-pawn-exit-reservation.md lists why). It is inert unless the
+    armed dev action "S31 — Create/ensure dedicated test map" creates it. Run "S31 — Cleanup" before removing a spike build:
+    a save that still holds this world object cannot resolve it without this file.
+  -->
+  <WorldObjectDef ParentName="StaticWorldObjectBase">
+    <defName>TheNetwork_S31_TestMap</defName>
+    <label>S31 test site (dev)</label>
+    <description>A dev-only test map created by The Network's S31 spike. It is not part of normal play.</description>
+    <worldObjectClass>MapParent</worldObjectClass>
+    <texture>World/WorldObjects/Ambush</texture>
+    <expandingIcon>true</expandingIcon>
+    <expandingIconTexture>World/WorldObjects/Expanding/Ambush</expandingIconTexture>
+    <expandingIconPriority>80</expandingIconPriority>
+    <expandMore>true</expandMore>
+  </WorldObjectDef>
+
+</Defs>

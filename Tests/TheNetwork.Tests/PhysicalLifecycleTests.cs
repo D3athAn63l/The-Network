@@ -893,12 +893,18 @@ namespace TheNetwork.Tests
             }
             // Nothing anywhere ages a pawn by rewriting its birth tick (P3-INV-022).
             foreach (string f in AllSources()) T.Check(!Code(File.ReadAllText(f)).Contains("BirthAbsTicks"), "no BirthAbsTicks write (" + Path.GetFileName(f) + ")");
-            // The only Pawn-typed field in the assembly is the binding's own pointer, and no code assigns it.
+            // The only Pawn-typed field in the assembly is the binding's own pointer, and no code assigns it. A field holding Pawns in a
+            // collection or array counts too. The one exemption is the dev-only, armed S31 spike (Diagnostics/Spikes/S31), which must hold
+            // the real pawns it creates in order to observe them; its isolation is proven by the S31.* tests.
             foreach (Type t in typeof(PawnRef).Assembly.GetTypes())
             {
+                bool spike = t.Namespace == "TheNetwork.Diagnostics.Spikes.S31";
                 foreach (System.Reflection.FieldInfo fi in t.GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
                 {
-                    if (fi.FieldType == typeof(Pawn)) T.Check(t == typeof(PawnRef) && fi.Name == "pawn", "a Pawn field only as PawnRef.pawn (" + t.Name + "." + fi.Name + ")");
+                    if (fi.FieldType == typeof(Pawn)) T.Check(spike || (t == typeof(PawnRef) && fi.Name == "pawn"), "a Pawn field only as PawnRef.pawn (" + t.Name + "." + fi.Name + ")");
+                    bool holdsPawns = (fi.FieldType.IsArray && fi.FieldType.GetElementType() == typeof(Pawn))
+                        || (fi.FieldType.IsGenericType && Array.IndexOf(fi.FieldType.GetGenericArguments(), typeof(Pawn)) >= 0);
+                    if (holdsPawns) T.Check(spike, "no Pawn collection field outside the S31 spike (" + t.FullName + "." + fi.Name + ")");
                 }
             }
             foreach (string f in AllSources())

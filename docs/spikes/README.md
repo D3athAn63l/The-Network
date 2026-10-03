@@ -62,6 +62,7 @@ complete S20: its spatial scenarios run in a sandbox over a synthetic world grap
 | [S19](S19-loot-without-extermination.md) loot without extermination | NOT RUN — OWNER RUNTIME VALIDATION REQUIRED |
 | [S13](S13-drop-pod-delivery.md) drop-pod delivery (Phase 2) | PARTIAL — normal home delivery PASSED in the owner's runtime test; edge cases NOT RUN |
 | [S20](S20-abstract-spatial-routing.md) abstract spatial routing, charter transport and Last Known Location placement (Phase 2.5) | NOT RUN — OWNER RUNTIME VALIDATION REQUIRED |
+| [S31](S31-retained-pawn-exit-reservation.md) retained pawn exit reservation / the Free-world-pawn window (blocks Phase 3.1; M1 harness built, no mechanism adopted) | NOT RUN — OWNER RUNTIME VALIDATION REQUIRED |
 
 ## Phase 3 spikes (planned; no records yet)
 
@@ -77,4 +78,6 @@ role-constrained creation, **S26** team cohesion, **S27** encounter evidence, an
 mechanism that keeps a retained named pawn from being redressed, discarded or reused between a **vanilla** map exit and
 `Stored` authority (reserve while spawned, else a synchronous vanilla callback, else a narrow Harmony contingency, in that
 order; [PHYSICAL_LIFECYCLE § 7.6](../PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31)). **S31 is
-mandatory and blocks Phase 3.1** (3.0 does not need it); it is **NOT RUN**.
+mandatory and blocks Phase 3.1** (3.0 does not need it); it is **NOT RUN**. Its record now exists:
+[S31-retained-pawn-exit-reservation.md](S31-retained-pawn-exit-reservation.md) (the M1 harness and the owner checklist; final mechanism
+**UNDECIDED** until the owner's run is reviewed). The other Phase 3 spikes still have no record.

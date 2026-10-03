@@ -94,6 +94,32 @@ fi
 grep -q "physicalPort = new Domain.Physical.UnavailablePhysicalWorldPort()" Source/TheNetwork/Core/NetworkRuntime.cs || { echo "FAIL: the live runtime does not hold the fail-closed physical port" >&2; exit 1; }
 echo "ok"
 
+echo "### Source scan: spike S31 is dev-only, armed, runtime-only and isolated (PHYSICAL_LIFECYCLE § 7.6, § 21.2)"
+S31="Source/TheNetwork/Diagnostics/Spikes/S31"
+# Real creation APIs exist in the spike folder and nowhere else in the mod.
+if grep -rnE "\b(PawnGenerator|GeneratePawn|GenSpawn|LordMaker|MakeNewLord|FactionGenerator|NewGeneratedFaction|WorldObjectMaker|GetOrGenerateMap|DeinitAndRemoveMap|HediffMaker)\b|QuestManager\.Add\b" Source/TheNetwork --include=*.cs | grep -v "^$S31/" | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' ; then
+  echo "FAIL: a real creation API is used outside the S31 spike folder" >&2; exit 1
+fi
+# The harness saves nothing of its own, never calls PassToWorld, never forces a GC pass, and implements no physical port.
+if grep -rnE "Scribe_|IExposable|ExposeData|GameComponent|WorldComponent|MapComponent|PassToWorld[[:space:]]*\(|(RunGC|PawnGCPass|WorldPawnGCTick)[[:space:]]*\(|IPhysicalWorldPort|PhysicalLifecycleService|EpisodeRequest|physicalPort" $S31 | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' ; then
+  echo "FAIL: the S31 harness persists state, passes a pawn itself, forces a GC pass or touches the physical port" >&2; exit 1
+fi
+# The safe runtime suites never reach the spike.
+if grep -rnE "Spikes|S31Spike|S31Run" Source/TheNetwork/Diagnostics/RuntimeTests | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' ; then
+  echo "FAIL: a safe runtime suite references the S31 spike" >&2; exit 1
+fi
+# Every S31 pawn removal goes through the fail-closed S31World.TryDispose (ownership checked first); the unguarded helper is gone.
+td_from=$(grep -n "public static bool TryDispose(Pawn p, out string reason)" $S31/S31World.cs | cut -d: -f1)
+td_to=$(grep -n "public static string Identify(Pawn p)" $S31/S31World.cs | cut -d: -f1)
+if [ -z "$td_from" ] || [ -z "$td_to" ]; then
+  echo "FAIL: S31World.TryDispose / Identify not found" >&2; exit 1
+fi
+if grep -rnE "\.Discard[[:space:]]*\(|RemovePawn[[:space:]]*\(|\.Destroy[[:space:]]*\([[:space:]]*DestroyMode|S31World\.Dispose[[:space:]]*\(" $S31 | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' \
+    | awk -F: -v f="$S31/S31World.cs" -v a="$td_from" -v b="$td_to" '!($1 == f && $2 > a && $2 < b)' | grep . ; then
+  echo "FAIL: the S31 harness removes, destroys or discards a pawn outside the fail-closed TryDispose" >&2; exit 1
+fi
+echo "ok"
+
 REPO="$(pwd)"
 OUT="${TEST_OUT:-$(mktemp -d)}"
 EXTRA=()

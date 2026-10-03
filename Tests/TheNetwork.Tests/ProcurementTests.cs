@@ -1257,9 +1257,11 @@ namespace TheNetwork.Tests
                 T.Check(t.Name.IndexOf("Encounter", StringComparison.Ordinal) < 0, "no encounter faction machinery (" + t.Name + ")");
                 T.Check(t.Name.IndexOf("Rumor", StringComparison.Ordinal) < 0 && t.Name.IndexOf("Gossip", StringComparison.Ordinal) < 0, "no rumors or gossip (" + t.Name + ")");
                 T.Check(t.Name.IndexOf("Registry", StringComparison.Ordinal) < 0 || t.Name == "ContractKindRegistry", "no registry quest (" + t.Name + ")");
+                // The one exemption: the dev-only, armed S31 spike must hold the real pawns it creates (its isolation: the S31.* tests).
+                bool spike = t.Namespace == "TheNetwork.Diagnostics.Spikes.S31";
                 foreach (FieldInfo f in t.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
                 {
-                    T.Check(f.FieldType.Name != "Pawn" || (t.Name == "PawnRef" && f.Name == "pawn"), "no Pawn fields but the binding's own pointer (" + t.Name + "." + f.Name + ")");
+                    T.Check(spike || f.FieldType.Name != "Pawn" || (t.Name == "PawnRef" && f.Name == "pawn"), "no Pawn fields but the binding's own pointer (" + t.Name + "." + f.Name + ")");
                 }
             }
             TestNet n = World(10);
