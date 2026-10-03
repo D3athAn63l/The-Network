@@ -7,9 +7,9 @@
 
 | ID | Risk | Sev. | Lik. | Proven in |
 |---|---|---|---|---|
-| R-01 | Abstract ↔ physical pawn identity (duplication, resurrection, lost identity) | Critical | Medium | Phase 3 (S9, S11, S17) |
-| R-02 | Save/load during physical contractor encounters | High | Medium | Phase 3 (S9, S11, S14) |
-| R-03 | Vanilla quest and site cleanup semantics | High | Medium | Phase 1 (S1, S2), Phase 3 (S9) |
+| R-01 | Abstract ↔ physical pawn identity (duplication, resurrection, lost identity) | Critical | Medium | Phase 3 (S9r, S11, S17, S31) |
+| R-02 | Save/load during physical contractor encounters | High | Medium | Phase 3 (S9r, S11, S14) |
+| R-03 | Vanilla quest and site cleanup semantics | High | Medium | Phase 1 (S1, S2), Phase 3 (S9r) |
 | R-04 | Third-party mods destroying or modifying generated sites | Medium | Medium | Phase 1 (S2), ongoing |
 | R-05 | External Def removal | High | High | Phase 1 (S7) |
 | R-06 | Optional DLC APIs (Odyssey, Royalty) | Medium | Medium | Phase 7 (S15, S16) |
@@ -19,9 +19,9 @@
 | R-10 | Faction relation changes during active contracts | Medium | High | Phase 2 |
 | R-11 | Contractor pawns recruited or captured by the player | High | High | Phase 3 |
 | R-12 | World-object deletion | Medium | Medium | Phase 1 (S1, S2) |
-| R-13 | Cross-mod quest interactions | Medium | Medium | Phase 3 (S9) |
+| R-13 | Cross-mod quest interactions | Medium | Medium | Phase 3 (S9r) |
 | R-14 | Performance of large, long-running contractor populations | High | Low | Phase 2 soak, Phase 3 soak |
-| R-15 | Registry-quest custody unworkable at runtime | High | Medium | Phase 3 (S9) |
+| R-15 | Registry-quest custody unworkable at runtime | High | Medium | Phase 3 (S9r) |
 | R-16 | Master design brief unavailable during Phase 0 | — | — | **Resolved** in the Phase 0 review |
 | R-17 | Stories feel like transactions (narrative under-investment) | High | Medium | Phases 1–4 playtests |
 | R-18 | Claim accounting inaccurate (non-caravan departures) | Low | Medium | Phase 1 |
@@ -56,15 +56,16 @@
 - **Failure modes.** The same character instantiated twice. A dead character reappears. A
   character's pawn is discarded by vanilla GC. A pawn is reused by vanilla in a random raid.
   Another mod copies a pawn along with our tags.
-- **Mitigation.** Invariants I-1 to I-10 ([ABSTRACT_PHYSICAL_LIFECYCLE § 3](ABSTRACT_PHYSICAL_LIFECYCLE.md#3-invariants)):
-  bind-once, a reverse map, a deployment exclusivity check, a dead-is-final guard, handlers that
-  act only on bound objects, reconciliation from actual pawn state, and registry reservation
-  (no GC, no redress). A validator checks one-to-one maps on every load.
-- **Proven by.** S9 (reservation effects), S11 (holder), S17 (copies); Phase 3 soak with forced
-  scenarios (dev actions).
+- **Mitigation.** The normative invariants are **P3-INV-001…032** ([PHYSICAL_LIFECYCLE Appendix B](PHYSICAL_LIFECYCLE.md#appendix-b-formal-invariants);
+  the Phase 0 I-1 to I-10 are historical): bind-once, a reverse map, episode exclusivity, a dead-is-final guard, handlers
+  that act only on bound objects, reconciliation from observed pawn state, no second `PassToWorld` for a pawn vanilla
+  already passed, and registry reservation (no GC, no redress) with the exit window left to spike S31. A validator checks
+  one-to-one maps on every load.
+- **Proven by.** **S9r** (reservation effects; it revises S9), S11 (holder), S17 (copies), **S31** (the exit window); the
+  `RT-PHYS` / `RT-PHYX` suites and the Phase 3 soak with forced scenarios (dev actions).
 - **Phase 3 design review.** Refined and re-audited against the 1.6.9676 assemblies in
   [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md): identity is `Actor ≠ Person ≠ Pawn`, a named person keeps one pawn for
-  life, the invariants are P3-INV-001…016 ([Appendix B](PHYSICAL_LIFECYCLE.md#appendix-b-formal-invariants)); the
+  life, the invariants are P3-INV-001…032 ([Appendix B](PHYSICAL_LIFECYCLE.md#appendix-b-formal-invariants)); the
   corrections to this entry's premises are in [Appendix E](PHYSICAL_LIFECYCLE.md#appendix-e-what-the-audit-changed-from-the-phase-0-design).
 
 ## R-02 · Save/load during physical encounters
@@ -85,7 +86,7 @@
   players already understand, and our comp mirrors each lifecycle callback. The registry quest
   has a non-null root, is `Ongoing` and never ends. On load, a missing registry quest is
   recreated.
-- **Proven by.** S1, S2 (sites) and S9 (registry).
+- **Proven by.** S1, S2 (sites) and S9r (registry).
 
 ## R-04 · Third-party mods destroying or modifying generated sites
 - **Failure modes.** A world cleaner deletes sites. Map-generation overhauls change the stash
@@ -171,7 +172,7 @@
 - **Mitigation.** A single hidden registry quest. The root def is flagged so it is never
   generated or offered. Its parts do nothing in generic callbacks. No Network contracts are
   modelled as quests.
-- **Proven by.** S9 with a sample of popular quest-related mods.
+- **Proven by.** S9r with a sample of popular quest-related mods.
 - **Phase 3 design review.** S9 is revised as **S9r**: it also compares a registry built only of vanilla classes
   (`QuestPart_ReservePawns`) against the Network-owned part ([PHYSICAL_LIFECYCLE § 7.4](PHYSICAL_LIFECYCLE.md#74-the-registry-reservation-retained-pawns-only)).
 
@@ -186,7 +187,7 @@
 ## R-15 · Registry-quest custody unworkable at runtime
 - **Failure modes.** Suspension causes oddities: pawns frozen in bad states, or vanilla code
   that assumes reserved pawns belong to real quests. Quest mods break it.
-- **Mitigation.** Spike S9 before Phase 3 content. A documented fallback (`KeepForever` plus
+- **Mitigation.** Spike S9r before Phase 3 content. A documented fallback (`KeepForever` plus
   factionless storage) and a contingency patch C-1 with its analysis done in advance
   ([RIMWORLD_INTEGRATION § 3.3](RIMWORLD_INTEGRATION.md#33-contingency-patches-analysed-not-adopted)).
 - **Proven by.** S9.

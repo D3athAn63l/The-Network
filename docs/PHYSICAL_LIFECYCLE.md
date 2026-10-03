@@ -84,7 +84,9 @@
    pawn is never under-aged: chronological age is derived from the game clock, and biological age is brought fully
    up to date (never capped per materialization) before anything can observe it
    ([§ 6.4](#64-truthful-aging-of-a-retained-pawn)).
-9. **No Harmony is required for the recommended slice.** Every needed event has a vanilla signal, a component
+9. **No Harmony patch is adopted, and the recommended slice is designed to need none** (a patch may be adopted only after a
+   runtime spike proves vanilla insufficient and an ADR adopts it; the one pre-specified candidate is C-4, gated by S31).
+   Every needed event has a vanilla signal, a component
    callback or a bounded poll; the real gaps (downed, resurrection, caravan join) are polls, documented
    ([§ 14](#14-event-detection)).
 10. **Event-driven, near-zero idle.** No scan of pawns, maps or world pawns per tick; jobs exist only while an
@@ -1716,7 +1718,8 @@ by the vanilla GenStep. Attack, flee, arrest, recruit and exit are RimWorld doin
 
 ### 14.2 Conclusion on Harmony
 
-**No Harmony is required for the recommended slice or for 3.2.** Every transition has a signal, a component
+**No Harmony patch is adopted, and the recommended slice and 3.2 are designed to need none** (adoption requires a failed
+runtime spike and an ADR; S31's contingency C-4 is the one pre-specified candidate). Every transition has a signal, a component
 callback or a bounded poll. The three genuine hook gaps (**downed, caravan join, resurrection**) are polls over a
 tiny set (the members of Open episodes plus the `OutOfCustody` people). If a spike later shows a poll is
 insufficient (for example a held person is lost between polls), the narrowest documented contingency is **a

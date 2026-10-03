@@ -216,7 +216,7 @@ same change.
 | Log prefix | `[TheNetwork]` |
 | Def name prefix | `TheNetwork_` |
 | Signal / quest-tag prefix | `TheNetwork.` |
-| Harmony | None. Not required for Phases 1–3: the Phase 3 design review found no required lifecycle event that needs it (see [RIMWORLD_INTEGRATION.md § Harmony](docs/RIMWORLD_INTEGRATION.md#3-harmony-policy), [PHYSICAL_LIFECYCLE § 14](docs/PHYSICAL_LIFECYCLE.md#14-event-detection)) |
+| Harmony | None adopted. Phases 1–3 target zero Harmony; a patch may be adopted only after a runtime spike proves vanilla extension points insufficient and an ADR adopts it. The Phase 3 design review found no required lifecycle event that needs one (see [RIMWORLD_INTEGRATION.md § Harmony](docs/RIMWORLD_INTEGRATION.md#3-harmony-policy), [PHYSICAL_LIFECYCLE § 14](docs/PHYSICAL_LIFECYCLE.md#14-event-detection)) |
 | Dependencies | None. Grandmaster21 and RegenNanites were read as references only. The Network does not depend on them or assume they are installed. |
 | Settings | `ModSettings`: preferences, catalog overrides and the global cast (with its own `NetworkSettingsVersion`). Never runtime history. |
 | Access | A usable vanilla Comms Console is required for Network actions (Phase 1). |

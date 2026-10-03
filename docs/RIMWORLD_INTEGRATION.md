@@ -145,7 +145,11 @@ only the `OpportunityId` and forwards callbacks. It stays inert on sites it is n
 - Map generation is fully vanilla (site parts and linked GenSteps). The Network does not write
   map generation code in Phase 1.
 - `MapDeiniter.Deinit` passes map pawns to the world. On a hostile-faction map, colonists left
-  behind are kidnapped (`MapDeiniter.cs:142–175`). `LeftMap` signals are sent for pawns.
+  behind are kidnapped (`MapDeiniter.cs:142–175`). The `LeftMap` quest-target signal is sent **only** for those kidnapped
+  colonists and for player-faction or player-hosted pawns (`MapDeiniter.cs:173–180`). Any other pawn, including a
+  non-colonist Network contractor, is passed to `WorldPawns` **without** a `LeftMap` signal and without
+  `FactionManager.Notify_PawnLeftMap`; the Network learns of it from the map-removal callbacks and observation
+  ([PHYSICAL_LIFECYCLE § 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31), audit row A52).
 - There is no "about to be removed" hook available to comps. Only `SitePartWorker` has
   `Notify_SiteMapAboutToBeRemoved`, and it requires a Network SitePartDef. Claim accounting
   therefore uses `PostCaravanFormed` plus a low-frequency sample
@@ -384,8 +388,8 @@ The Network uses the same property for its access gate, found through
 
 ### 3.1 Policy
 
-1. **Zero Harmony patches are required for Phases 1–3.** The Network will not even declare a
-   Harmony dependency until a patch is adopted.
+1. **No Harmony patch is currently adopted. Phases 1–3 target zero Harmony. A patch may be adopted only after a runtime spike proves vanilla extension points insufficient **and** an ADR explicitly adopts the patch.** The Network will not even declare a Harmony dependency until a patch is adopted. (The one pre-specified
+   candidate that a Phase 3 spike could still force is C-4, § 3.3, gated by S31.)
 2. A patch may be adopted only if a vanilla extension point is shown to be insufficient **by a
    failed spike**, not by convenience.
 3. Every adopted patch must be documented with: exact target · why vanilla is insufficient ·
@@ -452,7 +456,7 @@ These patches are documented in advance so a failed spike does not lead to an im
 
 | Field | Value |
 |---|---|
-| Target | `RimWorld.Planet.WorldPawns.PassToWorld(Pawn, PawnDiscardDecideMode)` (public), **prefix**: if the pawn has a Network retained binding (an O(1) lookup by `thingIDNumber` in the runtime index), add it to the registry reservation before the original runs, so that `AddPawn`, `Notify_PassedToWorld`, the GC and redress all see `ReservedByQuest`. It never changes the result and never skips the original. |
+| Target | `RimWorld.Planet.WorldPawns.PassToWorld(Pawn, PawnDiscardDecideMode)` (public), **prefix**: if the pawn is a **retained named Network pawn whose current lifecycle transition requires continued Network retention** (the exact predicate is an S31 result; it is **not** "any pawn with a Network binding": an anonymous slot pawn, a pawn being released to vanilla, or a held or dead person must never match), add it to the registry reservation before the original runs (an O(1) lookup in the runtime index), so that `AddPawn`, `Notify_PassedToWorld`, the GC and redress all see `ReservedByQuest`. It never changes the result and never skips the original. |
 | Why vanilla is insufficient | only if S31 shows both that a *spawned* reserved pawn misbehaves and that no synchronous vanilla callback precedes every path that passes a pawn (notably a map removal on a map type with no pre-removal hook) |
 | Call frequency | once per pawn passed to the world (map exit, map removal, quests, pods); never per tick |
 | Compatibility risk | Low to medium. About fifty vanilla call sites and other mods call it; a prefix that only adds to the Network's own list and always lets the original run composes, and costs O(1) |

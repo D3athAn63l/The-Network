@@ -223,7 +223,8 @@
 
 ### ADR-017 · Zero Harmony for Phases 1–3
 - **Decision.** No patches. Observation through signals, quest parts, world-object comps and
-  reconciliation. Contingency patches are pre-analysed and not adopted.
+  reconciliation. Contingency patches are pre-analysed and not adopted. *(Policy wording, Phase 3.0.)* No Harmony patch is currently adopted. Phases 1–3 target zero Harmony. A patch may be adopted only after a runtime spike proves vanilla extension points insufficient **and** an ADR explicitly adopts the patch.
+  The title states the target, not a guarantee: spike S31 could in principle force contingency C-4.
 - **Rejected.** Convenience patches on `Pawn.Kill`, GC, redress, site removal and goodwill.
 - **Consequences.** The mod does not even require Harmony until a spike forces an adoption.
 
