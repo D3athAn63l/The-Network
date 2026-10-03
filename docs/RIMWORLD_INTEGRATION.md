@@ -448,6 +448,17 @@ These patches are documented in advance so a failed spike does not lead to an im
 | Fallback | sampling (current design) |
 | Phase | 1 only if playtesting demands it; expected to be unnecessary |
 
+**C-4 · Exit-window reservation guard (only if Spike S31 proves reservation-while-spawned and the vanilla callbacks insufficient)**
+
+| Field | Value |
+|---|---|
+| Target | `RimWorld.Planet.WorldPawns.PassToWorld(Pawn, PawnDiscardDecideMode)` (public), **prefix**: if the pawn has a Network retained binding (an O(1) lookup by `thingIDNumber` in the runtime index), add it to the registry reservation before the original runs, so that `AddPawn`, `Notify_PassedToWorld`, the GC and redress all see `ReservedByQuest`. It never changes the result and never skips the original. |
+| Why vanilla is insufficient | only if S31 shows both that a *spawned* reserved pawn misbehaves and that no synchronous vanilla callback precedes every path that passes a pawn (notably a map removal on a map type with no pre-removal hook) |
+| Call frequency | once per pawn passed to the world (map exit, map removal, quests, pods); never per tick |
+| Compatibility risk | Low to medium. About fifty vanilla call sites and other mods call it; a prefix that only adds to the Network's own list and always lets the original run composes, and costs O(1) |
+| Fallback | M1 / M2 of [PHYSICAL_LIFECYCLE § 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31); or C-1 plus C-2 (a redress guard and a GC keep reason), a larger surface that covers redress and GC but **not** quest-generation selection of `Free` pawns |
+| Phase | 3.1, conditional (expected unnecessary). Needs its own ADR; **not adopted** |
+
 No other contingency is anticipated through Phase 6. Black contracts, witnesses, rumors and
 bidding are domain logic plus vanilla observation.
 

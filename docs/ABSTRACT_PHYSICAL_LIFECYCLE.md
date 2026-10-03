@@ -17,6 +17,12 @@
 > items (a *Lease* and a *Notable Asset* are separate seams; generic gear stays abstract); and the implicit "reconcile in one
 > synchronous block" (now an atomic, snapshot-guarded commit with idempotent post-commit stages). It also adds Operational
 > Roles, role composition and team cohesion, which this document does not have.
+>
+> **A final micro-correction** supersedes this document's "(c) passes to world with `Decide`" (I-8) and its collapse / map-removal
+> steps wherever they pass a *returning* pawn to the world: vanilla (`Pawn.ExitMap`, `MapDeiniter`) has **already** passed it, and
+> a second `PassToWorld` is rejected; the Network passes only a bound pawn that is positively not in `WorldPawns`
+> ([PHYSICAL_LIFECYCLE § 7.5](PHYSICAL_LIFECYCLE.md#75-who-may-call-passtoworld-an-observed-world-pawn-is-never-passed-again)).
+> It also leaves the retained-pawn exit window to the unresolved spike S31 ([§ 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31)).
 
 > The highest-risk area of the mod. It covers how an off-map contractor organization, which is
 > a record with headcounts, becomes real pawns on a map, and how the results return to the

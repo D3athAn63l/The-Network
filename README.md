@@ -99,7 +99,7 @@ and is **reconciled exactly once**, atomically, from observed state, with every 
 carrying its own durable marker; death is final; custody beyond the map is never mistaken for "home"; **no Harmony** for the recommended slice. Four subphases:
 3.0 the abstract foundation (no pawn), 3.1 one controlled physical episode (first real pawn, in a separate, session-armed test
 tier on its own test map), 3.2 custody, rescue and groups (first player-visible content), 3.3 procurement fulfillment / physical
-handoff (**design direction only**). Full Safe Regression stays safe on a real colony. Open questions and the spikes that settle
+handoff (**design direction only**). **3.0 may begin once the design is accepted; 3.1 is gated on a mandatory runtime spike (S31, the retained-pawn exit-reservation window) that has not been run.** Full Safe Regression stays safe on a real colony. Open questions and the spikes that settle
 them are listed, not hidden; none has been run.
 
 The contract board, the player as contractor and the social layer are later phases

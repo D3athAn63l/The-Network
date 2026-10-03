@@ -762,6 +762,8 @@
   **Amended** by the Phase 3 amendment pass: rules 3, 6 and 10 are revised (see [PHYSICAL_LIFECYCLE Appendix F](PHYSICAL_LIFECYCLE.md#appendix-f-amendment-log)).
   **Corrected** by the Phase 3 correction pass: rule 1 (the gate also waits for release) and rule 6 (explicit stage markers
   and a durable publication outbox) are tightened, no rule changes direction (see [Appendix G](PHYSICAL_LIFECYCLE.md#appendix-g-correction-log)).
+  A **micro-correction** adds to rule 6: a pawn vanilla has already passed to the world is never passed again, and the
+  retained-pawn exit window is an open spike that gates 3.1 ([Appendix G.2](PHYSICAL_LIFECYCLE.md#g2-micro-correction-on-top-of-3f1cbee)).
 - **Context.** Phase 3 crosses from abstract records into real RimWorld pawn state. The failure to avoid is a hidden
   second authority: a person simulated abstractly while physical, a death overwritten by stale abstract health, a
   clone, a consequence applied twice, a prisoner abstracted because it is "not spawned". The Phase 3 design audit of the
@@ -795,7 +797,13 @@
      is durable per event:** the commit stores an ordered outbox and `publishCursor`; an event the existing bus has accepted
      is never submitted again, no dedupe key is assumed (the bus has none), a throwing consumer is never redispatched, and
      publication failure never replays a consequence. Atomicity is *demonstrated* by a fault-injection sweep (RT-PHYS-026),
-     not argued.
+     not argued. *(Micro-correction)* **`PassToWorld` is never called for a pawn already in `WorldPawns`.** Vanilla's
+     `Pawn.ExitMap`, map removal and site destruction pass the pawn themselves, so a `Returned` member is already a world
+     pawn and RELEASE only normalizes it, proves its reservation and strips routing; the Network calls `PassToWorld` only for
+     a bound pawn that is positively unspawned, not in `WorldPawns` and held by nobody
+     ([§ 7.5](PHYSICAL_LIFECYCLE.md#75-who-may-call-passtoworld-an-observed-world-pawn-is-never-passed-again)). The interval between vanilla's pass and the Network's reservation is **not solved**: spike **S31**
+     chooses the mechanism (reserve while spawned, a synchronous vanilla callback, or a narrow patch, in that order) and
+     **3.1 is blocked until it has been run and owner-reviewed**; 3.0 is not ([§ 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31)).
   7. **Death is monotonic;** resurrection is observed, never initiated, and never makes a person `Active`.
   8. **Held people are a persisted custody state** observed by a bounded custody watch; an unsupported custody fails safe
      into `Quarantined`, never faked.
@@ -814,6 +822,9 @@
   roster of anonymous individuals. Mirroring Hediffs, inventories or gear into abstract state. *(Amendment)* Treating the
   commit as "one block of primitive assignments that cannot fail" by calling the existing casualty, succession and
   actor-ending paths directly (they publish, schedule and swallow faults inline), and publishing inside the transaction.
+  *(Micro-correction)* Calling `PassToWorld` for a pawn vanilla already passed; assuming the Network can reserve a retained
+  pawn "in time" after a vanilla exit without proof; choosing a Harmony patch for the exit window before the vanilla
+  callbacks are shown insufficient.
   *(Correction)* Inferring a stage's completion from its side effects (a removed tag, a changed status); republishing "keyed"
   events after a retry (the bus has no idempotency key, so a second `Publish` is a new event that every consumer would
   process again); letting a Closed-but-unreleased person become abstractly simulatable.

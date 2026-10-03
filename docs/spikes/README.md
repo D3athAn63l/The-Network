@@ -72,4 +72,9 @@ S10 temporary faction, S11 site-part pawn holder, **S12** store-time normalizati
 Lord, S17 tag hygiene, **S21** observation completeness, **S22** the physical-tier guard (a session-only arm and a dedicated test
 map; no disposability inference), **S23** first-creation pins and modded races, **S24** the save/load matrix, **S25**
 role-constrained creation, **S26** team cohesion, **S27** encounter evidence, and, for the design-direction-only Phase 3.3,
-**S28** a right-click command without Harmony, **S29** physical cargo at a handoff, **S30** a rendezvous site.
+**S28** a right-click command without Harmony, **S29** physical cargo at a handoff, **S30** a rendezvous site. A final
+**micro-correction** added **S31**, *retained pawn exit reservation / the Free-world-pawn window*: the smallest safe 1.6
+mechanism that keeps a retained named pawn from being redressed, discarded or reused between a **vanilla** map exit and
+`Stored` authority (reserve while spawned, else a synchronous vanilla callback, else a narrow Harmony contingency, in that
+order; [PHYSICAL_LIFECYCLE § 7.6](../PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31)). **S31 is
+mandatory and blocks Phase 3.1** (3.0 does not need it); it is **NOT RUN**.

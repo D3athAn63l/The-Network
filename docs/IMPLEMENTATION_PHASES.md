@@ -436,14 +436,17 @@ observed errors) stays recorded as Phase 2 / 2.75 runtime evidence.
 > **Status: design reviewed, not implemented.** Normative design: [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md)
 > (audited against the 1.6.9676 assemblies; supersedes the Phase 0 scope below where they differ). Decisions:
 > [ADR-048](DECISIONS.md), [ADR-049](DECISIONS.md), [ADR-050](DECISIONS.md) and [ADR-051](DECISIONS.md). Risks:
-> [R-28 to R-41](RISKS.md). Save format stays **4** until implementation; the first Phase 3 build will bump once (the
+> [R-28 to R-42](RISKS.md). Save format stays **4** until implementation; the first Phase 3 build will bump once (the
 > number is not chosen here). **Amended** after the first design review by ten owner decisions (roles and composition,
 > progressive concretization, team cohesion, the reputation / fame / capability split, reconciliation atomicity, truthful
 > aging, a generalized equipment seam, Phase 3.3, a stricter physical-test guard); see
 > [PHYSICAL_LIFECYCLE Appendix F](PHYSICAL_LIFECYCLE.md#appendix-f-amendment-log). **Corrected** by a final design pass (explicit
 > release / follow-up / publish markers and a durable publication outbox, the authority gate waiting for release, strong
 > evidence for company concretization, time-independent role and composition identity, passion-free role correction, and the
-> 3.3 handoff as an idempotent staged protocol); see [Appendix G](PHYSICAL_LIFECYCLE.md#appendix-g-correction-log).
+> 3.3 handoff as an idempotent staged protocol); see [Appendix G](PHYSICAL_LIFECYCLE.md#appendix-g-correction-log). A **micro-correction** then fixed the RELEASE return
+> semantics (a pawn vanilla already passed to the world is never passed again) and added the **mandatory spike S31** (the
+> retained-pawn exit-reservation window): **3.0 may begin; 3.1 is blocked until S31 is run and owner-reviewed**
+> ([Appendix G.2](PHYSICAL_LIFECYCLE.md#g2-micro-correction-on-top-of-3f1cbee)).
 
 **The target is not "spawn some contractor pawns."** It is: a persistent Network actor can temporarily become
 physically present, actual physical consequences become authoritative, and that reality reconciles back into The
@@ -453,10 +456,16 @@ Network **exactly once**, with one authority per person at a time.
 
 | Subphase | Content | Spikes needed |
 |---|---|---|
-| **3.0 Authority and episode foundation** (no RimWorld pawn) | the Episode store (reserved `deployments` slot), `PawnRef` (with `agedThroughTick`), the new `KnownCharacter` fields (incl. `opRole`, `firstEncounterTick`), the authority gate and every abstract writer behind it, **reconciliation as plan → validate → atomic snapshot-guarded commit → flag last → release → follow-up → publish** (the existing casualty/succession/ending paths are *split*, not called), a `PhysicalWorldPort` with a scriptable fake, validator, compaction, prepare-for-removal settle, `RT-PHYS-001…019` and `025…029` in the **safe** runtime tier (incl. the fault-injection sweep, release interruption with the authority gate, and publication interruption), one save-format bump | none |
-| **3.1 The controlled physical episode** (the vertical slice) | the real adapter: create-once-and-bind a named pawn as a **role-constrained projection** (verified before binding; the smallest correction: raise a role-defining skill's base level only, never passion), spawn, tags, signal routes, the visit Lord, the per-episode temporary faction, the registry reservation, store-time normalization and **truthful, uncapped aging catch-up**, the **physical test tier** (separate; a session-only typed arm; its own generated test map by default; no inference of "disposable"), a read-only Episode Monitor. One Solo contractor, dev-triggered: exits, is wounded, is killed, or its map is removed; then re-materializes as the **same pawn**, truthfully older | S9r, S10, S12, S14, S17, S21, S22, S23, S24, S25 |
+| **3.0 Authority and episode foundation** (no RimWorld pawn) | the Episode store (reserved `deployments` slot), `PawnRef` (with `agedThroughTick`), the new `KnownCharacter` fields (incl. `opRole`, `firstEncounterTick`), the authority gate and every abstract writer behind it, **reconciliation as plan → validate → atomic snapshot-guarded commit → flag last → release → follow-up → publish** (the existing casualty/succession/ending paths are *split*, not called), a `PhysicalWorldPort` with a scriptable fake, validator, compaction, prepare-for-removal settle, `RT-PHYS-001…019` and `025…029` in the **safe** runtime tier (incl. the fault-injection sweep, release interruption with the authority gate, and publication interruption), one save-format bump | none (**S31 is not needed**: no pawn exists in 3.0) |
+| **3.1 The controlled physical episode** (the vertical slice) | the real adapter: create-once-and-bind a named pawn as a **role-constrained projection** (verified before binding; the smallest correction: raise a role-defining skill's base level only, never passion), spawn, tags, signal routes, the visit Lord, the per-episode temporary faction, the registry reservation, store-time normalization and **truthful, uncapped aging catch-up**, the **physical test tier** (separate; a session-only typed arm; its own generated test map by default; no inference of "disposable"), a read-only Episode Monitor. One Solo contractor, dev-triggered: exits, is wounded, is killed, or its map is removed; then re-materializes as the **same pawn**, truthfully older. **Blocked until S31 is run and owner-reviewed** | S9r, S10, S12, S14, S17, S21, S22, S23, S24, S25, **S31 (mandatory, blocks 3.1)** |
 | **3.2 Custody, rescue and groups** | held people (arrest, recruit, enslave, kidnap, caravan, pod) and the custody watch; **group materialization with organization and mission role composition, anonymous vs concretized people (progressive concretization), promotion, team cohesion**; the **rescue** episode for a Troubled operation (site holder, `OpStatus.Physical`); Last Known Locations with survivors and captives. First player-visible content | S11, S21, S26, S27 |
 | **3.3 Procurement fulfillment / physical handoff** (**design direction only**) | delivery-mode selection (orbital, colony handoff, rendezvous) constrained by capability and logistics; a per-contract orbital charter ("Additional Funds for Orbital Delivery"); personnel mobility vs freight capability; the explicit physical handoff (an idempotent staged protocol, not one atomic transaction); the robbery / betrayal consequence hook; seams for payment timing (future Direct Contracts) and rival interception (never implemented here). Decided after 3.2 | S28, S29, S30 |
+
+**Gating (explicit).** **3.0 may begin once the design is accepted**: it is the abstract foundation over a fake port and needs
+no spike. **3.1 may not begin until spike S31 (retained-pawn exit reservation / the Free-world-pawn window) has been run and
+owner-reviewed**, because 3.1 introduces the first retained pawn, a real map exit, a real reservation and a real `WorldPawns`
+transition, and the mechanism that keeps that pawn from ever being `Free` is **not yet chosen**
+([PHYSICAL_LIFECYCLE § 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31)). S31 has not been run.
 
 **Recommended re-scope (needs owner confirmation).** The Phase 0 scope listed below is larger than the physical
 lifecycle needs and partly belongs to Phase 4:

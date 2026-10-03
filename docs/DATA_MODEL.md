@@ -46,7 +46,7 @@
 | `ContractId` | `C` | Contract |
 | `OfferId` | `B` | Offer (bid) |
 | `OperationId` | `P` | Operation |
-| `DeploymentId` | `D` | Deployment |
+| `DeploymentId` | `D` | Deployment (the Phase 0 name; it becomes the Episode id, value unchanged, [PHYSICAL_LIFECYCLE § 5.3](PHYSICAL_LIFECYCLE.md#53-the-persisted-data-candidate-shapes)) |
 | `LeaseId` | `E` | EquipmentLease |
 | `ObligationId` | `F` | Obligation (favor or debt) |
 | `BeliefId` | `R` | Belief / rumor (Phase 5) |
@@ -313,7 +313,7 @@ KnownCharacter
   custody: CustodyState        // Unmaterialized | Stored | Deployed | OutOfCustody | Released | Lost
   pawn: PawnRef?               // bound at most once, never rebound to a different pawn
   boundTick: int = -1
-  deploymentId: DeploymentId?  // non-null only while Deployed
+  deploymentId: DeploymentId?  // Phase 0 shape, NOT adopted: Phase 3 uses `episode` (PHYSICAL_LIFECYCLE § 5.3)
   captor: FactionRef? / captorActor: ActorId?
   notability: float            // drives promotion, retention, legend candidacy
   traitsSnapshot: string[]     // defNames of notable traits, for narrative (strings, not DefRefs)
@@ -798,7 +798,7 @@ Operation
     delayTicks: int
     extraLoot: ItemTally[]
     knowledgeGains: TopicGain[]
-  physical: DeploymentId?               // when the operation went physical
+  physical: DeploymentId?               // Phase 0 shape, superseded: the Episode is the owner (PHYSICAL_LIFECYCLE § 5.3); only `OpStatus.Physical = 3` exists in code
   careerEligible: bool                  // Phase 2.75: its result counts toward the contractor's career (false for an operation from an older save)
   careerOutcomeApplied: bool            // the durable career mutation committed (set only after it), exactly once, at the lifecycle's end
   spatial: OperationSpatialPlan?        // Phase 2.5; null for operations from an older save
@@ -816,7 +816,7 @@ it explains WHERE; the checkpoints stay the timeline and the resolver decides WH
 
 ## 11. Deployments and equipment leases
 
-> **Phase 3 design review:** the `Deployment` below is replaced by the Physical Episode; the candidate persisted shapes
+> **Phase 3 design review:** the Phase 0 `Deployment` is replaced by the Physical Episode; the candidate persisted shapes
 > (`PhysicalEpisode`, `EpisodeMember`, the `KnownCharacter` additions `pawn`/`episode`/`heldBy`/`opRole`/`firstEncounterTick`,
 > `PawnRef` with `agedThroughTick`, `OrganizationProfile.composition`, and the episode's explicit stage markers
 > `releaseApplied` / `followUpApplied`, the per-member `releaseStep`, and the publication outbox with `publishCursor`) are in
@@ -825,36 +825,20 @@ it explains WHERE; the checkpoints stay the timeline and the resolver decides WH
 > stored in `leases`): [§ 11.2](PHYSICAL_LIFECYCLE.md#112-the-future-equipment-seam-not-built-a-lease-is-not-a-notable-asset).
 > Nothing here is implemented.
 
-```
-Deployment                                   // one physical appearance of an org's people
-  id: DeploymentId
-  org: ActorId
-  operation: OperationId?
-  purposeKey: string                         // "Delivery", "RescueTarget", "SiteCompetitor", "JointOp" …
-                                             // (future content may add "PassingThrough", "Stopover", "TradeVisit")
-  encounterFaction: FactionRef?              // temporary faction used (Phase 3)
-  anchor: WorldObjectRef? / map: MapRef?
-  entries: DeploymentEntry[]
-      { pawn: PawnRef, character: CharacterId?, tier: Tier, leases: LeaseId[],
-        fate: Pending | Returned | Killed | CapturedByPlayer | CapturedByOther | Defected |
-              Missing | Lost | StillDeployed,
-        reconciledTick: int }
-  state: Planned | Materialized | Active | Reconciling | Closed
-  openedTick, closedTick: int
+**The Phase 0 `Deployment` and `EquipmentLease` pseudo-schemas that stood here have been removed.** They were superseded
+by the Phase 3 design and would mislead an implementation, so they are not kept even as history (the git history has them).
+Nothing in this section is a schema to implement; [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md) is the **only** normative source:
 
-EquipmentLease                               // a specific tracked item (sponsored or notable)
-  id: LeaseId
-  owner: ActorId                             // sponsor or org
-  holder: ActorId                            // org using it (or the player, for gear a faction lends them)
-  terms: Gift | Loan                         // Loan = return expected (master § 41); Gift = given outright
-  thing: DefRef<ThingDef>, stuff: DefRef<ThingDef>?, quality: QualityCategory?, count: int
-  condition: float (0..1)                    // abstract; updated from real HP% after physical use
-  state: Held | Deployed | Returned | Lost | WrittenOff
-  physicalThing: ThingRefSnapshot?           // thingIDNumber + label while deployed (no pointer)
-  originTick: int
-```
+| Concern | Where the normative shape is | What it replaced |
+|---|---|---|
+| One physical appearance of an organization's people (who is out there, where, since when, the authority state, what was observed, the stage markers, the publication outbox) | the **`PhysicalEpisode`** and **`EpisodeMember`** shapes in [PHYSICAL_LIFECYCLE § 5.3](PHYSICAL_LIFECYCLE.md#53-the-persisted-data-candidate-shapes), stored in the reserved `deployments` slot (`EntityKind.Deployment = 9` is renamed `Episode`, value unchanged) | the Phase 0 `Deployment` with its `Planned / Materialized / Active / Reconciling / Closed` states and per-entry `fate` list |
+| Exact equipment that matters | **two separate future seams**: a *Lease* (ownership stays external) and a *Notable Asset* (ownership transfers and belongs to the person). **No record shape is fixed for either**; the reserved `leases` slot and `LeaseId` (`EntityKind.Lease = 10`) belong to the **Lease** only ([PHYSICAL_LIFECYCLE § 11.2](PHYSICAL_LIFECYCLE.md#112-the-future-equipment-seam-not-built-a-lease-is-not-a-notable-asset)) | the Phase 0 `EquipmentLease` with `terms: Gift \| Loan`, which collapsed the two (a `Gift` is a Notable Asset, a `Loan` is a Lease) |
 
-The lifecycle rules are in [ABSTRACT_PHYSICAL_LIFECYCLE](ABSTRACT_PHYSICAL_LIFECYCLE.md).
+Where other sections of this document still say `LeaseId` (the `SponsorProfile` and `EquipmentProfile` lines), read them as the
+**Lease** seam only, and as reserved: nothing writes them.
+
+The lifecycle rules are in [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md) (normative);
+[ABSTRACT_PHYSICAL_LIFECYCLE](ABSTRACT_PHYSICAL_LIFECYCLE.md) is the superseded Phase 0 text.
 
 ---
 

@@ -557,6 +557,12 @@ to the bus twice, a throwing consumer never redispatched), `RT-PHYS-020` (role c
 skill's base level and never touches passion) and `RT-PHYS-023` (a company is not promoted by presence). In the physical
 tier it adds role-constrained creation, truthful aging and concretization on real pawns (`RT-PHYX-011…014`). Nothing is
 implemented and no physical case has been run.
+**The micro-correction** extends `RT-PHYS-029` (the fake port records every `PassToWorld`: a member observed `WorldFree` produces
+none, and a call that violates the three-part precondition is rejected) and adds two physical-tier regressions that are **gated by
+the mandatory spike S31** and **not run**: `RT-PHYX-015` (a retained named pawn leaves by a normal vanilla `ExitMap`: no Network
+`PassToWorld`, no "already here" error, no window in which the pawn is reusable or redressable, RELEASE once, abstract authority
+only after RELEASE, the same `Pawn` after a save/load and a rematerialization) and `RT-PHYX-016` (the map-removal variant, which
+has no `LeftMap`).
 
 ## 15. Owner-observed runtime evidence
 

@@ -48,6 +48,7 @@
 | R-39 | Team cohesion is infeasible, over-trusted, or drifts into sanitizing real social history | Low | Medium | Phase 3.2 (S26) |
 | R-40 | Reputation, fame and capability stay conflated and leak into projection | Medium | Medium | design now; a later focused phase |
 | R-41 | Handoff exploits: cargo duplication, ownership ambiguity, a "reform caravan" loophole, a double charge | High | Medium | Phase 3.3 (design; S28–S30) |
+| R-42 | A retained pawn becomes temporarily `Free` during a vanilla map exit and vanilla redresses, discards or reuses it before the Network's reservation takes effect | High | Medium | Phase 3.1 (S31, **blocks 3.1**) |
 
 ---
 
@@ -579,3 +580,21 @@
   existing refund path); a terminal handoff state is required before normal completion; **no ownership locks and no invulnerability** (physical reality wins)
   ([§ 27](PHYSICAL_LIFECYCLE.md#27-phase-33-procurement-fulfillment-and-physical-handoff-design-direction), ADR-051).
 - **Proven by.** Spikes **S28 to S30**; handoff scenarios `RT-PHYX-030+` (pay, decline, rob, abandon). Not before 3.3 is approved.
+
+## R-42 · A retained pawn becomes temporarily `Free` during a vanilla exit (Phase 3.1)
+- **Failure modes.** A normal exit is performed by **vanilla**: `Pawn.ExitMap` despawns the pawn and passes it to
+  `WorldPawns` itself, and map removal does the same for every pawn with no `LeftMap` signal for a contractor. Until the
+  Network's registry reservation takes effect the contractor is an ordinary `Free` world pawn. `Free` is what vanilla
+  **redresses** into a raid, visitor or prisoner (and *mutates*), what its world-pawn GC may **discard**, and what quest
+  generation may select; and the episode's temporary faction is removed on a later tick, nulling the faction of a still-`Free`
+  pawn. A related defect, found while auditing this: the first design passed a `Returned` pawn to the world **again**, which
+  vanilla rejects as "already here" ([PHYSICAL_LIFECYCLE § 7.5](PHYSICAL_LIFECYCLE.md#75-who-may-call-passtoworld-an-observed-world-pawn-is-never-passed-again), P3-INV-031).
+- **Mitigation.** **No guessed fix.** The mandatory runtime spike **S31** chooses the smallest safe mechanism, in this order
+  of preference: reserve the retained named pawn **while it is still spawned** (static reading suggests every reservation
+  consumer is gated on `WorldPawns.Contains`, which is a reason to test it and not a proof); else reserve synchronously at
+  a vanilla callback (the `LeftMap` signal inside `ExitMap`; `Notify_SiteMapAboutToBeRemoved` for a map removal); else the
+  narrowest documented Harmony contingency (**C-4**, only if both are proven insufficient). Until S31 is run and
+  owner-reviewed, **3.1 does not begin**; 3.0 is unaffected (it creates no pawn)
+  ([§ 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31)).
+- **Proven by.** Spike **S31** (cases A to G), then the physical-tier regressions `RT-PHYX-015` (normal exit) and
+  `RT-PHYX-016` (map removal) and P3-INV-032. None has been run.
