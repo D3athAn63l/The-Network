@@ -134,8 +134,22 @@ namespace TheNetwork.Domain.Contractors
         }
 
         /// <summary>
+        /// The Phase 3.1 physicalization scope (PHYSICAL_LIFECYCLE Appendix K.8): ONE existing NPC SOLO CONTRACTOR, an individual that is not an
+        /// organization AND actually is a contractor (<see cref="ContractorProfile"/> plus <see cref="ContractorSimulation"/>, <see cref="IsNpcContractor"/>).
+        /// <see cref="IsSolo"/> alone is "an individual that is not an organization" and so also counts a Fixer (an embodied individual with a
+        /// <see cref="FixerProfile"/> and no contractor profile): <see cref="IsSolo"/>'s meaning is unchanged, and the Phase 3.1 physical test picker, the
+        /// operational-role compatibility pass and the role derivation use THIS predicate. A Fixer may become physically realizable in a later design;
+        /// 3.1 must not give it a contractor-style role merely because it was selected. Pure and structural: no actor id, no guessing.
+        /// </summary>
+        public static bool IsNpcSoloContractor(NetworkActor a)
+        {
+            return IsSolo(a) && IsNpcContractor(a);
+        }
+
+        /// <summary>
         /// The compatibility / init pass for the operational role (PHYSICAL_LIFECYCLE § 6.6.5, the 3.1 runtime-QA correction): every embodied
-        /// individual whose person still has <see cref="Physical.OperationalRole.Unset"/> and has NEVER had a pawn bound gets the role derived
+        /// NPC SOLO CONTRACTOR (<see cref="IsNpcSoloContractor"/>; a Fixer is outside the Phase 3.1 scope and is never touched, and a role an earlier
+        /// build already stored on one is neither cleared nor rewritten) whose person still has <see cref="Physical.OperationalRole.Unset"/> and has NEVER had a pawn bound gets the role derived
         /// from the actor's immutable origin facts (<see cref="Physical.RoleDerivation.ForSolo"/>: its seed and its original specialties) and
         /// stored, once, here, before anything can materialize them. Deterministic and independent of the episode, the clock, the map, fame,
         /// reputation and every physical pawn (none exists yet). A role already stored is never overwritten; a bound person is never touched
@@ -150,7 +164,7 @@ namespace TheNetwork.Domain.Contractors
             for (int i = 0; i < all.Count; i++)
             {
                 NetworkActor a = all[i];
-                if (!IsSolo(a) || !a.bindings.embodies.IsValid) continue;
+                if (!IsNpcSoloContractor(a) || !a.bindings.embodies.IsValid) continue;
                 KnownCharacter c = ctx.characters.Get(a.bindings.embodies);
                 if (c == null || c.opRole != Physical.OperationalRole.Unset) continue;
                 if (c.pawn != null && c.pawn.IsBound) continue;

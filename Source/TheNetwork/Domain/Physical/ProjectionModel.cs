@@ -361,19 +361,16 @@ namespace TheNetwork.Domain.Physical
         }
 
         /// <summary>
-        /// The role of an individual's embodied person from the actor's stored ORIGIN facts (its seed and the specialties it was created with).
-        /// Total for every individual that is not an organization: a contractor reads its <see cref="ContractorProfile"/>, a Fixer (also an
-        /// individual with an embodied person, and what <c>ContractorService.IsSolo</c> counts as one) its <see cref="FixerProfile"/>, and an
-        /// individual with no specialty on record the documented fallback (Specialist). It is never Unset for an embodied individual, so a
-        /// materialization can never reach a pawn with the role unknown. Null-safe; Unset only for an actor that is not an individual.
+        /// The role of a NPC SOLO CONTRACTOR's embodied person from the actor's stored ORIGIN facts (its seed and the specialties on its
+        /// <see cref="ContractorProfile"/>). CONTRACTOR-ONLY by contract (Phase 3.1 scope, <c>ContractorService.IsNpcSoloContractor</c>): anything
+        /// else (a Fixer, an organization, a player or faction proxy, an individual without a contractor profile, null) is
+        /// <see cref="OperationalRole.Unset"/>; no contractor-style role is ever invented for it, and no Fixer-specific mapping exists in this phase.
+        /// Deterministic and independent of the episode, the map, the clock, fame, reputation, skills and every pawn.
         /// </summary>
         public static OperationalRole ForSolo(NetworkActor a)
         {
-            if (a == null || a.kind != ActorKind.Individual || a.Has<OrganizationProfile>()) return OperationalRole.Unset;
-            ContractorProfile p = a.Get<ContractorProfile>();
-            if (p != null) return SoloRole(a.seed, p.specialties);
-            FixerProfile f = a.Get<FixerProfile>();
-            return SoloRole(a.seed, f?.specialties);
+            if (!ContractorService.IsNpcSoloContractor(a)) return OperationalRole.Unset;
+            return SoloRole(a.seed, a.Get<ContractorProfile>().specialties);
         }
     }
 

@@ -288,6 +288,9 @@ namespace TheNetwork.Domain.Physical
                 if (!seen.Add(c.id.Value)) return CommandResult.Fail("DuplicatePerson", c.id.ToString());
                 if (c.org != a.id && a.bindings.embodies != c.id) return CommandResult.Fail("NotAMember", c.id.ToString());
                 if (!c.IsAlive) return CommandResult.Fail("NotAlive", c.id.ToString());
+                // The Phase 3.1 role boundary: an embodied person's role is stored from CONTRACTOR origin facts. One whose role is unknown and not
+                // derivable (a Fixer, or any individual outside the NPC Solo contractor scope) is refused here, with nothing changed: a role is never invented.
+                if (a.bindings.embodies == c.id && c.opRole == OperationalRole.Unset && RoleDerivation.ForSolo(a) == OperationalRole.Unset) return CommandResult.Fail("RoleUnderivable", c.id + " " + a.id);
                 // ONE authority (P3-INV-001): someone in any episode (Planned, Open, or Closed with release pending) or held is refused.
                 if (!AuthorityGate.CanSimulateAbstractly(c)) return CommandResult.Fail("AlreadyPhysical", c.id + " " + AuthorityGate.AuthorityOf(c));
                 if (busyPeople.Contains(c.id)) return CommandResult.Fail("OnOperation", c.id.ToString());

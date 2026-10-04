@@ -653,6 +653,6 @@
 - **Proven by.** `Phys31Qa.Fix2_*`; `RT-PHYX-011` reports the allowed provenance on the owner's mod list.
 
 ## R-48 · A person's role is unknown at first materialization (Phase 3.1, observed)
-- **Failure modes.** The derivation returned `Unset` for an individual with no `ContractorProfile` (a Fixer), so the first projection was unconstrained and `RT-PHYX-001` failed.
-- **Mitigation.** The derivation is total for an embodied individual; the compatibility pass stores it once at bootstrap and load; `Plan` stays the safety net; never overwritten, never reconstructed for a bound person (P3-INV-039).
+- **Failure modes.** The derivation returned `Unset` for an individual with no `ContractorProfile` (a Fixer, which `IsSolo` counts and the physical tier's lowest-id picker selected), so the first projection was unconstrained and `RT-PHYX-001` failed, and the tier could PASS without exercising a contractor.
+- **Mitigation.** The picker, the role compatibility pass and the derivation are limited to NPC Solo contractors (`IsNpcSoloContractor`); a Fixer is outside Phase 3.1 and untouched (a role an earlier build stored on one is neither cleared nor rewritten); the pass stores a contractor's role once at bootstrap and load; `Plan` stays the safety net and fails closed (`RoleUnderivable`) rather than inventing a role; never overwritten, never reconstructed for a bound person (P3-INV-039, Appendix K.8).
 - **Proven by.** `Phys31Qa.Fix3_*`; `RT-PHYX-001`.

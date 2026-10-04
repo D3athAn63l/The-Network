@@ -34,7 +34,11 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix2_RematerializationNeverChangesTheKind", RematerializationKeepsPawn));
             t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix2_Scan_NoGlobalScanNoBlacklistNoNamedKind", ScanKindSelection));
             t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix3_LegacySoloWithUnsetRoleGetsOneDeterministicRoleBeforeProjection", LegacySolo));
-            t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix3_AFixerIndividualWithoutAContractorProfileIsNeverLeftUnset", FixerIndividual));
+            t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix3_AFixerIsOutsideThePhase31SoloContractorPathAndIsLeftUntouched", FixerOutsideScope));
+            t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix3_OnlyAnActualNpcSoloContractorQualifies", PredicateMatrix));
+            t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix3_ThePhysicalTestPickerNeverSelectsAFixerAndStaysDeterministic", PickerExcludesFixers));
+            t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix3_TheCompatibilityPassSkipsFixersAndStillRepairsLegacyContractors", PassSkipsFixers));
+            t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix3_ExistingIdentityFactsAreNeverRewrittenOrCleared", NeverRewrittenOrCleared));
             t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix3_RoleIsDeterministicAndIndependentOfEpisodeTimeFameAndMap", RoleIndependence));
             t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix3_AStoredRoleIsNeverOverwrittenAndABoundPersonNeverReconstructed", RoleNeverOverwritten));
             t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix3_Scan_DerivationReadsOriginFactsOnly", ScanRoleDerivation));
@@ -290,30 +294,150 @@ namespace TheNetwork.Tests
             T.Eq(c.opRole, e.members[0].seatRole, "and the member's seat is that role");
         }
 
-        private static void FixerIndividual()
+        private static void FixerOutsideScope()
         {
-            // The real cause found by the audit: a Fixer is an individual with an embodied person (ContractorService.IsSolo counts it) but has NO
-            // ContractorProfile, and RoleDerivation.ForSolo used to return Unset for it: the lazy fill in Plan stored nothing.
+            // The review finding: a Fixer is an embodied individual with a FixerProfile and NO ContractorProfile. IsSolo (individual, not an
+            // organization) counts it, which let the physical tier select a Fixer and PASS without ever exercising a contractor. The previous
+            // correction made the role derivation total for it, which is the wrong semantic answer: a Fixer is not a Phase 3.1 candidate and must
+            // not silently receive a contractor-style role.
             TestNet n = new TestNet(9742);
             NetworkActor fixer = n.AddFixer("Standard");
-            T.Check(fixer != null && ContractorService.IsSolo(fixer) && fixer.Get<ContractorProfile>() == null && fixer.Has<FixerProfile>(), "the fixture: an individual, embodied, with a FixerProfile and no ContractorProfile");
+            T.Check(fixer != null && fixer.Get<ContractorProfile>() == null && fixer.Has<FixerProfile>() && fixer.bindings.embodies.IsValid, "the fixture: an embodied individual with a FixerProfile and no ContractorProfile");
             KnownCharacter c = n.ctx.characters.Get(fixer.bindings.embodies);
+            T.Check(ContractorService.IsSolo(fixer), "IsSolo keeps its GLOBAL meaning (an individual that is not an organization): it still counts the Fixer");
+            T.Check(!ContractorService.IsNpcSoloContractor(fixer), "but a Fixer is not an NPC Solo contractor");
             T.Eq(OperationalRole.Unset, c.opRole, "its person starts with the role Unset");
-            OperationalRole role = Derived(fixer);
-            T.Check(role != OperationalRole.Unset, "the derivation is TOTAL for an embodied individual (from the actor's seed and the specialties on its profile)");
-            T.Eq(role, Derived(fixer), "deterministic");
-            T.Eq(1, n.ctx.Contractors.EnsureSoloRoles(), "the compatibility pass stores it");
-            T.Eq(role, c.opRole, "the stored role is the derived one");
-            // Not an individual (an organization, a faction proxy): still nothing to derive.
-            T.Eq(OperationalRole.Unset, RoleDerivation.ForSolo(null), "null-safe");
-            NetworkActor org = PhysicalLifecycleTests.Make(n, ContractorForm.Company, "org");
-            T.Eq(OperationalRole.Unset, RoleDerivation.ForSolo(org), "an organization has no single role");
-            // The same individual through Plan with its role still Unset (an older save): stored before the projection.
-            c.opRole = OperationalRole.Unset;
-            n.ctx.Spatial.EnsureInitialized(fixer);
-            PhysicalEpisode e = PhysicalLifecycleTests.Begin(n, fixer, new[] { c });
-            T.Eq(role, c.opRole, "Plan stored the derived role for the individual");
-            T.Eq(role, n.physical.requests[0].role, "and the first projection was asked for it");
+            T.Eq(OperationalRole.Unset, Derived(fixer), "ForSolo invents no contractor role for a Fixer (and there is no Fixer-specific mapping)");
+            T.Eq(0, n.ctx.Contractors.EnsureSoloRoles(), "the compatibility pass stores nothing for it");
+            T.Eq(OperationalRole.Unset, c.opRole, "its role remains Unset");
+            // Plan fails closed rather than inventing a role, and changes nothing.
+            PhysicalEpisode e;
+            CommandResult res = PhysicalLifecycleTests.L(n).Plan(PhysicalRuntimeSuite.Request(fixer, new[] { c }), out e);
+            T.Check(!res.ok && res.reasonKey == "RoleUnderivable", "Plan refuses an embodied person whose role is Unset and not derivable (" + res.reasonKey + ")");
+            T.Check(e == null && n.ctx.episodes.episodes.Count == 0, "no episode was created");
+            T.Check(c.custody == CustodyState.Unmaterialized && !c.episode.IsValid && c.opRole == OperationalRole.Unset && AuthorityGate.CanSimulateAbstractly(c), "the person is exactly as before: not deployed, no episode, role still Unset, authority still abstract");
+            T.Eq(0, n.physical.creates + n.physical.requests.Count, "no pawn was requested or created");
+        }
+
+        private static void PredicateMatrix()
+        {
+            // The REAL predicates, over real instantiated actors.
+            TestNet n = new TestNet(9746);
+            NetworkActor fixer = n.AddFixer("Standard");
+            NetworkActor solo = Solo(n, "pm-solo");
+            NetworkActor org = PhysicalLifecycleTests.Make(n, ContractorForm.Company, "pm-org");
+            NetworkActor proxy = null;
+            foreach (NetworkActor a in n.ctx.actors.actors) if (a.kind == ActorKind.PlayerProxy) proxy = a;
+            T.Check(fixer != null && solo != null && org != null && proxy != null, "the fixtures exist (Fixer, Solo contractor, organization contractor, player proxy)");
+            T.Check(!ContractorService.IsNpcSoloContractor(fixer), "Individual + FixerProfile only -> false");
+            T.Check(solo.kind == ActorKind.Individual && solo.Has<ContractorProfile>() && solo.Has<ContractorSimulation>() && ContractorService.IsNpcSoloContractor(solo), "Individual + ContractorProfile + ContractorSimulation -> true");
+            T.Check(ContractorService.IsNpcContractor(org) && !ContractorService.IsSolo(org) && !ContractorService.IsNpcSoloContractor(org), "an organization contractor is a contractor but not a Solo -> false for the Phase 3.1 Solo picker");
+            T.Check(!ContractorService.IsNpcSoloContractor(proxy), "the player proxy -> false");
+            T.Check(!ContractorService.IsNpcSoloContractor(null), "null -> false");
+            // Structural, not an id or a kind guess: a contractor profile without its simulation, or an individual with neither, does not qualify.
+            NetworkActor half = new NetworkActor { id = new ActorId(990001), kind = ActorKind.Individual };
+            half.Add(new ContractorProfile());
+            T.Check(ContractorService.IsSolo(half) && !ContractorService.IsNpcContractor(half) && !ContractorService.IsNpcSoloContractor(half), "a ContractorProfile without a ContractorSimulation -> false");
+            NetworkActor bare = new NetworkActor { id = new ActorId(990002), kind = ActorKind.Individual };
+            T.Check(!ContractorService.IsNpcSoloContractor(bare), "an individual with no profile at all -> false");
+            // The derivation follows the same boundary.
+            T.Check(Derived(solo) != OperationalRole.Unset, "the Solo contractor derives a role");
+            foreach (NetworkActor other in new[] { fixer, org, proxy, half, bare }) T.Eq(OperationalRole.Unset, Derived(other), "no role for " + other.kind + (other.Has<FixerProfile>() ? " (Fixer)" : ""));
+            // IsSolo's own, global meaning is untouched.
+            T.Check(ContractorService.IsSolo(fixer) && ContractorService.IsSolo(solo) && !ContractorService.IsSolo(org) && !ContractorService.IsSolo(proxy), "IsSolo still means 'an individual that is not an organization' for every other system that uses it");
+        }
+
+        private static void PickerExcludesFixers()
+        {
+            TestNet n = new TestNet(9747);
+            NetworkActor fixer = n.AddFixer("Standard");   // created FIRST: the lower actor id
+            NetworkActor solo = Solo(n, "pick");
+            KnownCharacter cf = n.ctx.characters.Get(fixer.bindings.embodies), cs = Self(n, solo);
+            T.Check(fixer.id.Value < solo.id.Value, "the Fixer has the LOWER actor id (" + fixer.id.Value + " < " + solo.id.Value + ")");
+            T.Check(cf.IsAlive && cs.IsAlive && cf.status == CharacterStatus.Active && cs.status == CharacterStatus.Active && AuthorityGate.CanSimulateAbstractly(cf) && AuthorityGate.CanSimulateAbstractly(cs), "both are alive and abstractly eligible");
+            // Control: the global IsSolo meaning would have offered the Fixer first (the lowest eligible id), which is the defect.
+            List<NetworkActor> byId = new List<NetworkActor>(n.ctx.actors.actors);
+            byId.Sort((x, y) => x.id.Value.CompareTo(y.id.Value));
+            NetworkActor firstGlobal = null;
+            foreach (NetworkActor a in byId) if (a.IsActive && ContractorService.IsSolo(a) && a.bindings.embodies.IsValid) { firstGlobal = a; break; }
+            T.Check(ReferenceEquals(firstGlobal, fixer), "control: 'an individual that is not an organization' would have taken the Fixer first");
+            NetworkActor chosen;
+            string why;
+            KnownCharacter picked = SoloPicker.Pick(n.ctx, SoloNeed.Fresh, null, out chosen, out why);
+            T.Check(picked != null && ReferenceEquals(picked, cs) && ReferenceEquals(chosen, solo), "the Phase 3.1 picker selects the NPC Solo CONTRACTOR, not the lower-id Fixer");
+            T.Check(SoloPicker.Pick(n.ctx, SoloNeed.Any, null, out chosen, out why) == cs && ReferenceEquals(chosen, solo), "SoloNeed.Any selects the contractor too");
+            T.Check(SoloPicker.Pick(n.ctx, SoloNeed.Fresh, null, out chosen, out why) == cs, "and it is deterministic: the same answer every time");
+            // With the contractor excluded or unavailable the picker returns NOTHING; it never falls back to the Fixer.
+            HashSet<int> excluded = new HashSet<int> { cs.id.Value };
+            T.Check(SoloPicker.Pick(n.ctx, SoloNeed.Fresh, excluded, out chosen, out why) == null && chosen == null && why != null, "the contractor excluded: nothing is picked (never the Fixer)");
+            // The existing checks still hold (the narrowing is purely semantic): a non-abstract contractor is not offered either.
+            cs.custody = CustodyState.Deployed;
+            cs.episode = new EpisodeId(7);
+            T.Check(SoloPicker.Pick(n.ctx, SoloNeed.Fresh, null, out chosen, out why) == null, "a contractor that is not abstractly simulatable is still refused");
+            cs.custody = CustodyState.Unmaterialized;
+            cs.episode = EpisodeId.None;
+            cs.status = CharacterStatus.Dead;
+            T.Check(SoloPicker.Pick(n.ctx, SoloNeed.Fresh, null, out chosen, out why) == null, "a dead person is still refused");
+            cs.status = CharacterStatus.Active;
+            T.Check(SoloPicker.Pick(n.ctx, SoloNeed.Fresh, null, out chosen, out why) == cs, "and the contractor is offered again once it is eligible");
+            // A save with only Fixers has no Phase 3.1 candidate.
+            TestNet only = new TestNet(9748);
+            only.AddFixer("Standard");
+            only.AddFixer("Quick");
+            T.Check(SoloPicker.Pick(only.ctx, SoloNeed.Any, null, out chosen, out why) == null && chosen == null, "a world with only Fixers offers no Phase 3.1 Solo");
+            T.Check(why != null && why.Contains("NPC Solo contractor") && why.Contains("Fixers"), "and says why in words: " + why);
+            string picker = Body(Code("Diagnostics/RuntimePhysicalTests/PhysicalTestWorld.cs"), "public static class SoloPicker", "public static class RedressProbe");
+            T.Check(picker.Contains("ContractorService.IsNpcSoloContractor(a)") && !picker.Contains("ContractorService.IsSolo(a)") && picker.Contains("all.Sort((a, b) => a.id.Value.CompareTo(b.id.Value))"), "the picker uses the explicit predicate and still takes the lowest id");
+            foreach (string kept in new[] { "!a.IsActive", "a.bindings.embodies.IsValid", "!c.IsAlive", "c.status != CharacterStatus.Active", "AuthorityGate.CanSimulateAbstractly(c)", "ctx.Contractors.Occupied(a, OperationId.None)", "bound != (c.custody == CustodyState.Stored)", "need == SoloNeed.Fresh", "need == SoloNeed.Stored" })
+                T.Check(picker.Contains(kept), "the picker still checks " + kept);
+        }
+
+        private static void PassSkipsFixers()
+        {
+            TestNet n = new TestNet(9749);
+            NetworkActor fixer = n.AddFixer("Standard");
+            NetworkActor solo = Solo(n, "legacy2");
+            KnownCharacter cf = n.ctx.characters.Get(fixer.bindings.embodies), cs = Self(n, solo);
+            OperationalRole origin = cs.opRole;
+            T.Check(origin != OperationalRole.Unset, "control: a NEW contractor gets its role eagerly");
+            cs.opRole = OperationalRole.Unset; // the legacy contractor: an existing Solo from before the role was populated
+            T.Eq(OperationalRole.Unset, cf.opRole, "the Fixer is Unset too, with no pawn binding");
+            T.Check((cf.pawn == null || !cf.pawn.IsBound) && (cs.pawn == null || !cs.pawn.IsBound), "neither was ever bound");
+            T.Eq(1, n.ctx.Contractors.EnsureSoloRoles(), "exactly ONE role was stored: the contractor's");
+            T.Eq(OperationalRole.Unset, cf.opRole, "the Fixer's opRole remains Unset");
+            T.Check(cs.opRole != OperationalRole.Unset && cs.opRole == Derived(solo) && cs.opRole == origin, "the legacy contractor got the deterministic role it would have been given at creation");
+            T.Eq(0, n.ctx.Contractors.EnsureSoloRoles(), "idempotent: nothing more to store");
+            T.Eq(OperationalRole.Unset, cf.opRole, "the Fixer still Unset after every pass");
+        }
+
+        private static void NeverRewrittenOrCleared()
+        {
+            TestNet n = new TestNet(9750);
+            NetworkActor fixer = n.AddFixer("Standard");
+            NetworkActor solo = Solo(n, "keep2"), bound = Solo(n, "bound2");
+            KnownCharacter cf = n.ctx.characters.Get(fixer.bindings.embodies), cs = Self(n, solo), cb = Self(n, bound);
+            // A role an EARLIER build of this PR stored on a Fixer: harmless stale test-era data. Not cleared, not rewritten, whatever it is.
+            foreach (OperationalRole stale in new[] { OperationalRole.Specialist, OperationalRole.Medic, OperationalRole.Rifleman })
+            {
+                cf.opRole = stale;
+                n.ctx.Contractors.EnsureSoloRoles();
+                T.Eq(stale, cf.opRole, "a pre-existing Fixer role (" + stale + ") is neither cleared nor rewritten, although Fixers are no longer backfilled");
+            }
+            // A stored contractor role is left alone (even when it differs from what the derivation would give).
+            OperationalRole derived = Derived(solo);
+            OperationalRole other = derived == OperationalRole.Medic ? OperationalRole.Scout : OperationalRole.Medic;
+            cs.opRole = other;
+            // A bound contractor is never reconstructed.
+            cb.opRole = OperationalRole.Unset;
+            cb.pawn = new PawnRef { pawn = null, thingIdNumber = 4242, defName = "Human", boundTick = 1 };
+            T.Eq(0, n.ctx.Contractors.EnsureSoloRoles(), "nothing to store: one role is stored, one person is bound, one is a Fixer");
+            T.Eq(other, cs.opRole, "the stored contractor role is unchanged");
+            T.Eq(OperationalRole.Unset, cb.opRole, "the bound contractor's role is not reconstructed after the fact");
+            T.Check(cb.pawn.thingIdNumber == 4242 && cb.pawn.boundTick == 1, "and its binding is untouched");
+            string service = Body(Code("Domain/Contractors/ContractorService.cs"), "public int EnsureSoloRoles()", "public static int Headcount");
+            T.Check(!Regex.IsMatch(service, @"opRole\s*=\s*(Physical\.)?OperationalRole\.Unset") && !service.Contains("Remove") && !service.Contains("Clear"), "the pass has no code path that clears or rewrites a role to Unset");
+            T.Check(service.Contains("IsNpcSoloContractor(a)") && !service.Contains("IsSolo(a)"), "it considers only NPC Solo contractors");
+            T.Eq(5, SaveMigrations.Current, "no cleanup migration and no save bump");
         }
 
         private static void RoleIndependence()
@@ -376,6 +500,12 @@ namespace TheNetwork.Tests
             foreach (string forbidden in new[] { "Pawn", "pawn", "reputation", "fame", "Fame", "notability", "ctx.Now", "clock", "Clock", "episode", "Episode", "map", "Map", "Rand", "NetRng", "skill", "Skill" })
                 T.Check(!derive.Contains(forbidden), "the role derivation never reads " + forbidden + " (origin facts only: seed and specialties)");
             T.Check(derive.Contains("NetHash.Combine(actorSeed, \"oprole.v\" + Version)"), "the role is a pure hash of the actor's own seed");
+            T.Check(!derive.Contains("Fixer") && !derive.Contains("FixerProfile"), "no Fixer-specific mapping exists in the role derivation (a Fixer is outside Phase 3.1)");
+            string forSolo = Body(derive, "public static OperationalRole ForSolo(NetworkActor a)", "}");
+            T.Check(forSolo.Contains("if (!ContractorService.IsNpcSoloContractor(a)) return OperationalRole.Unset;") && forSolo.Contains("a.Get<ContractorProfile>().specialties"), "ForSolo is contractor-only: anything else is Unset, the rest reads the contractor profile's origin facts");
+            T.Check(Regex.IsMatch(Code("Domain/Contractors/ContractorService.cs"), @"public static bool IsSolo\(NetworkActor a\)\s*\{\s*return a != null && a\.kind == ActorKind\.Individual && !a\.Has<OrganizationProfile>\(\);\s*\}"), "IsSolo's global meaning is unchanged");
+            T.Check(Regex.IsMatch(Code("Domain/Contractors/ContractorService.cs"), @"public static bool IsNpcSoloContractor\(NetworkActor a\)\s*\{\s*return IsSolo\(a\) && IsNpcContractor\(a\);\s*\}"), "the Phase 3.1 predicate is exactly IsSolo && IsNpcContractor");
+            T.Check(Body(Code("Domain/Physical/PhysicalLifecycleService.cs"), "private CommandResult CheckPlan", "private ").Contains("CommandResult.Fail(\"RoleUnderivable\""), "Plan fails closed on an embodied person whose role cannot be derived");
             string service = Body(Code("Domain/Contractors/ContractorService.cs"), "public int EnsureSoloRoles()", "public static int Headcount");
             T.Check(service.Length > 100, "found the compatibility pass");
             foreach (string forbidden in new[] { "reputation", "Fame", "notability", "ctx.Now", "clock", "Rand", "NetRng", "skill", "Physical.PawnProjection" })
@@ -559,6 +689,10 @@ namespace TheNetwork.Tests
             T.Check(lifecycle.Contains("## Appendix K: Phase 3.1 runtime-QA correction pass (PR #10)"), "Appendix K exists");
             foreach (string inv in new[] { "P3-INV-037", "P3-INV-038", "P3-INV-039" }) T.Check(lifecycle.Contains("| **" + inv + "** |"), inv + " is in the invariant table");
             T.Check(decisions.Contains("### ADR-055 · Phase 3.1 runtime-QA correction") && decisions.Contains("#adr-055--"), "ADR-055 exists and is linked");
+            T.Check(lifecycle.Contains("### K.8 Fixers are not Phase 3.1 Solo contractor candidates") && lifecycle.Contains("k8-fixers-are-not-phase-31-solo-contractor-candidates"), "Appendix K.8 records the Fixer exclusion and its anchor resolves");
+            T.Check(lifecycle.IndexOf("### K.7 ", StringComparison.Ordinal) < lifecycle.IndexOf("### K.8 ", StringComparison.Ordinal), "K.8 follows K.7");
+            T.Check(!lifecycle.Contains("The derivation is now total for any embodied individual") && !decisions.Contains("The role of an embodied individual is total and stored early"), "no document still says the role derivation is total for a Fixer or any embodied individual");
+            T.Check(testing.Contains("A Fixer is never selected") && decisions.Contains("a Fixer is not a Phase 3.1 candidate"), "the owner-facing docs say a Fixer is never selected");
             T.Check(risks.Contains("| R-46 |") && risks.Contains("| R-47 |") && risks.Contains("| R-48 |") && risks.Contains("## R-46 ·"), "the three observed risks are registered");
             // The audited load order, in every document that states it.
             T.Check(lifecycle.Contains("**`World.FinalizeInit(fromLoad: true)`** (`Game.cs:586`)") && lifecycle.Contains("`worldPawns.WorldPawnsTick()` BEFORE any world component"), "PHYSICAL_LIFECYCLE § 16.3 states the audited order");

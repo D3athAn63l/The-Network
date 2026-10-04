@@ -795,6 +795,8 @@ A suite visit lasts 1,250 ticks at the chill spot (the same vanilla Lord as prod
 
 `RT-PHYX-013` and `014` (cohesion, concretization) and `020+` (held custody, groups) are Phase 3.2 and do not exist.
 
+**"Solo" in the Needs column means an NPC Solo _contractor_** (`ContractorService.IsNpcSoloContractor`: an individual that is not an organization, with a contractor profile and simulation). **A Fixer is never selected**: Phase 3.1 exercises one existing NPC Solo contractor, and the picker, still deterministic (the lowest eligible actor id), keeps every other check (active, embodied, alive, abstractly simulatable, not on an operation, binding and custody agreement, the scenario's need). A world with only Fixers has no candidate and the run says so.
+
 ### 17.3 RT-PHYX-010: the save and load workflow (owner steps)
 
 Use a **fresh disposable save** (or a clean pre-physical-test copy). The corrupted forensic save of the first run is **not** reused and nothing was added to make it look clean.
@@ -834,7 +836,7 @@ closed) and these findings, each corrected by the runtime-QA pass ([PHYSICAL_LIF
 |---|---|---|---|
 | 1 | after save and load "15 bound pawn(s), 0 retained"; the verifier "14 not"; the pawn was `Free` at its exit; RELEASE refused; later vanilla discarded retained pawns | **production blocker** | the registry is built in two load stages (`FinalizeInit` by thing id, `PostLoadInit` by validated pointer) and the quest is restored from durable state before the first tick (K.2) |
 | 2 | ordinary Solos generated as a highthrall, an ancient soldier, Empire royals and champions; one Anomaly kind came back to life after the Network recorded its death once | **production blocker** | the first projection draws only from the encounter faction's generic member pool; no named blacklist; resurrection untouched (K.4) |
-| 3 | `RT-PHYX-001` failed "operational role is stored": the picked individual still had `Unset` | **production blocker** | the role derivation is total for any embodied individual and a load-time compatibility pass stores it (K.5) |
+| 3 | `RT-PHYX-001` failed "operational role is stored": the picked individual still had `Unset` | **production blocker** | the picker took a Fixer (an individual with no contractor profile); now only NPC Solo contractors are selected, a load-time compatibility pass stores a contractor role, and a Fixer is outside Phase 3.1 and untouched (K.5, K.8) |
 | 4 | `RT-PHYX-002` and `015` failed on a "skipped pass" counter | harness assertion | a Returned release has no pass action at all: 0 passed, 0 skipped, 0 refused (K.6) |
 | 5 | `RT-PHYX-009` judged "still quarantined / still a prisoner" after the scenario had moved on | harness assertion | two phases; the intermediate facts are captured when observed (K.6) |
 | 6 | the three `RT-PHYX-010` menu items looked alike in the narrow menu | harness UX | front-loaded labels `010A` / `010B` / `010V`; the workflow above (K.6) |

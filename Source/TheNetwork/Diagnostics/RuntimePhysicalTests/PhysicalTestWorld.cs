@@ -447,7 +447,9 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             for (int i = 0; i < all.Count; i++)
             {
                 NetworkActor a = all[i];
-                if (a == null || !a.IsActive || !ContractorService.IsSolo(a) || !a.bindings.embodies.IsValid) continue;
+                // Phase 3.1's target is ONE existing NPC SOLO CONTRACTOR. IsSolo alone also counts a Fixer (an individual with an embodied person and no
+                // ContractorProfile), which would let the tier PASS without ever exercising a contractor: only IsNpcSoloContractor qualifies.
+                if (a == null || !a.IsActive || !ContractorService.IsNpcSoloContractor(a) || !a.bindings.embodies.IsValid) continue;
                 solos++;
                 KnownCharacter c = ctx.characters.Get(a.bindings.embodies);
                 if (c == null || (exclude != null && exclude.Contains(c.id.Value))) continue;
@@ -463,7 +465,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 actor = a;
                 return c;
             }
-            why = solos == 0 ? "this save has no Solo contractor actor" : need == SoloNeed.Stored
+            why = solos == 0 ? "this save has no NPC Solo contractor actor (Fixers are not Phase 3.1 candidates)" : need == SoloNeed.Stored
                 ? "no STORED Solo is available: run RT-PHYX-001, 002, 003 or 005 first (they leave the person stored)"
                 : "no never-materialized, available Solo is left (" + solos + " Solo actors; busy on operations, wounded, or already materialized)";
             return null;
