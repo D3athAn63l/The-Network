@@ -17,9 +17,11 @@ namespace TheNetwork.Integration.Physical
     public static class EncounterFactions
     {
         /// <summary>
-        /// The def by capability, never by mod name: a humanlike, non-player faction that is not permanently hostile and has a humanlike
-        /// basic member kind. Vanilla's own OutlanderRefugee (the def its hidden temporary refugee factions use) is preferred when it
-        /// qualifies; otherwise the first qualifying def in name order. Null when none exists (the episode then places nobody).
+        /// The def by capability, never by mod name: a humanlike, non-player faction that is not permanently hostile, has a humanlike basic
+        /// member kind AND offers at least one GENERIC member (<see cref="FactionMemberKinds"/>: a basic member kind that is a boss, a leader,
+        /// a royal, a cultist or a forced-xenotype kind does not count). Vanilla's own OutlanderRefugee (the def its hidden temporary refugee
+        /// factions use) is preferred when it qualifies; otherwise the first qualifying def in name order. Null when none exists (the episode
+        /// then places nobody, rather than borrowing a special-purpose kind).
         /// </summary>
         public static FactionDef ChooseDef()
         {
@@ -34,7 +36,7 @@ namespace TheNetwork.Integration.Physical
         public static bool Qualifies(FactionDef d)
         {
             return d != null && d.humanlikeFaction && !d.isPlayer && !d.permanentEnemy && d.basicMemberKind != null && d.basicMemberKind.RaceProps != null
-                && d.basicMemberKind.RaceProps.Humanlike;
+                && d.basicMemberKind.RaceProps.Humanlike && FactionMemberKinds.HasGenericPool(d);
         }
 
         /// <summary>Returns <paramref name="current"/> when it is still a live temporary faction; otherwise creates the episode's faction.</summary>

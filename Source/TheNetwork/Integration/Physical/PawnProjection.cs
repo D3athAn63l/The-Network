@@ -141,9 +141,15 @@ namespace TheNetwork.Integration.Physical
         /// <summary>The identity pins the returned pawn (or the last attempt) was asked for (diagnostics; RT-PHYX-011 compares them with the real pawn).</summary>
         public IdentityPins pins;
 
+        /// <summary>
+        /// The GENERIC member pool the kind was drawn from (the encounter faction's own, § 6.2 "kind"): the only kinds a first projection may use,
+        /// with their provenance and every refused candidate. RT-PHYX-011 checks the real pawn's kind against it.
+        /// </summary>
+        public FactionMemberPool pool;
+
         public override string ToString()
         {
-            return (pawn != null ? "pawn #" + pawn.thingIDNumber + " (" + kind + ")" : "FAILED (" + failure + ")") + ", " + attempts + " attempt(s), " + rejected + " rejected, "
+            return (pawn != null ? "pawn #" + pawn.thingIDNumber + " (" + kind + (pool != null ? " from the " + pool.Describe() : "") + ")" : "FAILED (" + failure + ")") + ", " + attempts + " attempt(s), " + rejected + " rejected, "
                 + corrections + " correction(s), " + ms.ToString("0.0") + " ms" + (spec != null ? ", role " + spec.Describe() : "") + (pins != null ? ", identity " + pins.Describe() : "");
         }
     }
@@ -152,70 +158,13 @@ namespace TheNetwork.Integration.Physical
     /// Role-constrained first projection (PHYSICAL_LIFECYCLE § 6.8, ADR-050, S25): request → candidate → AUTHORITATIVE verification →
     /// at most the smallest correction → re-verification → returned (the lifecycle binds it before it is spawned). Bounded: K outer attempts,
     /// each at most vanilla's own 120 internal tries. The request forces a NEW pawn (never a redressed world pawn), generates no relations,
-    /// uses only EXISTING kinds chosen by capability, and never reads fame. A rejected candidate is unbound, unspawned and unreferenced: it is
-    /// dropped (RT-PHYX-011 measures residue). No contradicting candidate is ever returned.
+    /// uses only kinds from the encounter faction's GENERIC member pool (<see cref="FactionMemberKinds"/>: never a scan of every loaded kind, never
+    /// a fallback to one; no generic member means a clean failure before anything is generated), and never reads fame. A rejected candidate is
+    /// unbound, unspawned and unreferenced: it is dropped (RT-PHYX-011 measures residue). No contradicting candidate is ever returned.
     /// </summary>
     public static class PawnProjection
     {
         public const int MaxAttempts = 4;
-
-        private static List<KindFacts> kindCache;
-        private static int kindCacheCount = -1;
-
-        /// <summary>Every loaded PawnKindDef as plain capability facts (cached per def count; mods included, none named).</summary>
-        public static List<KindFacts> Kinds()
-        {
-            List<PawnKindDef> defs = DefDatabase<PawnKindDef>.AllDefsListForReading;
-            if (kindCache != null && kindCacheCount == defs.Count) return kindCache;
-            List<KindFacts> r = new List<KindFacts>();
-            for (int i = 0; i < defs.Count; i++)
-            {
-                PawnKindDef k = defs[i];
-                if (k?.race?.race == null) continue;
-                bool ranged = false, melee = false;
-                if (k.weaponTags != null)
-                {
-                    for (int t = 0; t < k.weaponTags.Count; t++)
-                    {
-                        string w = k.weaponTags[t] ?? "";
-                        if (w.IndexOf("Melee", StringComparison.OrdinalIgnoreCase) >= 0) melee = true;
-                        if (w.IndexOf("Gun", StringComparison.OrdinalIgnoreCase) >= 0 || w.IndexOf("Rifle", StringComparison.OrdinalIgnoreCase) >= 0 || w.IndexOf("Ranged", StringComparison.OrdinalIgnoreCase) >= 0) ranged = true;
-                    }
-                }
-                r.Add(new KindFacts
-                {
-                    defName = k.defName,
-                    humanlike = k.race.race.Humanlike,
-                    toolUser = k.race.race.ToolUser,
-                    fighter = k.isFighter,
-                    factionLeader = k.factionLeader,
-                    playerKind = k.defaultFactionDef != null && k.defaultFactionDef.isPlayer,
-                    humanlikeFaction = k.defaultFactionDef != null && k.defaultFactionDef.humanlikeFaction,
-                    ranged = ranged,
-                    melee = melee,
-                    combatPower = k.combatPower
-                });
-            }
-            kindCache = r;
-            kindCacheCount = defs.Count;
-            return r;
-        }
-
-        /// <summary>The kind chain: the two best capability matches, then the faction's own basic member kind, then vanilla's Villager.</summary>
-        public static List<PawnKindDef> KindChain(RoleSpec spec, int equipmentTier, Faction f)
-        {
-            List<PawnKindDef> chain = new List<PawnKindDef>();
-            List<string> ranked = KindPolicy.Rank(Kinds(), spec.kindClass, equipmentTier);
-            for (int i = 0; i < ranked.Count && chain.Count < 2; i++)
-            {
-                PawnKindDef k = DefDatabase<PawnKindDef>.GetNamedSilentFail(ranked[i]);
-                if (k != null && !chain.Contains(k)) chain.Add(k);
-            }
-            PawnKindDef basic = f?.def?.basicMemberKind;
-            if (basic != null && basic.RaceProps != null && basic.RaceProps.Humanlike && !chain.Contains(basic)) chain.Add(basic);
-            if (PawnKindDefOf.Villager != null && !chain.Contains(PawnKindDefOf.Villager)) chain.Add(PawnKindDefOf.Villager);
-            return chain;
-        }
 
         public static ProjectionResult Project(ProjectionRequest r, Faction f)
         {
@@ -223,10 +172,12 @@ namespace TheNetwork.Integration.Physical
             Stopwatch sw = Stopwatch.StartNew();
             RoleSpec spec = RoleRules.SpecFor(r.role, r.capability);
             res.spec = spec;
-            List<PawnKindDef> chain = KindChain(spec, r.equipmentTier, f);
+            FactionMemberPool pool = FactionMemberKinds.For(f?.def, spec.kindClass, r.equipmentTier);
+            res.pool = pool;
+            List<PawnKindDef> chain = pool.chain;
             if (chain.Count == 0)
             {
-                res.failure = "no humanlike tool-using PawnKindDef is loaded";
+                res.failure = "the encounter faction offers no safe generic member kind (" + pool.Describe() + "); no special-purpose kind is borrowed";
                 return Done(res, sw);
             }
             List<TraitDef> prohibited = new List<TraitDef>();

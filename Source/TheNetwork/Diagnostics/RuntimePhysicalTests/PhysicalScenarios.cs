@@ -127,7 +127,10 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             if (left == null) v.Gap("no synchronous LeftMap was observed for the pawn, so the exit evidence cannot be confirmed");
             else v.Check(c.pawn.agedThroughTick == left.tick, "agedThroughTick is the observed exit tick " + left.tick + " (got " + c.pawn.agedThroughTick + ")");
             v.Check(port.counters.passes == passes0, "the Network called PassToWorld 0 times (vanilla's exit already passed the pawn)");
-            v.Check(lc.counters.passSkippedAlreadyWorld > skipped0 && lc.counters.passRefused == refused0, "RELEASE recognised the world pawn and skipped the pass (skipped " + (lc.counters.passSkippedAlreadyWorld - skipped0) + ", refused " + (lc.counters.passRefused - refused0) + ")");
+            // A Returned named pawn's RELEASE list is { Normalize, EnsureRetained, StripTag }: it contains NO PassToWorldIfAllowed action at all
+            // (ReleasePolicy, § 7.5, P3-INV-031), so nothing is passed, nothing is "skipped as already a world pawn" and nothing is refused.
+            v.Check(lc.counters.passSkippedAlreadyWorld == skipped0 && lc.counters.passRefused == refused0,
+                "a Returned release contains no Network PassToWorld action at all: 0 passed, 0 skipped, 0 refused (skipped " + (lc.counters.passSkippedAlreadyWorld - skipped0) + ", refused " + (lc.counters.passRefused - refused0) + ")");
             v.Check(lc.counters.releasesCompleted == releases0 + 1, "RELEASE completed exactly once");
             v.Check(authorityLeak == 0, "abstract authority stayed closed on every frame until RELEASE completed (" + authorityLeak + " frames open early)");
             v.Check(storedEarly == 0, "custody became Stored only through the commit");
@@ -669,11 +672,25 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         }
     }
 
-    /// <summary>RT-PHYX-009 — unsupported custody (a dev arrest) ⇒ Quarantined, pawn untouched, person blocked; ended by vanilla's map removal.</summary>
+    /// <summary>
+    /// RT-PHYX-009 — unsupported custody (a dev arrest) ⇒ Quarantined, pawn untouched, person blocked; then ended by vanilla's map removal.
+    ///
+    /// TWO phases, asserted separately (the 3.1 runtime-QA correction: the first owner run reached the intended quarantine and then judged "still
+    /// quarantined / still a prisoner" facts AFTER the scenario had deliberately moved on). The facts that hold DURING the unsupported custody are
+    /// captured on the very frame the quarantine is actually observed (<see cref="Capture"/>), before the map is removed; the facts that hold AFTER
+    /// vanilla clears the custody (re-observation, the ordinary Returned path, the same pawn and binding, no Network PassToWorld) are asserted at
+    /// the end. The episode is NOT required to still be quarantined at the end: ending the custody is exactly what lifts it.
+    /// </summary>
     public sealed class Phyx009UnsupportedCustody : PhysicalRun
     {
-        private int arrestTick, commits0, passes0;
+        private int arrestTick, commits0, passes0, quarantineTick = -1, framesQuarantined, wakeups0;
         private IntVec3 cell;
+        private bool armed, removed;
+
+        // Intermediate evidence: captured when the quarantine is observed, never reconstructed later.
+        private bool sawUnsupportedQuarantine, sawPawnStillPrisoner, sawAuthorityClosed, sawNoCommit, sawNoPassToWorld, sawPawnOnTestMap;
+        private string quarantineSeen;
+        private PawnSnap prisonerSnap;
 
         public Phyx009UnsupportedCustody(NetworkRuntime rt, string runId) : base(PhysicalScenarioTable.Get("RT-PHYX-009"), runId, rt)
         {
@@ -693,41 +710,80 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 }
                 commits0 = lc.counters.commits;
                 passes0 = port.counters.passes;
+                wakeups0 = lc.counters.wakeups;
                 p.guest.CapturedBy(Faction.OfPlayer);
                 arrestTick = PhysLog.Tick;
                 cell = p.Position;
                 v.Check(p.IsPrisonerOfColony, "the dev arrest made the pawn a prisoner of the colony");
+                armed = true;
+                everyFrame = Capture;
                 return StepResult.Next;
             });
-            Then("the watch quarantines the episode and touches nothing", () =>
+            Then("PHASE 1 — wait for the watch to quarantine the episode (the evidence is captured on that very frame)", () =>
             {
-                if (PhysLog.Tick < arrestTick + 2 * PhysicalLifecycleService.WatchPeriod + 10) return StepResult.Wait;
-                v.Check(e.state == EpisodeState.Quarantined && e.quarantineKey != null && e.quarantineKey.StartsWith("UnsupportedCustody:HeldByPlayer", StringComparison.Ordinal),
-                    "Quarantined(UnsupportedCustody) — " + e.state + " " + e.quarantineKey);
-                v.Check(e.members[0].state == MemberState.Present && e.members[0].outcome == MemberOutcome.Pending && lc.counters.commits == commits0, "nothing was committed: no capture is faked");
-                v.Check(c.custody == CustodyState.Deployed && !AuthorityGate.CanSimulateAbstractly(c), "the person stays non-abstract (custody Deployed, authority closed)");
-                v.Check(p.IsPrisonerOfColony && p.Spawned && TestSite.IsTestMap(p.Map), "the pawn is untouched by the Network: still the colony's prisoner, on the test map");
-                if (p.Position != cell) v.Note("the prisoner moved on its own (vanilla AI) from " + cell + " to " + p.Position);
-                v.Check(port.counters.passes == passes0, "no Network PassToWorld");
+                if (sawUnsupportedQuarantine) return StepResult.Next;
+                if (e.IsComplete || (e.state != EpisodeState.Open && e.state != EpisodeState.Quarantined))
+                {
+                    v.Fail("the episode reached " + e.state + " WITHOUT ever being observed as Quarantined(UnsupportedCustody) while the pawn was the colony's prisoner (key " + e.quarantineKey + ")");
+                    return StepResult.Abort;
+                }
+                return StepResult.Wait;
+            }, 12 * PhysicalLifecycleService.WatchPeriod);
+            Then("PHASE 1 — assert the facts captured DURING the unsupported custody", () =>
+            {
+                v.Check(sawUnsupportedQuarantine && quarantineSeen != null && quarantineSeen.StartsWith("UnsupportedCustody:HeldByPlayer", StringComparison.Ordinal),
+                    "the episode was observed Quarantined(UnsupportedCustody) " + (quarantineTick - arrestTick) + " ticks after the arrest — " + quarantineSeen);
+                v.Check(sawNoCommit, "nothing was committed while quarantined (member Present/Pending, commits unchanged): no capture is faked");
+                v.Check(sawAuthorityClosed, "the person stayed non-abstract while quarantined (custody Deployed, authority closed)");
+                v.Check(sawPawnStillPrisoner && sawPawnOnTestMap, "the pawn was untouched by the Network: still the colony's prisoner, on the test map, when the quarantine was observed");
+                v.Check(sawNoPassToWorld, "no Network PassToWorld while quarantined");
+                if (prisonerSnap != null) v.Note("snapshot at the quarantine: " + prisonerSnap.Line());
                 return StepResult.Next;
             });
-            Then("end it through vanilla's map removal (vanilla clears the guest status and passes the pawn)", () =>
+            Then("PHASE 2 — end the unsupported custody through vanilla's map removal (vanilla clears the guest status and passes the pawn)", () =>
             {
+                removed = true;
                 v.Note(TestSite.RemoveMap(false));
                 return StepResult.Next;
             });
-            Then("the quarantined episode is re-observed and completes", () => WaitComplete(e), 20000);
+            Then("PHASE 2 — the quarantined episode is re-observed and completes through the ordinary path", () => WaitComplete(e), 20000);
+        }
+
+        /// <summary>Every frame from the arrest to the map removal: records the facts the FIRST time the episode is observed Quarantined.</summary>
+        private void Capture()
+        {
+            if (!armed || removed || e == null || p == null) return;
+            if (e.state != EpisodeState.Quarantined || e.quarantineKey == null || !e.quarantineKey.StartsWith("UnsupportedCustody:", StringComparison.Ordinal)) return;
+            framesQuarantined++;
+            if (sawUnsupportedQuarantine) return;
+            sawUnsupportedQuarantine = true;
+            quarantineTick = PhysLog.Tick;
+            quarantineSeen = e.quarantineKey;
+            sawPawnStillPrisoner = p.IsPrisonerOfColony && p.Spawned;
+            sawPawnOnTestMap = p.Spawned && TestSite.IsTestMap(p.Map);
+            sawAuthorityClosed = c.custody == CustodyState.Deployed && !AuthorityGate.CanSimulateAbstractly(c);
+            sawNoCommit = e.members[0].state == MemberState.Present && e.members[0].outcome == MemberOutcome.Pending && lc.counters.commits == commits0;
+            sawNoPassToWorld = port.counters.passes == passes0;
+            prisonerSnap = PawnSnap.Of(p, "at the quarantine");
+            if (p.Position != cell) v.Note("the prisoner moved on its own (vanilla AI) from " + cell + " to " + p.Position + " before the quarantine was observed");
         }
 
         protected override void Finish()
         {
+            // PHASE 2: after vanilla cleared the custody. The ordinary Returned path, the same pawn and binding, and still no Network pass.
+            v.Check(framesQuarantined > 0, "the quarantine was observed on " + framesQuarantined + " frame(s) before the custody ended");
+            v.Check(lc.counters.wakeups > wakeups0, "the episode was re-observed after the custody ended (" + (lc.counters.wakeups - wakeups0) + " wake-ups)");
+            v.Check(e.IsComplete && e.state != EpisodeState.Quarantined && e.quarantineKey == null, "the episode is no longer quarantined: ending the unsupported custody lifted it (" + e.state + ", quarantine " + (e.quarantineKey ?? "none") + ")");
             CheckReturnedAndStored(e, c, p);
+            v.Check(e.members[0].pawn != null && e.members[0].pawn.SameBinding(c.pawn), "the same pawn and binding the episode started with");
+            v.Check(port.counters.passes == passes0, "no Network PassToWorld over the whole scenario (vanilla's map removal passed the pawn)");
         }
     }
 
     /// <summary>
-    /// RT-PHYX-010 — owner-assisted save points. Each one sets up a meaningful state, PAUSES the game and asks the owner to save and load;
-    /// "Verify after load" then checks the loaded state read-only. There is no save/reload automation.
+    /// RT-PHYX-010 — owner-assisted save points (menu: 010A SAVE — visitor spawned, 010B SAVE — post-map). Each one sets up a meaningful state,
+    /// PAUSES the game and asks the owner to save and load; "010V VERIFY — loaded save" then checks the loaded state read-only. There is no
+    /// save/reload automation. A save made while paused loads paused, so no tick runs between the load and the verifier.
     /// </summary>
     public sealed class Phyx010SavePoint : PhysicalRun
     {
@@ -755,7 +811,8 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 }
                 else Snap(p, "before saving");
                 v.Check(true, "save point " + (removeMap ? "B (map removed, not yet reconciled)" : "A (visitor present)") + " is set: episode " + e.id + ", person " + c.id + ", pawn #" + p.thingIDNumber);
-                v.Note("NOW: save the game (the game is paused), load that save, then run \"RT-PHYX-010 — Verify after load (read-only)\" BEFORE unpausing, then unpause and run it again once the episode completed");
+                v.Note("NOW: save the game (it is paused), return to the main menu and load that save, then IMMEDIATELY run \"" + PhysicalTestIds.Label010V + "\" (NO ARM) and let the verifier and the episode finish naturally (unpause). "
+                    + "Stopping the verifier stops only the read-only QA runner: it does NOT cancel the real production episode, which keeps blocking the next destructive physical scenario until it completes.");
                 return StepResult.Next;
             });
         }
@@ -779,6 +836,10 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         public const int IdentityPeople = 8;
         private int identityPinned, identityMismatches;
         private readonly Dictionary<string, string> identityRealized = new Dictionary<string, string>();
+
+        /// <summary>The 3.1 runtime-QA correction: a first projection draws ONLY from the encounter faction's generic member pool.</summary>
+        private int kindEscapes;
+        private string poolDescription;
 
         public Phyx011RoleGeneration(NetworkRuntime rt, string runId) : base(PhysicalScenarioTable.Get("RT-PHYX-011"), runId, rt)
         {
@@ -827,6 +888,12 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 made++;
                 kinds.Add(r.kind);
                 races.Add(r.pawn.def.defName);
+                if (poolDescription == null && r.pool != null) poolDescription = r.pool.Describe();
+                if (r.pool == null || !r.pool.Allows(r.pawn.kindDef))
+                {
+                    kindEscapes++;
+                    v.Fail("KIND: a " + role + " was generated as " + (r.pawn.kindDef != null ? r.pawn.kindDef.defName : "?") + ", which is NOT in the encounter faction's generic member pool (" + (r.pool != null ? r.pool.Describe() : "no pool") + ")");
+                }
                 CheckIdentity(r, person);
                 if (!RoleRules.Verify(r.spec, PawnRoleReader.Snapshot(r.pawn)).holds)
                 {
@@ -899,11 +966,13 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         protected override void Finish()
         {
             v.Check(contradictions == 0, made + " real pawns satisfied their role; 0 contradicting pawns returned");
+            v.Check(kindEscapes == 0, "every real pawn's kind came from the encounter faction's generic member pool (no global kind, no special-purpose kind): " + (poolDescription ?? "no pawn was made"));
             v.Check(identityMismatches == 0, "every real pawn carries its person's first gender and age, and the same person is the same in every projection (" + identityPinned + " pins checked, " + identityMismatches + " mismatches)");
             if (made > 0 && identityPinned == 0) v.Gap("no projection carried an identity pin (no safe adult window or a fixed-gender kind in every case): the first-identity claim is INCONCLUSIVE");
             v.Note(total + " projections over " + roles.Count + " roles: " + made + " made, " + aborted + " contained aborts" + (failuresByRole.Count > 0 ? " (" + string.Join(", ", Describe(failuresByRole)) + ")" : "")
                 + "; " + attempts + " attempts, " + rejected + " rejected candidates, " + corrections + " skill corrections; " + (total > 0 ? (msTotal / total).ToString("0.0") : "0") + " ms avg, " + msMax.ToString("0.0") + " ms max");
             v.Note("kinds used: " + string.Join(", ", new List<string>(kinds).ToArray()) + "; races: " + string.Join(", ", new List<string>(races).ToArray()));
+            if (poolDescription != null) v.Note("allowed kind provenance: " + poolDescription);
             v.Check(made > 0, "at least one real pawn was made");
             v.Check(lc.counters.created == created0 && Bound() == bound0, "no Network person was bound or created by the probe");
         }
@@ -1010,7 +1079,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
     /// </summary>
     public sealed class Phyx015NormalExitM1 : PhysicalRun
     {
-        private int commits0, passes0, releases0, skipped0;
+        private int commits0, passes0, releases0, skipped0, refused0;
         private int spawnedUncovered, freeSeen, brokenSeen, rewritten, authorityLeak, storedEarly;
         private int placedFaction = -1;
         private PhysicalEpisode first, second;
@@ -1028,6 +1097,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 passes0 = port.counters.passes;
                 releases0 = lc.counters.releasesCompleted;
                 skipped0 = lc.counters.passSkippedAlreadyWorld;
+                refused0 = lc.counters.passRefused;
                 StepResult r = MaterializeOnTestMap();
                 first = e;
                 placedFaction = p?.Faction?.loadID ?? -1;
@@ -1054,7 +1124,8 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             {
                 CheckReturnedAndStored(first, c, p);
                 v.Check(lc.counters.commits == commits0 + 1 && lc.counters.releasesCompleted == releases0 + 1, "one commit, one RELEASE");
-                v.Check(port.counters.passes == passes0 && lc.counters.passSkippedAlreadyWorld > skipped0, "no Network PassToWorld; RELEASE skipped the already-passed pawn");
+                v.Check(port.counters.passes == passes0 && lc.counters.passSkippedAlreadyWorld == skipped0 && lc.counters.passRefused == refused0,
+                    "no Network PassToWorld, and none was even attempted: a Returned release contains no pass action at all (0 passed, 0 skipped, 0 refused)");
                 bool again = lc.Reconcile(first, "dev duplicate (RT-PHYX-015)");
                 v.Check(!again && lc.counters.commits == commits0 + 1, "a duplicate wake-up commits nothing");
                 return StepResult.Next;
@@ -1258,7 +1329,12 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             }
             v.Check(unresolved == 0, bound + " binding(s): every one resolves to its persisted thing id (" + unresolved + " do not)");
             v.Check(clones == 0, "no bound pawn has a twin with the same thing id (" + clones + ")");
-            v.Check(unreserved == 0, "the registry (rebuilt before the first tick) reserves every Deployed or Stored living person's pawn (" + unreserved + " not)");
+            v.Check(port.Registry.pointersResolved, "the registry's pointer index was built after the load's cross-references (post-load-init), before the first tick");
+            v.Check(unreserved == 0, "the registry reserves every Deployed or Stored living person's pawn (" + unreserved + " not)");
+            v.Check(port.Registry.RetainedCount() == port.Registry.DurableRetainedCount(), "every person the durable state says must be reserved IS covered (" + port.Registry.RetainedCount() + " of " + port.Registry.DurableRetainedCount() + ")");
+            List<BindingFinding> integrity = port.Registry.Audit();
+            for (int i = 0; i < integrity.Count; i++) v.Fail(integrity[i].ToString());
+            if (integrity.Count == 0) v.Check(true, "binding integrity: no living bound person has an unresolved, discarded or mismatching binding");
             v.Check(tagErrors == 0, "routing tags agree with the bindings and episodes (" + tagErrors + " disagree)");
             Quest q = port.Registry.FindQuest();
             if (port.Registry.RetainedCount() > 0) v.Check(q != null && q.State == QuestState.Ongoing, "the registry quest exists and is Ongoing");

@@ -64,7 +64,7 @@ complete S20: its spatial scenarios run in a sandbox over a synthetic world grap
 | [S19](S19-loot-without-extermination.md) loot without extermination | NOT RUN — OWNER RUNTIME VALIDATION REQUIRED |
 | [S13](S13-drop-pod-delivery.md) drop-pod delivery (Phase 2) | PARTIAL — normal home delivery PASSED in the owner's runtime test; edge cases NOT RUN |
 | [S20](S20-abstract-spatial-routing.md) abstract spatial routing, charter transport and Last Known Location placement (Phase 2.5) | NOT RUN — OWNER RUNTIME VALIDATION REQUIRED |
-| **S31** retained pawn exit reservation / the Free-world-pawn window (Phase 3; mandatory gate on 3.1) | **PASS — owner runtime; M1 accepted ([ADR-053](../DECISIONS.md#adr-053--retained-pawn-exit-reservation-uses-m1)).** Validates the *mechanism* only: the Phase 3.1 physical suite is **NOT YET RUN by the owner** |
+| **S31** retained pawn exit reservation / the Free-world-pawn window (Phase 3; mandatory gate on 3.1) | **PASS — owner runtime; M1 accepted ([ADR-053](../DECISIONS.md#adr-053--retained-pawn-exit-reservation-uses-m1)).** Validates the *mechanism* only: the Phase 3.1 physical suite is **in owner validation** (first run on `29f31dd` done, findings corrected, retest owed) |
 
 ## Phase 3 spikes (planned; no records yet)
 
@@ -87,11 +87,11 @@ no Network double `PassToWorld`; same-pawn rematerialization; the injured-return
 world-pawn / redress pressure; save and load; map removal with no `LeftMap`. Neither a synchronous-callback mechanism (M2) nor a
 Harmony patch (C-4) is needed.
 
-**Phase 3.1 (implemented and corrected after review; the physical suite is NOT YET RUN by the owner).** The 3.1 slice builds the production side of S9r (registry quest and
+**Phase 3.1 (implemented; owner physical validation in progress: the first run on `29f31dd` is done and its findings are corrected, the corrected build awaits its reduced retest).** The 3.1 slice builds the production side of S9r (registry quest and
 derived reservation), S10 (temporary encounter faction), S12 (store-time normalization and truthful aging catch-up), S14 (visit Lord),
 S21 (observation), S22 (the session-armed physical tier and its own test map), S23 (name pins, modded races by capability), S24 (the
 owner-assisted save/load points) and S25 (role-constrained creation), and the physical tier scenarios that exercise them
 (`RT-PHYX-001…012`, `015`, `016`; [RUNTIME_TESTING § 17](../RUNTIME_TESTING.md#17-the-physical-tier-phase-31)). **None of these spikes is recorded as run**: each
 record is written from the owner's physical run. S31 is different: it was a dedicated spike the owner had already run before 3.1 was
 implemented (PASS, above), so the two statuses stay separate: **S31 / M1: owner-runtime PASS, accepted. Phase 3.1 physical
-runtime suite: NOT YET RUN by the owner.**
+runtime suite: first owner run done, corrected build awaiting its reduced retest (not a PASS).**

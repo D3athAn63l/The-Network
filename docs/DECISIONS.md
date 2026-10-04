@@ -1017,15 +1017,14 @@
 - **Rejected.** **M2** (a synchronous reserve-only route on `LeftMap`, plus a pre-removal `SitePartWorker` hook): unnecessary after M1
   passed, and it would not cover a map type without the hook. **M3 / C-4** (a Harmony prefix on `PassToWorld`): not needed, so ADR-017's
   zero-Harmony stance stands. Waiting for `LeftMap` to establish retention: there is no `LeftMap` on a map removal.
-- **Consequences.** Registry membership is derived and covers the pawn from its binding (ADR-054 item 2); the reserved set now includes
+- **Consequences.** Registry membership is derived and covers the pawn from its binding (ADR-054 item 2); (the registry's load order is corrected by [ADR-055](#adr-055--phase-31-runtime-qa-correction-the-load-order-generic-first-kinds-role-compatibility)) the reserved set now includes
   deployed people (still bounded by the named-people cap) and the per-tick cost is re-measured by the physical tier (`RT-PHYX-007`); a
   retained named person observed as an actual `Free` world pawn is the reservation **failing**, never a return (P3-INV-034, the
   Phase 3.1 correction pass); `EnsureRetained` is a pure proof; § 6.3, § 6.4, § 7.4 and RELEASE's wording now say "prove", not
   "establish". The spikes README, the phase plan and the risk register carry the corrected status.
 
 ### ADR-054 · Phase 3.1 implementation choices for the controlled physical episode
-- **Status.** **Deviation / clarification, for owner review. Phase 3.1 IMPLEMENTED and CORRECTED after review — OWNER PHYSICAL RUNTIME
-  VALIDATION REQUIRED.** Recorded by the Phase 3.1 implementation; none changes an approved principle of ADR-048 to ADR-052. Each
+- **Status.** **Deviation / clarification, for owner review. Phase 3.1 IMPLEMENTED — OWNER PHYSICAL VALIDATION IN PROGRESS (not a PASS; the first owner run's findings are corrected by [ADR-055](#adr-055--phase-31-runtime-qa-correction-the-load-order-generic-first-kinds-role-compatibility)).** Recorded by the Phase 3.1 implementation; none changes an approved principle of ADR-048 to ADR-052. Each
   settles a point [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md) left open; code locations are in
   [PHYSICAL_LIFECYCLE Appendix I](PHYSICAL_LIFECYCLE.md#appendix-i-phase-31-as-built) and the correction pass in
   [Appendix J](PHYSICAL_LIFECYCLE.md#appendix-j-phase-31-post-review-correction-pass-pr-10). The implementation is built on **M1, accepted and
@@ -1041,12 +1040,12 @@
      binding precedes the spawn, so the reservation already covers a spawned pawn and is in force when vanilla's exit or map
      removal passes it; placement is refused unless the registry covers the pawn; RELEASE proves the reservation and never
      establishes or recreates it. One hidden accepted quest with a fieldless Network-owned part answers vanilla's reservation question;
-     the runtime index is rebuilt before the first tick.
+     the registry is built in two load stages (the durable thing-id index at `FinalizeInit`, the validated pointer index at `PostLoadInit`; *corrected by ADR-055: it was first built from pointers in `FinalizeInit`, which runs before cross-references resolve, and was empty after every load*).
   3. **One temporary encounter faction per episode**, the vanilla refugee pattern (hidden, neutral, named after the actor, goodwill
      seeded once from the Network standing, never hostile in 3.1), handed back to vanilla's own removal by RELEASE.
   4. **Vanilla AI only**: `LordJob_VisitColony` with a fixed stay and no gift.
-  5. **Role derivation v1** from the actor's seed and original specialties only, stored at `Instantiate` (or lazily, identically,
-     at the first `Plan`); first creation is bounded (four seeded attempts over a capability-ranked kind chain), verified, corrected
+  5. **Role derivation v1** from the actor's seed and original specialties only, stored at `Instantiate` (or by the load-time compatibility pass, ADR-055, or lazily, identically,
+     at the first `Plan`); first creation is bounded (four seeded attempts over the encounter faction's generic member pool, ADR-055; *an earlier global capability ranking leaked special-purpose kinds*), verified, corrected
      at most by raising one role skill's base level, and aborted rather than contradicted.
   6. **Truthful aging** through `AgeTickMothballed` over the full interval, chunked per game year. *(Correction pass: the step is **not
      atomic**: it advances the whole step before its birthday effects run, so a step that throws has an unprovable progress. The
@@ -1076,3 +1075,29 @@
   format stays 5. Owner validation of `RT-PHYX-001…012`, `015`, `016` in RimWorld is the remaining gate (S31 / M1 itself is already
   validated, ADR-053); 3.2 (custody, rescue, groups, group extraction) is not started. Two pre-existing headless tests that encoded the
   placement defect of item 9 were updated, keeping their purpose (Appendix J.2).
+
+### ADR-055 · Phase 3.1 runtime-QA correction: the load order, generic first kinds, role compatibility
+- **Status.** **Deviation / clarification, for owner review. Phase 3.1 owner physical validation in progress — NOT a PASS.** Recorded by the correction pass after the owner's first physical run (build `29f31dd`, a
+  disposable save). It corrects ADR-054 item 2's and [PHYSICAL_LIFECYCLE § 16.3](PHYSICAL_LIFECYCLE.md#163-the-registry-across-load-corrected-by-the-phase-31-runtime-qa-pass)'s earlier claim that the registry is rebuilt
+  "after cross-references, before the first tick"; it changes no principle of ADR-048 to ADR-053 (S31 / M1 timing stays accepted). Details and evidence: [Appendix K](PHYSICAL_LIFECYCLE.md#appendix-k-phase-31-runtime-qa-correction-pass-pr-10).
+- **Context.** (1) After a save and load the load pass said "15 bound pawn(s), 0 retained", the read-only verifier "14 not" reserved, the pawn was `Free` at its exit and RELEASE refused; later vanilla discarded retained pawns. The audit of the 1.6 assembly found
+  `World.FinalizeInit` (our `FinalizeInit`, where the registry was built) runs before `Scribe.loader.FinalizeLoading()` resolves references, so the pointer-built index was empty, and `World.WorldTick` runs `WorldPawns` before any world component, so
+  the first-tick start-up gate is too late for anything exposure-critical. (2) Ordinary Solos were generated as a highthrall, an ancient soldier and Empire royals and champions: the kind chain ranked every loaded humanlike kind. (3) A person could reach first
+  materialization with the operational role `Unset`. (4) Three harness defects (a skip counter that must not move, a late intermediate assertion, three near-identical menu labels).
+- **Decision.**
+  1. **The registry has two load stages.** Stage 1, at `FinalizeInit`: a durable `thingIdNumber` index from persisted values only (never a pointer); until the pointer index exists a pawn is covered iff its own thing id equals the persisted one of a living
+     `Deployed`/`Stored` binding and no resolved pointer contradicts it (`BindingRules.BridgeCovers`). Stage 2, at the world component's `PostLoadInit` (the narrowest supported point: after every cross-reference, before any tick): the validated pointer index
+     (reference equality, an agreeing persisted thing id) becomes the authority and the bridge closes; the registry quest is ensured from the **durable** retained count; a binding that is unresolved, discarded or disagrees is **reported and never regenerated,
+     cleared, healed or reserved on a guess** (P3-INV-037). Only an `Ongoing` quest counts as live. Provenance is not weakened: the persisted `PawnRef` stays authoritative and the thing id is a load-safety bridge for an existing binding, not an identity system.
+  2. **A first projection draws its kind only from the encounter faction's generic member pool** (basic member kind first, then its Combat and Peaceful group kinds), admitted by what a kind carries (no boss, leader, royal title, mutant, trader, fixed backstory,
+     built-in conditions or abilities, forced traits or xenotype, other faction): structural, never a list of def names; the encounter faction def must offer one; none ⇒ a clean abort before binding, no global fallback (P3-INV-038). Role strength is the role's job.
+     Resurrection and every later real change are untouched.
+  3. **The role of an embodied individual is total and stored early:** `RoleDerivation.ForSolo` covers a contractor, a Fixer (found by the audit to have returned `Unset`) and any other individual; `ContractorService.EnsureSoloRoles` stores it once at bootstrap and
+     load, never overwriting a stored role and never reconstructing one for a person who ever had a pawn; `Plan` remains the safety net (P3-INV-039).
+  4. **Harness only:** a Returned release has no pass action, so `RT-PHYX-002` and `015` assert 0 passed, 0 skipped, 0 refused; `RT-PHYX-009` captures its intermediate facts when the quarantine is observed and asserts the post-custody facts separately;
+     `RT-PHYX-010`'s menu labels are `010A SAVE — visitor spawned`, `010B SAVE — post-map`, `010V VERIFY — loaded save` with the family id unchanged. Production RELEASE and P3-INV-031 are unchanged.
+- **Rejected.** Weakening provenance to "the same thing id is the same person"; building the pointer index in the first-tick gate (too late); a pawn list persisted in the quest part; a later repair of the registry; a named PawnKind blacklist or whitelist; a global kind scan
+  or a fallback to one; disabling resurrection; generating a replacement for a discarded pawn; making the corrupted QA save look clean; persisting a test-control object or a "disposable save" flag; Harmony.
+- **Consequences.** Save format stays 5; no Harmony; no new durable field. The owner retests on a **fresh** disposable save: `RT-PHYX-001`, `002`, `004`, `009`, `010A` + reload + `010V`, `010B` + reload + `010V`, `011`, `015`. Three existing headless tests that
+  encoded the defects were updated and say so (Appendix K.7). 3.2 is not started.
+

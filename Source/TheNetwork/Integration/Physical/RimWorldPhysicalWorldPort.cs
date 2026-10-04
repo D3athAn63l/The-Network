@@ -92,8 +92,9 @@ namespace TheNetwork.Integration.Physical
         {
             this.ctx = ctx;
             Registry = new RetainedPawnRegistry(ctx);
-            // Before the first tick (FinalizeInit builds the runtime): no Stored pawn is ever Free between a load and the first tick.
-            Registry.Rebuild();
+            // STAGE 1 (FinalizeInit builds the runtime, BEFORE the load's cross-references resolve): the durable thing-id index only. It must
+            // not read a pawn pointer (still null here). The pointer index is stage 2, OnReferencesResolved, at the world component's PostLoadInit.
+            Registry.RebuildEarly();
         }
 
         public bool Available => Current.ProgramState == ProgramState.Playing && Find.World != null && Find.WorldPawns != null && !Registry.inert;
@@ -355,9 +356,47 @@ namespace TheNetwork.Integration.Physical
         // ================================================================== load, removal, diagnostics
 
         /// <summary>
-        /// The load pass (§ 16.1–16.3), at start-up: tags corrected FROM the bindings (bounded by the bound people), and the registry quest
-        /// ensured when anyone is retained. The runtime index was already rebuilt before the first tick. Nothing is generated, spawned,
-        /// destroyed or decided.
+        /// LOAD STAGE 2 (the Phase 3.1 runtime-QA correction), called from the world component's PostLoadInit: every cross-reference is
+        /// resolved, so the validated pointer index is built (it becomes the authority), the registry quest is ensured when the DURABLE state
+        /// says anyone is retained, and every living binding that is unresolved, discarded or disagrees with its persisted thing id is reported
+        /// loudly. All of it happens before the first tick, so a Stored or Deployed person is never exposed as an ordinary Free world pawn.
+        /// Nothing is generated, spawned, destroyed, cleared or decided; the stage is idempotent.
+        /// </summary>
+        public RegistryLoadReport OnReferencesResolved()
+        {
+            RegistryLoadReport report = Registry.ResolvePointers();
+            string quest = "not needed (no living Deployed or Stored bound person)";
+            if (report.durableRetained > 0)
+            {
+                try
+                {
+                    Quest q = Registry.EnsureQuest();
+                    quest = "quest " + q.id + " " + q.State;
+                }
+                catch (Exception ex)
+                {
+                    quest = "FAILED: " + ex.Message;
+                    NetLog.Error(LogCategory.Physical, "The retained-pawn registry quest could not be ensured after the load's references resolved: " + ex.Message);
+                }
+            }
+            for (int i = 0; i < report.findings.Count; i++) NetLog.ErrorOnce(LogCategory.Physical, "binding." + report.findings[i].id.Value + "." + report.findings[i].kind, report.findings[i].ToString());
+            if (report.bound > 0 || report.durableRetained > 0)
+            {
+                NetLog.Info(LogCategory.Physical, "Physical load, stage 2 (post-load-init, references resolved, before the first tick): " + report + "; registry " + quest + ".");
+            }
+            if (report.covered < report.durableRetained)
+            {
+                NetLog.Error(LogCategory.Physical, "RESERVATION GAP: " + report.durableRetained + " living Deployed or Stored bound person(s) must be reserved but only " + report.covered
+                    + " are covered; the rest have an unresolved, discarded or mismatching binding (see the integrity findings above).");
+            }
+            return report;
+        }
+
+        /// <summary>
+        /// The load pass (§ 16.1–16.3), at start-up (the first tick's gate, AFTER <see cref="OnReferencesResolved"/>): tags corrected FROM the
+        /// bindings (bounded by the bound people), and the registry quest re-ensured when anyone is retained (idempotent). Nothing is
+        /// generated, spawned, destroyed or decided. The reservation itself never waits for this pass: vanilla's first tick runs
+        /// WorldPawns BEFORE any world component, so the reservation is complete before it.
         /// </summary>
         public string OnLoaded()
         {
@@ -385,8 +424,9 @@ namespace TheNetwork.Integration.Physical
                 }
             }
             int retained = Registry.RetainedCount();
+            int durable = Registry.DurableRetainedCount();
             string quest = "not needed";
-            if (retained > 0)
+            if (durable > 0)
             {
                 try
                 {
@@ -398,8 +438,8 @@ namespace TheNetwork.Integration.Physical
                     NetLog.Error(LogCategory.Physical, "The retained-pawn registry quest could not be ensured at load: " + ex.Message);
                 }
             }
-            string summary = "Physical load pass: " + bound + " bound pawn(s), " + retained + " retained (registry index rebuilt before the first tick), " + tagged + " tag(s) restored, "
-                + stripped + " stale tag(s) stripped, registry " + quest + ".";
+            string summary = "Physical load pass: " + bound + " bound pawn(s), " + retained + " of " + durable + " durable retained covered (" + (Registry.pointersResolved ? "pointer index resolved at post-load-init" : "thing-id bridge")
+                + "), " + tagged + " tag(s) restored, " + stripped + " stale tag(s) stripped, registry " + quest + ".";
             if (bound > 0) NetLog.Info(LogCategory.Physical, summary);
             return summary;
         }

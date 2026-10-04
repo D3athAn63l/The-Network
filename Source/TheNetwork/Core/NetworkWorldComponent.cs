@@ -105,6 +105,22 @@ namespace TheNetwork
                     NetLog.Error(LogCategory.Save, "Store failed to load (subsystem degraded, other stores unaffected): " + loadFailures[i]);
                 }
             }
+            // LOAD STAGE 2 of the retained-pawn registry. PostLoadInit runs inside Scribe.loader.FinalizeLoading, AFTER every cross-reference
+            // (every PawnRef.pawn) is resolved and BEFORE the first tick; FinalizeInit (stage 1) runs before either, when no pointer exists.
+            if (Scribe.mode == LoadSaveMode.PostLoadInit) ResolveRetentionAfterLoad();
+        }
+
+        private void ResolveRetentionAfterLoad()
+        {
+            if (runtime == null || !bootstrapped) return;
+            try
+            {
+                runtime.PhysicalWorld?.OnReferencesResolved();
+            }
+            catch (Exception ex)
+            {
+                NetLog.Error(LogCategory.Physical, "The retained-pawn registry could not resolve its pointers after the load: " + ex);
+            }
         }
 
         public override void FinalizeInit(bool fromLoad)
@@ -119,6 +135,8 @@ namespace TheNetwork
                     RunLoadMigrations();
                 }
                 BuildRuntime();
+                // A new game (or a mod added to an existing save) has no persisted binding to wait for: nothing is pending resolution.
+                if (!fromLoad || !bootstrapped) runtime.PhysicalWorld?.Registry.ResolvePointers();
             }
             catch (Exception ex)
             {
@@ -221,6 +239,8 @@ namespace TheNetwork
             ctx.Actors.ImportCast(settings?.roster, settings?.LoadedVersion ?? NetworkSettings.CurrentVersion, report);
             int fixers = ctx.Actors.InstantiateFixers();
             int contractors = ctx.Contractors.InstantiateFromSnapshot();
+            // Every embodied individual's operational role is stored from its origin facts at creation (a Fixer has no ContractorProfile).
+            ctx.Contractors.EnsureSoloRoles();
             ctx.Spatial.InitializeAll();
 
             ScheduleSweeps();
@@ -259,6 +279,10 @@ namespace TheNetwork
             // actors: they are instantiated now, from the world's own snapshot (idempotent).
             int newContractors = ctx.Contractors.InstantiateFromSnapshot();
             if (newContractors > 0) NetLog.Info(LogCategory.Actors, "Instantiated " + newContractors + " contractors from this world's cast snapshot.");
+            // A save from before the operational role was populated (or an individual the role derivation could not reach): the role is stored
+            // now, from origin facts only, so no first materialization ever starts with it unknown (idempotent; no save version).
+            int roles = ctx.Contractors.EnsureSoloRoles();
+            if (roles > 0) NetLog.Info(LogCategory.Actors, "Stored " + roles + " operational role(s) for individuals created before the role was populated (derived from origin facts only).");
             // A save from before Phase 2.5 (or a contractor made before world data existed): anchor them now.
             int anchored = ctx.Spatial.InitializeAll();
             if (anchored > 0) NetLog.Info(LogCategory.Spatial, "Anchored " + anchored + " contractors in the world (hidden spatial state).");

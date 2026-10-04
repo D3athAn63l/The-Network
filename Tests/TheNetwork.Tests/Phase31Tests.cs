@@ -121,7 +121,14 @@ namespace TheNetwork.Tests
             string actions = Src("Diagnostics/RuntimePhysicalTests/PhysicalTestDevActions.cs");
             foreach (PhysicalScenarioInfo s in PhysicalScenarioTable.All)
             {
-                T.Check(actions.Contains("\"" + s.Label), "the menu shows \"" + s.Label + "\" first");
+                if (s.id == "RT-PHYX-010")
+                {
+                    // The runtime-QA correction: RimWorld truncates long debug labels and the three save-matrix items were nearly identical, so they
+                    // start with their UNIQUE part (010A / 010B / 010V). The scenario family id is unchanged everywhere else.
+                    foreach (string l in new[] { PhysicalTestIds.Label010A, PhysicalTestIds.Label010B, PhysicalTestIds.Label010V })
+                        T.Check(actions.Contains("\"" + l + "\""), "the menu shows \"" + l + "\" (RT-PHYX-010, front-loaded)");
+                }
+                else T.Check(actions.Contains("\"" + s.Label), "the menu shows \"" + s.Label + "\" first");
                 T.Check(actions.Contains("PhysicalScenarioTable.Get(\"" + s.id + "\")"), s.id + " is reachable from the menu");
             }
             MatchCollection labels = Regex.Matches(actions, @"\[DebugAction\(Cat, ""([^""]+)""");
@@ -129,11 +136,12 @@ namespace TheNetwork.Tests
             foreach (Match m in labels)
             {
                 string label = m.Groups[1].Value;
-                T.Check(label.StartsWith("RT-PHYX-", StringComparison.Ordinal) || label.StartsWith("PHYX — ", StringComparison.Ordinal), "every label starts with its id (" + label + ")");
-                bool readOnly = label.Contains("(read-only)") || label.Contains("Arm physical tests") || label.Contains("Stop current run");
+                bool is010 = label == PhysicalTestIds.Label010A || label == PhysicalTestIds.Label010B || label == PhysicalTestIds.Label010V;
+                T.Check(label.StartsWith("RT-PHYX-", StringComparison.Ordinal) || label.StartsWith("PHYX — ", StringComparison.Ordinal) || is010, "every label starts with its id (" + label + ")");
+                bool readOnly = label.Contains("(read-only)") || label.Contains("Arm physical tests") || label.Contains("Stop current run") || label == PhysicalTestIds.Label010V;
                 T.Check(readOnly || label.EndsWith("[armed]", StringComparison.Ordinal), "a destructive item says it needs the arm (" + label + ")");
             }
-            T.Check(Regex.Matches(actions, @"StartReadOnly\(").Count == 1 && actions.Contains("verify after load (read-only)"), "only the after-load verification runs without the arm");
+            T.Check(Regex.Matches(actions, @"StartReadOnly\(").Count == 1 && actions.Contains("\"" + PhysicalTestIds.Label010V + "\""), "only the after-load verification runs without the arm");
             T.Check(PhysicalTestIds.Category != "The Network" && Src("Diagnostics/RuntimePhysicalTests/PhysicalTestDevActions.cs").Contains("private const string Cat = PhysicalTestIds.Category;"), "a separate category");
             T.Check(PhysicalTestIds.Category.Contains("PHYSICAL TESTS") && PhysicalTestIds.Category.Contains("disposable"), "the category warns in plain words");
         }
@@ -188,7 +196,10 @@ namespace TheNetwork.Tests
                 startingFame = FameBand.Local, doctrineStyle = "Professional", specialties = new List<string> { "escort" }
             });
             KnownCharacter c = n.ctx.characters.Get(a.bindings.embodies);
+            // Real pawns carry the thing id the binding persisted (the post-load validation requires the pointer and the persisted id to agree).
             Pawn bound = new Pawn(), twin = new Pawn();
+            bound.thingIDNumber = 4242;
+            twin.thingIDNumber = 4243;
             c.pawn = new PawnRef { pawn = bound, thingIdNumber = 4242, defName = "Human", boundTick = 1, agedThroughTick = 1 };
             RetainedPawnRegistry r = new RetainedPawnRegistry(n.ctx);
             r.Rebuild();
@@ -206,7 +217,7 @@ namespace TheNetwork.Tests
             r.inert = true;
             T.Check(!r.Reserves(bound), "prepared for removal: the registry reserves nobody");
             r.inert = false;
-            c.pawn = new PawnRef { pawn = twin, thingIdNumber = 4242 };
+            c.pawn = new PawnRef { pawn = twin, thingIdNumber = 4243 };
             T.Check(!r.Reserves(bound), "the index never outlives the binding: only the CURRENT binding's pawn counts");
             r.Rebuild();
             T.Check(r.Reserves(twin) && r.RetainedCount() == 1, "rebuilt from the stores: the current binding is the one retained pawn");
@@ -217,7 +228,9 @@ namespace TheNetwork.Tests
             int spawn = adapter.IndexOf("GenSpawn.Spawn(p, entry, map);", StringComparison.Ordinal);
             T.Check(refusal > 0 && spawn > refusal, "Place checks its preconditions before vanilla's spawn");
             T.Check(adapter.Contains("if (!Registry.Reserves(p)) return \"M1 precondition"), "the M1 precondition: the registry must cover the pawn before placement");
-            T.Check(Regex.IsMatch(adapter, @"Registry = new RetainedPawnRegistry\(ctx\);\s*[^}]*Registry\.Rebuild\(\);"), "the runtime index is rebuilt when the runtime is built (FinalizeInit), before the first tick");
+            // The runtime-QA correction: FinalizeInit runs BEFORE the load's cross-references resolve, so it builds only the DURABLE thing-id stage; the
+            // pointer stage is the world component's PostLoadInit (Phase31QaTests.LoadOrderScan pins both).
+            T.Check(Regex.IsMatch(adapter, @"Registry = new RetainedPawnRegistry\(ctx\);\s*[^}]*Registry\.RebuildEarly\(\);"), "the runtime's durable thing-id stage is built when the runtime is built (FinalizeInit), before the first tick");
             string registry = Code(Src("Integration/Physical/RetainedPawnRegistry.cs"));
             T.Check(Regex.IsMatch(registry, @"public override void ExposeData\(\)\s*\{\s*base\.ExposeData\(\);\s*\}"), "the Network-owned quest part persists no pawn list");
             T.Check(registry.Contains("public sealed class QuestPart_NetworkRetainedPawns : QuestPart"), "the saved class name is stable");

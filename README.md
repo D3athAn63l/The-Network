@@ -90,7 +90,7 @@ stores nothing in the save, and uses no Harmony. It complements the headless sui
 
 **Phase 3 (abstract ↔ physical lifecycle): the design has been reviewed, amended and corrected; Phase 3.0 is implemented** (the
 authority gate, the Episode store, the atomic reconciliation commit and its RELEASE / FOLLOW-UP / PUBLISH stages, over a fake physical
-port; save format 5). **Phase 3.1 is implemented — owner runtime validation required**: one Solo contractor can become one real,
+port; save format 5). **Phase 3.1 is implemented — owner physical validation in progress (not a PASS: the owner's first run found six issues, corrected by the runtime-QA pass in [Appendix K](docs/PHYSICAL_LIFECYCLE.md#appendix-k-phase-31-runtime-qa-correction-pass-pr-10); the corrected build awaits its reduced retest)**: one Solo contractor can become one real,
 retained, named pawn and later the same pawn again, but only through the Dev Mode physical test tier ("The Network (PHYSICAL TESTS:
 disposable environment only)", session-armed, its own test map); there is no player-facing content and no Harmony
 ([Appendix I](docs/PHYSICAL_LIFECYCLE.md#appendix-i-phase-31-as-built), [RUNTIME_TESTING § 17](docs/RUNTIME_TESTING.md#17-the-physical-tier-phase-31)).
@@ -104,7 +104,7 @@ and is **reconciled exactly once**, atomically, from observed state, with every 
 carrying its own durable marker; death is final; custody beyond the map is never mistaken for "home"; **no Harmony** for the recommended slice. Four subphases:
 3.0 the abstract foundation (no pawn), 3.1 one controlled physical episode (first real pawn, in a separate, session-armed test
 tier on its own test map), 3.2 custody, rescue and groups (first player-visible content), 3.3 procurement fulfillment / physical
-handoff (**design direction only**). **3.0 began once the design was accepted. The mandatory runtime spike S31 (the retained-pawn exit-reservation window) has been run by the owner and PASSED: M1 (reserve a retained named pawn while it is spawned) is accepted (ADR-053). That validates the mechanism only; the Phase 3.1 physical suite (`RT-PHYX-*`) has not yet been run by the owner.** Full Safe Regression stays safe on a real colony. Open questions and the spikes that settle
+handoff (**design direction only**). **3.0 began once the design was accepted. The mandatory runtime spike S31 (the retained-pawn exit-reservation window) has been run by the owner and PASSED: M1 (reserve a retained named pawn while it is spawned) is accepted (ADR-053). That validates the mechanism only; the owner's first run of the Phase 3.1 physical suite (build `29f31dd`) found six issues, now corrected, and the corrected build awaits its reduced retest — not a Phase 3.1 PASS.** Full Safe Regression stays safe on a real colony. Open questions and the spikes that settle
 them are listed, not hidden; apart from S31, none has been run by the owner.
 
 The contract board, the player as contractor and the social layer are later phases

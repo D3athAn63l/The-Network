@@ -575,9 +575,9 @@ By design, not built in this phase and not part of any default suite:
 `PhysicalRuntimeSuite`, part of *Full safe regression*; the headless-only ones in `Tests/TheNetwork.Tests/PhysicalLifecycleTests.cs`).
 They have run headlessly; **they have not yet been run inside RimWorld**.
 
-**Phase 3.1 status: IMPLEMENTED and CORRECTED after review — OWNER PHYSICAL RUNTIME VALIDATION REQUIRED.** The safe tier gains `RT-PHYS-020`, `021`, `022` and `030` (in
+**Phase 3.1 status: IMPLEMENTED; OWNER PHYSICAL VALIDATION IN PROGRESS (not a PASS).** The safe tier gains `RT-PHYS-020`, `021`, `022` and `030` (in
 `PhysicalRuntimeSuite`, so *Full safe regression* now holds 70 tests; they pass headlessly). The separate **physical tier** exists:
-`RT-PHYX-001…012`, `015` and `016` ([§ 17](#17-the-physical-tier-phase-31)). **PHYSICAL RUNTIME — NOT YET RUN BY OWNER.** (The owner's earlier,
+`RT-PHYX-001…012`, `015` and `016` ([§ 17](#17-the-physical-tier-phase-31)). **PHYSICAL RUNTIME — the owner's first run (build `29f31dd`, a disposable save) found six issues, all corrected ([§ 17.4](#174-the-first-owner-run-findings-and-the-reduced-retest)); the corrected build awaits its reduced retest.** (The owner's earlier,
 dedicated spike **S31 / M1 is runtime-validated and accepted**, ADR-053; that is a different thing from this suite on the 3.1 build.)
 
 Phase 3's multi-step lifecycle is what the stepped cases and the preserved sandbox are for, in two tiers: the
@@ -598,7 +598,7 @@ tier it adds role-constrained creation, truthful aging and concretization on rea
 implemented and no physical case has been run.
 **The micro-correction** extends `RT-PHYS-029` (the fake port records every `PassToWorld`: a member observed `WorldFree` produces
 none, and a call that violates the three-part precondition is rejected) and adds two physical-tier regressions that were **gated by
-the mandatory spike S31** (since run by the owner: PASS with M1, ADR-053; these two regressions on the 3.1 build are **not yet run by the owner**): `RT-PHYX-015` (a retained named pawn leaves by a normal vanilla `ExitMap`: no Network
+the mandatory spike S31** (since run by the owner: PASS with M1, ADR-053; the owner's first physical run exercised these two regressions on the 3.1 build; the corrected build awaits its reduced retest, [§ 17.4](#174-the-first-owner-run-findings-and-the-reduced-retest)): `RT-PHYX-015` (a retained named pawn leaves by a normal vanilla `ExitMap`: no Network
 `PassToWorld`, no "already here" error, no window in which the pawn is reusable or redressable, RELEASE once, abstract authority
 only after RELEASE, the same `Pawn` after a save/load and a rematerialization) and `RT-PHYX-016` (the map-removal variant, which
 has no `LeftMap`).
@@ -732,8 +732,9 @@ derived from the generated terms and never the observed 58,335.
 
 ## 17. The physical tier (Phase 3.1)
 
-> **Status: IMPLEMENTED and CORRECTED after review — NOT YET RUN BY OWNER.** Nothing below has been run inside RimWorld on the 3.1 build. (The
-> separate S31 spike, whose mechanism M1 these scenarios regress, was run by the owner and passed: ADR-053. That validates the mechanism, not this tier.)
+> **Status: IMPLEMENTED; OWNER PHYSICAL VALIDATION IN PROGRESS. This is not a Phase 3.1 PASS.** The owner ran a first pass on build `29f31dd`: positive evidence plus six
+> findings, corrected by the runtime-QA pass ([§ 17.4](#174-the-first-owner-run-findings-and-the-reduced-retest), [Appendix K](PHYSICAL_LIFECYCLE.md#appendix-k-phase-31-runtime-qa-correction-pass-pr-10)); the corrected build awaits its reduced retest on a FRESH
+> disposable save. (The separate S31 spike, whose mechanism M1 these scenarios regress, was run by the owner and passed: ADR-053. That validates the mechanism, not this tier.)
 > The post-review correction pass ([Appendix J](PHYSICAL_LIFECYCLE.md#appendix-j-phase-31-post-review-correction-pass-pr-10)) changed four things here, with no
 > scenario id renumbered: **an ACTUAL `Free` world pawn is now an explicit FAIL, never an acceptable return, in 002, 005, 015 and 016** (it is the M1 reservation
 > failing, and the lifecycle's own `ReservationBroken` quarantine is counted as the same failure); 011 additionally checks, on real pawns, that the generated gender
@@ -761,8 +762,10 @@ disposable.
 | `PHYX — Stop current run (preserves evidence)` | no | stops pumping the run; nothing is undone |
 | `PHYX — Remove test map now (vanilla map removal) [armed]` | yes | vanilla's map removal of the suite's own map, members included (bound pawns are passed, never destroyed) |
 | `PHYX — Cleanup: test map and fixtures [armed]` | yes | removes the test map and site and leftover fixture factions; refuses while an incomplete episode has a member on the map |
-| `RT-PHYX-0NN — <name> [armed]` | yes | one scenario run (table below) |
-| `RT-PHYX-010 — Save/load matrix: verify after load (read-only)` | no | the after-load verification, then follows the test episodes to completion |
+| `RT-PHYX-0NN — <name> [armed]` | yes | one scenario run (table below). The three RT-PHYX-010 items are the exception: RimWorld truncates long labels in its narrow debug menu, so they start with their unique part (`010A` / `010B` / `010V`); the scenario family id is still **RT-PHYX-010** in the table, the log and every report |
+| `010A SAVE — visitor spawned [armed]` | yes | RT-PHYX-010, save point A: a Solo spawned on the test map, then the game **pauses** for the owner to save ([§ 17.3](#173-rt-phyx-010-the-save-and-load-workflow-owner-steps)) |
+| `010B SAVE — post-map [armed]` | yes | RT-PHYX-010, save point B: the test map removed by vanilla (the pawn passed, not yet reconciled), then the game **pauses** for the owner to save |
+| `010V VERIFY — loaded save` | **no** | RT-PHYX-010, after a load: the read-only verification, then follows the test episodes to completion. Stopping it stops **only this QA runner**, never a production episode |
 | The Network → `Episode Monitor (read-only)` | no | every episode, member, custody, binding, pawn situation, reservation, faction, markers and watch |
 
 The guard checks facts only: Dev Mode on, armed, the Network running, the adapter available, no other run, **no incomplete episode**
@@ -776,18 +779,65 @@ A suite visit lasts 1,250 ticks at the chill spot (the same vanilla Lord as prod
 | ID | Name | Needs | What it does and proves |
 |---|---|---|---|
 | RT-PHYX-001 | First materialization | a never-materialized Solo | Plan + Materialize through the production lifecycle: exactly one role-constrained pawn, bound (write-once), spawned on the test map, tags agree, M1 reserves it while spawned, hidden temporary faction, `LordJob_VisitColony`; then the visit ends and the episode completes, Stored |
-| RT-PHYX-002 | Normal visitor exit | any Solo | vanilla's own exit; Returned once over many wake-ups; no Network `PassToWorld`; RELEASE once; authority closed on every frame until COMPLETE; **an actual Free (or a `ReservationBroken` quarantine) on any frame is a FAIL**; `agedThroughTick` = the exit tick |
+| RT-PHYX-002 | Normal visitor exit | any Solo | vanilla's own exit; Returned once over many wake-ups; **0 Network `PassToWorld`, 0 "skipped as already a world pawn", 0 refused (a Returned release contains no pass action at all)**; RELEASE once; authority closed on every frame until COMPLETE; **an actual Free (or a `ReservationBroken` quarantine) on any frame is a FAIL**; `agedThroughTick` = the exit tick |
 | RT-PHYX-003 | Downed and recovery | any Solo | dev damage downs the visitor; the watch sees it downed and decides nothing; dev first aid; the watch sees the recovery; the visit ends by map removal; the recovery truth (Wounded or not) is the designed band; temporary injuries normalized, permanent ones kept |
 | RT-PHYX-004 | Killed: death recorded once | a never-materialized Solo | dev damage kills; Killed once; a duplicate wake and a new Plan change nothing; the binding still points to the same (dead) pawn; the actor ends |
 | RT-PHYX-005 | Test map removed while present | any Solo | vanilla's map removal with the pawn on it: at that instant a reserved world pawn (an actual Free is a FAIL), faction unchanged, no `LeftMap`, episode still Open; then Returned once |
 | RT-PHYX-006 | Same-pawn rematerialization | a **Stored** Solo | the same `Pawn` object, thing id and name; `BirthAbsTicks` unchanged; biological age advanced by the full stored interval; no second insertion into `WorldPawns`; a permanent scar survives storage and the next rematerialization; a temporary bruise is normalized; a stored pawn does not age on its own |
 | RT-PHYX-007 | Registry, redress and GC protection | a **Stored** Solo | ReservedByQuest, Suspended, not in the Free or FactionLeader pools, kept by three GC accumulation passes, lookup cost; then real forced generations that cannot redress it (run only when vanilla's pool for the request is empty) |
 | RT-PHYX-008 | Temporary faction lifecycle | any Solo | hidden, temporary, neutral, named after the actor, goodwill as seeded; removed after the episode; the stored pawn's faction nulled harmlessly |
-| RT-PHYX-009 | Unsupported custody: dev arrest quarantines | any Solo | a dev arrest ⇒ `Quarantined(UnsupportedCustody:HeldByPlayer)`, nothing committed, pawn untouched, person blocked; map removal (vanilla clears the guest status) ends it |
-| RT-PHYX-010 | Save/load matrix | any Solo | save point A (visitor present) or B (map removed, not yet reconciled) pauses the game; the owner saves and loads; the read-only verification checks nothing was generated, rerolled or cloned, bindings resolve, the registry reserves, tags agree, episodes are watched; then follows them to completion |
-| RT-PHYX-011 | Role-constrained real pawn generation | — | every role × 4 seeds × 2 competence bands through the production projection with a fixture faction; no contradicting pawn ever returned; aborts counted; every pawn disposed; **each real pawn carries its person's first gender and age (vanilla request inputs, whole years in the race's adult window), and the same person projected with different seeds, roles and bands is identical within a kind (INCONCLUSIVE if no pin applied)** |
+| RT-PHYX-009 | Unsupported custody: dev arrest quarantines | any Solo | **two phases, asserted separately.** Phase 1: a dev arrest ⇒ `Quarantined(UnsupportedCustody:HeldByPlayer)`; the facts (still the colony's prisoner, authority closed, nothing committed, no Network pass) are **captured on the frame the quarantine is first observed**, before anything else happens. Phase 2: map removal (vanilla clears the guest status) ⇒ re-observed, the ordinary Returned path, the same pawn and binding, no Network pass. The final state is **not** required to still be Quarantined |
+| RT-PHYX-010 | Save/load matrix | any Solo | `010A` / `010B` set up a meaningful state, **pause** the game and ask the owner to save; after reloading, `010V` (read-only, no arm) checks nothing was generated, rerolled or cloned, bindings resolve, **the registry reserves every Deployed or Stored living person (stage 1 and 2 of the load, before the first tick)**, no binding is unresolved, discarded or mismatching, tags agree, episodes are watched; then follows them to completion |
+| RT-PHYX-011 | Role-constrained real pawn generation | — | every role × 4 seeds × 2 competence bands through the production projection with a fixture faction; no contradicting pawn ever returned; aborts counted; every pawn disposed; **each real pawn's kind came from the encounter faction's generic member pool (the allowed provenance is reported; any pawn outside it FAILS)**; **each real pawn carries its person's first gender and age (vanilla request inputs, whole years in the race's adult window), and the same person projected with different seeds, roles and bands is identical within a kind (INCONCLUSIVE if no pin applied)** |
 | RT-PHYX-012 | Truthful aging mechanism | — | four disposable 25-year-olds aged by 1 day, 1, 10 and 70 years through the production catch-up; full interval applied, `BirthAbsTicks` untouched, biological age advanced exactly; birthday effects listed |
-| RT-PHYX-015 | Normal-exit M1 regression | any Solo | at vanilla's synchronous `LeftMap` (after vanilla's own pass): ReservedByQuest, reserved, faction unchanged, custody still Deployed; per frame: covered while spawned, **an actual Free (or a `ReservationBroken` quarantine) is a FAIL**, authority closed until COMPLETE; then the same pawn rematerializes and leaves again; 0 Network passes |
+| RT-PHYX-015 | Normal-exit M1 regression | any Solo | at vanilla's synchronous `LeftMap` (after vanilla's own pass): ReservedByQuest, reserved, faction unchanged, custody still Deployed; per frame: covered while spawned, **an actual Free (or a `ReservationBroken` quarantine) is a FAIL**, authority closed until COMPLETE; then the same pawn rematerializes and leaves again; **0 passes, 0 skipped, 0 refused (no pass action exists in a Returned release)** |
 | RT-PHYX-016 | Map-removal M1 regression | 1–3 Solos | up to three Solos (one episode each) on the test map when vanilla removes it: each a reserved world pawn at once (an actual Free is a FAIL), no `LeftMap`, faction unchanged; each Returned once; 0 Network passes |
 
 `RT-PHYX-013` and `014` (cohesion, concretization) and `020+` (held custody, groups) are Phase 3.2 and do not exist.
+
+### 17.3 RT-PHYX-010: the save and load workflow (owner steps)
+
+Use a **fresh disposable save** (or a clean pre-physical-test copy). The corrupted forensic save of the first run is **not** reused and nothing was added to make it look clean.
+
+**010A — a visitor spawned, then reload**
+
+1. Arm (type the phrase).
+2. Click `010A SAVE — visitor spawned [armed]`.
+3. Wait for the **automatic pause**.
+4. Save.
+5. Return to the main menu.
+6. Load that save (it loads paused: no tick runs before you act).
+7. Immediately run `010V VERIFY — loaded save` — **NO ARM**.
+8. Unpause and let the verifier and the episode finish **naturally**.
+
+**010B — the map removed, not yet reconciled, then reload** (only after the A episode is **fully complete**)
+
+1. Arm.
+2. Click `010B SAVE — post-map [armed]`.
+3. Save at the paused checkpoint.
+4. Return to the main menu.
+5. Load.
+6. Run `010V VERIFY — loaded save` — **NO ARM**.
+7. Let it complete.
+
+> **Stopping `010V` stops only the read-only QA runner. It does NOT cancel a real production `PhysicalEpisode`.** An episode that is still incomplete will, correctly, keep
+> blocking the next destructive physical scenario (the guard refuses while any episode is incomplete) until it completes through the real lifecycle. Nothing about the test is persisted: there is no "disposable
+> save" flag and no test-control object; the production load invariant (§ 16.3 of the design) stands independently of this harness.
+
+### 17.4 The first owner run: findings and the reduced retest
+
+The first run (build `29f31dd`, a disposable save with only RimWorld, its DLCs and The Network) gave positive evidence (M1 while spawned, the normal exit, no Network double `PassToWorld`, the map-removal path, same-pawn
+rematerialization, downed and recovery, injury normalization, truthful aging, the temporary faction, registry and redress protection while the registry was healthy, unsupported custody quarantining, exactly-once reconciliation, RELEASE failing
+closed) and these findings, each corrected by the runtime-QA pass ([PHYSICAL_LIFECYCLE Appendix K](PHYSICAL_LIFECYCLE.md#appendix-k-phase-31-runtime-qa-correction-pass-pr-10)):
+
+| # | Finding | Kind | Correction |
+|---|---|---|---|
+| 1 | after save and load "15 bound pawn(s), 0 retained"; the verifier "14 not"; the pawn was `Free` at its exit; RELEASE refused; later vanilla discarded retained pawns | **production blocker** | the registry is built in two load stages (`FinalizeInit` by thing id, `PostLoadInit` by validated pointer) and the quest is restored from durable state before the first tick (K.2) |
+| 2 | ordinary Solos generated as a highthrall, an ancient soldier, Empire royals and champions; one Anomaly kind came back to life after the Network recorded its death once | **production blocker** | the first projection draws only from the encounter faction's generic member pool; no named blacklist; resurrection untouched (K.4) |
+| 3 | `RT-PHYX-001` failed "operational role is stored": the picked individual still had `Unset` | **production blocker** | the role derivation is total for any embodied individual and a load-time compatibility pass stores it (K.5) |
+| 4 | `RT-PHYX-002` and `015` failed on a "skipped pass" counter | harness assertion | a Returned release has no pass action at all: 0 passed, 0 skipped, 0 refused (K.6) |
+| 5 | `RT-PHYX-009` judged "still quarantined / still a prisoner" after the scenario had moved on | harness assertion | two phases; the intermediate facts are captured when observed (K.6) |
+| 6 | the three `RT-PHYX-010` menu items looked alike in the narrow menu | harness UX | front-loaded labels `010A` / `010B` / `010V`; the workflow above (K.6) |
+
+**Reduced owner retest (fresh disposable save, the corrected build):** `RT-PHYX-001`, `002`, `004`, `009`, `010A` + reload + `010V`, `010B` + reload + `010V`, `011`, `015`.
+`006`, `007`, `012` and `016` need not be rerun for this pass (the rematerialization, aging, normalization and map-removal paths are untouched; the registry's steady-state answer is unchanged); `016` and `007` exercise the registry and are worth one run if time allows.

@@ -523,7 +523,7 @@ namespace TheNetwork.Tests
                 string body = Body(adapter, name, "        public ");
                 T.Check(!body.Contains("EnsureQuest("), name + " never creates the registry quest");
             }
-            T.Eq(3, Regex.Matches(adapter, @"EnsureQuest\(").Count, "the adapter creates the registry quest in exactly three reviewed places (Create, PlacementRefusal, the load pass)");
+            T.Eq(4, Regex.Matches(adapter, @"EnsureQuest\(").Count, "the adapter creates the registry quest in exactly four reviewed places (Create, PlacementRefusal, the load's stage 2 at PostLoadInit, the first-tick load pass); never in RELEASE");
             string observer = Code("Integration/Physical/PawnObserver.cs");
             T.Check(observer.Contains("WorldPawnRules.KindOf("), "the observer classifies world pawns through the pure rule");
             T.Check(!Regex.IsMatch(observer, @"==\s*WorldPawnSituation\.Free\s*\|\|") && !observer.Contains("o.kind = ObservedKind.WorldFree;"), "and never maps an actual Free straight to WorldFree");
@@ -833,7 +833,8 @@ namespace TheNetwork.Tests
             T.Check(adr.Contains("Phase 3.1 as a complete controlled physical episode is not"), "and does not claim the whole of Phase 3.1");
             string spikes = File.ReadAllText(Path.Combine(docs, "spikes/README.md"));
             Match row = Regex.Match(spikes, @"\| \*\*S31\*\*[^\n]*");
-            T.Check(row.Success && row.Value.Contains("PASS") && row.Value.Contains("M1 accepted") && row.Value.Contains("NOT YET RUN"), "the spikes README lists S31 as an owner-runtime PASS and the 3.1 suite as not yet run");
+            // The runtime-QA pass: the owner has since run the first physical pass (build 29f31dd), so the 3.1 suite is "in owner validation", not "not yet run".
+            T.Check(row.Success && row.Value.Contains("PASS") && row.Value.Contains("M1 accepted") && row.Value.Contains("in owner validation") && !row.Value.Contains("NOT YET RUN"), "the spikes README lists S31 as an owner-runtime PASS and the 3.1 suite as in owner validation");
             string lifecycle = File.ReadAllText(Path.Combine(docs, "PHYSICAL_LIFECYCLE.md"));
             T.Check(lifecycle.Contains("### 7.6 The vanilla exit window: RESOLVED by M1 (spike S31, owner-validated)"), "§ 7.6 says the window is resolved");
             T.Check(lifecycle.Contains("## Appendix J: Phase 3.1 post-review correction pass (PR #10)"), "Appendix J records the correction pass");
@@ -853,11 +854,12 @@ namespace TheNetwork.Tests
                 if (text.Contains("#adr-053--retained-pawn-exit-reservation-uses-m1")) T.Check(adr53 > 0, name + ": the ADR-053 anchor resolves");
                 if (text.Contains("#appendix-j-phase-31-post-review-correction-pass-pr-10")) T.Check(lifecycle.Contains("## Appendix J: Phase 3.1 post-review correction pass (PR #10)"), name + ": the Appendix J anchor resolves");
             }
-            // Status wording never lets the S31 pass stand in for the 3.1 suite (and the 3.1 suite is not claimed as run).
+            // Status wording never lets the S31 pass stand in for the 3.1 suite, and the 3.1 suite is never claimed as passed. (The runtime-QA pass: the owner has
+            // since run a first physical pass, so the status is "owner physical validation in progress", not "not yet run".)
             foreach (string name in new[] { "PHYSICAL_LIFECYCLE.md", "IMPLEMENTATION_PHASES.md", "RUNTIME_TESTING.md", "RISKS.md" })
             {
                 string text = File.ReadAllText(Path.Combine(docs, name));
-                T.Check(text.Contains("NOT YET RUN BY OWNER") || text.Contains("NOT YET RUN by the owner"), name + " states that the 3.1 physical suite has not yet been run by the owner");
+                T.Check(text.Contains("OWNER PHYSICAL VALIDATION IN PROGRESS") || text.Contains("owner physical validation in progress"), name + " states that the 3.1 physical validation is in progress (not a pass)");
             }
         }
 

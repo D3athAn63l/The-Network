@@ -360,12 +360,20 @@ namespace TheNetwork.Domain.Physical
             return c[(int)(h % (uint)c.Count)];
         }
 
-        /// <summary>The role of a Solo's embodied person from the actor's stored origin facts (null-safe; Unset if not a contractor).</summary>
+        /// <summary>
+        /// The role of an individual's embodied person from the actor's stored ORIGIN facts (its seed and the specialties it was created with).
+        /// Total for every individual that is not an organization: a contractor reads its <see cref="ContractorProfile"/>, a Fixer (also an
+        /// individual with an embodied person, and what <c>ContractorService.IsSolo</c> counts as one) its <see cref="FixerProfile"/>, and an
+        /// individual with no specialty on record the documented fallback (Specialist). It is never Unset for an embodied individual, so a
+        /// materialization can never reach a pawn with the role unknown. Null-safe; Unset only for an actor that is not an individual.
+        /// </summary>
         public static OperationalRole ForSolo(NetworkActor a)
         {
-            if (a == null) return OperationalRole.Unset;
+            if (a == null || a.kind != ActorKind.Individual || a.Has<OrganizationProfile>()) return OperationalRole.Unset;
             ContractorProfile p = a.Get<ContractorProfile>();
-            return p == null ? OperationalRole.Unset : SoloRole(a.seed, p.specialties);
+            if (p != null) return SoloRole(a.seed, p.specialties);
+            FixerProfile f = a.Get<FixerProfile>();
+            return SoloRole(a.seed, f?.specialties);
         }
     }
 
@@ -422,39 +430,89 @@ namespace TheNetwork.Domain.Physical
         }
     }
 
-    /// <summary>What a PawnKindDef can do, as plain data (gathered once by the adapter from the loaded defs; mods included, never named).</summary>
-    public sealed class KindFacts
+    /// <summary>
+    /// One candidate member kind OFFERED BY THE ENCOUNTER FACTION, as plain facts (gathered by the adapter from the faction's own def; mods
+    /// included, none named). Every flag is read from a vanilla PawnKindDef field: nothing here knows a def name.
+    /// </summary>
+    public sealed class MemberKindFacts
     {
         public string defName;
+
+        /// <summary>Where the faction offers it: "basic member kind", or "<group kind> group".</summary>
+        public string source;
+
+        /// <summary>It IS the faction's basic member kind (the faction's own statement of its generic member).</summary>
+        public bool basic;
+
         public bool humanlike;
         public bool toolUser;
-        public bool fighter;
-        public bool factionLeader;
+
+        /// <summary>The kind belongs to no OTHER faction: its default faction is this faction or none.</summary>
+        public bool native;
+
+        // Special-purpose content: a kind carrying any of these is somebody's quest, boss, title, cult, cryptosleeper or vampire, not a person.
         public bool playerKind;
-        public bool humanlikeFaction;
+        public bool factionLeader;
+        public bool boss;
+        public bool mutant;
+        public bool titled;
+        public bool trader;
+        public bool hostileToAll;
+        public bool fixedBackstory;
+        public bool builtInConditions;
+        public bool builtInAbilities;
+        public bool forcedTraits;
+        public bool forcedXenotype;
+
+        public bool fighter;
         public bool ranged;
         public bool melee;
         public float combatPower;
     }
 
     /// <summary>
-    /// Kind selection by capability (§ 6.2 "kind", OPEN O-3): only EXISTING kinds (a runtime kind would not survive a save), humanlike
-    /// tool users of a humanlike non-player faction, never a faction leader kind. Scored by the role's kind class and the closeness of the
-    /// kind's combat power to the equipment tier. Pure and deterministic (ties by def name). The role verdict, not the kind, is the authority.
+    /// First-projection PawnKind eligibility (Phase 3.1 runtime-QA correction, § 6.2 "kind", O-3). The kind of a person's FIRST pawn is drawn
+    /// ONLY from the temporary encounter faction's own GENERIC member pool: its basic member kind first (the faction's own statement of
+    /// "an ordinary member"), then the kinds its Combat and Peaceful groups list, each of which must pass <see cref="Reject"/>. There is no
+    /// global scan of loaded kinds and no fallback to one: when the faction offers no generic member the projection fails cleanly, before
+    /// anything is bound. Role strength is the ROLE's job (the work-tag, skill and trait clauses of <see cref="RoleRules"/> and its one allowed
+    /// skill raise), never a reason to borrow a boss, royal, cultist or ancient kind. The rule is structural (a kind carrying special-purpose
+    /// content is not generic), never a list of def names, so a modded race or faction is judged by what its kinds ARE.
+    ///
+    /// This governs FIRST realization only. A pawn that already exists keeps its kind for life (and whatever the game later does to it).
     /// </summary>
-    public static class KindPolicy
+    public static class GenericMemberPolicy
     {
+        public const int MaxChain = 3;
+
         public static float TargetPower(int equipmentTier)
         {
             return 40f + 25f * Math.Max(1, Math.Min(5, equipmentTier));
         }
 
-        public static bool Eligible(KindFacts k)
+        /// <summary>Null when the kind is a generic member; otherwise the plain reason it is not.</summary>
+        public static string Reject(MemberKindFacts k)
         {
-            return k != null && k.humanlike && k.toolUser && !k.factionLeader && !k.playerKind && k.humanlikeFaction && !string.IsNullOrEmpty(k.defName);
+            if (k == null || string.IsNullOrEmpty(k.defName)) return "no kind";
+            if (!k.humanlike || !k.toolUser) return "not a humanlike tool user";
+            if (!k.native) return "belongs to another faction";
+            if (k.playerKind) return "a player-faction kind";
+            if (k.factionLeader) return "a faction leader kind";
+            if (k.boss) return "a boss kind";
+            if (k.mutant) return "a mutant kind";
+            if (k.titled) return "requires a royal title";
+            if (k.trader) return "a trader kind";
+            if (k.hostileToAll) return "hostile to everything";
+            if (k.fixedBackstory) return "carries fixed backstories";
+            if (k.builtInConditions) return "carries built-in conditions (hediffs, missing parts or addictions)";
+            if (k.builtInAbilities) return "carries built-in abilities";
+            if (k.forcedTraits) return "carries forced traits";
+            if (k.forcedXenotype) return "forces a non-baseline xenotype";
+            return null;
         }
 
-        public static float Score(KindFacts k, RoleClass cls, int equipmentTier)
+        /// <summary>How well a kind's combat bias suits a role class and equipment tier. Only orders members of the SAME generic pool.</summary>
+        public static float Score(MemberKindFacts k, RoleClass cls, int equipmentTier)
         {
             float s = 0f;
             switch (cls)
@@ -468,18 +526,48 @@ namespace TheNetwork.Domain.Physical
             return s;
         }
 
-        /// <summary>The eligible kinds, best first. Empty when nothing qualifies (the adapter then falls back to a faction or vanilla default).</summary>
-        public static List<string> Rank(IList<KindFacts> kinds, RoleClass cls, int equipmentTier)
+        /// <summary>The generic members among the candidates (deduplicated by def name), in the order the projection tries them. Empty when the faction offers none.</summary>
+        public static List<string> Chain(IList<MemberKindFacts> candidates, RoleClass cls, int equipmentTier)
         {
-            List<KindFacts> ok = new List<KindFacts>();
-            if (kinds != null) for (int i = 0; i < kinds.Count; i++) if (Eligible(kinds[i])) ok.Add(kinds[i]);
-            ok.Sort((a, b) =>
+            List<MemberKindFacts> ok = Eligible(candidates);
+            List<string> chain = new List<string>();
+            for (int i = 0; i < ok.Count; i++) if (ok[i].basic) chain.Add(ok[i].defName);
+            List<MemberKindFacts> rest = new List<MemberKindFacts>();
+            for (int i = 0; i < ok.Count; i++) if (!ok[i].basic) rest.Add(ok[i]);
+            rest.Sort((a, b) =>
             {
                 int c = Score(b, cls, equipmentTier).CompareTo(Score(a, cls, equipmentTier));
                 return c != 0 ? c : string.CompareOrdinal(a.defName, b.defName);
             });
+            for (int i = 0; i < rest.Count && chain.Count < MaxChain; i++) chain.Add(rest[i].defName);
+            return chain;
+        }
+
+        /// <summary>The kinds the policy admits, deduplicated (a kind offered twice is judged once, as the basic member when it is one).</summary>
+        public static List<MemberKindFacts> Eligible(IList<MemberKindFacts> candidates)
+        {
+            List<MemberKindFacts> ok = new List<MemberKindFacts>();
+            HashSet<string> seen = new HashSet<string>();
+            if (candidates == null) return ok;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                MemberKindFacts k = candidates[i];
+                if (Reject(k) != null || !seen.Add(k.defName)) continue;
+                ok.Add(k);
+            }
+            return ok;
+        }
+
+        /// <summary>"kind: reason" for every candidate the policy refused (diagnostics: why the pool is what it is).</summary>
+        public static List<string> Rejections(IList<MemberKindFacts> candidates)
+        {
             List<string> r = new List<string>();
-            for (int i = 0; i < ok.Count; i++) r.Add(ok[i].defName);
+            if (candidates == null) return r;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                string why = Reject(candidates[i]);
+                if (why != null && !r.Contains(candidates[i].defName + ": " + why)) r.Add(candidates[i].defName + ": " + why);
+            }
             return r;
         }
     }

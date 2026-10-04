@@ -52,6 +52,9 @@
 | R-43 | The physical test tier is run on a save that matters, or its cleanup touches what it does not own | High | Low | Phase 3.1 (the session arm, the fact-only guard, ownership-proven disposal) |
 | R-44 | Role-constrained creation cannot satisfy a role on a heavily modded race or kind list (repeated contained aborts) | Medium | Medium | Phase 3.1 (`RT-PHYX-011` on the owner's mod list) |
 | R-45 | A temporary encounter faction leaves residue (its vanilla leader world pawn, or the faction itself after an unusual exit) | Low | Medium | Phase 3.1 (`RT-PHYX-008`; sentinel notes) |
+| R-46 | **The retained registry does not survive a load:** it is built before the load's cross-references resolve, so retained people are `Free` on the first tick and vanilla discards them | **High** | **Observed** | Phase 3.1 (owner run on `29f31dd`; corrected; `RT-PHYX-010` A and B with a reload) |
+| R-47 | A first projection borrows a special-purpose kind (boss, royal, ancient, cultist) because its combat stats fit the role | High | **Observed** | Phase 3.1 (owner run on `29f31dd`; corrected; `RT-PHYX-011` provenance) |
+| R-48 | A person reaches first materialization with their operational role unknown (`Unset`) | Medium | **Observed** | Phase 3.1 (owner run on `29f31dd`; corrected; `RT-PHYX-001`) |
 
 ---
 
@@ -601,9 +604,9 @@
   narrowest documented Harmony contingency (**C-4**, only if both are proven insufficient; **not needed**, never adopted). 3.0 was never
   affected (it creates no pawn) ([§ 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-resolved-by-m1-spike-s31-owner-validated)).
 - **Proven by.** Spike **S31** (cases A to G): **PASSED in the owner's runtime; M1 accepted** (ADR-053). Then the physical-tier
-  regressions `RT-PHYX-015` (normal exit) and `RT-PHYX-016` (map removal) and P3-INV-032 on the 3.1 build: **implemented, NOT YET RUN BY
-  OWNER**.
-- **Phase 3.1 status (implemented and corrected after review; physical suite NOT YET RUN BY OWNER).** Phase 3.1 is built on the accepted
+  regressions `RT-PHYX-015` (normal exit) and `RT-PHYX-016` (map removal) and P3-INV-032 on the 3.1 build: implemented; the owner's first run
+  (build `29f31dd`) showed M1 holding while spawned and across a vanilla exit, and exposed the **load-time gap of R-46** (corrected); the corrected build awaits its reduced retest.
+- **Phase 3.1 status (implemented; owner physical validation in progress, not a PASS).** Phase 3.1 is built on the accepted
   **M1** (reserve while spawned): the registry's membership is derived from the binding and the retained custody, the binding precedes
   the spawn, placement is refused unless the registry already covers the pawn, and RELEASE only **proves** the reservation (it never
   creates it); no Network `PassToWorld` for a pawn vanilla passed (source-scanned). After M1 an **actual `Free` on a retained named
@@ -624,7 +627,7 @@
 ## R-44 · Role-constrained creation fails on a modded kind list (Phase 3.1)
 - **Failure modes.** No loaded kind yields a candidate that satisfies a role, so a person cannot be materialized; or a contradicting
   pawn slips through.
-- **Mitigation.** Kinds are chosen by capability (never by mod name) with a vanilla fallback chain; four seeded attempts; the
+- **Mitigation.** Kinds come only from the encounter faction's generic member pool (capability and content, never a mod name; no global scan, no fallback to one: R-47); four seeded attempts; the
   authoritative verdict runs on the real candidate; failure is a contained abort (the member stays unplaced, the episode closes
   `NeverPlaced` through the commit, nothing is bound). A contradicting pawn is never returned.
 - **Proven by.** `RT-PHYS-020` (pure verdict and correction); `RT-PHYX-011` on the owner's mod list (counts aborts by role).
@@ -635,3 +638,21 @@
   RELEASE hands it back too (covering map removal). Its leader is an ordinary vanilla world pawn the world-pawn GC may collect, exactly
   as for vanilla's refugee quests. The sentinel reports both as explained deltas.
 - **Proven by.** `RT-PHYX-008` (the faction is removed after the episode); the sentinel notes of every run.
+
+## R-46 · The retained registry does not survive a load (Phase 3.1, observed)
+- **Failure modes.** `World.FinalizeInit` (which builds the registry) runs before `Scribe.loader.FinalizeLoading()` resolves cross-references, so an index built from `PawnRef.pawn` is empty; the first tick runs `WorldPawns` before any world component, so every
+  Stored or Deployed person is an ordinary `Free` world pawn that vanilla may redress or discard; later saves warn about references to discarded things.
+- **Mitigation.** Two load stages: the durable thing-id index at `FinalizeInit` (a narrow bridge: the persisted `PawnRef` stays authoritative, a resolved pointer must agree) and the validated pointer index at the world component's `PostLoadInit`; the registry quest restored
+  from durable state before the first tick; a bounded integrity audit of every living bound person (unresolved, discarded, mismatching) that reports and never repairs; nothing is generated, spawned, cleared or healed at load
+  ([PHYSICAL_LIFECYCLE § 16.3](PHYSICAL_LIFECYCLE.md#163-the-registry-across-load-corrected-by-the-phase-31-runtime-qa-pass), P3-INV-037).
+- **Proven by.** `Phys31Qa.Fix1_*` and `Phys31Qa.Fix7_*` (headless, over real `Pawn` objects; five mutations that reintroduce the defect are caught); the owner's `RT-PHYX-010` A and B, each with a reload and `010V`, on a fresh save.
+
+## R-47 · A first projection borrows a special-purpose kind (Phase 3.1, observed)
+- **Failure modes.** A global capability ranking admits boss, royal, ancient and cultist kinds as ordinary contractors; later gameplay (resurrection, titles, ideology) is then genuinely wrong for the person.
+- **Mitigation.** The encounter faction's own generic member pool only, admitted by what the kind carries (P3-INV-038); no named list; a faction with no generic member is not chosen and the projection aborts before anything is bound; a pawn that already exists is never sanitized.
+- **Proven by.** `Phys31Qa.Fix2_*`; `RT-PHYX-011` reports the allowed provenance on the owner's mod list.
+
+## R-48 · A person's role is unknown at first materialization (Phase 3.1, observed)
+- **Failure modes.** The derivation returned `Unset` for an individual with no `ContractorProfile` (a Fixer), so the first projection was unconstrained and `RT-PHYX-001` failed.
+- **Mitigation.** The derivation is total for an embodied individual; the compatibility pass stores it once at bootstrap and load; `Plan` stays the safety net; never overwritten, never reconstructed for a bound person (P3-INV-039).
+- **Proven by.** `Phys31Qa.Fix3_*`; `RT-PHYX-001`.

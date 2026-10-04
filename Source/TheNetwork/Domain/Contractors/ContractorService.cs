@@ -133,6 +133,35 @@ namespace TheNetwork.Domain.Contractors
             return a != null && a.kind == ActorKind.Individual && !a.Has<OrganizationProfile>();
         }
 
+        /// <summary>
+        /// The compatibility / init pass for the operational role (PHYSICAL_LIFECYCLE § 6.6.5, the 3.1 runtime-QA correction): every embodied
+        /// individual whose person still has <see cref="Physical.OperationalRole.Unset"/> and has NEVER had a pawn bound gets the role derived
+        /// from the actor's immutable origin facts (<see cref="Physical.RoleDerivation.ForSolo"/>: its seed and its original specialties) and
+        /// stored, once, here, before anything can materialize them. Deterministic and independent of the episode, the clock, the map, fame,
+        /// reputation and every physical pawn (none exists yet). A role already stored is never overwritten; a bound person is never touched
+        /// (the role its pawn was built for is not reconstructed after the fact). Idempotent; fills an existing v5 field, so no save version.
+        /// Bounded by the actors. Returns the roles stored.
+        /// </summary>
+        public int EnsureSoloRoles()
+        {
+            int stored = 0;
+            List<NetworkActor> all = ctx.actors?.actors;
+            if (all == null || ctx.characters == null) return 0;
+            for (int i = 0; i < all.Count; i++)
+            {
+                NetworkActor a = all[i];
+                if (!IsSolo(a) || !a.bindings.embodies.IsValid) continue;
+                KnownCharacter c = ctx.characters.Get(a.bindings.embodies);
+                if (c == null || c.opRole != Physical.OperationalRole.Unset) continue;
+                if (c.pawn != null && c.pawn.IsBound) continue;
+                Physical.OperationalRole role = Physical.RoleDerivation.ForSolo(a);
+                if (role == Physical.OperationalRole.Unset) continue;
+                c.opRole = role;
+                stored++;
+            }
+            return stored;
+        }
+
         /// <summary>The people this contractor keeps: a Solo is one; an organization its healthy, wounded, committed and named members.</summary>
         public static int Headcount(NetworkActor a)
         {

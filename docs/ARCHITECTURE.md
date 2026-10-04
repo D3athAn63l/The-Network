@@ -844,8 +844,10 @@ Failure → ContractFailed(cause), deposit normally lost (insurance may recover 
 ```
 Save:  WorldComponent.ExposeData → stores in fixed order → only IDs, refs, values
 Load:  ExposeData (LoadingVars) → per-element tolerant list loading
-       → ResolvingCrossRefs (PawnRef pointers) → PostLoadInit (defaults)
-       → FinalizeInit(true): run migrations, rebuild runtime caches, no events
+       → FinalizeInit(true): run migrations, rebuild runtime caches FROM PERSISTED VALUES (no Pawn reference
+         exists yet: vanilla calls it before cross-references resolve), no events
+       → ResolvingCrossRefs (PawnRef pointers) → PostLoadInit (defaults; the retained-pawn registry's validated
+         pointer index, its quest and the binding-integrity audit; still before the first tick)
        → first tick: EnsureStarted → validators → ReferenceInvalidated events → re-register signals
 ```
 

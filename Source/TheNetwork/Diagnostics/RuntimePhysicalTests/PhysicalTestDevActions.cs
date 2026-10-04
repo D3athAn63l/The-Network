@@ -8,6 +8,8 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
     /// <summary>
     /// Dev Mode → "The Network (PHYSICAL TESTS: disposable environment only)" (§ 21.2). A separate category, unreachable from Quick smoke
     /// and Full safe regression. Every scenario label starts with its id and name, so the owner never translates letters into menu items.
+    /// The ONE exception is RT-PHYX-010's three save-matrix items: RimWorld truncates long labels in its narrow debug menu and the three
+    /// were nearly identical, so they start with their unique part (010A / 010B / 010V); the scenario id is still RT-PHYX-010 everywhere else.
     /// Items marked [armed] spend the session arm (one arm = one action); the read-only ones never need it.
     /// </summary>
     public static class PhysicalTestDevActions
@@ -106,19 +108,19 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             PhysicalTestSession.Start((rt, id) => new Phyx009UnsupportedCustody(rt, id), PhysicalScenarioTable.Get("RT-PHYX-009"));
         }
 
-        [DebugAction(Cat, "RT-PHYX-010 — Save/load matrix: save point A, visitor present (pauses) [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        [DebugAction(Cat, "010A SAVE — visitor spawned [armed]", allowedGameStates = AllowedGameStates.Playing)]
         public static void Phyx010A()
         {
             PhysicalTestSession.Start((rt, id) => new Phyx010SavePoint(rt, id, false), PhysicalScenarioTable.Get("RT-PHYX-010"));
         }
 
-        [DebugAction(Cat, "RT-PHYX-010 — Save/load matrix: save point B, map removed, not yet reconciled (pauses) [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        [DebugAction(Cat, "010B SAVE — post-map [armed]", allowedGameStates = AllowedGameStates.Playing)]
         public static void Phyx010B()
         {
             PhysicalTestSession.Start((rt, id) => new Phyx010SavePoint(rt, id, true), PhysicalScenarioTable.Get("RT-PHYX-010"));
         }
 
-        [DebugAction(Cat, "RT-PHYX-010 — Save/load matrix: verify after load (read-only)", allowedGameStates = AllowedGameStates.Playing)]
+        [DebugAction(Cat, "010V VERIFY — loaded save", allowedGameStates = AllowedGameStates.Playing)]
         public static void Phyx010Verify()
         {
             PhysicalTestSession.StartReadOnly((rt, id) => new Phyx010VerifyAfterLoad(rt, id), PhysicalScenarioTable.Get("RT-PHYX-010"));

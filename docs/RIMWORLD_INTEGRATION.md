@@ -41,7 +41,9 @@
   the deep-load path. The null is removed (`components.RemoveAll(null)`) and the game continues.
 - `FinalizeInit(bool fromLoad)`: for **new worlds** it is called from
   `WorldGenerator.cs:67` **during world generation**, before the colony and scenario exist. On
-  load it is called from `Game.LoadGame` (`Game.cs:586`). **Consequence:** the bootstrap runs
+  load it is called from `Game.LoadGame` (`Game.cs:586`), **right after the world's `LoadingVars` and BEFORE `Scribe.loader.FinalizeLoading()` (`Game.cs:611`) resolves cross-references: no `Pawn` or `Thing`
+  reference is usable in it** (the Phase 3.1 retained-pawn registry was empty after every load until it learned this; pointer-dependent structures are built at the world component's `PostLoadInit`,
+  which runs inside `FinalizeLoading`, and the world-pawn GC ticks before any world component). **Consequence:** the bootstrap runs
   lazily on first use (normally the first `WorldComponentTick`), not in `FinalizeInit`; only the
   `networkSeed` of a not-yet-bootstrapped world is derived there, from the world's seed
   ([ARCHITECTURE § 6.1](ARCHITECTURE.md#61-networkworldcomponent-kernel-root)).

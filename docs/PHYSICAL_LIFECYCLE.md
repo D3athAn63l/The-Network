@@ -1,13 +1,15 @@
 # Phase 3 Design: Abstract ↔ Physical Lifecycle
 
-> **Status: Phase 3.1 IMPLEMENTED and CORRECTED after review ([Appendix I](#appendix-i-phase-31-as-built), [Appendix J](#appendix-j-phase-31-post-review-correction-pass-pr-10));
-> its PHYSICAL RUNTIME SUITE (`RT-PHYX-*`) has NOT YET BEEN RUN BY THE OWNER. Phase 3.0 implemented
-> ([Appendix H](#appendix-h-phase-30-as-built)); 3.2 and 3.3 NOT implemented.** Two things must never be conflated:
+> **Status: Phase 3.1 IMPLEMENTED; OWNER PHYSICAL VALIDATION IN PROGRESS. NOT a Phase 3.1 PASS.** The owner's first physical run (build `29f31dd`, a
+> disposable save) produced positive evidence and six real findings, corrected in [Appendix K](#appendix-k-phase-31-runtime-qa-correction-pass-pr-10)
+> (the retained registry did not survive a load; first projections used special-purpose kinds; an individual's role could stay `Unset`; three
+> harness defects). Earlier: implemented and corrected after review ([Appendix I](#appendix-i-phase-31-as-built), [Appendix J](#appendix-j-phase-31-post-review-correction-pass-pr-10)).
+> Phase 3.0 implemented ([Appendix H](#appendix-h-phase-30-as-built)); 3.2 and 3.3 NOT implemented.** Two things must never be conflated:
 > **(1) S31 / M1 is owner-runtime VALIDATED and ACCEPTED** ([§ 7.6](#76-the-vanilla-exit-window-resolved-by-m1-spike-s31-owner-validated), ADR-053): the owner
 > ran the dedicated S31 spike on a real 1.6 game before 3.1 was implemented, and reserving a retained named pawn **while it is spawned**
-> is the accepted production mechanism. **(2) Phase 3.1 as a whole is NOT runtime-validated**: `RT-PHYX-001…012`, `015` and `016` on
-> this build, the 3.1 save/load matrix, role generation on real pawns and truthful aging on real disposable pawns are all still the
-> owner's runs. The live game holds the real physical adapter, and the only trigger that creates or places a contractor pawn is the
+> is the accepted production mechanism. **(2) Phase 3.1 as a whole is NOT runtime-validated**: the owner's first run was on the pre-correction build and its
+> findings are fixed in this one; `RT-PHYX-001…012`, `015` and `016` on the CORRECTED build, the 3.1 save/load matrix (010A and 010B, each with a reload), role
+> generation on real pawns and truthful aging on real disposable pawns are still the owner's runs. The live game holds the real physical adapter, and the only trigger that creates or places a contractor pawn is the
 > session-armed physical test tier (Dev Mode, its own test map). The save format is still **5**; there is no Harmony. The design text
 > below is unchanged by the implementation except where Appendices H, I and J record a decision the design left open or a correction.
 >
@@ -2063,7 +2065,7 @@ owner; our `PawnRef` is a non-owning reference.
 | already exited by vanilla, not yet reconciled | `WorldPawns` (vanilla passed it; saved `Deep`) | `Open`, member still `Present`, binding | the load pass observes `WorldFree` ⇒ `Returned`, then RELEASE (**no `PassToWorld`**, [§ 7.5](#75-who-may-call-passtoworld-an-observed-world-pawn-is-never-passed-again)); the pawn was not exposed as `Free` in the gap (M1; **S31 case D passed**, [§ 7.6](#76-the-vanilla-exit-window-resolved-by-m1-spike-s31-owner-validated)); an actual `Free` there would be observed as `ReservationBroken` and quarantined, never returned |
 | `Closed`, release not finished | the pawn's owner | `Closed` + `consequencesApplied`, `releaseApplied = false`, per-member `releaseStep` | the finish-pending pass resumes each member at its cursor; the person stays **non-abstract** (the gate is closed) until `releaseApplied` |
 | `Planned` (a crash or save between create and spawn) | an unspawned generated pawn is **not saved** unless something holds it | `Planned` + `Created` members | members whose pointer resolves ⇒ treated as `Present`; none ⇒ `Closed(NeverPlaced)`, custody reverted |
-| `Stored` (between episodes) | `WorldPawns` (`pawnsAlive` or `pawnsMothballed`, saved `Deep`) | `custody = Stored`, binding, `agedThroughTick` | the runtime registry is rebuilt from the characters store in `FinalizeInit` (§ 16.3); the truthful age catch-up runs at the next observation ([§ 6.4](#64-truthful-aging-of-a-retained-pawn)); nothing is aged at load |
+| `Stored` (between episodes) | `WorldPawns` (`pawnsAlive` or `pawnsMothballed`, saved `Deep`) | `custody = Stored`, binding, `agedThroughTick` | the registry covers it from the persisted thing id at `FinalizeInit` and from the validated pointer at `PostLoadInit`, both before the first tick (§ 16.3); the truthful age catch-up runs at the next observation ([§ 6.4](#64-truthful-aging-of-a-retained-pawn)); nothing is aged at load |
 
 ### 16.2 What load must never do
 
@@ -2073,14 +2075,41 @@ It observes, corrects tags, rebuilds runtime indexes and (only for `Planned` epi
 evidence. A bound pointer that is `null` where the member says `Created` or `Present` is *evidence of loss*, never
 a reason to regenerate.
 
-### 16.3 The registry across load
+### 16.3 The registry across load (corrected by the Phase 3.1 runtime-QA pass)
 
-The registry quest part holds **no persisted pawn list** of its own. `QuestPartReserves(Pawn)` delegates to a
-**runtime registry** (`HashSet<Pawn>` built from the characters with `custody = Stored`) owned by the Network
-runtime; no runtime ⇒ false. The runtime registry is built in `FinalizeInit`/`BuildRuntime` (after cross-references
-resolve, before any first tick), so no `Stored` pawn is `Free` between load and the first tick. The stores are the
-single source of truth; the quest only asks. (If the Network is absent, the part answers false and the pawns become
-`Free`: the self-healing property.)
+The registry quest part holds **no persisted pawn list** of its own. `QuestPartReserves(Pawn)` delegates to the **runtime registry** owned by the Network
+runtime; no runtime ⇒ false. The stores are the single source of truth; the quest only asks. (If the Network is absent, the part answers false and the
+pawns become `Free`: the self-healing property.)
+
+**The load order, audited in the 1.6 assembly (the first owner run disproved the earlier belief that the registry was built "after cross-references"):**
+
+| # | Vanilla step (`Game.LoadGame`, `Game.cs:560–640`) | What exists at that moment |
+|---|---|---|
+| 1 | the game's small components load, **including the `QuestManager`** (the saved registry quest and its part) | quests, with their parts |
+| 2 | `World.ExposeData` (`LoadingVars`), then **`World.FinalizeInit(fromLoad: true)`** (`Game.cs:586`) ⇒ our `FinalizeInit` ⇒ `BuildRuntime` ⇒ the registry is built | every saved **value** (`thingIdNumber`, `custody`, `status`); **every `Pawn` reference is still null** |
+| 3 | the maps load | |
+| 4 | `Scribe.loader.FinalizeLoading()` (`Game.cs:611`, `ScribeLoader.cs:88`): `ResolveAllCrossReferences` ⇒ **`PawnRef.pawn` becomes usable**, then `DoAllPostLoadInits` ⇒ our world component's `ExposeData` runs in `PostLoadInit` | pointers resolved |
+| 5 | `maps[i].FinalizeLoading()`, `Game.FinalizeInit` | |
+| 6 | the first tick: `World.WorldTick` runs **`worldPawns.WorldPawnsTick()` BEFORE any world component** (`World.cs:213–222`), so before our start-up gate | |
+
+A registry whose index is built from pointers at step 2 is **empty** (the owner's log: "15 bound pawn(s), 0 retained"), and the first
+vanilla tick, whose first act is the world-pawn GC, finds every retained person an ordinary `Free` world pawn. The start-up gate (the first `WorldComponentTick`) is
+**too late** for anything exposure-critical. So the registry has two stages and no gap (P3-INV-037):
+
+| Stage | Hook | Reads | Builds |
+|---|---|---|---|
+| **1** | `FinalizeInit` (the port's constructor): `RetainedPawnRegistry.RebuildEarly` | persisted values only: each binding's `thingIdNumber`, custody, status. **Never `PawnRef.pawn`.** | `thingIdNumber → CharacterId` |
+| answer between | `Reserves(pawn)` | the pawn's own `thingIDNumber` | covered iff the id equals the persisted one of a living `Deployed`/`Stored` binding **and no resolved pointer contradicts it** (`BindingRules.BridgeCovers`). A load-safety bridge for a binding that already exists, **never an identity system**. |
+| **2** | the world component's **`PostLoadInit`** (`ResolveRetentionAfterLoad` ⇒ `OnReferencesResolved`): `RetainedPawnRegistry.ResolvePointers` | the resolved pointers | the validated pointer index (reference equality, `BindingRules.Judge` = Healthy), which **becomes the authority**; the bridge is closed. The registry quest is ensured from the **durable** retained count (never from the index), and every binding that is unresolved, discarded or disagrees with its persisted thing id is reported (§ 16.5). |
+| first tick | `OnLoaded` (the start-up gate) | | re-ensures the quest (idempotent), restores routing tags, starts the episode watch |
+
+`PostLoadInit` is the narrowest supported point: vanilla registers every deep-loaded exposable for it right after its `ExposeData`
+(`ScribeExtractor.SaveableFromNode`), and it runs inside `FinalizeLoading`, after every cross-reference and before anything ticks. A new game has nothing to wait for.
+Only an **Ongoing** registry quest counts as live (vanilla's `QuestReserves` answers only for `Ongoing`).
+
+**Fail closed, never repair.** A living bound person whose pointer does not resolve, resolves to a `Discarded` pawn, or whose persisted thing id disagrees with the
+resolved pawn is **never regenerated, never cleared, never marked healthy** and never reserved on a guess: the Network reports it loudly, abstract authority stays
+closed, and a person with an open episode is handled by the episode's own observation (a discarded pawn is positive `Gone` evidence ⇒ `Lost`, § 7.3 rule 7).
 
 ### 16.4 The minimum new persisted truth
 
@@ -2100,6 +2129,12 @@ Not persisted, by rule: the runner, sessions, sandboxes, the wake-up queue, the 
 anything about the physical test tier.
 
 ### 16.5 Migration and version implications (the number is **not** chosen here)
+
+> **Binding integrity (the Phase 3.1 runtime-QA pass).** The normal post-load validation also audits every **living bound person** (bounded by the bound people,
+> no world scan): an unresolved binding, a binding to a `Discarded` pawn, or a thing-id disagreement fails validation loudly, and a `Deployed` or `Stored`
+> person the registry does not cover is a stated **reservation gap**. It reports only: no regeneration, no clearing, no repair, no unrelated world mutation.
+> The owner's read-only verifier (`010V`) fails on the same findings. (This is what the corrupted save would have shown at its first load: vanilla later
+> discarded retained pawns, and the durable bindings then pointed at discarded things.)
 
 - The first Phase 3 build (3.0) will perform **the format bump** (a "next version" migration `…ToN+1PhysicalLifecycle`). It
   performs no data change (the new fields default correctly) but *marks* the save as written by a Phase 3 build. Fields
@@ -2880,6 +2915,9 @@ component callback or a bounded poll provides it. Risk is after the recommended 
 | **P3-INV-034** | **A retained named person observed as an actual `Free` world pawn is never `Returned`:** it is the M1 reservation failing (`ObservedKind.ReservationBroken`); the episode is quarantined, authority stays closed, nothing repairs the registry, and RELEASE only proves the reservation (it never creates it) | `WorldPawnRules`; `PawnObserver`; `EnsureRetained` as a proof | `Phys31Fix.Fix3_*`; RT-PHYX-002, 005, 015, 016 (an actual `Free` is a FAIL) |
 | **P3-INV-035** | **A named person's first gender and age are a pure function of (world seed, `CharacterId`):** never of the episode, its seed, the slot, the map or the time, and never of fame, reputation, experience, doctrine or funds; they reach vanilla only through its own request inputs, are never persisted and never applied to a pawn later | `PersonIdentity` v1; `AdultAgeWindow`; `PawnIdentityPins` | `Phys31Fix.Fix4_*`; RT-PHYX-011 |
 | **P3-INV-036** | **A truthful-aging step that threw is uncertain:** `agedThroughTick` advances only by the steps that returned, the unknown interval is never replayed, falsified or set to "now", and the person stays blocked (the episode is quarantined, `AgeTruthUncertain`) until the owner decides | `AgingUncertainException`; `QuarantineAgeUncertain`; `IsHardQuarantine` | `Phys31Fix.Fix5_*` |
+| **P3-INV-037** | **A retained person is never exposed across a load:** from the first moment vanilla can ask (`World.FinalizeInit` onward) every living, bound, `Deployed` or `Stored` person's pawn is covered, first by the persisted thing id (`BindingRules.BridgeCovers`, only while no resolved pointer contradicts it), then by the validated pointer index built at `PostLoadInit`; the registry quest is ensured from **durable** state before the first tick; an unresolved, discarded or mismatching binding is reported, never regenerated, cleared or healed | `RetainedPawnRegistry.RebuildEarly` / `ResolvePointers` / `Audit`; `BindingRules`; `NetworkWorldComponent` (PostLoadInit hook); `NetValidator.CheckBindings` | `Phys31Qa.Fix1_*`, `Phys31Qa.Fix7_*`; RT-PHYX-010 (010A + reload + 010V, 010B + reload + 010V) |
+| **P3-INV-038** | **A first projection draws its PawnKind only from the encounter faction's generic member pool:** its basic member kind and the kinds of its Combat and Peaceful groups that carry no special-purpose content (boss, leader, royal title, mutant, trader, fixed backstory, built-in conditions or abilities, forced traits or xenotype, another faction's kind); never a scan of every loaded kind, never a named blacklist, never a fallback to a global kind; no generic member means a clean abort before anything is bound. Role strength is the role's job (the verdict and its one allowed skill raise). Real later history (resurrection, genes, titles) is never sanitized | `GenericMemberPolicy`; `FactionMemberKinds`; `PawnProjection.Project`; `EncounterFactions.Qualifies` | `Phys31Qa.Fix2_*`; RT-PHYX-011 (provenance) |
+| **P3-INV-039** | **An embodied individual's operational role is stored from origin facts before it can first materialize:** the derivation is total for any individual (a contractor reads its `ContractorProfile`, a Fixer its `FixerProfile`, otherwise Specialist), is never `Unset` for one, and a stored role is never overwritten nor reconstructed for a person who ever had a pawn | `RoleDerivation.ForSolo`; `ContractorService.EnsureSoloRoles`; `Plan` | `Phys31Qa.Fix3_*`; RT-PHYX-001 |
 
 ---
 
@@ -3164,13 +3202,14 @@ as one guarded sub-step). **The RT-PHYS suite has run headlessly only; it has no
 
 ## Appendix I: Phase 3.1 as built
 
-> **Phase 3.1 IMPLEMENTED and CORRECTED after review ([Appendix J](#appendix-j-phase-31-post-review-correction-pass-pr-10)) — OWNER PHYSICAL RUNTIME
-> VALIDATION REQUIRED.** HEADLESS: the full suite passes (including the safe physical suite over the fake port, the correction pass's
-> `Phys31Fix.*` regressions and the source scans). SAFE RUNTIME: the sandbox suite passes headlessly; the in-game safe run on this build
-> is the owner's. **PHYSICAL RUNTIME (`RT-PHYX-*`): NOT YET RUN BY OWNER.** Two statuses, kept apart: **S31 / M1 is owner-runtime PASS and
+> **Phase 3.1 IMPLEMENTED; OWNER PHYSICAL VALIDATION IN PROGRESS (not a PASS).** The text below is the build as first delivered; the post-review
+> correction ([Appendix J](#appendix-j-phase-31-post-review-correction-pass-pr-10)) and the runtime-QA correction after the owner's first run
+> ([Appendix K](#appendix-k-phase-31-runtime-qa-correction-pass-pr-10)) amend it where they say so (notably the registry's two load stages, the first-projection kind pool and the role of individuals
+> that predate the field). HEADLESS: the full suite passes (including the safe physical suite over the fake port, the `Phys31Fix.*` and `Phys31Qa.*` regressions and the source scans). SAFE RUNTIME: the sandbox suite passes headlessly; the in-game safe run on this build
+> is the owner's. **PHYSICAL RUNTIME (`RT-PHYX-*`): the owner's first run (build `29f31dd`) is done and its findings are corrected; the corrected build awaits its reduced retest.** Two statuses, kept apart: **S31 / M1 is owner-runtime PASS and
 > accepted** ([§ 7.6](#76-the-vanilla-exit-window-resolved-by-m1-spike-s31-owner-validated), ADR-053: the owner ran the dedicated S31 spike before 3.1 was implemented),
 > while **Phase 3.1 as a complete controlled physical episode is NOT runtime-validated**: `RT-PHYX-001…012`, the production regressions
-> `RT-PHYX-015` and `RT-PHYX-016` on this build, the 3.1 save/load matrix, role generation on real pawns and truthful aging on real
+> `RT-PHYX-015` and `RT-PHYX-016` on the corrected build, the 3.1 save/load matrix (010A and 010B, each with a reload), role generation on real pawns and truthful aging on real
 > disposable pawns are all still the owner's runs. No Harmony; no new durable field; save format **5**.
 
 Phase 3.1 implements the 3.1 row of [§ 23](#23-suggested-subphases) for **one Solo**: the real `IPhysicalWorldPort`, role-constrained
@@ -3186,8 +3225,8 @@ commit → RELEASE → FOLLOW-UP → PUBLISH); no second architecture exists.
 |---|---|
 | The real port (§ 21) | `Integration/Physical/RimWorldPhysicalWorldPort.cs` (create, resolve, catch-up, faction, place, observe, normalize, prove retention, the guarded pass, tag strip, load pass, removal, diagnostics, `DescribeBinding` for the monitor). Built by `NetworkRuntime` after the fail-closed default: `Ctx.physicalPort = PhysicalWorld` (live game only; headless, sandbox and soak keep the fail-closed or fake port) |
 | Port additions | `EnsureEncounterFaction`, `ReleaseEncounterFaction`, `Place(…, FactionRef faction)`; `ProjectionRequest.capability`, `.equipmentTier`, `.faction`; `PhysicalObservation.exitTick`; `AgingUncertainException` (the correction pass replaced the earlier partial-catch-up exception). The fail-closed port refuses the new actions; the fake records them and can fault them |
-| Registry (S9r, M1 timing) | `Integration/Physical/RetainedPawnRegistry.cs`: `RetainedPawnRegistry` (derived membership, O(1) `Reserves`, runtime index rebuilt from the stores, lazy registry quest, inert on prepare-for-removal) and `QuestPart_NetworkRetainedPawns` (a fieldless Network-owned part; the class name is saved) |
-| Role-constrained projection (§ 6.6–6.8) | pure `Domain/Physical/ProjectionModel.cs` (`RoleSpec`, `RoleRules.SpecFor/Verify/ApplyCorrection`, `RoleDerivation` v1, `NamePins`, `KindPolicy`, `ProjectionPolicy`) + `Integration/Physical/PawnProjection.cs` (`PawnRoleReader`, `PawnProjection.Project`, `ApplyNamePins`) |
+| Registry (S9r, M1 timing) | `Integration/Physical/RetainedPawnRegistry.cs`: `RetainedPawnRegistry` (derived membership, O(1) `Reserves`, a two-stage load index: durable thing ids at `FinalizeInit`, validated pointers at `PostLoadInit`; the read-only `Audit`; lazy registry quest restored from durable state; inert on prepare-for-removal), the pure `Domain/Physical/BindingRules.cs` and `RegistryLoadReport` and `QuestPart_NetworkRetainedPawns` (a fieldless Network-owned part; the class name is saved) |
+| Role-constrained projection (§ 6.6–6.8) | pure `Domain/Physical/ProjectionModel.cs` (`RoleSpec`, `RoleRules.SpecFor/Verify/ApplyCorrection`, `RoleDerivation` v1, `NamePins`, `GenericMemberPolicy`, `ProjectionPolicy`) + `Integration/Physical/FactionMemberKinds.cs` (the encounter faction's generic member pool) + `Integration/Physical/PawnProjection.cs` (`PawnRoleReader`, `PawnProjection.Project`, `ApplyNamePins`) |
 | Temporary faction (S10), aging (S12), normalization | `Integration/Physical/EncounterFactions.cs`: `EncounterFactions`, `PawnAging`, `PawnNormalization` |
 | Observation (§ 9.3) | `Integration/Physical/PawnObserver.cs` (`Classify`, `SituationOf`, `OtherQuestReserves`, `CheckPass`) over the pure `Domain/Physical/ObservationRules.cs` (`WorldPawnRules`, `PlacementRules`) |
 | Tags (§ 7.3) | `Integration/Physical/PhysicalTags.cs` (`TheNetwork.Ep.<id>`, `TheNetwork.Char.<id>`; routing only) |
@@ -3213,8 +3252,9 @@ commit → RELEASE → FOLLOW-UP → PUBLISH); no second architecture exists.
 3. **The registry quest.** One hidden, accepted raw quest rooted on vanilla's `Util_GetDefaultRewardValueFromPoints` (a root is
    mandatory; a root-less quest is dropped on load) holding one fieldless Network-owned part; created lazily at the first creation and
    whenever a load finds a retained person; ended and removed by prepare-for-removal (the registry is then inert) and recreated on
-   resume. The part persists no pawn list: the Network stores are the truth and the runtime index is rebuilt when the runtime is built
-   (FinalizeInit), before the first tick. An **unprepared** removal makes vanilla drop the unknown part class (one load error) and the
+   resume. The part persists no pawn list: the Network stores are the truth. The registry has TWO load stages (the runtime-QA correction,
+   § 16.3): the durable thing-id index at `FinalizeInit` (before cross-references resolve) and the validated pointer index at the world
+   component's `PostLoadInit`; an index built from pointers at `FinalizeInit` was empty. An **unprepared** removal makes vanilla drop the unknown part class (one load error) and the
    pawns become ordinary world pawns: the self-healing outcome S9r prefers.
 4. **The encounter faction.** Vanilla's `OutlanderRefugee` when it qualifies, otherwise the first humanlike, non-player,
    non-permanent-enemy faction def with a humanlike basic kind, in def-name order (capability, never a mod name). Hidden, temporary,
@@ -3225,9 +3265,10 @@ commit → RELEASE → FOLLOW-UP → PUBLISH); no second architecture exists.
 5. **The visit.** `LordJob_VisitColony(faction, chill spot, 7,500 ticks)` with an empty gift list (no random gift). The entry cell is
    the suite's own edge-cell search with a reachability check, because `CanReachColony` fails on a map that is not a player home.
 6. **Role derivation v1.** A fixed specialty → role-candidates map, one pick by `NetHash.Combine(seed, "oprole.v1")`, Specialist for
-   unknown specialties. Stored at `Instantiate` for new Solos; for an older actor `Plan` stores the identical value the first time it is
-   needed. `OperationalRole` gained values; enums are saved by name, so no format change.
-7. **First projection.** Kind chain: the two best capability matches, the faction's basic kind, then `Villager`; at most four outer
+   unknown specialties. Stored at `Instantiate` for new Solos; for an older actor the load-time compatibility pass
+   (`ContractorService.EnsureSoloRoles`, Appendix K.5) stores the identical value before anything can materialize it, and `Plan` stays the safety net. `OperationalRole` gained values; enums are saved by name, so no format change.
+7. **First projection.** Kind chain: **only the encounter faction's generic member pool** (its basic member kind first, then the generic kinds of its Combat and Peaceful
+   groups; Appendix K.4; the earlier "two best capability matches of every loaded kind, then `Villager`" leaked boss, royal and ancient kinds); at most four outer
    attempts, each seeded (`Rand.PushState(seed + attempt)`), each a `ForceGenerateNewPawn`, no-relations, adult request with
    `mustBeCapableOfViolence` for violent roles, the role's prohibited traits and the hard clauses as `validatorPreGear`. Then the
    authoritative verdict, at most **one** raise of one role skill's base level, re-verification. A rejected candidate is dropped
@@ -3260,7 +3301,7 @@ commit → RELEASE → FOLLOW-UP → PUBLISH); no second architecture exists.
 * **Menu.** Dev Mode → "The Network (PHYSICAL TESTS: disposable environment only)". Every label starts with its id and name
   (`RT-PHYX-001 — First materialization`, …): the owner's handoff rule replaces the `⚠ PHYSICAL` prefix of § 21.2, and the category
   name carries the warning. Items marked `[armed]` spend the arm; `PHYX — Show status`, `PHYX — Last reports`,
-  `PHYX — Stop current run` and `RT-PHYX-010 — … verify after load (read-only)` never need it.
+  `PHYX — Stop current run` and `010V VERIFY — loaded save` never need it.
 * **Arm.** A modal states what the suite creates and changes; typing `ARM PHYSICAL TESTS` arms **one** action for the current game
   object only. Never saved; cleared by `FinalizeInit` on every load and new game; gone on quit; spent by each action.
 * **Guard (facts, never a guess).** Dev Mode on, armed, the Network running, the adapter available, no other run, **no incomplete
@@ -3310,7 +3351,7 @@ leases, notable assets, ambient visits, any player-facing content, Harmony. `RT-
 The owner had already run the dedicated S31 spike before 3.1 was implemented, and it passed. Documentation and ADR now say so: ADR-053 records
 "retained pawn exit reservation uses M1"; § 7.6 records the owner-runtime cases and what they do and do not prove; the spikes README, the
 phase plan, the risk register and the status banners distinguish **S31 / M1: owner-runtime PASS, accepted** from **Phase 3.1 physical
-runtime suite: NOT YET RUN by the owner**. Nothing here re-runs or redesigns S31.
+runtime suite: not yet run by the owner when this pass was written** (the owner's first run then followed: [Appendix K](#appendix-k-phase-31-runtime-qa-correction-pass-pr-10)). Nothing here re-runs or redesigns S31.
 
 ### J.2 A failed placement never strands a bound person (P3-INV-033)
 
@@ -3393,6 +3434,86 @@ runtime suite: NOT YET RUN by the owner**. Nothing here re-runs or redesigns S31
 
 * **Headless:** the full suite (361 existing tests, two of them updated as J.2 states, plus the `Phys31Fix.*` regressions), zero project warnings,
   save format 5, no Harmony.
-* **Owner runtime, NOT yet run on this build:** the Phase 3.1 physical suite `RT-PHYX-001…012`, `015`, `016` (with actual `Free` now a FAIL
+* **Owner runtime (superseded by [Appendix K](#appendix-k-phase-31-runtime-qa-correction-pass-pr-10): the owner then ran a first pass on build `29f31dd`):** the Phase 3.1 physical suite `RT-PHYX-001…012`, `015`, `016` (with actual `Free` now a FAIL
   in 002, 005, 015 and 016, and real-pawn identity checks in 011), the 3.1 save/load matrix (010), role generation on real pawns (011) and
   truthful aging on real disposable pawns (006, 012). S31 / M1 is **not** on this list: it is already owner-validated.
+
+## Appendix K: Phase 3.1 runtime-QA correction pass (PR #10)
+
+> **Status: Phase 3.1 implemented; owner physical validation in progress. This is NOT a Phase 3.1 PASS.** The owner ran the first real physical suite on build
+> `29f31dd` in a disposable save (RimWorld, its DLCs and The Network only). S31 / M1 timing itself stays accepted (ADR-053); this pass is about making production
+> M1 **survive a save and load** and about three production defects and three harness defects the run exposed. Phase 3.0's lifecycle (authority, episodes,
+> the atomic commit, RELEASE) is unchanged, as is every design principle the review approved. No Harmony. No new durable field: save format **5**. The owner's QA save
+> is forensic evidence (retained pawns were discarded by vanilla after the registry gap, leaving bindings that point at discarded things) and is **not** to be reused,
+> and nothing here makes that one save look clean: the retest uses a fresh disposable save.
+
+### K.1 What the first owner run showed
+
+Positive, and unchanged: M1 reservation while spawned; normal vanilla exit before save/load; no Network double `PassToWorld`; the map-removal M1 path; same-pawn
+rematerialization; downed and recovery; physical injury persistence and normalization; truthful aging; the temporary faction lifecycle; registry, redress and GC protection
+while the registry is healthy; unsupported custody really reaching `Quarantined(UnsupportedCustody)`; exactly-once reconciliation and the authority gate; production RELEASE failing
+closed when the reservation could not be proven.
+
+Findings: (1) the load-time registry reconstruction was broken (K.2); (2) generic contractors were generated from special-purpose kinds (K.4); (3) an individual's role could reach
+first materialization `Unset` (K.5); (4) `RT-PHYX-002` and `015` asserted a `PassToWorld` skip counter that must not move (K.6); (5) `RT-PHYX-009` judged an intermediate quarantine too late (K.6);
+(6) `RT-PHYX-010`'s three menu items were indistinguishable in RimWorld's narrow menu (K.6).
+
+### K.2 The load-time registry gap (P3-INV-037)
+
+After saving at `010A` (a Solo spawned, M1 PASS) and loading, the load pass said "15 bound pawn(s), 0 retained", the read-only verifier "14 not" reserved, and at the pawn's
+vanilla exit it was a `Free` world pawn the registry did not cover; RELEASE correctly refused (the reservation was unproven). **Root cause (audited, § 16.3):** the registry was built
+in `FinalizeInit`, which vanilla runs (`Game.cs:586`) **before** `Scribe.loader.FinalizeLoading()` (`Game.cs:611`) resolves cross-references, so every `PawnRef.pawn` was still null, the
+pointer-built index was empty, and the load pass then decided "retained = 0, registry not needed". The persisted thing id (a plain value) was loaded the whole time. The earlier
+text (§ 16.3, Appendix I, ADR-054, SAVE_AND_MIGRATION § 5, ARCHITECTURE § 7.3) listed `FinalizeInit` **after** `PostLoadInit`; that order was wrong and is corrected everywhere.
+
+**The fix** is the two-stage registry of § 16.3. Thing-id indexing **was required** (it is the only identity a loaded value offers before references resolve) and provenance stays safe:
+the persisted `PawnRef` remains authoritative, the bridge covers a pawn only when its own thing id equals the persisted one of an existing living `Deployed`/`Stored` binding and no
+resolved pointer contradicts it, and it is closed the moment the validated pointer index (reference equality plus an agreeing thing id) exists. The registry quest is restored from the
+**durable** retained count at `PostLoadInit` (not from the index, which may be empty), before the first tick, and only an `Ongoing` quest counts.
+Nothing is generated, spawned, rerolled, passed, cleared or destroyed at load (source-scanned).
+
+### K.3 The bound / discarded integrity diagnostic
+
+K.2's collateral: with the reservation gone, vanilla discarded retained pawns and later saves warned "Trying to save reference to a discarded thing … saveDestroyedThings=true". Preventing the gap is
+the fix; the diagnostic is the backstop (§ 16.5): every living bound person whose pointer is unresolved, resolves to a `Discarded` pawn or disagrees with its persisted thing id is reported by the
+post-load validation, by the load's stage 2 and by the `010V` verifier, and a reservation gap is stated. Never regenerated, cleared or healed; a person with an open episode is handled by the episode's observation.
+
+### K.4 First-projection PawnKind eligibility (P3-INV-038)
+
+The owner's run generated ordinary Solos as kinds such as a Horaxian highthrall, an ancient soldier and Empire royals and champions: the kind chain ranked **every** loaded humanlike kind by combat
+fit. One death scenario produced an Anomaly kind that later came back to life through that content's own mechanics: the Network recorded the physical death once, correctly; the first-realization
+kind was what was wrong. Resurrection is **not** disabled and no def is blacklisted. The pool is now structural: `FactionMemberKinds.For(factionDef)` reads the faction's own basic member kind and its Combat and
+Peaceful group kinds, and `GenericMemberPolicy` admits only those that carry no special-purpose content (the list in P3-INV-038, every flag read from a vanilla `PawnKindDef` field). For vanilla's refugee
+faction that is its basic member kind alone. `EncounterFactions.Qualifies` requires at least one generic member, so a faction whose only member kind is special-purpose is not chosen; if none exists the
+projection aborts cleanly before anything is bound and **no global kind is borrowed**. The first-realization restriction only: a pawn that already exists keeps its kind for life and whatever the game later
+does to it. `RT-PHYX-011` reports the allowed provenance and fails any real pawn outside the pool.
+
+### K.5 The operational role of an individual that predates the field (P3-INV-039)
+
+`RT-PHYX-001` failed "the person's operational role is stored" for Solos the owner picked whose person still had `Unset`. **What the code audit found** (the owner's save was not available to this pass,
+so this is a finding by reading the code, proved by a headless fixture): `Plan` already stored the role lazily, but through `RoleDerivation.ForSolo`, which returned `Unset` for any individual that has no `ContractorProfile`.
+A Fixer is exactly that (an individual with an embodied person, counted as a Solo by `ContractorService.IsSolo`, with a `FixerProfile`), and the physical tier's picker takes the lowest actor ids first, which are Fixers.
+The derivation is now total for any embodied individual (contractor profile, else fixer profile, else the documented Specialist fallback), and the normal compatibility path
+(`ContractorService.EnsureSoloRoles`, run at bootstrap and at load) stores it once, before anything can materialize the person, for every individual whose role is `Unset` and who never had a pawn bound.
+Deterministic (the actor's seed and original specialties only), independent of episode, time, map, fame, reputation and every physical pawn (none exists yet); a stored role is never overwritten; a person who
+ever had a pawn is never given one retroactively; no save-version bump (it fills an existing v5 field). `Plan` remains the in-lifecycle safety net.
+
+### K.6 Harness corrections (production behaviour unchanged)
+
+* **`RT-PHYX-002` / `015`.** A Returned named pawn's RELEASE list is `{ Normalize, EnsureRetained, StripTag }`: it contains **no** `PassToWorldIfAllowed` action at all, so the "already a world pawn, skipped" counter correctly stays
+  at 0. The old assertion expected it to increment. Now: 0 passed, 0 skipped, 0 refused. P3-INV-031's protection and RELEASE are unchanged.
+* **`RT-PHYX-009`.** Two phases, asserted separately. During the unsupported custody the facts are captured on the frame the quarantine is first observed (`sawUnsupportedQuarantine`, `sawPawnStillPrisoner`, `sawAuthorityClosed`, `sawNoCommit`, `sawNoPassToWorld`),
+  **before** the map is removed. After vanilla clears the custody: re-observation, the ordinary Returned path, the same pawn and binding, no Network pass. The final state is **not** required to still be Quarantined.
+* **`RT-PHYX-010`.** Display labels only (the family id stays `RT-PHYX-010` everywhere): **`010A SAVE — visitor spawned`**, **`010B SAVE — post-map`**, **`010V VERIFY — loaded save`**. A save made while paused loads paused, so no tick runs
+  between the load and the verifier; no harness change was needed for that, and nothing about the test is persisted. The workflow is in [RUNTIME_TESTING § 17.3](RUNTIME_TESTING.md#173-rt-phyx-010-the-save-and-load-workflow-owner-steps).
+  **Stopping `010V` stops only the read-only QA runner; it does not cancel a real production episode**, which keeps blocking the next destructive scenario until it completes.
+* **`RT-PHYX-011`** additionally reports the allowed kind provenance (K.4).
+
+### K.7 Evidence and what is still owed
+
+* **Headless:** the full suite, **418 tests, 31,268 checks, 0 failures** (385 / 29,887 before this pass, plus 33 `Phys31Qa.*` regressions), zero C# warnings, save format 5, no Harmony. Five existing tests were updated because they encoded the defects or the superseded
+  status: the label convention (`Phys31.TierScenarioTableAndMenuLabels`), the "rebuilt in `FinalizeInit`" scan with its thing-id-less fixture (`Phys31.M1RuleIsRepresentedInTheRealAdapter`), the registry-quest place count, and the two docs-status assertions of the previous pass
+  (`Phys31Fix.Docs_*`: the owner has now run a first pass). The Mono headless runner still crashes about one full run in ten (a native SIGSEGV inside the pre-existing Phase 2 soak tests, `SoakYears` and `SoakCareerStress`; it also occurs on the untouched PR head); no test of this pass has ever crashed it. Five mutations that reintroduce each defect (bridge off, Fixer derivation `Unset`, royal kind admitted, PostLoadInit hook removed, the old pass assertion) are each caught by the new tests.
+  The real adapter cannot run headlessly: its decisions are the pure rules those tests prove, and vanilla's own ordering is pinned by the audited facts of § 16.3.
+* **Owner runtime, on a FRESH disposable save, on the corrected build:** `RT-PHYX-001`, `002`, `004`, `009`, `010A` + reload + `010V`, `010B` + reload + `010V`, `011`, `015`. The corrections do not touch the rematerialization, aging, normalization or
+  map-removal paths, so `006`, `007`, `012` and `016` need not be rerun for this pass, **except** that `016` and `007` exercise the registry and are worth one run if time allows (the registry's runtime answer in steady state is unchanged: pointer reference equality plus retained custody).

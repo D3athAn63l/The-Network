@@ -18,6 +18,13 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
 
         public const string LogPrefix = "[TheNetwork][PHYS] ";
 
+        // RT-PHYX-010's three menu labels. DISPLAY TEXT ONLY: the scenario family id stays RT-PHYX-010 in the table, the log and every report
+        // (stable ids are never renumbered). RimWorld's debug menu truncates long labels, so the unique part comes FIRST; a test pins that the
+        // literal in PhysicalTestDevActions equals these, so the on-screen instructions below can never name a label that does not exist.
+        public const string Label010A = "010A SAVE — visitor spawned [armed]";
+        public const string Label010B = "010B SAVE — post-map [armed]";
+        public const string Label010V = "010V VERIFY — loaded save";
+
         /// <summary>Every entity the suite itself creates (disposable pawns, fixture factions) carries this tag plus the run id.</summary>
         public const string TestTagPrefix = "TheNetwork.Test.";
 

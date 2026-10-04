@@ -202,8 +202,9 @@ namespace TheNetwork.Domain.Physical
                 for (int i = 0; i < people.Count; i++)
                 {
                     KnownCharacter c = people[i];
-                    // A Solo's operational role, stored lazily from IMMUTABLE origin facts (§ 6.6.5, P3-INV-030): the same value whenever it
-                    // is first needed. An organization's people get theirs with composition (3.2).
+                    // A Solo's operational role, stored from IMMUTABLE origin facts (§ 6.6.5, P3-INV-030): the same value whenever it is first
+                    // needed. The load-time compatibility pass (ContractorService.EnsureSoloRoles) normally stored it long before; this is the
+                    // safety net for the first use. An organization's people get theirs with composition (3.2).
                     if (c.opRole == OperationalRole.Unset && a.bindings.embodies == c.id) c.opRole = RoleDerivation.ForSolo(a);
                     e.members.Add(new EpisodeMember { character = c.id, slot = slot++, tier = Tier.Regular, seatRole = c.opRole, pawn = c.pawn?.Copy() });
                     c.custody = CustodyState.Deployed;
