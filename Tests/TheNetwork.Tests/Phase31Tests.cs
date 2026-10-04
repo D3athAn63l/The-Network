@@ -114,8 +114,10 @@ namespace TheNetwork.Tests
 
         private static void ScenarioLabels()
         {
-            string[] expected = { "RT-PHYX-001", "RT-PHYX-002", "RT-PHYX-003", "RT-PHYX-004", "RT-PHYX-005", "RT-PHYX-006", "RT-PHYX-007", "RT-PHYX-008", "RT-PHYX-009", "RT-PHYX-010", "RT-PHYX-011", "RT-PHYX-012", "RT-PHYX-015", "RT-PHYX-016" };
-            T.Eq(expected.Length, PhysicalScenarioTable.All.Count, "the 3.1 scenario table has exactly the 3.1 ids");
+            // Phase 3.2A added the custody ids 020–025 (S21) and retired 009 (kept, never reused); the 3.1 ids are unchanged and in order.
+            string[] expected = { "RT-PHYX-001", "RT-PHYX-002", "RT-PHYX-003", "RT-PHYX-004", "RT-PHYX-005", "RT-PHYX-006", "RT-PHYX-007", "RT-PHYX-008", "RT-PHYX-009", "RT-PHYX-010", "RT-PHYX-011", "RT-PHYX-012", "RT-PHYX-015", "RT-PHYX-016",
+                "RT-PHYX-020", "RT-PHYX-021", "RT-PHYX-022", "RT-PHYX-023", "RT-PHYX-024", "RT-PHYX-025" };
+            T.Eq(expected.Length, PhysicalScenarioTable.All.Count, "the scenario table has exactly the 3.1 and 3.2A ids");
             for (int i = 0; i < expected.Length; i++) T.Eq(expected[i], PhysicalScenarioTable.All[i].id, "scenario " + (i + 1));
             T.Check(PhysicalScenarioTable.Get("RT-PHYX-013") == null && PhysicalScenarioTable.Get("RT-PHYX-014") == null, "no 3.2 group scenario (013/014) is invented");
             string actions = Src("Diagnostics/RuntimePhysicalTests/PhysicalTestDevActions.cs");
@@ -141,7 +143,8 @@ namespace TheNetwork.Tests
                 bool readOnly = label.Contains("(read-only)") || label.Contains("Arm physical tests") || label.Contains("Stop current run") || label == PhysicalTestIds.Label010V;
                 T.Check(readOnly || label.EndsWith("[armed]", StringComparison.Ordinal), "a destructive item says it needs the arm (" + label + ")");
             }
-            T.Check(Regex.Matches(actions, @"StartReadOnly\(").Count == 1 && actions.Contains("\"" + PhysicalTestIds.Label010V + "\""), "only the after-load verification runs without the arm");
+            T.Check(Regex.Matches(actions, @"StartReadOnly\(").Count == 2 && actions.Contains("\"" + PhysicalTestIds.Label010V + "\"") && actions.Contains("\"RT-PHYX-025 — Held people after save/load (read-only)\""),
+                "only the two after-load verifications (010V, 025) run without the arm");
             T.Check(PhysicalTestIds.Category != "The Network" && Src("Diagnostics/RuntimePhysicalTests/PhysicalTestDevActions.cs").Contains("private const string Cat = PhysicalTestIds.Category;"), "a separate category");
             T.Check(PhysicalTestIds.Category.Contains("PHYSICAL TESTS") && PhysicalTestIds.Category.Contains("disposable"), "the category warns in plain words");
         }
@@ -268,7 +271,7 @@ namespace TheNetwork.Tests
 
         // ================================================================== source scans (the 3.1 brief § 27)
 
-        private static readonly string[] PawnApis = { "PawnGenerator", "GenSpawn", "LordMaker", "MakeNewLord", "FactionGenerator", "AgeTickMothballed", "DamageUntilDowned", "DamageUntilDead", "CapturedBy", "DeinitAndRemoveMap", "RemoveHediff", "AddHediff", "SetFaction", "Find.WorldPawns" };
+        private static readonly string[] PawnApis = { "PawnGenerator", "GenSpawn", "LordMaker", "MakeNewLord", "FactionGenerator", "AgeTickMothballed", "DamageUntilDowned", "DamageUntilDead", "CapturedBy(", "DeinitAndRemoveMap", "RemoveHediff", "AddHediff", "SetFaction", "Find.WorldPawns" };
 
         private static void PawnApisScoped()
         {

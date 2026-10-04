@@ -48,7 +48,7 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix1_Stage2_PointerIndexAfterCrossRefsBecomesTheAuthority", Stage2Pointers));
             t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix1_PointerAndPersistedIdMustAgree_MismatchFailsClosed", MismatchFailsClosed));
             t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix1_UnresolvedAndDiscardedBindingsAreReportedNeverRepaired", UnresolvedAndDiscarded));
-            t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix1_OnlyLivingDeployedOrStoredPeopleAreRetained", CustodyMatrix));
+            t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix1_OnlyLivingDeployedStoredOrHeldPeopleAreRetained", CustodyMatrix));
             t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix1_FifteenBoundPeopleNoneIsEverActuallyFree", FifteenBound));
             t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix1_RealScribeLoad_StageOneRegistryFromTheLoadedStore", ScribeStages));
             t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix1_Scan_QuestRestoredFromDurableStateAtPostLoadInit", ScanQuestRestore));
@@ -314,8 +314,9 @@ namespace TheNetwork.Tests
                     c.pawn = new PawnRef { pawn = null, thingIdNumber = id, defName = "Human", boundTick = 1 };
                     c.custody = custody;
                     c.status = status;
-                    bool want = c.IsAlive && (custody == CustodyState.Deployed || custody == CustodyState.Stored);
-                    T.Eq(want, RetainedPawnRegistry.RetainedCustody(c), "retained iff alive and Deployed or Stored (" + status + ", " + custody + ")");
+                    // Phase 3.2A (ADR-056) extends M1 "from the binding on" to a person vanilla holds: OutOfCustody is retained too.
+                    bool want = c.IsAlive && (custody == CustodyState.Deployed || custody == CustodyState.Stored || custody == CustodyState.OutOfCustody);
+                    T.Eq(want, RetainedPawnRegistry.RetainedCustody(c), "retained iff alive and Deployed, Stored or OutOfCustody (" + status + ", " + custody + ")");
                     if (want)
                     {
                         expected++;
@@ -337,8 +338,8 @@ namespace TheNetwork.Tests
             }
             RetainedPawnRegistry r = new RetainedPawnRegistry(n.ctx);
             r.RebuildEarly();
-            T.Eq(expected, r.DurableRetainedCount(), "the durable count is exactly the living Deployed or Stored people (" + expected + ")");
-            T.Eq(2, expected, "only Deployed and Stored, while alive (2 of " + id + " fixtures)");
+            T.Eq(expected, r.DurableRetainedCount(), "the durable count is exactly the living Deployed, Stored or held people (" + expected + ")");
+            T.Eq(3, expected, "only Deployed, Stored and OutOfCustody, while alive (3 of " + id + " fixtures)");
             for (int i = 0; i < retained.Count; i++) T.Check(r.Reserves(retained[i]), "stage 1 reserves retained #" + retained[i].thingIDNumber);
             foreach (KnownCharacter c in n.ctx.characters.characters) if (c.pawn != null && c.pawn.IsBound) c.pawn.pawn = MakeLike(c.pawn.thingIdNumber, retained);
             r.ResolvePointers();

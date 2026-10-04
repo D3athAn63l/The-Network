@@ -45,8 +45,10 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix4_ReturnedReleaseContainsNoPassToWorldAction", ReturnedHasNoPass));
             t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix4_NormalReturnPassesSkipsAndRefusesNothing", NormalReturnCounters));
             t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix4_Scan_Rt002AndRt015AssertZeroNotAnIncrement", ScanPassAssertions));
-            t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix5_UnsupportedCustody_QuarantineThenVanillaClearsItAndTheEpisodeReturns", UnsupportedThenCleared));
-            t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix5_Scan_Rt009CapturesIntermediateEvidenceBeforeTheMapIsRemoved", ScanRt009));
+            // Phase 3.2A superseded the 3.1 "arrest ⇒ Quarantined(UnsupportedCustody)" production rule these two tests encoded: an arrest is now a
+            // supported held custody (ADR-056). They are UPDATED, deliberately, to the 3.2A behaviour, and RT-PHYX-009 is retired (never reused).
+            t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix5_ArrestCommitsHeldOnceThenTheCustodyWatchReturnsTheSamePawn", UnsupportedThenCleared));
+            t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix5_Scan_Rt009IsRetiredAndSupersededByRt020", ScanRt009));
             t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix6_Rt010LabelsAreFrontLoadedAndTheFamilyIdIsStable", Rt010Labels));
             t.Add(new KeyValuePair<string, Action>("Phys31Qa.Fix6_VerifierIsReadOnlyAndTheLoadClearsTheArm", Rt010VerifierReadOnly));
             t.Add(new KeyValuePair<string, Action>("Phys31Qa.Scan_NoHarmonyNoPhase32NoSaveFormatBump", ScanGlobals));
@@ -587,46 +589,37 @@ namespace TheNetwork.Tests
             PhysicalEpisode e = PhysicalLifecycleTests.Begin(n, a, new[] { c });
             PawnRef binding = c.pawn.Copy();
             int commits0 = lc.counters.commits, passes0 = lc.counters.passedToWorld;
-            // PHASE 1 — the dev arrest: held by the player. Evidence is captured while it holds.
-            n.physical.Hold(c.pawn, ObservedKind.HeldByPlayer);
-            n.physical.TokenOf(c.pawn).held = true;
+            // PHASE 1 — the dev arrest: held by the player. Phase 3.2A: a supported custody, so the mission episode ends ONCE on the held outcome.
+            n.physical.Hold(c.pawn, ObservedKind.HeldByPlayer, HeldKind.PlayerPrisoner);
             lc.Reconcile(e, "watch");
-            T.Eq(EpisodeState.Quarantined, e.state, "PHASE 1: the episode is Quarantined");
-            T.Check(e.quarantineKey != null && e.quarantineKey.StartsWith("UnsupportedCustody:HeldByPlayer", StringComparison.Ordinal), "PHASE 1: UnsupportedCustody:HeldByPlayer (" + e.quarantineKey + ")");
-            T.Check(e.members[0].state == MemberState.Present && e.members[0].outcome == MemberOutcome.Pending && lc.counters.commits == commits0, "PHASE 1: nothing committed, no capture faked");
-            T.Check(c.custody == CustodyState.Deployed && !AuthorityGate.CanSimulateAbstractly(c), "PHASE 1: the person stays non-abstract");
+            lc.Reconcile(e, "duplicate");
+            T.Check(e.IsComplete && e.members[0].outcome == MemberOutcome.HeldByPlayer, "PHASE 1: the episode closed once on HeldByPlayer (" + e + ")");
+            T.Eq(commits0 + 1, lc.counters.commits, "PHASE 1: exactly one commit");
+            T.Check(c.custody == CustodyState.OutOfCustody && c.heldBy == HeldKind.PlayerPrisoner && c.status == CharacterStatus.Captured, "PHASE 1: Captured, OutOfCustody(PlayerPrisoner)");
+            T.Check(!c.episode.IsValid && !AuthorityGate.CanSimulateAbstractly(c) && AuthorityGate.AuthorityOf(c) == PersonAuthority.VanillaHeld, "PHASE 1: released from the episode, VanillaHeld, never abstract");
+            T.Check(n.scheduler.Has(PhysicalLifecycleService.CustodyWatchJob, PhysicalLifecycleService.CustodyWatchTarget), "PHASE 1: the custody watch exists while someone is held");
             T.Eq(0, n.physical.passCalls, "PHASE 1: no Network PassToWorld");
-            // PHASE 2 — vanilla clears the custody (the map is removed: the guest status ends and the pawn is passed to the world).
-            n.physical.TokenOf(c.pawn).held = false;
-            n.physical.ExitNormally(c.pawn, 80);
-            int wakeups0 = lc.counters.wakeups;
-            lc.Reconcile(e, "watch");
-            T.Check(lc.counters.wakeups > wakeups0, "PHASE 2: the episode was re-observed");
-            T.Check(e.IsComplete && e.state != EpisodeState.Quarantined && e.quarantineKey == null, "PHASE 2: it is NOT still quarantined: ending the custody lifted it, and the episode completed");
-            T.Eq(MemberOutcome.Returned, e.members[0].outcome, "PHASE 2: through the ordinary Returned path");
-            T.Check(c.custody == CustodyState.Stored && AuthorityGate.CanSimulateAbstractly(c), "PHASE 2: Stored, authority open again");
-            T.Check(c.pawn.SameBinding(binding) && e.members[0].pawn.SameBinding(c.pawn), "PHASE 2: the same pawn and binding");
+            // PHASE 2 — vanilla clears the custody (released, or the map is removed): the same pawn is a free world pawn the registry reserves.
+            n.physical.Free(c.pawn);
+            n.Advance(PhysicalLifecycleService.CustodyWatchPeriod + 10);
+            T.Check(c.custody == CustodyState.Stored && AuthorityGate.CanSimulateAbstractly(c), "PHASE 2: Stored through a Custody episode, authority open again");
+            T.Check(c.status == CharacterStatus.Active && c.heldBy == HeldKind.None && c.heldSinceTick < 0, "PHASE 2: free again (Captured resolved by the positive return; holder cleared)");
+            T.Check(c.pawn.SameBinding(binding), "PHASE 2: the same pawn and binding");
             T.Eq(passes0, lc.counters.passedToWorld, "PHASE 2: still no Network PassToWorld");
             T.Eq(0, n.physical.passCalls, "PHASE 2: the port was never asked to pass anything");
+            T.Check(!n.scheduler.Has(PhysicalLifecycleService.CustodyWatchJob, PhysicalLifecycleService.CustodyWatchTarget), "PHASE 2: the custody watch is gone once nobody is held");
         }
 
         private static void ScanRt009()
         {
-            string s = Body(Code("Diagnostics/RuntimePhysicalTests/PhysicalScenarios.cs"), "public sealed class Phyx009UnsupportedCustody", "public sealed class Phyx010SavePoint");
-            foreach (string field in new[] { "sawUnsupportedQuarantine", "sawPawnStillPrisoner", "sawAuthorityClosed", "sawNoCommit", "sawNoPassToWorld" })
-                T.Check(s.Contains("bool ") && s.Contains(field), "RT-PHYX-009 records " + field);
-            T.Check(Regex.IsMatch(s, @"everyFrame\s*=\s*Capture;"), "the evidence is gathered EVERY frame from the arrest on");
-            string capture = Body(s, "private void Capture()", "protected override void Finish()");
-            T.Check(capture.Contains("if (sawUnsupportedQuarantine) return;") && capture.Contains("sawPawnStillPrisoner = ") && capture.Contains("sawAuthorityClosed = ") && capture.Contains("sawNoCommit = ") && capture.Contains("sawNoPassToWorld = "), "all five facts are captured on the frame the quarantine is first observed");
-            T.Check(capture.Contains("if (!armed || removed") , "and nothing is captured after the map removal");
-            int wait = s.IndexOf("if (sawUnsupportedQuarantine) return StepResult.Next;", StringComparison.Ordinal);
-            int assert1 = s.IndexOf("PHASE 1 — assert the facts captured DURING the unsupported custody", StringComparison.Ordinal);
-            int remove = s.IndexOf("TestSite.RemoveMap(false)", StringComparison.Ordinal);
-            T.Check(wait > 0 && assert1 > wait && remove > assert1, "the map is removed only AFTER the quarantine was observed and its facts asserted");
-            string finish = Body(s, "protected override void Finish()", "RT-PHYX-010");
-            T.Check(!Regex.IsMatch(finish, @"EpisodeState\.Quarantined\)?\s*,") || finish.Contains("e.state != EpisodeState.Quarantined"), "the final assertions never require the episode to STILL be quarantined");
-            T.Check(!finish.Contains("e.state == EpisodeState.Quarantined") && !finish.Contains("IsPrisonerOfColony"), "nor that the pawn is still a prisoner");
-            T.Check(finish.Contains("e.members[0].pawn.SameBinding(c.pawn)") && finish.Contains("port.counters.passes == passes0") && finish.Contains("lc.counters.wakeups > wakeups0") && finish.Contains("CheckReturnedAndStored(e, c, p)"), "they assert re-observation, the ordinary Returned path, the same binding and no Network PassToWorld");
+            PhysicalScenarioInfo retired = PhysicalScenarioTable.Get("RT-PHYX-009");
+            T.Check(retired != null && retired.id == "RT-PHYX-009" && retired.name == "Unsupported custody: dev arrest quarantines", "RT-PHYX-009 keeps its id and name (never renumbered, never reused)");
+            T.Check(retired != null && retired.IsRetired && retired.retired.Contains("RT-PHYX-020"), "and is retired, superseded by RT-PHYX-020 (" + retired?.retired + ")");
+            string s = Code("Diagnostics/RuntimePhysicalTests/PhysicalScenarios.cs");
+            T.Check(!s.Contains("class Phyx009UnsupportedCustody") && !s.Contains("UnsupportedCustody:HeldByPlayer"), "no scenario still expects an arrest to quarantine");
+            string actions = Code("Diagnostics/RuntimePhysicalTests/PhysicalTestDevActions.cs");
+            T.Check(actions.Contains("PhysicalTestSession.Retired(PhysicalScenarioTable.Get(\"RT-PHYX-009\"))"), "the 009 menu item only says it is retired (it runs nothing)");
+            T.Check(PhysicalScenarioTable.Get("RT-PHYX-020") != null && Code("Diagnostics/RuntimePhysicalTests/PhysicalCustodyScenarios.cs").Contains("class Phyx020Arrest"), "RT-PHYX-020 is the arrest scenario now");
         }
 
         // ================================================================== Fix 6: RT-PHYX-010 labels

@@ -376,12 +376,13 @@ namespace TheNetwork.Tests
             HashSet<string> all = new HashSet<string>();
             foreach (RuntimeTestCase c in RuntimeTestPlans.FullSafe(null).Cases) all.Add(c.Id);
             foreach (string must in new[] { "RT-SMOKE-001", "RT-LIVE-001", "RT-PROC-007", "RT-CAR-010", "RT-SPAT-005", "RT-PHYS-001", "RT-PHYS-026", "RT-PHYS-029" }) T.Check(all.Contains(must), "the documented id " + must + " exists");
-            T.Eq(8 + 6 + 11 + 14 + 8 + 23, all.Count, "the Full safe regression holds exactly the documented tests");
+            T.Eq(8 + 6 + 11 + 14 + 8 + 26, all.Count, "the Full safe regression holds exactly the documented tests");
             // Phase 3.0 implements exactly the safe in-game RT-PHYS cases its design assigns (§ 21.1); 007, 011, 015, 027 and 028 are headless-only,
             // 020–024 and 030 belong to 3.1/3.2, and no destructive RT-PHYX case exists.
             foreach (string id in all) T.Check(!id.StartsWith("RT-PHYX-", StringComparison.Ordinal), id + " is not a physical-tier case");
             foreach (string now in new[] { "RT-PHYS-020", "RT-PHYS-021", "RT-PHYS-022", "RT-PHYS-030" }) T.Check(all.Contains(now), now + " exists (Phase 3.1)");
-            foreach (string notYet in new[] { "RT-PHYS-023", "RT-PHYS-024" }) T.Check(!all.Contains(notYet), notYet + " is not implemented before its subphase (3.2)");
+            foreach (string notYet in new[] { "RT-PHYS-023", "RT-PHYS-024" }) T.Check(!all.Contains(notYet), notYet + " is not implemented before its subphase (3.2B: groups)");
+            foreach (string now in new[] { "RT-PHYS-031", "RT-PHYS-032", "RT-PHYS-033" }) T.Check(all.Contains(now), now + " exists (Phase 3.2A, held custody)");
         }
 
         private static void PreservedRuntimeOnly()
