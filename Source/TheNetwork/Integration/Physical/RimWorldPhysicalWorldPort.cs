@@ -192,11 +192,15 @@ namespace TheNetwork.Integration.Physical
             PhysicalTags.Add(p, PhysicalTags.Episode(episode));
             if (who.IsValid) PhysicalTags.Add(p, PhysicalTags.Character(who));
             // Vanilla's SpawnSetup takes a stored world pawn out of WorldPawns itself (no Network RemovePawn, no second insertion).
+            // GenSpawn.Spawn returns the pawn even when SpawnSetup discarded it, and a mod may throw inside it: neither the return value nor a throw
+            // says what became of the pawn. The lifecycle classifies the bound pawn from positive observation after any placement that did not
+            // report success (PlacementRules); this method only reports the truth it can see and never decides the member's fate.
             GenSpawn.Spawn(p, entry, map);
             if (!p.Spawned || p.Discarded)
             {
                 counters.placeRefusals++;
-                NetLog.Warn(LogCategory.Physical, "Vanilla did not keep " + pawn + " spawned (SpawnSetup can discard an invalid pawn); not placed.");
+                NetLog.Warn(LogCategory.Physical, "Vanilla did not leave " + pawn + " spawned (SpawnSetup can discard an invalid pawn): discarded " + p.Discarded + ", dead " + p.Dead
+                    + ", world pawn " + (Find.WorldPawns != null && Find.WorldPawns.Contains(p)) + ". Not reported placed; the lifecycle classifies it from observation.");
                 return false;
             }
             LordJob_VisitColony job = new LordJob_VisitColony(f, chill, VisitTicks) { gifts = new List<Thing>() };
@@ -303,19 +307,21 @@ namespace TheNetwork.Integration.Physical
         }
 
         /// <summary>
-        /// PROVE the M1 reservation: the registry covers the pawn and, as a world pawn, vanilla sees it as anything but Free. Nothing is
-        /// established here (the binding and custody already did it); a failed proof throws and RELEASE stays pending.
+        /// PROVE the M1 reservation (ADR-053: RELEASE proves it, it does not create it): the registry quest exists, the registry covers the pawn
+        /// and, as a world pawn, vanilla sees it as ReservedByQuest. Nothing is established or repaired here (the binding, the custody and the
+        /// quest made at the first binding already did it): a registry quest that is missing is NOT recreated by this stage, and a failed proof
+        /// throws so RELEASE stays pending, never quietly healed.
         /// </summary>
         public void EnsureRetained(PawnRef pawn)
         {
             Pawn p = pawn?.pawn;
             if (p == null || p.Discarded) throw Refused("the binding does not resolve");
-            Registry.EnsureQuest();
+            if (Registry.FindQuest() == null) throw Refused("the registry quest does not exist (RELEASE proves the reservation, it never creates it)");
             if (!Registry.Reserves(p)) throw Refused("the registry does not cover " + p.LabelShort + " (custody or binding)");
             if (Find.WorldPawns.Contains(p))
             {
                 WorldPawnSituation s = Find.WorldPawns.GetSituation(p);
-                if (s == WorldPawnSituation.Free || s == WorldPawnSituation.None) throw Refused(p.LabelShort + " is a world pawn in situation " + s);
+                if (s != WorldPawnSituation.ReservedByQuest) throw Refused(p.LabelShort + " is a world pawn in situation " + s + ", not ReservedByQuest (M1 / P3-INV-032)");
             }
             counters.retentionProofs++;
         }

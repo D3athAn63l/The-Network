@@ -31,6 +31,19 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             public bool gone;
             public bool held;
 
+            /// <summary>
+            /// M1 (ADR-053): a NAMED token is covered by the registry from its binding on, so vanilla sees it as ReservedByQuest the instant it
+            /// is passed. False scripts the reservation failing (a missing registry quest): the pawn is then an ordinary Free world pawn. An
+            /// anonymous token is never covered.
+            /// </summary>
+            public bool registryReserves = true;
+
+            /// <summary>Scripts "a quest other than the Network's also reserves this pawn".</summary>
+            public bool otherQuestReserves;
+
+            /// <summary>How and where vanilla made the pawn a world pawn (a normal exit or a map removal); null = it never left a map.</summary>
+            public ExitRecord exit;
+
             /// <summary>What Observe returns; null = derived from the token's state.</summary>
             public PhysicalObservation scripted;
 
@@ -47,10 +60,28 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             public int factionId = -1;
         }
 
+        /// <summary>The facts of a pawn's exit, kept so the observation is derived at the moment of observing (it can change afterwards).</summary>
+        public sealed class ExitRecord
+        {
+            public int tileId;
+            public float health = 1f;
+            public bool downed;
+            public int mapId = -1;
+        }
+
         public bool available = true;
 
         /// <summary>When set, every Place fails (the "map is gone before spawn" case).</summary>
         public bool failPlace;
+
+        /// <summary>With <see cref="failPlace"/>: the failed placement THROWS (after <see cref="onPlaceFailed"/> ran) instead of returning false, as a mod's exception inside SpawnSetup would.</summary>
+        public bool failPlaceThrows;
+
+        /// <summary>
+        /// One-shot: the next truthful-aging catch-up completes this many ticks, then a step THROWS after already advancing the pawn by the whole
+        /// step (vanilla's non-atomic mothball step). −1 = off. Models <see cref="AgingUncertainException"/>.
+        /// </summary>
+        public long ageUncertainAfter = -1;
 
         /// <summary>
         /// Scripts what a failed placement left behind (for example a pawn that ended up spawned, held, dead or gone anyway), so a
@@ -89,7 +120,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests
 
         // ------------------------------------------------------------------ scripting
 
-        /// <summary>The next <paramref name="times"/> requests of <paramref name="action"/> (create, age, place, normalize, retain, pass, strip, faction, faction-release) throw.</summary>
+        /// <summary>The next <paramref name="times"/> requests of <paramref name="action"/> (create, age, place, observe, normalize, retain, pass, strip, faction, faction-release) throw.</summary>
         public void ThrowOn(string action, int times = 1)
         {
             faults[action] = times;
@@ -112,14 +143,39 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             if (t != null) t.scripted = o;
         }
 
-        /// <summary>A normal edge exit, performed by "vanilla": despawned and ALREADY passed to the world, with exit evidence.</summary>
+        /// <summary>
+        /// A normal edge exit, performed by "vanilla": despawned and ALREADY passed to the world. What the Network then observes is derived from
+        /// the token's reservation by the same pure rule the real adapter uses (<see cref="WorldPawnRules"/>): a named token is reserved by the
+        /// registry (M1), so it is WorldFree with exit evidence; an anonymous token is an ordinary Free world pawn.
+        /// </summary>
         public void ExitNormally(PawnRef p, int tileId, float health = 1f, bool downed = false)
         {
             Token t = TokenOf(p);
             if (t == null) return;
             t.spawned = false;
             t.inWorldPawns = true;
-            t.scripted = new PhysicalObservation { kind = ObservedKind.WorldFree, exitEvidence = true, health = health, downed = downed, tile = new TileRef { tileId = tileId }, mapId = t.mapId };
+            t.exit = new ExitRecord { tileId = tileId, health = health, downed = downed, mapId = t.mapId };
+            t.scripted = null;
+        }
+
+        /// <summary>The M1 reservation fails: vanilla passes the pawn while the registry does not cover it, so it is an actual Free world pawn.</summary>
+        public void ExitFree(PawnRef p, int tileId, float health = 1f, bool downed = false)
+        {
+            BreakReservation(p);
+            ExitNormally(p, tileId, health, downed);
+        }
+
+        public void BreakReservation(PawnRef p)
+        {
+            Token t = TokenOf(p);
+            if (t != null) t.registryReserves = false;
+        }
+
+        /// <summary>The owner repairs the registry by hand (a test of what a LATER positive observation does; the Network never does this itself).</summary>
+        public void RepairReservation(PawnRef p)
+        {
+            Token t = TokenOf(p);
+            if (t != null) t.registryReserves = true;
         }
 
         /// <summary>The pawn died where it was (a corpse; not a world pawn).</summary>
@@ -168,7 +224,8 @@ namespace TheNetwork.Diagnostics.RuntimeTests
                 if (!t.spawned || t.mapId != mapId || t.dead || t.gone) continue;
                 t.spawned = false;
                 t.inWorldPawns = true;
-                t.scripted = new PhysicalObservation { kind = ObservedKind.WorldFree, exitEvidence = true, tile = new TileRef { tileId = tileId }, mapId = mapId };
+                t.exit = new ExitRecord { tileId = tileId, mapId = mapId };
+                t.scripted = null;
                 n++;
             }
             actions.Add("map-removed " + mapId + " (" + n + " passed by vanilla)");
@@ -200,7 +257,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests
         {
             requests.Add(request);
             Fault("create", null);
-            Token t = new Token { thingId = nextThing++, def = "Fake_Human", character = request.character, slot = request.slot };
+            Token t = new Token { thingId = nextThing++, def = "Fake_Human", character = request.character, slot = request.slot, registryReserves = request.character.IsValid };
             tokens[t.thingId] = t;
             creates++;
             actions.Add("create " + t.thingId);
@@ -217,6 +274,22 @@ namespace TheNetwork.Diagnostics.RuntimeTests
         {
             Token t = TokenOf(pawn);
             Fault("age", t);
+            if (ageUncertainAfter >= 0)
+            {
+                long completed = System.Math.Min(ageUncertainAfter, elapsedTicks);
+                long step = System.Math.Min(3600000L, elapsedTicks - completed);
+                ageUncertainAfter = -1;
+                catchUps++;
+                lastCatchUp = elapsedTicks;
+                // Vanilla advances the WHOLE failing step before its birthday effects can throw, so the pawn really is older by it.
+                if (t != null)
+                {
+                    t.agedTicks += completed + step;
+                    t.ageRequests++;
+                }
+                actions.Add("age-uncertain " + pawn?.thingIdNumber + " completed " + completed + " step " + step);
+                throw new AgingUncertainException(completed, step, 0, step, new InjectedFaultException("fake port: a birthday effect threw"));
+            }
             catchUps++;
             lastCatchUp = elapsedTicks;
             if (t != null)
@@ -256,6 +329,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             if (failPlace)
             {
                 onPlaceFailed?.Invoke(t);
+                if (failPlaceThrows) throw new InjectedFaultException("fake port: place threw after the attempt");
                 return false;
             }
             t.spawned = true;
@@ -273,11 +347,39 @@ namespace TheNetwork.Diagnostics.RuntimeTests
         {
             observes++;
             Token t = TokenOf(pawn);
+            Fault("observe", t);
             if (t == null || t.gone) return PhysicalObservation.Of(ObservedKind.Gone);
             if (t.scripted != null) return t.scripted;
             if (t.dead) return PhysicalObservation.Of(ObservedKind.Dead);
             if (t.spawned) return new PhysicalObservation { kind = ObservedKind.Spawned, mapId = t.mapId };
+            if (t.exit != null && t.inWorldPawns) return WorldObservation(t);
             return PhysicalObservation.Of(ObservedKind.Unknown);
+        }
+
+        /// <summary>A world pawn that left a map, observed NOW through the same pure rule as the real adapter (M1: a named token is reserved by the registry).</summary>
+        private static PhysicalObservation WorldObservation(Token t)
+        {
+            bool named = t.character.IsValid;
+            WorldPawnFacts facts = new WorldPawnFacts
+            {
+                retained = named,
+                situation = named && t.registryReserves ? WorldSituation.ReservedByQuest : named && t.otherQuestReserves ? WorldSituation.ReservedByQuest : WorldSituation.Free,
+                otherQuestReserves = t.otherQuestReserves
+            };
+            ObservedKind kind = WorldPawnRules.KindOf(facts);
+            PhysicalObservation o = new PhysicalObservation { kind = kind, mapId = t.exit.mapId };
+            if (kind == ObservedKind.WorldFree)
+            {
+                o.exitEvidence = true;
+                o.health = t.exit.health;
+                o.downed = t.exit.downed;
+                o.tile = new TileRef { tileId = t.exit.tileId };
+            }
+            else if (kind == ObservedKind.ReservationBroken)
+            {
+                o.note = WorldPawnRules.BrokenReservation;
+            }
+            return o;
         }
 
         public void Normalize(PawnRef pawn)
@@ -297,6 +399,12 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             if (t != null)
             {
                 t.retainCalls++;
+                // A PROOF, like the real adapter's (ADR-053): it establishes and creates nothing, and a reservation that is not in force is refused.
+                if (t.character.IsValid && !t.registryReserves)
+                {
+                    actions.Add("retain-refused " + pawn?.thingIdNumber);
+                    throw new System.InvalidOperationException("RELEASE: the retained reservation is not proven (the fake registry does not cover " + t.thingId + ")");
+                }
                 t.retained = true;
             }
             actions.Add("retain " + pawn?.thingIdNumber);

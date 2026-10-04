@@ -676,8 +676,10 @@ namespace TheNetwork.Diagnostics.RuntimeTests.Suites
             ctx.Assert.Equal(a.Get<ContractorSimulation>().equipment.tier, r.equipmentTier, "the abstract equipment tier");
             ctx.Assert.Equal(NetHash.Combine(e.seed, e.members[0].slot), r.seed, "the seed is the episode's");
             ctx.Assert.True(r.faction != null && r.faction.loadId == e.faction.loadId, "the episode's encounter faction");
-            // Nothing the Network never established is in the request: there is no field for it.
-            HashSet<string> allowed = new HashSet<string> { "episode", "actor", "character", "slot", "tier", "name", "role", "capability", "equipmentTier", "seed", "faction" };
+            // Nothing the Network never established is in the request: there is no field for it. (The person's first gender and age position
+            // are ESTABLISHED, by a pure function of the world seed and the person: § 6.3; the pawn is the truth once it exists.)
+            HashSet<string> allowed = new HashSet<string> { "episode", "actor", "character", "slot", "tier", "name", "role", "capability", "equipmentTier", "seed", "faction", "identity" };
+            ctx.Assert.Equal(PersonIdentity.For(sb.Ctx.networkSeed, c.id).ToString(), r.identity.ToString(), "the request's first identity is the person's, from the world seed and the person only");
             foreach (System.Reflection.FieldInfo f in typeof(ProjectionRequest).GetFields()) ctx.Assert.True(allowed.Contains(f.Name), "the request has no field for an unestablished fact (" + f.Name + ")");
             NamePins pins = NamePins.From(new NameSnapshot { first = "Ada", last = "Vale" });
             ctx.Assert.True(pins.first == "Ada" && pins.last == "Vale" && pins.nick == null, "stated first and last names are pinned; an unstated nickname is not");
@@ -693,13 +695,13 @@ namespace TheNetwork.Diagnostics.RuntimeTests.Suites
             KnownCharacter c = Self(sb, a);
             PhysicalEpisode e = Begin(ctx, a, new[] { c });
             EpisodeMember m = e.members[0];
-            string key = ProjectionPolicy.Key(ProjectionPolicy.ForPerson(e, m, c, a));
+            string key = ProjectionPolicy.Key(ProjectionPolicy.ForPerson(e, m, c, a, sb.Ctx.networkSeed));
             OperationalRole role = RoleDerivation.ForSolo(a);
             CareerRecord career = a.Get<ContractorSimulation>().career;
             foreach (FameBand band in System.Enum.GetValues(typeof(FameBand)))
             {
                 a.reputation.SetBand(band);
-                ctx.Assert.Equal(key, ProjectionPolicy.Key(ProjectionPolicy.ForPerson(e, m, c, a)), "fame " + band + " changes no projection request");
+                ctx.Assert.Equal(key, ProjectionPolicy.Key(ProjectionPolicy.ForPerson(e, m, c, a, sb.Ctx.networkSeed)), "fame " + band + " changes no projection request");
                 ctx.Assert.Equal(role, RoleDerivation.ForSolo(a), "fame " + band + " changes no role");
             }
             int[] scores = { 0, 1, 250, 5000, int.MaxValue };
@@ -708,7 +710,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests.Suites
                 a.reputation.SetScore(scores[i]);
                 career.reputationEarned = scores[i] / 2;
                 career.triumphs = i * 7;
-                ctx.Assert.Equal(key, ProjectionPolicy.Key(ProjectionPolicy.ForPerson(e, m, c, a)), "reputation score " + scores[i] + " changes no projection request");
+                ctx.Assert.Equal(key, ProjectionPolicy.Key(ProjectionPolicy.ForPerson(e, m, c, a, sb.Ctx.networkSeed)), "reputation score " + scores[i] + " changes no projection request");
             }
             ctx.Assert.Equal(role, RoleDerivation.ForSolo(a), "nor the role");
         }

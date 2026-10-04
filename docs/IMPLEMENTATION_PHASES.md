@@ -446,7 +446,7 @@ observed errors) stays recorded as Phase 2 / 2.75 runtime evidence.
 > 3.3 handoff as an idempotent staged protocol); see [Appendix G](PHYSICAL_LIFECYCLE.md#appendix-g-correction-log). A **micro-correction** then fixed the RELEASE return
 > semantics (a pawn vanilla already passed to the world is never passed again) and added the **mandatory spike S31** (the
 > retained-pawn exit-reservation window): **3.0 may begin; 3.1 is blocked until S31 is run and owner-reviewed**
-> ([Appendix G.2](PHYSICAL_LIFECYCLE.md#g2-micro-correction-on-top-of-3f1cbee)).
+> ([Appendix G.2](PHYSICAL_LIFECYCLE.md#g2-micro-correction-on-top-of-3f1cbee)). *(Since then the owner ran S31: PASS, M1 accepted, ADR-053.)*
 
 **The target is not "spawn some contractor pawns."** It is: a persistent Network actor can temporarily become
 physically present, actual physical consequences become authoritative, and that reality reconciles back into The
@@ -457,31 +457,36 @@ Network **exactly once**, with one authority per person at a time.
 | Subphase | Content | Spikes needed |
 |---|---|---|
 | **3.0 Authority and episode foundation** (no RimWorld pawn) — **implemented** ([PHYSICAL_LIFECYCLE Appendix H](PHYSICAL_LIFECYCLE.md#appendix-h-phase-30-as-built)) | the Episode store (reserved `deployments` slot), `PawnRef` (with `agedThroughTick`), the new `KnownCharacter` fields (incl. `opRole`, `firstEncounterTick`), the authority gate and every abstract writer behind it, **reconciliation as plan → validate → atomic snapshot-guarded commit → flag last → release → follow-up → publish** (the existing casualty/succession/ending paths are *split*, not called), a `PhysicalWorldPort` with a scriptable fake, validator, compaction, prepare-for-removal settle, `RT-PHYS-001…019` and `025…029` in the **safe** runtime tier (incl. the fault-injection sweep, release interruption with the authority gate, and publication interruption), one save-format bump | none (**S31 is not needed**: no pawn exists in 3.0) |
-| **3.1 The controlled physical episode** (the vertical slice) — **implemented, owner runtime validation required** ([PHYSICAL_LIFECYCLE Appendix I](PHYSICAL_LIFECYCLE.md#appendix-i-phase-31-as-built)) | the real adapter: create-once-and-bind a named pawn as a **role-constrained projection** (verified before binding; the smallest correction: raise a role-defining skill's base level only, never passion), spawn, tags, signal routes, the visit Lord, the per-episode temporary faction, the registry reservation, store-time normalization and **truthful, uncapped aging catch-up**, the **physical test tier** (separate; a session-only typed arm; its own generated test map by default; no inference of "disposable"), a read-only Episode Monitor. One Solo contractor, dev-triggered: exits, is wounded, is killed, or its map is removed; then re-materializes as the **same pawn**, truthfully older. **Blocked until S31 is run and owner-reviewed** | S9r, S10, S12, S14, S17, S21, S22, S23, S24, S25, **S31 (mandatory, blocks 3.1)** |
+| **3.1 The controlled physical episode** (the vertical slice) — **implemented and corrected after review; owner physical runtime validation required** ([PHYSICAL_LIFECYCLE Appendix I](PHYSICAL_LIFECYCLE.md#appendix-i-phase-31-as-built)) | the real adapter: create-once-and-bind a named pawn as a **role-constrained projection** (verified before binding; the smallest correction: raise a role-defining skill's base level only, never passion), spawn, tags, signal routes, the visit Lord, the per-episode temporary faction, the registry reservation, store-time normalization and **truthful, uncapped aging catch-up**, the **physical test tier** (separate; a session-only typed arm; its own generated test map by default; no inference of "disposable"), a read-only Episode Monitor. One Solo contractor, dev-triggered: exits, is wounded, is killed, or its map is removed; then re-materializes as the **same pawn**, truthfully older. **S31 (done: PASS, M1, ADR-053); gated now on the owner's physical run of the 3.1 suite** | S9r, S10, S12, S14, S17, S21, S22, S23, S24, S25, **S31 (mandatory gate: PASSED, owner runtime)** |
 | **3.2 Custody, rescue and groups** | held people (arrest, recruit, enslave, kidnap, caravan, pod) and the custody watch; **group materialization with organization and mission role composition, anonymous vs concretized people (progressive concretization), promotion, team cohesion**; the **rescue** episode for a Troubled operation (site holder, `OpStatus.Physical`); Last Known Locations with survivors and captives. First player-visible content | S11, S21, S26, S27 |
 | **3.3 Procurement fulfillment / physical handoff** (**design direction only**) | delivery-mode selection (orbital, colony handoff, rendezvous) constrained by capability and logistics; a per-contract orbital charter ("Additional Funds for Orbital Delivery"); personnel mobility vs freight capability; the explicit physical handoff (an idempotent staged protocol, not one atomic transaction); the robbery / betrayal consequence hook; seams for payment timing (future Direct Contracts) and rival interception (never implemented here). Decided after 3.2 | S28, S29, S30 |
 
 **Gating (explicit).** **3.0 may begin once the design is accepted**: it is the abstract foundation over a fake port and needs
-no spike. **3.1 may not begin until spike S31 (retained-pawn exit reservation / the Free-world-pawn window) has been run and
+no spike. **3.1 was gated on spike S31 (retained-pawn exit reservation / the Free-world-pawn window) being run and
 owner-reviewed**, because 3.1 introduces the first retained pawn, a real map exit, a real reservation and a real `WorldPawns`
-transition, and the mechanism that keeps that pawn from ever being `Free` is **not yet chosen**
-([PHYSICAL_LIFECYCLE § 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31)). S31 has not been run.
+transition. **The owner ran S31 and it PASSED with M1 (reserve while spawned), which is accepted**
+([ADR-053](DECISIONS.md#adr-053--retained-pawn-exit-reservation-uses-m1),
+[PHYSICAL_LIFECYCLE § 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-resolved-by-m1-spike-s31-owner-validated)). That validates the mechanism only: the 3.1
+physical suite itself is still the owner's run.
 
 **Phase 3.0 status.** Implemented: the authority gate in front of every abstract person writer, the Episode store (save format
 **5**), reconciliation as plan → validate → snapshot-guarded commit (flag last) → RELEASE → FOLLOW-UP → PUBLISH with explicit
 markers, the fail-closed production port and the scriptable fake, the validator, compaction and removal settle, and `RT-PHYS-001…019`
 and `025…029` (headless, and in the safe sandbox tier). It creates no pawn and changes no gameplay (the deterministic soaks are
-identical to the pre-3.0 build). **3.1 remains blocked until S31 is run and owner-reviewed.** See
+identical to the pre-3.0 build). *(3.1 was blocked until S31 was run and owner-reviewed: done, PASS, ADR-053.)* See
 [PHYSICAL_LIFECYCLE Appendix H](PHYSICAL_LIFECYCLE.md#appendix-h-phase-30-as-built) and [ADR-052](DECISIONS.md).
 
-**Phase 3.1 status: IMPLEMENTED — OWNER RUNTIME VALIDATION REQUIRED.** One Solo contractor can become one real, retained, named
+**Phase 3.1 status: IMPLEMENTED and CORRECTED after review — OWNER PHYSICAL RUNTIME VALIDATION REQUIRED.** One Solo contractor can become one real, retained, named
 pawn on the physical tier's own test map (Dev Mode, session-armed): role-constrained first creation, the write-once binding, the
-retained-pawn registry (reservation while spawned: candidate **M1**), the temporary encounter faction, the visit Lord, signal wake-ups,
+retained-pawn registry (reservation while spawned: **M1**, accepted and owner-runtime validated by S31, ADR-053), the temporary encounter faction, the visit Lord, signal wake-ups,
 unsupported custody ⇒ quarantine, death, downed/recovery, truthful aging, store-time normalization, map removal and same-pawn
 rematerialization, all through the Phase 3.0 lifecycle; a read-only Episode Monitor; the physical tier `RT-PHYX-001…012`, `015`, `016`;
-the safe `RT-PHYS-020…022` and `030`. No Harmony; save format **5**; no player-facing content. HEADLESS: pass. PHYSICAL RUNTIME — NOT
-RUN BY OWNER. The gating paragraph above is the design history: 3.1 is built on M1 as the owner's 3.1 brief directs, and the S31
-record and ADR-053 are updated only after the owner confirms that result. See
+the safe `RT-PHYS-020…022` and `030`. No Harmony; save format **5**; no player-facing content. HEADLESS: pass. PHYSICAL RUNTIME
+(`RT-PHYX-*`) — **NOT YET RUN BY OWNER**. **S31 / M1 is owner-runtime PASS and accepted (ADR-053); the 3.1 physical suite, the 3.1
+save/load matrix, role generation on real pawns and truthful aging on real disposable pawns are not.** The post-review correction pass
+([PHYSICAL_LIFECYCLE Appendix J](PHYSICAL_LIFECYCLE.md#appendix-j-phase-31-post-review-correction-pass-pr-10)) made a failed placement never strand a bound
+person, made an actual `Free` on a retained person a bug, made the first age and gender follow the person, and withdrew an atomicity claim
+about truthful aging that vanilla does not support. See
 [PHYSICAL_LIFECYCLE Appendix I](PHYSICAL_LIFECYCLE.md#appendix-i-phase-31-as-built), [RUNTIME_TESTING § 17](RUNTIME_TESTING.md#17-the-physical-tier-phase-31)
 and [ADR-054](DECISIONS.md).
 

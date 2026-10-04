@@ -485,14 +485,124 @@ namespace TheNetwork.Domain.Physical
     }
 
     /// <summary>
+    /// The person-level choices a person's FIRST pawn creation honours (§ 6.3): the intended gender and where in the race's adult range the first
+    /// age falls. It is derived from PERSON-level immutable facts only (<see cref="PersonIdentity"/>) and is a pure value: nothing about it is
+    /// persisted (the pawn is the truth once it exists), and a later materialization never reads it (it never rewrites a pawn).
+    /// </summary>
+    public struct FirstIdentity
+    {
+        /// <summary>Resolution of <see cref="ageUnit"/>: the age's position in the adult range, in 1/65536ths (an integer, so the mapping is exact).</summary>
+        public const int Resolution = 65536;
+
+        /// <summary>False for an anonymous slot: the Network states nothing about it.</summary>
+        public bool set;
+
+        /// <summary>The intended gender, honoured only where the loaded race and kind leave the gender open.</summary>
+        public bool female;
+
+        /// <summary>0 … <see cref="Resolution"/> − 1: the position of the first age within the race's adult window.</summary>
+        public int ageUnit;
+
+        /// <summary>The whole year this identity picks in the inclusive range [lo, hi]. Integer arithmetic: identical on every machine.</summary>
+        public int PickYear(int lo, int hi)
+        {
+            if (hi < lo) throw new ArgumentException("an empty age window");
+            return lo + (int)(((long)ageUnit * ((long)hi - lo + 1)) / Resolution);
+        }
+
+        public override string ToString()
+        {
+            return set ? (female ? "female" : "male") + ", age position " + ageUnit + "/" + Resolution : "unset";
+        }
+    }
+
+    /// <summary>
+    /// First age and gender from PERSON-level immutable facts only (§ 6.3, P3-INV-018): <c>Hash(networkSeed, CharacterId, "physical.identity.v1")</c>
+    /// with a separate salt for each choice. The same person of the same world resolves to the same intended first gender and age whichever
+    /// episode happens to materialize them first, on whichever map, in whichever slot, at whatever time, and whatever their fame, reputation,
+    /// experience, doctrine or funds: none of those is an input. A better function would be a new version for people created after it; version 1
+    /// never changes its output for the same inputs.
+    /// </summary>
+    public static class PersonIdentity
+    {
+        public const int Version = 1;
+        public const string Salt = "physical.identity.v1";
+
+        public static FirstIdentity For(int networkSeed, CharacterId person)
+        {
+            if (!person.IsValid) return new FirstIdentity();
+            int h = NetHash.Combine(NetHash.Combine(networkSeed, person.Value), Salt);
+            uint gender = unchecked((uint)NetHash.Combine(h, "gender"));
+            uint age = unchecked((uint)NetHash.Combine(h, "age"));
+            return new FirstIdentity { set = true, female = (gender >> 31) == 1u, ageUnit = (int)(age >> 16) };
+        }
+    }
+
+    /// <summary>One life stage of a race as plain data: its first age and whether vanilla counts it as the Adult developmental stage.</summary>
+    public struct LifeStageFact
+    {
+        public float minAge;
+        public bool adult;
+    }
+
+    /// <summary>
+    /// The sensible adult age window of a loaded race and kind, computed from the DEFS and never from human numbers: from the race's own Adult
+    /// life stage (vanilla's <c>AdultMinAge</c>) up to half-way through the rest of its life expectancy, inside the kind's own generation range and
+    /// inside the contiguous Adult stages. For vanilla humans that is 18 – 49, the flat part of their own age curve; a modded race scales by its own
+    /// numbers. No safe window (no Adult stage, a life expectancy at or below adulthood, an empty intersection) means NO age is pinned: the
+    /// narrowest supported behaviour is to leave the age to vanilla, never to guess.
+    /// </summary>
+    public static class AdultAgeWindow
+    {
+        public static bool TryFor(IList<LifeStageFact> stages, float lifeExpectancy, int kindMinAge, int kindMaxAge, out int lo, out int hi)
+        {
+            lo = 0;
+            hi = -1;
+            if (stages == null || stages.Count == 0) return false;
+            List<LifeStageFact> sorted = new List<LifeStageFact>(stages);
+            sorted.Sort((a, b) => a.minAge.CompareTo(b.minAge));
+            int first = -1;
+            for (int i = 0; i < sorted.Count; i++)
+            {
+                if (sorted[i].adult)
+                {
+                    first = i;
+                    break;
+                }
+            }
+            if (first < 0) return false;
+            float adultStart = sorted[first].minAge;
+            float adultEnd = float.PositiveInfinity;
+            for (int i = first + 1; i < sorted.Count; i++)
+            {
+                if (!sorted[i].adult)
+                {
+                    adultEnd = sorted[i].minAge;
+                    break;
+                }
+            }
+            if (!(lifeExpectancy > adultStart)) return false;
+            double ceiling = adultStart + 0.5 * (lifeExpectancy - adultStart);
+            double high = Math.Min(Math.Min(ceiling, kindMaxAge), float.IsPositiveInfinity(adultEnd) ? double.MaxValue : adultEnd - 1e-3);
+            double low = Math.Max(adultStart, kindMinAge);
+            int l = (int)Math.Ceiling(low - 1e-6);
+            int h = (int)Math.Floor(high + 1e-6);
+            if (h < l) return false;
+            lo = l;
+            hi = h;
+            return true;
+        }
+    }
+
+    /// <summary>
     /// Builds a first-materialization request from DURABLE Network truth only (§ 6.5, P3-INV-018/019): the name snapshot, the operational
-    /// role, the capability band (current experience: competence within the role) and the equipment tier. Fame, the reputation score and
-    /// visibility are never read (RT-PHYS-022). Anything the Network never established (gender, age, traits, backstory, appearance) is not
-    /// part of the request and stays vanilla-random.
+    /// role, the capability band (current experience: competence within the role), the equipment tier and the person's first identity
+    /// (gender and age position, from <see cref="PersonIdentity"/>). Fame, the reputation score and visibility are never read (RT-PHYS-022).
+    /// Anything else the Network never established (traits, backstory, appearance) is not part of the request and stays vanilla-random.
     /// </summary>
     public static class ProjectionPolicy
     {
-        public static ProjectionRequest ForPerson(PhysicalEpisode e, EpisodeMember m, KnownCharacter c, NetworkActor actor)
+        public static ProjectionRequest ForPerson(PhysicalEpisode e, EpisodeMember m, KnownCharacter c, NetworkActor actor, int networkSeed)
         {
             ContractorSimulation sim = actor?.Get<ContractorSimulation>();
             return new ProjectionRequest
@@ -507,7 +617,8 @@ namespace TheNetwork.Domain.Physical
                 capability = ContractorService.Experience(actor),
                 equipmentTier = sim?.equipment?.tier ?? 2,
                 seed = NetHash.Combine(e.seed, m.slot),
-                faction = e.faction
+                faction = e.faction,
+                identity = PersonIdentity.For(networkSeed, c.id)
             };
         }
 
@@ -517,7 +628,7 @@ namespace TheNetwork.Domain.Physical
             if (r == null) return "null";
             NamePins p = NamePins.From(r.name);
             return r.episode + "|" + r.actor + "|" + r.character + "|" + r.slot + "|" + r.tier + "|" + p + "|" + r.role + "|" + r.capability + "|" + r.equipmentTier + "|" + r.seed
-                + "|" + (r.faction?.loadId ?? -1);
+                + "|" + (r.faction?.loadId ?? -1) + "|" + r.identity;
         }
     }
 }

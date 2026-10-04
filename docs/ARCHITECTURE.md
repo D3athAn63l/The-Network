@@ -776,7 +776,7 @@ state **and atomic for the Network's durable data** (no publication, scheduler o
 later stage has an explicit durable marker written last, publication progress is durable per event so the event bus is never
 asked to accept one twice, and a person is not abstractly simulatable again until release has completed; vanilla itself
 passes an exiting pawn to the world, so the Network never passes a pawn already in `WorldPawns`, and the exit-reservation
-window is the open spike S31 that gates 3.1); a first projection never contradicts established truth; no Harmony; no work when nobody is physical; physical tests are a
+window was closed by M1, the accepted outcome of the owner's spike S31: ADR-053); a first projection never contradicts established truth; no Harmony; no work when nobody is physical; physical tests are a
 separate, session-armed tier on its own test map ([ADR-048](DECISIONS.md), [ADR-049](DECISIONS.md),
 [ADR-050](DECISIONS.md)). Phase 3.3 (procurement fulfillment by physical handoff) is design direction only
 ([ADR-051](DECISIONS.md), [PHYSICAL_LIFECYCLE § 27](PHYSICAL_LIFECYCLE.md#27-phase-33-procurement-fulfillment-and-physical-handoff-design-direction)).

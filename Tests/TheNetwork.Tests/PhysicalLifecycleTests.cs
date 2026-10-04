@@ -60,7 +60,7 @@ namespace TheNetwork.Tests
 
         // ================================================================== helpers
 
-        private static PhysicalLifecycleService L(TestNet n) { return n.ctx.Lifecycle; }
+        internal static PhysicalLifecycleService L(TestNet n) { return n.ctx.Lifecycle; }
 
         private static ContractorTemplate Fixed(ContractorForm form, string id)
         {
@@ -72,18 +72,18 @@ namespace TheNetwork.Tests
             };
         }
 
-        private static NetworkActor Make(TestNet n, ContractorForm form, string id)
+        internal static NetworkActor Make(TestNet n, ContractorForm form, string id)
         {
             NetworkActor a = ContractorTests.Make(n, Fixed(form, id));
             n.ctx.Spatial.EnsureInitialized(a);
             return a;
         }
 
-        private static KnownCharacter Self(TestNet n, NetworkActor a) { return n.ctx.characters.Get(a.bindings.embodies); }
+        internal static KnownCharacter Self(TestNet n, NetworkActor a) { return n.ctx.characters.Get(a.bindings.embodies); }
 
         private static KnownCharacter Leader(TestNet n, NetworkActor a) { return n.ctx.characters.Get(a.Get<OrganizationProfile>().leader); }
 
-        private static List<KnownCharacter> Others(TestNet n, NetworkActor a)
+        internal static List<KnownCharacter> Others(TestNet n, NetworkActor a)
         {
             List<KnownCharacter> l = new List<KnownCharacter>();
             OrganizationProfile org = a.Get<OrganizationProfile>();
@@ -95,7 +95,7 @@ namespace TheNetwork.Tests
             return l;
         }
 
-        private static PhysicalEpisode Begin(TestNet n, NetworkActor a, IEnumerable<KnownCharacter> people, int anon = 0, OperationId op = default(OperationId), bool materialize = true)
+        internal static PhysicalEpisode Begin(TestNet n, NetworkActor a, IEnumerable<KnownCharacter> people, int anon = 0, OperationId op = default(OperationId), bool materialize = true)
         {
             EpisodeRequest r = PhysicalRuntimeSuite.Request(a, people, anon);
             r.cause.operation = op;
@@ -116,7 +116,7 @@ namespace TheNetwork.Tests
         }
 
         /// <summary>Saves the TestNet's stores (episodes included) through the real Scribe, loads them back and swaps them in.</summary>
-        private static NetworkState SaveLoad(TestNet n, int version = SaveMigrations.Current)
+        internal static NetworkState SaveLoad(TestNet n, int version = SaveMigrations.Current)
         {
             string path = PersistenceTests.SaveState(StateOf(n), version);
             NetworkState loaded = Load(path);
@@ -456,9 +456,16 @@ namespace TheNetwork.Tests
             PhysicalEpisode le2 = n2.ctx.episodes.Get(e2.id);
             L(n2).OnLoaded();
             n2.Advance(5);
+            // PR #10 correction (§ 7.3 rule 7): a BOUND pawn that no longer resolves is positive evidence of LOSS. The first correction pass committed this
+            // as NeverPlaced, whose RELEASE then refused to pass a pawn that no longer exists and stranded the Closed episode forever.
             T.Eq(EpisodeState.Closed, le2.state, "no resolvable pointer ⇒ Closed");
-            T.Eq(ReconciliationPlanner.CloseNeverPlaced, le2.closeReasonKey, "NeverPlaced");
-            T.Eq(MemberOutcome.NeverPlaced, le2.members[0].outcome, "the member was never placed");
+            T.Eq(ReconciliationPlanner.CloseReconciled, le2.closeReasonKey, "through the ordinary reconciliation (the bound pawn is observed Gone)");
+            T.Eq(MemberOutcome.Lost, le2.members[0].outcome, "the member is Lost: a bound pawn that is gone is never 'never placed'");
+            KnownCharacter lself = n2.ctx.characters.Get(self.id);
+            T.Eq(CharacterStatus.Lost, lself.status, "the person is Lost (the existing Lost semantics)");
+            T.Eq(CustodyState.Lost, lself.custody, "custody Lost");
+            T.Check(le2.IsComplete, "the episode is complete: no RELEASE waits on a pawn that no longer exists");
+            T.Eq(0, n2.physical.passCalls, "nothing was passed to the world");
             T.Eq(1, n2.physical.creates, "and nothing was generated to replace it");
         }
 
@@ -1007,19 +1014,25 @@ namespace TheNetwork.Tests
                 TestNet n = new TestNet(9400 + i);
                 NetworkActor a = Make(n, ContractorForm.Solo, "pass-" + s);
                 KnownCharacter c = Self(n, a);
+                // PR #10 correction (§ 7.3 rule 7): the placement legitimately fails and the pawn is positively observed alive, unspawned and held by
+                // nobody, so NeverPlaced is correct. (A pawn already spawned, held, dead or gone when the placement fails is NOT NeverPlaced any
+                // more: Phys31Fix.Fix2_*.) What this test is about is RELEASE's own precondition: the pawn's state changes BETWEEN that
+                // classification and RELEASE, at the commit boundary, so RELEASE meets a § 7.5 precondition that no longer holds.
+                FakePhysicalWorldPort.Token tok = null;
                 n.physical.failPlace = true;
-                n.physical.onPlaceFailed = t =>
+                L(n).commitBoundary = where =>
                 {
-                    if (s == "Spawned") t.spawned = true;
-                    else if (s == "Held") t.held = true;
-                    else if (s == "Dead") t.dead = true;
-                    else t.gone = true;
+                    if (where != "before") return;
+                    tok = n.physical.TokenOf(c.pawn);
+                    if (s == "Spawned") tok.spawned = true;
+                    else if (s == "Held") tok.held = true;
+                    else if (s == "Dead") tok.dead = true;
+                    else tok.gone = true;
                 };
                 PhysicalEpisode e = Begin(n, a, new[] { c });
                 n.physical.failPlace = false;
-                n.physical.onPlaceFailed = null;
+                L(n).commitBoundary = null;
                 EpisodeMember m = e.members[0];
-                FakePhysicalWorldPort.Token tok = n.physical.TokenOf(c.pawn);
                 T.Check(e.state == EpisodeState.Closed && e.consequencesApplied && m.outcome == MemberOutcome.NeverPlaced, s + ": committed as NeverPlaced");
                 T.Eq((byte)0, m.releaseStep, s + ": the cursor does not advance past PassToWorldIfAllowed");
                 T.Check(!e.releaseApplied, s + ": releaseApplied stays false");

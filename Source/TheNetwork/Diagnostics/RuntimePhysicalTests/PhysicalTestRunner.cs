@@ -249,7 +249,8 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             if (e.faction != null && e.faction.loadId >= 0) runFactions.Add(e.faction.loadId);
             if (present != 1 || e.state != EpisodeState.Open)
             {
-                v.Fail("Materialize placed " + present + " member(s), episode " + e.state + (e.lastError != null ? ", last error: " + e.lastError : ""));
+                v.Fail("Materialize placed " + present + " member(s), episode " + e.state + (e.closeReasonKey != null ? " (" + e.closeReasonKey + ", member " + e.members[0].outcome + ")" : "")
+                    + (e.quarantineKey != null ? ", quarantine: " + e.quarantineKey : "") + (e.lastError != null ? ", last error: " + e.lastError : ""));
                 return StepResult.Abort;
             }
             p = c.pawn?.pawn;
@@ -263,6 +264,31 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         protected StepResult WaitComplete(PhysicalEpisode ep)
         {
             return ep.IsComplete ? StepResult.Next : StepResult.Wait;
+        }
+
+        // ---- ADR-053 (the 3.1 correction pass): an ACTUAL Free retained named pawn is the M1 reservation FAILING --------------------------------
+
+        /// <summary>The pawn is an ordinary <c>Free</c> world pawn right now (vanilla's redress and discard candidate pool).</summary>
+        protected static bool IsActualFree(Pawn pawn)
+        {
+            return pawn != null && Find.WorldPawns != null && Find.WorldPawns.Contains(pawn) && Find.WorldPawns.GetSituation(pawn) == WorldPawnSituation.Free;
+        }
+
+        /// <summary>The lifecycle itself reported the failure: the episode is quarantined as ReservationBroken (<see cref="ObservedKind.ReservationBroken"/>).</summary>
+        protected static bool IsBrokenReservation(PhysicalEpisode ep)
+        {
+            return ep != null && ep.state == EpisodeState.Quarantined && ep.quarantineKey != null
+                && ep.quarantineKey.StartsWith(PhysicalLifecycleService.QuarantineReservation, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// An ACTUAL Free is a FAIL here, never an acceptable return: M1 (ADR-053, P3-INV-032) reserves a retained named person from its binding
+        /// on, so a Free observation means the reservation failed. The frames are counted by each scenario's per-frame invariants.
+        /// </summary>
+        protected void CheckNoActualFree(string where, int freeFrames, int brokenFrames)
+        {
+            v.Check(freeFrames == 0, where + ": the retained pawn was never an ACTUAL Free world pawn (" + freeFrames + " frames): an actual Free is the M1 reservation FAILING (ADR-053, P3-INV-032), never an acceptable return");
+            v.Check(brokenFrames == 0, where + ": the lifecycle never reported ReservationBroken for the episode (" + brokenFrames + " frames): that quarantine is the same failure seen by the lifecycle");
         }
 
         /// <summary>Waits until the pawn has had some time on the map (it walks in from the edge) or reached its chill spot.</summary>

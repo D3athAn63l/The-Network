@@ -61,6 +61,70 @@ namespace TheNetwork.Integration.Physical
         }
     }
 
+    /// <summary>
+    /// The request-time identity pins of ONE candidate kind (PHYSICAL_LIFECYCLE § 6.3): a person's first gender and age, from the pure
+    /// <see cref="FirstIdentity"/>, expressed through vanilla's own <c>PawnGenerationRequest</c> inputs (<c>FixedGender</c>,
+    /// <c>FixedBiologicalAge</c>, <c>FixedChronologicalAge</c>, audited in the 1.6 assembly). Nothing is applied to a pawn afterwards.
+    ///
+    /// Why these inputs and these limits (all read from the 1.6 generator, not recalled):
+    /// <list type="bullet">
+    /// <item>The generator assigns <c>FixedGender</c> before anything else and its validator rejects any other, so a pin that contradicts the
+    /// kind's own <c>fixedGender</c> or the race's <c>forceGender</c> would reject every candidate: it is simply not set there, and the kind or race
+    /// decides (deterministically).</item>
+    /// <item><c>FixedBiologicalAge</c> skips the generator's own age checks, so the window is computed here from the race's life stages and the
+    /// kind's generation range (<see cref="AdultAgeWindow"/>), never from human numbers. The generator's validator compares the float EXACTLY, so
+    /// only WHOLE years are pinned (exactly representable). No safe window means no pin and vanilla's age stands.</item>
+    /// <item><c>FixedChronologicalAge</c> removes the cryptosleep roll (a random extra chronological age drawn from the episode's random stream)
+    /// so the first age is not episode-dependent; a kind with its own <c>chronologicalAgeRange</c> would be rejected by the validator, so there
+    /// the range stands.</item>
+    /// </list>
+    /// </summary>
+    public sealed class IdentityPins
+    {
+        public Gender? gender;
+        public float? biologicalAge;
+        public float? chronologicalAge;
+        public int windowLo = -1, windowHi = -1;
+
+        public string Describe()
+        {
+            return "gender " + (gender.HasValue ? gender.Value.ToString() : "left to the kind or race")
+                + ", biological age " + (biologicalAge.HasValue ? biologicalAge.Value.ToString("0") + " (adult window " + windowLo + "-" + windowHi + ")" : "left to vanilla (no safe adult window)")
+                + (chronologicalAge.HasValue ? ", chronological age pinned equal" : "");
+        }
+    }
+
+    public static class PawnIdentityPins
+    {
+        public static IdentityPins For(PawnKindDef kind, FirstIdentity id)
+        {
+            IdentityPins pins = new IdentityPins();
+            RaceProperties race = kind?.race?.race;
+            if (!id.set || race == null) return pins;
+            if (race.hasGenders && race.forceGender == Gender.None && !kind.fixedGender.HasValue) pins.gender = id.female ? Gender.Female : Gender.Male;
+            List<LifeStageFact> stages = new List<LifeStageFact>();
+            if (race.lifeStageAges != null)
+            {
+                for (int i = 0; i < race.lifeStageAges.Count; i++)
+                {
+                    LifeStageAge a = race.lifeStageAges[i];
+                    if (a == null) continue;
+                    stages.Add(new LifeStageFact { minAge = a.minAge, adult = a.def != null && a.def.developmentalStage.Adult() });
+                }
+            }
+            int lo, hi;
+            if (AdultAgeWindow.TryFor(stages, race.lifeExpectancy, kind.minGenerationAge, kind.maxGenerationAge, out lo, out hi))
+            {
+                int years = id.PickYear(lo, hi);
+                pins.windowLo = lo;
+                pins.windowHi = hi;
+                pins.biologicalAge = years;
+                if (!kind.chronologicalAgeRange.HasValue) pins.chronologicalAge = years;
+            }
+            return pins;
+        }
+    }
+
     /// <summary>The outcome of one first projection (measured: attempts, corrections, generation time).</summary>
     public sealed class ProjectionResult
     {
@@ -74,10 +138,13 @@ namespace TheNetwork.Integration.Physical
         public RoleSpec spec;
         public RoleVerdict verdict;
 
+        /// <summary>The identity pins the returned pawn (or the last attempt) was asked for (diagnostics; RT-PHYX-011 compares them with the real pawn).</summary>
+        public IdentityPins pins;
+
         public override string ToString()
         {
             return (pawn != null ? "pawn #" + pawn.thingIDNumber + " (" + kind + ")" : "FAILED (" + failure + ")") + ", " + attempts + " attempt(s), " + rejected + " rejected, "
-                + corrections + " correction(s), " + ms.ToString("0.0") + " ms" + (spec != null ? ", role " + spec.Describe() : "");
+                + corrections + " correction(s), " + ms.ToString("0.0") + " ms" + (spec != null ? ", role " + spec.Describe() : "") + (pins != null ? ", identity " + pins.Describe() : "");
         }
     }
 
@@ -179,6 +246,10 @@ namespace TheNetwork.Integration.Physical
                 PawnKindDef kind = chain[Math.Min(attempt / 2, chain.Count - 1)];
                 res.attempts++;
                 Pawn c = null;
+                // The person's FIRST gender and age (§ 6.3): from PERSON-level facts only, through vanilla's own request inputs. The episode seed
+                // below still drives everything the Network never established (traits, backstory, appearance), never these.
+                IdentityPins pins = PawnIdentityPins.For(kind, r.identity);
+                res.pins = pins;
                 Rand.PushState(NetHash.Combine(r.seed, attempt));
                 try
                 {
@@ -186,6 +257,7 @@ namespace TheNetwork.Integration.Physical
                         forceGenerateNewPawn: true, allowDead: false, allowDowned: false, canGeneratePawnRelations: false,
                         mustBeCapableOfViolence: spec.NeedsViolence, colonistRelationChanceFactor: 0f, allowPregnant: false,
                         validatorPreGear: hard, prohibitedTraits: prohibited.Count > 0 ? prohibited : null,
+                        fixedBiologicalAge: pins.biologicalAge, fixedChronologicalAge: pins.chronologicalAge, fixedGender: pins.gender,
                         developmentalStages: DevelopmentalStage.Adult);
                     c = PawnGenerator.GeneratePawn(req);
                 }

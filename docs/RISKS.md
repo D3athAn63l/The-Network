@@ -7,7 +7,7 @@
 
 | ID | Risk | Sev. | Lik. | Proven in |
 |---|---|---|---|---|
-| R-01 | Abstract ↔ physical pawn identity (duplication, resurrection, lost identity) | Critical | Medium | Phase 3 (S9r, S11, S17, S31) |
+| R-01 | Abstract ↔ physical pawn identity (duplication, resurrection, lost identity) | Critical | Medium | Phase 3 (S9r, S11, S17, S31 passed) |
 | R-02 | Save/load during physical contractor encounters | High | Medium | Phase 3 (S9r, S11, S14) |
 | R-03 | Vanilla quest and site cleanup semantics | High | Medium | Phase 1 (S1, S2), Phase 3 (S9r) |
 | R-04 | Third-party mods destroying or modifying generated sites | Medium | Medium | Phase 1 (S2), ongoing |
@@ -48,7 +48,7 @@
 | R-39 | Team cohesion is infeasible, over-trusted, or drifts into sanitizing real social history | Low | Medium | Phase 3.2 (S26) |
 | R-40 | Reputation, fame and capability stay conflated and leak into projection | Medium | Medium | design now; a later focused phase |
 | R-41 | Handoff exploits: cargo duplication, ownership ambiguity, a "reform caravan" loophole, a double charge | High | Medium | Phase 3.3 (design; S28–S30) |
-| R-42 | A retained pawn becomes temporarily `Free` during a vanilla map exit and vanilla redresses, discards or reuses it before the Network's reservation takes effect | High | Medium | Phase 3.1 (S31, **blocks 3.1**) |
+| R-42 | A retained pawn becomes temporarily `Free` during a vanilla map exit and vanilla redresses, discards or reuses it before the Network's reservation takes effect | High | Medium → **Low (mitigated by M1; S31 passed in the owner's runtime, ADR-053); the 3.1 regressions are the owner's pending run** | Phase 3.1 (S31 **done**) |
 | R-43 | The physical test tier is run on a save that matters, or its cleanup touches what it does not own | High | Low | Phase 3.1 (the session arm, the fact-only guard, ownership-proven disposal) |
 | R-44 | Role-constrained creation cannot satisfy a role on a heavily modded race or kind list (repeated contained aborts) | Medium | Medium | Phase 3.1 (`RT-PHYX-011` on the owner's mod list) |
 | R-45 | A temporary encounter faction leaves residue (its vanilla leader world pawn, or the faction itself after an unusual exit) | Low | Medium | Phase 3.1 (`RT-PHYX-008`; sentinel notes) |
@@ -59,10 +59,11 @@
 - **Failure modes.** The same character instantiated twice. A dead character reappears. A
   character's pawn is discarded by vanilla GC. A pawn is reused by vanilla in a random raid.
   Another mod copies a pawn along with our tags.
-- **Mitigation.** The normative invariants are **P3-INV-001…032** ([PHYSICAL_LIFECYCLE Appendix B](PHYSICAL_LIFECYCLE.md#appendix-b-formal-invariants);
+- **Mitigation.** The normative invariants are **P3-INV-001…036** ([PHYSICAL_LIFECYCLE Appendix B](PHYSICAL_LIFECYCLE.md#appendix-b-formal-invariants);
   the Phase 0 I-1 to I-10 are historical): bind-once, a reverse map, episode exclusivity, a dead-is-final guard, handlers
   that act only on bound objects, reconciliation from observed pawn state, no second `PassToWorld` for a pawn vanilla
-  already passed, and registry reservation (no GC, no redress) with the exit window left to spike S31. A validator checks
+  already passed, and registry reservation (no GC, no redress) with the exit window closed by M1 (spike S31 passed, ADR-053); after
+  binding, a pawn's physical state is authoritative, so a failed placement never strands a person (P3-INV-033). A validator checks
   one-to-one maps on every load.
 - **Proven by.** **S9r** (reservation effects; it revises S9), S11 (holder), S17 (copies), **S31** (the exit window); the
   `RT-PHYS` / `RT-PHYX` suites and the Phase 3 soak with forced scenarios (dev actions).
@@ -593,20 +594,22 @@
   generation may select; and the episode's temporary faction is removed on a later tick, nulling the faction of a still-`Free`
   pawn. A related defect, found while auditing this: the first design passed a `Returned` pawn to the world **again**, which
   vanilla rejects as "already here" ([PHYSICAL_LIFECYCLE § 7.5](PHYSICAL_LIFECYCLE.md#75-who-may-call-passtoworld-an-observed-world-pawn-is-never-passed-again), P3-INV-031).
-- **Mitigation.** **No guessed fix.** The mandatory runtime spike **S31** chooses the smallest safe mechanism, in this order
-  of preference: reserve the retained named pawn **while it is still spawned** (static reading suggests every reservation
+- **Mitigation.** **No guessed fix: the mandatory runtime spike S31 chose the mechanism, and it passed in the owner's runtime with M1
+  (ADR-053).** The smallest safe mechanism, in the order of preference S31 tried: reserve the retained named pawn **while it is still spawned** (static reading suggests every reservation
   consumer is gated on `WorldPawns.Contains`, which is a reason to test it and not a proof); else reserve synchronously at
   a vanilla callback (the `LeftMap` signal inside `ExitMap`; `Notify_SiteMapAboutToBeRemoved` for a map removal); else the
-  narrowest documented Harmony contingency (**C-4**, only if both are proven insufficient). Until S31 is run and
-  owner-reviewed, **3.1 does not begin**; 3.0 is unaffected (it creates no pawn)
-  ([§ 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31)).
-- **Proven by.** Spike **S31** (cases A to G), then the physical-tier regressions `RT-PHYX-015` (normal exit) and
-  `RT-PHYX-016` (map removal) and P3-INV-032. None has been run.
-- **Phase 3.1 status (implemented, NOT RUN BY OWNER).** Phase 3.1 is built on candidate **M1** (reserve while spawned), as the
-  owner's 3.1 brief directs: the registry's membership is derived from the binding and the retained custody, the binding precedes
-  the spawn, placement is refused unless the registry already covers the pawn, and RELEASE only proves the reservation; no Network
-  `PassToWorld` for a pawn vanilla passed (source-scanned). `RT-PHYX-015` and `016` are implemented with per-frame and
-  `LeftMap`-instant checks. The S31 record and this risk's rating are updated only after the owner confirms the S31 result.
+  narrowest documented Harmony contingency (**C-4**, only if both are proven insufficient; **not needed**, never adopted). 3.0 was never
+  affected (it creates no pawn) ([§ 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-resolved-by-m1-spike-s31-owner-validated)).
+- **Proven by.** Spike **S31** (cases A to G): **PASSED in the owner's runtime; M1 accepted** (ADR-053). Then the physical-tier
+  regressions `RT-PHYX-015` (normal exit) and `RT-PHYX-016` (map removal) and P3-INV-032 on the 3.1 build: **implemented, NOT YET RUN BY
+  OWNER**.
+- **Phase 3.1 status (implemented and corrected after review; physical suite NOT YET RUN BY OWNER).** Phase 3.1 is built on the accepted
+  **M1** (reserve while spawned): the registry's membership is derived from the binding and the retained custody, the binding precedes
+  the spawn, placement is refused unless the registry already covers the pawn, and RELEASE only **proves** the reservation (it never
+  creates it); no Network `PassToWorld` for a pawn vanilla passed (source-scanned). After M1 an **actual `Free` on a retained named
+  person is itself the failure** (P3-INV-034): it is observed as `ReservationBroken`, quarantined, never returned and never repaired by the
+  lifecycle, and `RT-PHYX-002`, `005`, `015` and `016` fail on it. `RT-PHYX-015` and `016` are implemented with per-frame and
+  `LeftMap`-instant checks.
 
 ## R-43 · The physical test tier runs where it should not (Phase 3.1)
 - **Failure modes.** An owner presses a physical scenario in a save that matters; a run's cleanup removes something it did not

@@ -81,35 +81,45 @@ namespace TheNetwork.Integration.Physical
     }
 
     /// <summary>
-    /// Truthful aging (PHYSICAL_LIFECYCLE § 6.4, S12 candidate M1): vanilla's own mothball path, Pawn_AgeTracker.AgeTickMothballed, over the
+    /// Truthful aging (PHYSICAL_LIFECYCLE § 6.4, S12, the aging mechanism M1 of that section, not the reservation M1): vanilla's own mothball path, Pawn_AgeTracker.AgeTickMothballed, over the
     /// FULL elapsed interval, uncapped, chunked per game year (it takes an int, and the child/adult rate is re-read each chunk). It crosses
     /// every birthday with vanilla's consequences. BirthAbsTicks is never written, so chronological age stays derived and truthful.
+    ///
+    /// ATOMICITY (audited in the 1.6 assembly): <c>AgeTickMothballed</c> is NOT atomic. It advances the biological ticks by the whole step
+    /// (<c>TickBiologicalAge</c>) FIRST, then runs growth, the age-reversal check and one <c>BirthdayBiological</c> per birthday crossed (hediff
+    /// rolls, bed unclaim, work-type unlocks, growth moments, mod patches), with no try/catch and no rollback. A throw inside it leaves the pawn
+    /// older by the whole step with an unknowable number of birthday effects applied. So only the steps that RETURNED are known to be fully
+    /// applied; a step that threw is reported as <see cref="AgingUncertainException"/> (never as "the part that was applied"), and nothing here
+    /// retries or compensates for it.
     /// </summary>
     public static class PawnAging
     {
         public const int ChunkTicks = 3600000;
 
+        /// <summary>Ages the pawn by the full interval and returns the ticks applied (always the whole interval: a failure throws).</summary>
         public static long CatchUp(Pawn p, long elapsedTicks)
         {
             if (p == null) throw new InvalidOperationException("no pawn to age");
             if (elapsedTicks <= 0) return 0;
             Pawn_AgeTracker age = p.ageTracker;
             if (age == null) throw new InvalidOperationException(p + " has no age tracker");
-            long applied = 0;
-            try
+            long completed = 0;
+            while (completed < elapsedTicks)
             {
-                while (applied < elapsedTicks)
+                int step = (int)Math.Min(ChunkTicks, elapsedTicks - completed);
+                long before = age.AgeBiologicalTicks;
+                try
                 {
-                    int step = (int)Math.Min(ChunkTicks, elapsedTicks - applied);
                     age.AgeTickMothballed(step);
-                    applied += step;
                 }
+                catch (Exception ex)
+                {
+                    // Not provable how far the step got: report what completed and what is uncertain, with the measured evidence.
+                    throw new AgingUncertainException(completed, step, before, age.AgeBiologicalTicks, ex);
+                }
+                completed += step;
             }
-            catch (Exception ex)
-            {
-                throw new AgingIncompleteException(applied, ex);
-            }
-            return applied;
+            return completed;
         }
     }
 

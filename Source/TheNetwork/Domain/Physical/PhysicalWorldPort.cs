@@ -26,6 +26,9 @@ namespace TheNetwork.Domain.Physical
 
         public int mapId = -1;
 
+        /// <summary>A plain-text diagnosis the adapter attaches when the observation is an invariant violation (runtime only, never persisted).</summary>
+        public string note;
+
         /// <summary>
         /// When the pawn stopped being physically present, if the adapter saw it happen (the synchronous LeftMap of this session); -1 when
         /// unknown (a map removal, or a reload in between). Runtime data, never persisted: the commit uses it so a stored pawn's
@@ -40,7 +43,7 @@ namespace TheNetwork.Domain.Physical
 
         public override string ToString()
         {
-            return kind + (downed ? " downed" : "") + (health < 1f ? " hp" + health.ToString("0.00") : "") + (exitEvidence ? " exit" : "");
+            return kind + (downed ? " downed" : "") + (health < 1f ? " hp" + health.ToString("0.00") : "") + (exitEvidence ? " exit" : "") + (note != null ? " [" + note + "]" : "");
         }
     }
 
@@ -97,6 +100,12 @@ namespace TheNetwork.Domain.Physical
         /// <summary>Seeds the first creation only (§ 5.3); a rematerialization never asks for a creation.</summary>
         public int seed;
 
+        /// <summary>
+        /// The person's first gender and age position (§ 6.3): a pure function of the world seed and the person's id, never of the episode, slot,
+        /// map or time. Honoured only by a first creation, only through vanilla's request inputs; never persisted and never applied to a pawn later.
+        /// </summary>
+        public FirstIdentity identity;
+
         /// <summary>The episode's temporary encounter faction (§ 13.2), when one exists.</summary>
         public FactionRef faction;
     }
@@ -123,7 +132,11 @@ namespace TheNetwork.Domain.Physical
         /// <summary>Does the binding still resolve to its pawn? (Load and rematerialization evidence; never a decision by itself.)</summary>
         bool Resolves(PawnRef pawn);
 
-        /// <summary>Truthful aging (§ 6.4): bring the retained pawn's biological age forward by the FULL elapsed interval.</summary>
+        /// <summary>
+        /// Truthful aging (§ 6.4): bring the retained pawn's biological age forward by the FULL elapsed interval. Throws
+        /// <see cref="AgingUncertainException"/> when a vanilla step threw after it may have changed the pawn (the progress is then not provable);
+        /// any other exception means nothing was changed and the interval may be replayed.
+        /// </summary>
         void CatchUpAge(PawnRef pawn, long elapsedTicks);
 
         /// <summary>
@@ -137,8 +150,11 @@ namespace TheNetwork.Domain.Physical
         void ReleaseEncounterFaction(FactionRef faction);
 
         /// <summary>
-        /// Place the bound pawn at the episode's anchor, in the episode's encounter faction. False when placement failed (the member stays
-        /// unplaced). A retained pawn's reservation must already cover it (M1, ADR-053): placement never removes it.
+        /// Place the bound pawn at the episode's anchor, in the episode's encounter faction. A retained pawn's reservation must already cover it
+        /// (M1, ADR-053): placement never removes it. The return value (or a throw) is NOT evidence of what happened to the pawn: vanilla's
+        /// <c>GenSpawn.Spawn</c> returns the pawn even when <c>SpawnSetup</c> discarded it, and a mod may throw anywhere. After any placement that
+        /// did not report success the lifecycle classifies the bound pawn from POSITIVE observation (<see cref="PlacementRules"/>), never from this
+        /// result.
         /// </summary>
         bool Place(PawnRef pawn, EpisodeId episode, TileRef tile, int mapId, FactionRef faction);
 
@@ -150,7 +166,8 @@ namespace TheNetwork.Domain.Physical
 
         /// <summary>
         /// RELEASE: PROVE the retained reservation of a named pawn (§ 7.4). Under M1 the registry already covered the pawn before its exit, so
-        /// this establishes nothing new; a reservation that cannot be proven throws, and RELEASE stays pending. Idempotent.
+        /// this establishes nothing and CREATES nothing (no registry quest is made here): a reservation that cannot be proven throws, and RELEASE
+        /// stays pending. A violation is never repaired quietly by the stage that finds it. Idempotent.
         /// </summary>
         void EnsureRetained(PawnRef pawn);
 
@@ -174,17 +191,30 @@ namespace TheNetwork.Domain.Physical
     }
 
     /// <summary>
-    /// The truthful-aging catch-up stopped part-way (§ 6.4): <see cref="appliedTicks"/> of the interval were applied to the pawn. The lifecycle
-    /// advances <c>agedThroughTick</c> by exactly that much (the pawn really is that much older) and places nobody.
+    /// A truthful-aging step THREW (§ 6.4). Vanilla's <c>Pawn_AgeTracker.AgeTickMothballed</c> is not atomic: it advances the biological age by the
+    /// WHOLE step first and only then runs growth, the age-reversal check and each birthday's effects, with no rollback. So when a step throws, the
+    /// pawn may be older by the whole step with some, all or none of its birthday consequences applied, and which of them cannot be proven.
+    ///
+    /// What IS provable is <see cref="completedTicks"/>: the steps before the failing one returned normally, so every birthday inside them ran.
+    /// <see cref="uncertainTicks"/> is the interval of the failing step, whose progress is NOT known (measured biological ticks before and after are
+    /// kept as evidence). The lifecycle advances <c>agedThroughTick</c> by <see cref="completedTicks"/> only, never replays the uncertain interval,
+    /// never sets the bookmark to "now", and quarantines the episode: the person is blocked until the owner decides.
     /// </summary>
-    public sealed class AgingIncompleteException : InvalidOperationException
+    public sealed class AgingUncertainException : InvalidOperationException
     {
-        public readonly long appliedTicks;
+        public readonly long completedTicks;
+        public readonly long uncertainTicks;
+        public readonly long bioTicksBefore;
+        public readonly long bioTicksAfter;
 
-        public AgingIncompleteException(long applied, Exception inner)
-            : base("aging stopped after " + applied + " ticks: " + (inner?.Message ?? "unknown"), inner)
+        public AgingUncertainException(long completed, long uncertain, long bioBefore, long bioAfter, Exception inner)
+            : base("an aging step of " + uncertain + " ticks threw after " + completed + " ticks completed (biological ticks " + bioBefore + " → " + bioAfter
+                + "; the failing step's progress is not provable): " + (inner?.Message ?? "unknown"), inner)
         {
-            appliedTicks = applied;
+            completedTicks = completed;
+            uncertainTicks = uncertain;
+            bioTicksBefore = bioBefore;
+            bioTicksAfter = bioAfter;
         }
     }
 

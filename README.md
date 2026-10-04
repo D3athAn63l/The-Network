@@ -104,8 +104,8 @@ and is **reconciled exactly once**, atomically, from observed state, with every 
 carrying its own durable marker; death is final; custody beyond the map is never mistaken for "home"; **no Harmony** for the recommended slice. Four subphases:
 3.0 the abstract foundation (no pawn), 3.1 one controlled physical episode (first real pawn, in a separate, session-armed test
 tier on its own test map), 3.2 custody, rescue and groups (first player-visible content), 3.3 procurement fulfillment / physical
-handoff (**design direction only**). **3.0 may begin once the design is accepted; 3.1 is gated on a mandatory runtime spike (S31, the retained-pawn exit-reservation window) that has not been run.** Full Safe Regression stays safe on a real colony. Open questions and the spikes that settle
-them are listed, not hidden; none has been run.
+handoff (**design direction only**). **3.0 began once the design was accepted. The mandatory runtime spike S31 (the retained-pawn exit-reservation window) has been run by the owner and PASSED: M1 (reserve a retained named pawn while it is spawned) is accepted (ADR-053). That validates the mechanism only; the Phase 3.1 physical suite (`RT-PHYX-*`) has not yet been run by the owner.** Full Safe Regression stays safe on a real colony. Open questions and the spikes that settle
+them are listed, not hidden; apart from S31, none has been run by the owner.
 
 The contract board, the player as contractor and the social layer are later phases
 ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).

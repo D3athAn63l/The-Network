@@ -57,9 +57,26 @@ namespace TheNetwork.Domain.Physical
         public int settled;
         public int signalWakeups;
 
+        /// <summary>A placement that did not report success but left the bound pawn physically present (spawned or dead): treated as Present.</summary>
+        public int placementRecovered;
+
+        /// <summary>A bound pawn positively gone after binding (discarded): resolved through the existing Lost semantics, never NeverPlaced.</summary>
+        public int placementLost;
+
+        /// <summary>A bound pawn held by a vanilla owner or unobservable after a placement attempt: the episode was quarantined, nothing invented.</summary>
+        public int placementFailClosed;
+
+        /// <summary>A truthful-aging step threw (its progress is not provable): the episode was quarantined and nothing was replayed.</summary>
+        public int agingUncertain;
+
+        /// <summary>A retained named person observed as an actual Free world pawn (M1 failed): the episode was quarantined, never Returned.</summary>
+        public int reservationBroken;
+
         public override string ToString()
         {
             return "planned " + planned + " (refused " + refusedPlans + "), created " + created + ", rematerialized " + rematerialized + ", placed " + placed
+                + " (recovered " + placementRecovered + ", lost " + placementLost + ", failed closed " + placementFailClosed + ")"
+                + ", aging uncertain " + agingUncertain + ", reservation broken " + reservationBroken
                 + ", wake-ups " + wakeups + " (duplicate " + duplicateWakeups + ", deferred " + deferredWakeups + ", blind " + blindWakeups + ")"
                 + ", commits " + commits + " (failed " + commitFailures + ", invalid " + invalidPlans + "), quarantined " + quarantined
                 + ", release actions " + releaseActions + " (passed " + passedToWorld + ", already world " + passSkippedAlreadyWorld + ", refused " + passRefused + ")"
@@ -90,6 +107,20 @@ namespace TheNetwork.Domain.Physical
 
         /// <summary>After the bounded retries an episode is watched slowly (it stays reported, never auto-resolved).</summary>
         public const int SlowWatchPeriod = 2500;
+
+        /// <summary>The quarantine key prefixes the correction pass added (the persisted <c>quarantineKey</c> string; no schema change).</summary>
+        public const string QuarantinePlacement = "PlacementUnresolved";
+        public const string QuarantineReservation = "ReservationBroken";
+        public const string QuarantineAge = "AgeTruthUncertain";
+
+        /// <summary>
+        /// A quarantine no watch, load or wake-up resolves by observing the world: a person whose AGE TRUTH is uncertain cannot be made certain by
+        /// looking at a pawn (§ 6.4). It is reported and kept; clearing it is an owner decision, never an inference.
+        /// </summary>
+        public static bool IsHardQuarantine(string key)
+        {
+            return key != null && key.StartsWith(QuarantineAge, StringComparison.Ordinal);
+        }
 
         /// <summary>Group size bound (§ 5.1, § 18.2).</summary>
         public const int MaxMembers = 8;
@@ -286,8 +317,11 @@ namespace TheNetwork.Domain.Physical
         /// <summary>
         /// Creates (first time) or rematerializes (the SAME binding, never regenerated: P3-INV-006) every member over the port and
         /// places them. A rematerialized person's pawn is first aged by the FULL interval since <c>agedThroughTick</c>, uncapped
-        /// (§ 6.4, P3-INV-022). ≥ 1 placed ⇒ Open; none ⇒ Closed(NeverPlaced) through the same atomic commit. A member that could
-        /// not be created or placed stays unplaced and closes NeverPlaced with the episode (§ 17).
+        /// (§ 6.4, P3-INV-022). ≥ 1 placed ⇒ Open; none ⇒ Closed(NeverPlaced) through the same atomic commit.
+        ///
+        /// A member that could not be created (nothing was ever bound) stays unplaced and closes NeverPlaced (§ 17). A member that WAS bound but
+        /// is not reported placed is never assumed NeverPlaced: once bound, its physical state is authoritative, so it is classified from positive
+        /// observation (<see cref="SettleBoundButUnplaced"/>). A truthful-aging step that threw quarantines the episode (§ 6.4).
         /// </summary>
         public int Materialize(PhysicalEpisode e)
         {
@@ -325,6 +359,13 @@ namespace TheNetwork.Domain.Physical
                         counters.placed++;
                     }
                 }
+                catch (AgingUncertainException ex)
+                {
+                    // The age truth of a stored person is no longer provable: nobody is placed and nothing is replayed, closed or invented.
+                    QuarantineAgeUncertain(e, m, ex);
+                    StateVersion.Bump();
+                    return present;
+                }
                 catch (Exception ex)
                 {
                     counters.materializeFaults++;
@@ -332,18 +373,113 @@ namespace TheNetwork.Domain.Physical
                 }
                 if (m.state == MemberState.Present) present++;
             }
+            return FinishPlanned(e, present);
+        }
+
+        /// <summary>
+        /// The end of a materialization (and of a Planned episode resolved at load): every member that is BOUND but not Present is classified
+        /// from positive observation, never assumed NeverPlaced (<see cref="SettleBoundButUnplaced"/>); then the episode opens, closes
+        /// NeverPlaced (nobody bound is physically anywhere) or is quarantined (a bound pawn is held or unobservable).
+        /// </summary>
+        private int FinishPlanned(PhysicalEpisode e, int present)
+        {
+            int now = ctx.Now;
+            bool lost;
+            string failClosed;
+            present += SettleBoundButUnplaced(e, out lost, out failClosed);
+            if (failClosed != null)
+            {
+                if (present > 0 && e.openedTick < 0) e.openedTick = now;
+                Quarantine(e, QuarantinePlacement + ":" + failClosed);
+                StateVersion.Bump();
+                return present;
+            }
             if (present > 0)
             {
                 e.state = EpisodeState.Open;
                 e.openedTick = now;
                 EnsureWatch(e);
+                StateVersion.Bump();
+                // A bound pawn that is positively gone resolves through the ordinary observation (Gone ⇒ Lost) at once, so a Closed episode never
+                // waits on a RELEASE for a pawn that no longer exists.
+                if (lost) Reconcile(e, "placement");
+                return present;
             }
-            else
-            {
-                CloseUnplaced(e);
-            }
+            CloseUnplaced(e);
             StateVersion.Bump();
             return present;
+        }
+
+        /// <summary>
+        /// THE bound-pawn rule (§ 7.3 rule 7): once a named pawn is bound, its physical state is authoritative, so a placement that did not report
+        /// success (a false return, or a throw: <c>GenSpawn.Spawn</c> returns the pawn even when <c>SpawnSetup</c> discarded it) is never reduced
+        /// to NeverPlaced on assumption. Each bound member that is not Present is observed and <see cref="PlacementRules"/> decides:
+        /// spawned or dead ⇒ Present; positively gone ⇒ Present-to-be-observed-Gone, which the ordinary path resolves as Lost; alive,
+        /// unspawned, undiscarded and held by nobody ⇒ stays unplaced (NeverPlaced); held or unobservable ⇒ <paramref name="failClosed"/>.
+        /// Returns how many members became Present. Nothing is created and nothing is passed to the world here.
+        /// </summary>
+        private int SettleBoundButUnplaced(PhysicalEpisode e, out bool lost, out string failClosed)
+        {
+            lost = false;
+            failClosed = null;
+            int became = 0;
+            for (int i = 0; i < e.members.Count; i++)
+            {
+                EpisodeMember m = e.members[i];
+                if (m.state == MemberState.Present || !m.IsBound) continue;
+                PlacementVerdict v = ClassifyBound(m, e.id);
+                switch (v.kind)
+                {
+                    case PlacementVerdictKind.Present:
+                        m.state = MemberState.Present;
+                        became++;
+                        counters.placed++;
+                        counters.placementRecovered++;
+                        NetLog.Warn(LogCategory.Physical, "Episode " + e.id + ": placement of " + m + " did not report success, but the bound pawn is physically there (" + v.detail
+                            + "): treated as Present, nothing regenerated and nothing closed as NeverPlaced.");
+                        break;
+                    case PlacementVerdictKind.Lost:
+                        m.state = MemberState.Present;
+                        became++;
+                        lost = true;
+                        counters.placementLost++;
+                        NetLog.Warn(LogCategory.Physical, "Episode " + e.id + ": the bound pawn of " + m + " is gone after binding (" + v.detail
+                            + "): resolved as Lost by the ordinary observation; never NeverPlaced, never regenerated.");
+                        break;
+                    case PlacementVerdictKind.FailClosed:
+                        counters.placementFailClosed++;
+                        if (failClosed == null) failClosed = v.detail + " " + m;
+                        break;
+                }
+            }
+            return became;
+        }
+
+        /// <summary>Observes a BOUND member and classifies it by <see cref="PlacementRules"/>. An observation that cannot be made fails closed.</summary>
+        private PlacementVerdict ClassifyBound(EpisodeMember m, EpisodeId episode)
+        {
+            try
+            {
+                PhysicalObservation o = Port.Observe(m.pawn, episode);
+                PassToWorldCheck pass = Port.CheckPassToWorld(m.pawn);
+                return PlacementRules.Classify(o, pass);
+            }
+            catch (Exception ex)
+            {
+                return PlacementVerdict.FailClosed("the bound pawn could not be observed (" + ex.GetType().Name + ": " + ex.Message + ")");
+            }
+        }
+
+        /// <summary>
+        /// A truthful-aging step threw (§ 6.4): its progress is not provable, so the episode is quarantined HARD (<see cref="IsHardQuarantine"/>).
+        /// The bookmark was advanced only by what completed; the pawn is untouched; the evidence is kept in the persisted key and error.
+        /// </summary>
+        private void QuarantineAgeUncertain(PhysicalEpisode e, EpisodeMember m, AgingUncertainException ex)
+        {
+            counters.agingUncertain++;
+            e.attempts = PhysicalEpisode.MaxAttempts; // watched slowly: it is reported, never retried
+            e.lastError = NetScribe.Truncate("Materialize " + m + ": " + ex.Message, 300);
+            Quarantine(e, QuarantineAge + ":" + m.character + " completed " + ex.completedTicks + " uncertain " + ex.uncertainTicks + " bio " + ex.bioTicksBefore + ">" + ex.bioTicksAfter);
         }
 
         private bool Bind(PhysicalEpisode e, EpisodeMember m, int now)
@@ -362,8 +498,10 @@ namespace TheNetwork.Domain.Physical
                         return false;
                     }
                     // Truthful aging (§ 6.4): the FULL interval since agedThroughTick, uncapped, before anything can observe the pawn.
-                    // agedThroughTick advances only by what was really applied: a catch-up that stopped part-way records exactly that much
-                    // and the person is not placed (the binding is untouched).
+                    // Vanilla's mothball step is NOT atomic (it advances the whole step, then runs the birthdays, with no rollback), so the
+                    // bookmark advances only by the steps that RETURNED (every birthday inside them ran). A step that threw has an unprovable
+                    // progress: the bookmark is never moved for it, never set to "now", and the interval is never replayed (the episode is
+                    // quarantined by Materialize). Any other failure changed nothing and the interval may be retried later.
                     long elapsed = c.pawn.agedThroughTick >= 0 ? (long)now - c.pawn.agedThroughTick : 0L;
                     if (elapsed > 0)
                     {
@@ -371,9 +509,9 @@ namespace TheNetwork.Domain.Physical
                         {
                             Port.CatchUpAge(c.pawn, elapsed);
                         }
-                        catch (AgingIncompleteException ex)
+                        catch (AgingUncertainException ex)
                         {
-                            if (ex.appliedTicks > 0) c.pawn.agedThroughTick += (int)Math.Min(ex.appliedTicks, elapsed);
+                            if (ex.completedTicks > 0) c.pawn.agedThroughTick += (int)Math.Min(ex.completedTicks, elapsed);
                             throw;
                         }
                     }
@@ -382,7 +520,7 @@ namespace TheNetwork.Domain.Physical
                     counters.rematerialized++;
                     return true;
                 }
-                PawnRef made = Port.Create(ProjectionPolicy.ForPerson(e, m, c, ctx.actors.Get(e.actor)));
+                PawnRef made = Port.Create(ProjectionPolicy.ForPerson(e, m, c, ctx.actors.Get(e.actor), ctx.networkSeed));
                 if (made == null || !made.IsBound) return false;
                 made.boundTick = now;
                 made.agedThroughTick = now;
@@ -453,15 +591,37 @@ namespace TheNetwork.Domain.Physical
 
         private bool ReconcileCore(PhysicalEpisode e)
         {
+            // A person whose age truth is uncertain is not decided by looking at the world (§ 6.4): the episode is reported, never resolved.
+            if (e.state == EpisodeState.Quarantined && IsHardQuarantine(e.quarantineKey)) return false;
             List<MemberDecision> decisions = new List<MemberDecision>();
             bool pending = false;
             string unsupported = null;
+            string broken = null;
+            string failClosed = null;
             try
             {
                 for (int i = 0; i < e.members.Count; i++)
                 {
                     EpisodeMember m = e.members[i];
                     MemberDecision d = new MemberDecision { member = m, character = m.IsNamed ? ctx.characters.Get(m.character) : null };
+                    if (m.state != MemberState.Present && m.IsBound)
+                    {
+                        // Bound but never reported placed (§ 7.3 rule 7): its physical state is authoritative, so it is observed, never assumed NeverPlaced.
+                        PlacementVerdict v = ClassifyBound(m, e.id);
+                        if (v.kind == PlacementVerdictKind.Present || v.kind == PlacementVerdictKind.Lost)
+                        {
+                            m.state = MemberState.Present; // the ordinary observation below decides it (Spawned ⇒ Pending, Dead ⇒ Killed, Gone ⇒ Lost)
+                        }
+                        else if (v.kind == PlacementVerdictKind.FailClosed)
+                        {
+                            counters.placementFailClosed++;
+                            if (failClosed == null) failClosed = v.detail + " " + m;
+                            d.outcome = MemberOutcome.Pending;
+                            pending = true;
+                            decisions.Add(d);
+                            continue;
+                        }
+                    }
                     if (m.state != MemberState.Present)
                     {
                         d.outcome = MemberOutcome.NeverPlaced; // never placed: nothing physical happened to it in this episode
@@ -474,6 +634,11 @@ namespace TheNetwork.Domain.Physical
                         d.observation = o;
                         d.outcome = ReconciliationPlanner.Decide(o, out unsup);
                         if (unsup && unsupported == null) unsupported = o.kind + " " + m;
+                        if (o.kind == ObservedKind.ReservationBroken && broken == null)
+                        {
+                            broken = o.kind + " " + m;
+                            e.lastError = NetScribe.Truncate(o.note ?? WorldPawnRules.BrokenReservation, 300);
+                        }
                         if (d.outcome == MemberOutcome.Pending) pending = true;
                         if (d.outcome == MemberOutcome.Returned) d.woundDays = ReconciliationPlanner.WoundDaysFor(o);
                     }
@@ -483,6 +648,20 @@ namespace TheNetwork.Domain.Physical
             catch (Exception ex)
             {
                 RecordFailure(e, ex);
+                return false;
+            }
+            if (broken != null)
+            {
+                // ADR-053 / P3-INV-032: a retained named person that vanilla sees as an ordinary Free world pawn is the M1 reservation FAILING.
+                // It is never a return, and nothing here repairs it (no registry is ensured, nothing is committed): the pawn is untouched and
+                // the person stays blocked until the observation says something positive.
+                counters.reservationBroken++;
+                Quarantine(e, QuarantineReservation + ":" + broken);
+                return false;
+            }
+            if (failClosed != null)
+            {
+                Quarantine(e, QuarantinePlacement + ":" + failClosed);
                 return false;
             }
             if (unsupported != null)
@@ -499,7 +678,12 @@ namespace TheNetwork.Domain.Physical
                 }
                 return false;
             }
-            return Commit(e, decisions, ReconciliationPlanner.CloseReconciled);
+            // An episode whose members were ALL never placed (a quarantined placement that later resolved to "alive, unspawned, held by nobody")
+            // decided nothing about a linked operation: it closes NeverPlaced like any other nobody-placed episode, never as a Reconciled one
+            // whose operation marker would be written off.
+            bool nobodyPlaced = decisions.Count > 0;
+            for (int i = 0; i < decisions.Count; i++) if (decisions[i].outcome != MemberOutcome.NeverPlaced) nobodyPlaced = false;
+            return Commit(e, decisions, nobodyPlaced ? ReconciliationPlanner.CloseNeverPlaced : ReconciliationPlanner.CloseReconciled);
         }
 
         /// <summary>3 PLAN · 4 VALIDATE · 5 ATOMIC DURABLE COMMIT. False (with nothing applied) on any failure.</summary>
@@ -576,15 +760,25 @@ namespace TheNetwork.Domain.Physical
             if (e.state != EpisodeState.Closed && e.attempts >= PhysicalEpisode.MaxAttempts) Quarantine(e, "RetriesExhausted");
         }
 
-        /// <summary>A Planned episode outside its materialization (a load, § 16.1): resolved by evidence, never by regeneration.</summary>
+        /// <summary>
+        /// A Planned episode outside its materialization (a load, § 16.1): resolved by evidence, never by regeneration. A BOUND member that was
+        /// created is Present, whether or not its binding still resolves (§ 7.3 rule 7): a pointer that no longer resolves is evidence of LOSS, which the
+        /// ordinary observation (Gone) records as Lost, never as NeverPlaced. A bound member that was never created is classified like any other
+        /// bound-but-unplaced member.
+        /// </summary>
         public void ResolvePlanned(PhysicalEpisode e)
         {
             if (e == null || e.state != EpisodeState.Planned || !PortAvailable || busy) return;
             int present = 0;
+            bool unresolved = false;
             for (int i = 0; i < e.members.Count; i++)
             {
                 EpisodeMember m = e.members[i];
-                if (m.state == MemberState.Created && m.IsBound && Port.Resolves(m.pawn)) m.state = MemberState.Present;
+                if (m.state == MemberState.Created && m.IsBound)
+                {
+                    m.state = MemberState.Present;
+                    if (!Port.Resolves(m.pawn)) unresolved = true;
+                }
                 if (m.state == MemberState.Present) present++;
             }
             if (present > 0)
@@ -593,9 +787,11 @@ namespace TheNetwork.Domain.Physical
                 if (e.openedTick < 0) e.openedTick = ctx.Now;
                 EnsureWatch(e);
                 StateVersion.Bump();
+                // A binding that no longer resolves is positive evidence of loss: observed at once (Gone ⇒ Lost), not left blocked until the next watch.
+                if (unresolved) Reconcile(e, "load");
                 return;
             }
-            CloseUnplaced(e);
+            FinishPlanned(e, 0);
         }
 
         // ================================================================== the post-commit stages
@@ -885,6 +1081,13 @@ namespace TheNetwork.Domain.Physical
                 {
                     EpisodeMember m = e.members[k];
                     MemberDecision d = new MemberDecision { member = m, character = m.IsNamed ? ctx.characters.Get(m.character) : null, outcome = MemberOutcome.NeverPlaced };
+                    if (m.state != MemberState.Present && m.IsBound)
+                    {
+                        // A bound member that was never reported placed is not assumed NeverPlaced (§ 7.3 rule 7): positively gone ⇒ Lost; alive,
+                        // unspawned and held by nobody ⇒ NeverPlaced; anything else (held, unobservable, or an uncertain age) ⇒ Detached.
+                        PlacementVerdict v = PortAvailable && !IsHardQuarantine(e.quarantineKey) ? ClassifyBound(m, e.id) : PlacementVerdict.FailClosed("not observable");
+                        d.outcome = v.kind == PlacementVerdictKind.NeverPlaced ? MemberOutcome.NeverPlaced : v.kind == PlacementVerdictKind.Lost ? MemberOutcome.Lost : MemberOutcome.Detached;
+                    }
                     if (m.state == MemberState.Present)
                     {
                         d.outcome = MemberOutcome.Detached;

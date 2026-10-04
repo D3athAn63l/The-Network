@@ -9,9 +9,13 @@ namespace TheNetwork.Integration.Physical
 {
     /// <summary>
     /// The § 9.3 classification of one bound pawn, first match wins. A PURE READ of vanilla state: it changes nothing in the world or the
-    /// Network. "Not spawned" is never evidence of anything: Returned needs WorldFree (vanilla already passed the pawn, it is alive, held by
-    /// nobody, not the player's, Free or reserved by the Network's OWN registry and no other quest) plus exit evidence, and a world pawn has
-    /// left the episode map by construction (map removal included, which sends no LeftMap).
+    /// Network. "Not spawned" is never evidence of anything: Returned needs WorldFree plus exit evidence, and a world pawn has left the
+    /// episode map by construction (map removal included, which sends no LeftMap).
+    ///
+    /// After ADR-053 (M1) the registry reserves a retained named person from its binding on, so for such a person WorldFree means vanilla
+    /// sees the pawn as ReservedByQuest by the Network's OWN registry and no other quest. An actual <c>Free</c> world pawn is NOT a return for
+    /// it: it is the reservation failing, reported as ReservationBroken (P3-INV-032) and never healed here. The decision itself is the pure
+    /// <see cref="WorldPawnRules"/>; this class only gathers the plain facts. A pawn the registry never covers keeps the ordinary reading.
     /// </summary>
     public static class PawnObserver
     {
@@ -65,20 +69,35 @@ namespace TheNetwork.Integration.Physical
             if (wp != null && wp.Contains(p))
             {
                 WorldPawnSituation s = wp.GetSituation(p);
-                bool ours = s == WorldPawnSituation.ReservedByQuest && registry != null && registry.Reserves(p) && !OtherQuestReserves(p, registryQuest);
-                if (s == WorldPawnSituation.Free || ours)
+                WorldPawnFacts facts = new WorldPawnFacts
                 {
-                    o.kind = ObservedKind.WorldFree;
+                    retained = registry != null && registry.Reserves(p),
+                    situation = SituationOf(s),
+                    otherQuestReserves = s == WorldPawnSituation.ReservedByQuest && OtherQuestReserves(p, registryQuest)
+                };
+                o.kind = WorldPawnRules.KindOf(facts);
+                if (o.kind == ObservedKind.WorldFree)
+                {
                     o.exitEvidence = true;
                     o.exitTick = exitTick;
                     o.mapId = -1;
-                    return o;
                 }
-                o.kind = ObservedKind.WorldOther;
+                else if (o.kind == ObservedKind.ReservationBroken)
+                {
+                    o.note = WorldPawnRules.BrokenReservation + " (vanilla situation " + s + ")";
+                }
                 return o;
             }
             o.kind = ObservedKind.Unknown;
             return o;
+        }
+
+        /// <summary>Vanilla's situation reduced to what the pure rule reads. Only an actual <c>Free</c> maps to Free.</summary>
+        public static WorldSituation SituationOf(WorldPawnSituation s)
+        {
+            if (s == WorldPawnSituation.Free) return WorldSituation.Free;
+            if (s == WorldPawnSituation.ReservedByQuest) return WorldSituation.ReservedByQuest;
+            return s == WorldPawnSituation.None ? WorldSituation.None : WorldSituation.Other;
         }
 
         /// <summary>Is the pawn reserved by any active quest other than the Network's registry quest? (Bounded by the active quests.)</summary>

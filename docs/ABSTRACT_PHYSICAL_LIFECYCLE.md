@@ -22,7 +22,7 @@
 > steps wherever they pass a *returning* pawn to the world: vanilla (`Pawn.ExitMap`, `MapDeiniter`) has **already** passed it, and
 > a second `PassToWorld` is rejected; the Network passes only a bound pawn that is positively not in `WorldPawns`
 > ([PHYSICAL_LIFECYCLE § 7.5](PHYSICAL_LIFECYCLE.md#75-who-may-call-passtoworld-an-observed-world-pawn-is-never-passed-again)).
-> It also leaves the retained-pawn exit window to the unresolved spike S31 ([§ 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31)).
+> It also left the retained-pawn exit window to spike S31 (since run by the owner and passed with M1, ADR-053) ([§ 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-resolved-by-m1-spike-s31-owner-validated)).
 
 > The highest-risk area of the mod. It covers how an off-map contractor organization, which is
 > a record with headcounts, becomes real pawns on a map, and how the results return to the

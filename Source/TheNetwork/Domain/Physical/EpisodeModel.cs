@@ -63,7 +63,14 @@ namespace TheNetwork.Domain.Physical
         Spawned = 9,
         WorldFree = 10,
         WorldOther = 11,
-        Unknown = 12
+        Unknown = 12,
+
+        /// <summary>
+        /// A RETAINED named person observed as an ordinary <c>Free</c> world pawn: the M1 reservation (ADR-053, P3-INV-032) was not in force
+        /// when vanilla passed or kept the pawn. That is a bug, never a return: the member is never <c>Returned</c> from it and the episode
+        /// is quarantined. Appended last (enums persist by name, so no save-format change).
+        /// </summary>
+        ReservationBroken = 13
     }
 
     /// <summary>What vanilla holds a person as, while their custody is OutOfCustody (§ 8.2). Values are persisted.</summary>

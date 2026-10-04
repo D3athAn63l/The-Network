@@ -81,7 +81,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
     public sealed class Phyx002NormalExit : PhysicalRun
     {
         private int commits0, passes0, skipped0, refused0, releases0, wakeups0;
-        private int authorityLeak, storedEarly, freeSeen;
+        private int authorityLeak, storedEarly, freeSeen, brokenSeen;
 
         public Phyx002NormalExit(NetworkRuntime rt, string runId) : base(PhysicalScenarioTable.Get("RT-PHYX-002"), runId, rt)
         {
@@ -116,7 +116,8 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             if (e == null || c == null || p == null) return;
             if (!e.releaseApplied && AuthorityGate.CanSimulateAbstractly(c)) authorityLeak++;
             if (c.custody == CustodyState.Stored && !e.consequencesApplied) storedEarly++;
-            if (Find.WorldPawns.Contains(p) && Find.WorldPawns.GetSituation(p) == WorldPawnSituation.Free) freeSeen++;
+            if (IsActualFree(p)) freeSeen++;
+            if (IsBrokenReservation(e)) brokenSeen++;
         }
 
         protected override void Finish()
@@ -130,7 +131,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             v.Check(lc.counters.releasesCompleted == releases0 + 1, "RELEASE completed exactly once");
             v.Check(authorityLeak == 0, "abstract authority stayed closed on every frame until RELEASE completed (" + authorityLeak + " frames open early)");
             v.Check(storedEarly == 0, "custody became Stored only through the commit");
-            v.Check(freeSeen == 0, "the pawn was never seen Free in WorldPawns (" + freeSeen + " frames)");
+            CheckNoActualFree("RT-PHYX-002", freeSeen, brokenSeen);
         }
     }
 
@@ -293,7 +294,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
     /// <summary>RT-PHYX-005 — the test map is removed with the pawn still on it; the person is observed, not erased.</summary>
     public sealed class Phyx005MapRemoved : PhysicalRun
     {
-        private int leftMap0;
+        private int leftMap0, freeSeen, brokenSeen;
 
         public Phyx005MapRemoved(NetworkRuntime rt, string runId) : base(PhysicalScenarioTable.Get("RT-PHYX-005"), runId, rt)
         {
@@ -302,7 +303,16 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         protected override void Script()
         {
             Then("pick a Solo", () => PickSolo(SoloNeed.Any));
-            Then("materialize through the production lifecycle", MaterializeOnTestMap);
+            Then("materialize through the production lifecycle", () =>
+            {
+                StepResult r = MaterializeOnTestMap();
+                everyFrame = () =>
+                {
+                    if (IsActualFree(p)) freeSeen++;
+                    if (IsBrokenReservation(e)) brokenSeen++;
+                };
+                return r;
+            });
             Then("let the visitor walk in", WaitOnMap(300));
             Then("remove the test map with the pawn on it (vanilla removal)", () =>
             {
@@ -316,7 +326,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 v.Note(TestSite.RemoveMap(false));
                 PawnSnap s = PawnSnap.Of(p, "immediately after the map removal");
                 v.Note("snapshot " + s.Line());
-                v.Check(s.worldPawn && s.situation == WorldPawnSituation.ReservedByQuest, "immediately after the removal the pawn is a world pawn reserved by the registry, never Free (" + s.situation + ")");
+                v.Check(s.worldPawn && s.situation == WorldPawnSituation.ReservedByQuest, "immediately after the removal the pawn is a world pawn reserved by the registry; an ACTUAL Free here is the M1 reservation FAILING, not an acceptable return (" + s.situation + ")");
                 v.Check(s.factionId == faction, "the pass did not rewrite the pawn's faction");
                 v.Check(e.state == EpisodeState.Open && c.custody == CustodyState.Deployed, "the episode is still Open: nothing was decided by the removal itself");
                 int leftMap = observer.Count("LeftMap", p.thingIDNumber, startTick) - leftMap0;
@@ -330,6 +340,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         protected override void Finish()
         {
             CheckReturnedAndStored(e, c, p);
+            CheckNoActualFree("RT-PHYX-005", freeSeen, brokenSeen);
             v.Note("agedThroughTick " + c.pawn.agedThroughTick + " (no exit signal on map removal: the commit tick, " + e.committedTick + ")");
         }
     }
@@ -764,6 +775,11 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         private readonly Dictionary<string, int> failuresByRole = new Dictionary<string, int>();
         private int created0, bound0;
 
+        /// <summary>The 3.1 correction pass (§ 6.3): the first gender and age follow the PERSON. The projections share eight synthetic people.</summary>
+        public const int IdentityPeople = 8;
+        private int identityPinned, identityMismatches;
+        private readonly Dictionary<string, string> identityRealized = new Dictionary<string, string>();
+
         public Phyx011RoleGeneration(NetworkRuntime rt, string runId) : base(PhysicalScenarioTable.Get("RT-PHYX-011"), runId, rt)
         {
         }
@@ -791,7 +807,9 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 int i = cursor++;
                 OperationalRole role = roles[i % roles.Count];
                 ExperienceBand band = Bands[(i / roles.Count) % Bands.Length];
-                ProjectionRequest req = new ProjectionRequest { role = role, capability = band, equipmentTier = 1 + i % 5, seed = NetHash.Combine(NetHash.Combine(0x5EED, runId), i), faction = FactionRef.Of(fixture) };
+                int person = 1 + i % IdentityPeople;
+                ProjectionRequest req = new ProjectionRequest { role = role, capability = band, equipmentTier = 1 + i % 5, seed = NetHash.Combine(NetHash.Combine(0x5EED, runId), i), faction = FactionRef.Of(fixture),
+                    identity = PersonIdentity.For(0x5EED, new CharacterId(person)) };
                 ProjectionResult r = PawnProjection.Project(req, fixture);
                 attempts += r.attempts;
                 corrections += r.corrections;
@@ -809,6 +827,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 made++;
                 kinds.Add(r.kind);
                 races.Add(r.pawn.def.defName);
+                CheckIdentity(r, person);
                 if (!RoleRules.Verify(r.spec, PawnRoleReader.Snapshot(r.pawn)).holds)
                 {
                     contradictions++;
@@ -833,9 +852,55 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             return n;
         }
 
+        /// <summary>
+        /// The real pawn carries what the person's identity asked for (through vanilla's own request inputs; nothing is written afterwards), and the
+        /// same person projected again by a DIFFERENT episode seed, role or band comes out with the same gender and age (within one kind).
+        /// </summary>
+        private void CheckIdentity(ProjectionResult r, int person)
+        {
+            IdentityPins pins = r.pins;
+            if (pins == null || r.pawn == null) return;
+            Pawn pawn = r.pawn;
+            if (pins.gender.HasValue)
+            {
+                identityPinned++;
+                if (pawn.gender != pins.gender.Value)
+                {
+                    identityMismatches++;
+                    v.Fail("IDENTITY: person " + person + " asked for " + pins.gender.Value + " but the real pawn is " + pawn.gender + " (" + r + ")");
+                }
+            }
+            if (pins.biologicalAge.HasValue)
+            {
+                identityPinned++;
+                if (pawn.ageTracker.AgeBiologicalYearsFloat != pins.biologicalAge.Value)
+                {
+                    identityMismatches++;
+                    v.Fail("IDENTITY: person " + person + " asked for biological age " + pins.biologicalAge.Value + " but the real pawn is " + pawn.ageTracker.AgeBiologicalYearsFloat + " (" + r + ")");
+                }
+            }
+            if (pins.chronologicalAge.HasValue && pawn.ageTracker.AgeChronologicalYears != (int)pins.chronologicalAge.Value)
+            {
+                identityMismatches++;
+                v.Fail("IDENTITY: person " + person + " asked for chronological age " + pins.chronologicalAge.Value + " but the real pawn is " + pawn.ageTracker.AgeChronologicalYears + " (" + r + ")");
+            }
+            string key = person + "|" + r.kind, realized = pawn.gender + "/" + pawn.ageTracker.AgeBiologicalYears, was;
+            if (identityRealized.TryGetValue(key, out was) && was != realized)
+            {
+                identityMismatches++;
+                v.Fail("IDENTITY: person " + person + " (" + r.kind + ") came out " + realized + " here and " + was + " in another projection: the first identity depends on the episode");
+            }
+            else
+            {
+                identityRealized[key] = realized;
+            }
+        }
+
         protected override void Finish()
         {
             v.Check(contradictions == 0, made + " real pawns satisfied their role; 0 contradicting pawns returned");
+            v.Check(identityMismatches == 0, "every real pawn carries its person's first gender and age, and the same person is the same in every projection (" + identityPinned + " pins checked, " + identityMismatches + " mismatches)");
+            if (made > 0 && identityPinned == 0) v.Gap("no projection carried an identity pin (no safe adult window or a fixed-gender kind in every case): the first-identity claim is INCONCLUSIVE");
             v.Note(total + " projections over " + roles.Count + " roles: " + made + " made, " + aborted + " contained aborts" + (failuresByRole.Count > 0 ? " (" + string.Join(", ", Describe(failuresByRole)) + ")" : "")
                 + "; " + attempts + " attempts, " + rejected + " rejected candidates, " + corrections + " skill corrections; " + (total > 0 ? (msTotal / total).ToString("0.0") : "0") + " ms avg, " + msMax.ToString("0.0") + " ms max");
             v.Note("kinds used: " + string.Join(", ", new List<string>(kinds).ToArray()) + "; races: " + string.Join(", ", new List<string>(races).ToArray()));
@@ -946,7 +1011,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
     public sealed class Phyx015NormalExitM1 : PhysicalRun
     {
         private int commits0, passes0, releases0, skipped0;
-        private int spawnedUncovered, freeSeen, rewritten, authorityLeak, storedEarly;
+        private int spawnedUncovered, freeSeen, brokenSeen, rewritten, authorityLeak, storedEarly;
         private int placedFaction = -1;
         private PhysicalEpisode first, second;
 
@@ -979,7 +1044,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                     return StepResult.Next;
                 }
                 v.Note("at LeftMap: " + s.snap.Line());
-                v.Check(s.snap.worldPawn && s.snap.situation == WorldPawnSituation.ReservedByQuest, "at vanilla's LeftMap the pawn is already a world pawn, ReservedByQuest, NOT Free (" + s.snap.situation + ")");
+                v.Check(s.snap.worldPawn && s.snap.situation == WorldPawnSituation.ReservedByQuest, "at vanilla's LeftMap the pawn is already a world pawn, ReservedByQuest; an ACTUAL Free here is the M1 reservation FAILING, not an acceptable return (" + s.snap.situation + ")");
                 v.Check(s.snap.reserved, "at LeftMap the registry reserves it");
                 v.Check(s.snap.factionId == placedFaction, "at LeftMap its faction is not rewritten");
                 v.Check(s.characterCustodyAtSignal == (int)CustodyState.Deployed, "at LeftMap custody is still Deployed (the lifecycle decides later, from observation)");
@@ -1012,11 +1077,9 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         {
             if (e == null || c == null || p == null) return;
             if (p.Spawned && !port.Registry.Reserves(p)) spawnedUncovered++;
-            if (Find.WorldPawns.Contains(p))
-            {
-                if (Find.WorldPawns.GetSituation(p) == WorldPawnSituation.Free) freeSeen++;
-                if (p.Faction != null && p.Faction.loadID != placedFaction) rewritten++;
-            }
+            if (IsActualFree(p)) freeSeen++;
+            if (IsBrokenReservation(e)) brokenSeen++;
+            if (Find.WorldPawns.Contains(p) && p.Faction != null && p.Faction.loadID != placedFaction) rewritten++;
             if (!e.releaseApplied && AuthorityGate.CanSimulateAbstractly(c)) authorityLeak++;
             if (c.custody == CustodyState.Stored && !e.consequencesApplied) storedEarly++;
         }
@@ -1027,7 +1090,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             v.Check(port.counters.passes == passes0, "the Network called PassToWorld 0 times over both exits");
             v.Check(lc.counters.commits == commits0 + 2 && lc.counters.releasesCompleted == releases0 + 2, "exactly one commit and one RELEASE per exit");
             v.Check(spawnedUncovered == 0, "M1: the registry covered the pawn on every frame it was spawned (" + spawnedUncovered + " uncovered)");
-            v.Check(freeSeen == 0, "never Free on any frame (" + freeSeen + ")");
+            CheckNoActualFree("RT-PHYX-015", freeSeen, brokenSeen);
             v.Check(rewritten == 0, "its faction was never rewritten to another faction (" + rewritten + ")");
             v.Check(authorityLeak == 0, "abstract authority stayed closed until RELEASE completed (" + authorityLeak + " frames open early)");
             v.Check(storedEarly == 0, "custody became Stored only through the commit");
@@ -1046,7 +1109,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         private readonly List<Pawn> pawns = new List<Pawn>();
         private readonly List<int> factions = new List<int>();
         private int commits0, passes0, releases0;
-        private int spawnedUncovered, freeSeen;
+        private int spawnedUncovered, freeSeen, brokenSeen;
 
         public Phyx016MapRemovalM1(NetworkRuntime rt, string runId) : base(PhysicalScenarioTable.Get("RT-PHYX-016"), runId, rt)
         {
@@ -1096,7 +1159,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 {
                     PawnSnap s = PawnSnap.Of(pawns[i], "immediately after the map removal");
                     v.Note("snapshot " + s.Line());
-                    v.Check(s.worldPawn && s.situation == WorldPawnSituation.ReservedByQuest && s.reserved, people[i].id + ": a reserved world pawn the instant vanilla passed it, never Free (" + s.situation + ")");
+                    v.Check(s.worldPawn && s.situation == WorldPawnSituation.ReservedByQuest && s.reserved, people[i].id + ": a reserved world pawn the instant vanilla passed it; an ACTUAL Free is the M1 reservation FAILING, not an acceptable return (" + s.situation + ")");
                     v.Check(s.factionId == factions[i], people[i].id + ": faction not rewritten by the pass");
                     v.Check(people[i].custody == CustodyState.Deployed && episodes[i].state == EpisodeState.Open, people[i].id + ": custody Deployed and the episode Open (nothing decided by the removal itself)");
                     int left = observer.Count("LeftMap", pawns[i].thingIDNumber, startTick) - leftMap0[i];
@@ -1118,8 +1181,9 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             {
                 Pawn x = pawns[i];
                 if (x.Spawned && !port.Registry.Reserves(x)) spawnedUncovered++;
-                if (Find.WorldPawns.Contains(x) && Find.WorldPawns.GetSituation(x) == WorldPawnSituation.Free) freeSeen++;
+                if (IsActualFree(x)) freeSeen++;
             }
+            for (int i = 0; i < episodes.Count; i++) if (IsBrokenReservation(episodes[i])) brokenSeen++;
         }
 
         protected override void Finish()
@@ -1127,7 +1191,8 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             for (int i = 0; i < people.Count; i++) CheckReturnedAndStored(episodes[i], people[i], pawns[i]);
             v.Check(port.counters.passes == passes0, "the Network called PassToWorld 0 times");
             v.Check(lc.counters.commits == commits0 + people.Count && lc.counters.releasesCompleted == releases0 + people.Count, "exactly one commit and one RELEASE per person (" + people.Count + ")");
-            v.Check(spawnedUncovered == 0 && freeSeen == 0, "M1 held on every frame: covered while spawned, never Free (" + spawnedUncovered + ", " + freeSeen + ")");
+            v.Check(spawnedUncovered == 0, "M1 held on every frame: the registry covered every pawn while it was spawned (" + spawnedUncovered + " uncovered)");
+            CheckNoActualFree("RT-PHYX-016", freeSeen, brokenSeen);
         }
     }
 
