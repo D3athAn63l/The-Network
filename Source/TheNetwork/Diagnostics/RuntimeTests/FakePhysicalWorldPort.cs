@@ -41,6 +41,9 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             /// <summary>Scripts "a quest other than the Network's also reserves this pawn".</summary>
             public bool otherQuestReserves;
 
+            /// <summary>Phase 3.2A: scripts "a permanent faction other than the player's made this pawn a member" (a captor recruited it).</summary>
+            public bool otherAllegiance;
+
             /// <summary>How and where vanilla made the pawn a world pawn (a normal exit or a map removal); null = it never left a map.</summary>
             public ExitRecord exit;
 
@@ -199,10 +202,40 @@ namespace TheNetwork.Diagnostics.RuntimeTests
 
         public void Hold(PawnRef p, ObservedKind kind)
         {
+            Hold(p, kind, HeldKind.None);
+        }
+
+        /// <summary>A vanilla holder takes the pawn (Phase 3.2A): the observation names the holder as the real adapter would.</summary>
+        public void Hold(PawnRef p, ObservedKind kind, HeldKind heldBy)
+        {
             Token t = TokenOf(p);
             if (t == null) return;
             t.held = true;
-            t.scripted = new PhysicalObservation { kind = kind, mapId = t.mapId };
+            t.scripted = new PhysicalObservation { kind = kind, holder = heldBy, mapId = t.mapId };
+        }
+
+        /// <summary>
+        /// Vanilla lets a held pawn go (released, escaped, its map removed, a captor's caravan dissolved): it is a WORLD pawn again, passed by
+        /// "vanilla", never by the Network. A named token stays covered by the registry (M1 includes OutOfCustody, ADR-056), so it is observed
+        /// WorldFree with exit evidence; the tile is unknown (a world pawn has none) unless one is given.
+        /// </summary>
+        public void Free(PawnRef p, int tileId = -1)
+        {
+            Token t = TokenOf(p);
+            if (t == null) return;
+            t.held = false;
+            t.spawned = false;
+            t.inWorldPawns = true;
+            t.exit = new ExitRecord { tileId = tileId, mapId = t.mapId };
+            t.scripted = null;
+        }
+
+        /// <summary>A captor recruits the held pawn (vanilla's ≈ 30-day MTB): a free world pawn, but a member of another permanent faction.</summary>
+        public void JoinOtherFaction(PawnRef p)
+        {
+            Free(p);
+            Token t = TokenOf(p);
+            if (t != null) t.otherAllegiance = true;
         }
 
         public void Wound(PawnRef p, float health, bool downed)
@@ -367,7 +400,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests
                 otherQuestReserves = t.otherQuestReserves
             };
             ObservedKind kind = WorldPawnRules.KindOf(facts);
-            PhysicalObservation o = new PhysicalObservation { kind = kind, mapId = t.exit.mapId };
+            PhysicalObservation o = new PhysicalObservation { kind = kind, mapId = t.exit.mapId, otherAllegiance = t.otherAllegiance };
             if (kind == ObservedKind.WorldFree)
             {
                 o.exitEvidence = true;

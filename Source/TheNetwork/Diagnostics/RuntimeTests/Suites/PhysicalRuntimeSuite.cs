@@ -34,7 +34,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests.Suites
             yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-008", "Held, unknown or absent is never Returned", NeverReturnedByAbsence, true);
             yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-009", "A group member's death changes that member only; tiers are conserved", GroupDeath, true);
             yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-010", "Map removal cannot silently erase a person", MapRemoval, true);
-            yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-012", "An unsupported custody quarantines; the pawn is untouched, the person blocked", UnsupportedCustody, true);
+            yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-012", "An unsupported custody (an anonymous member held: 3.2B) quarantines; the pawn is untouched", UnsupportedCustody, true);
             yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-013", "A reconcile that throws restores the exact durable state; the retry applies once", ThrowRestores, true);
             yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-014", "Publication resumes at its cursor; nothing accepted is published twice", PublicationCursor, true);
             yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-016", "A person is never owned by an episode and an operation at once", OperationExclusivity, true);
@@ -48,6 +48,10 @@ namespace TheNetwork.Diagnostics.RuntimeTests.Suites
             yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-030", "Time-independent identity: the same origin facts give the same role in year 1 and year 10", TimeIndependentIdentity, true);
             yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-026", "Commit fault sweep: every injected throw restores the fingerprint", FaultSweep, true);
             yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-029", "Release interruption keeps the gate closed until COMPLETE; no second PassToWorld", ReleaseInterruption, true);
+            // Phase 3.2A (held custody, ADR-056): the abstract half over the fake port, safe in a real colony like every RT-PHYS case.
+            yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-031", "A held person ends the episode once and is never abstract while held", HeldEndsEpisodeOnce, true);
+            yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-032", "The custody watch returns the same person only on positive evidence, once", CustodyWatchReturns, true);
+            yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-033", "Recruitment, a captor's recruitment and death while held never return the person", HeldNeverReturned, true);
         }
 
         // ================================================================== helpers
@@ -289,7 +293,6 @@ namespace TheNetwork.Diagnostics.RuntimeTests.Suites
         private static void NeverReturnedByAbsence(RuntimeTestContext ctx)
         {
             RuntimeTestSandbox sb = ctx.RequireSandbox();
-            ctx.ExpectLog("quarantined (UnsupportedCustody");
             NetworkActor a = Contractor(ctx, ContractorForm.Solo);
             KnownCharacter c = Self(sb, a);
             PhysicalEpisode e = Begin(ctx, a, new[] { c });
@@ -304,11 +307,14 @@ namespace TheNetwork.Diagnostics.RuntimeTests.Suites
             L(sb).Reconcile(e, "test");
             ctx.Assert.Equal(EpisodeState.Open, e.state, "a world pawn without exit evidence is not Returned");
             ctx.Assert.False(AuthorityGate.CanSimulateAbstractly(c), "the person stays blocked");
-            sb.Physical.Hold(c.pawn, ObservedKind.Kidnapped);
+            sb.Physical.Hold(c.pawn, ObservedKind.Kidnapped, HeldKind.Kidnapped);
             L(sb).Reconcile(e, "test");
-            ctx.Assert.Equal(EpisodeState.Quarantined, e.state, "a held person is never abstracted (quarantined until 3.2)");
-            ctx.Assert.Equal(CustodyState.Deployed, c.custody, "no custody is invented");
-            ctx.Assert.False(e.consequencesApplied, "and nothing was committed");
+            // Phase 3.2A: a held person is a TERMINAL held outcome (the episode ends once), never Returned and never abstracted.
+            ctx.Assert.True(e.IsComplete, "the episode closes once on the held outcome");
+            ctx.Assert.Equal(MemberOutcome.Kidnapped, e.members[0].outcome, "Kidnapped, never Returned");
+            ctx.Assert.Equal(CustodyState.OutOfCustody, c.custody, "custody OutOfCustody: vanilla holds the person");
+            ctx.Assert.Equal(HeldKind.Kidnapped, c.heldBy, "held by a kidnapper");
+            ctx.Assert.False(AuthorityGate.CanSimulateAbstractly(c), "never abstracted while held");
         }
 
         private static void GroupDeath(RuntimeTestContext ctx)
@@ -364,27 +370,34 @@ namespace TheNetwork.Diagnostics.RuntimeTests.Suites
             ctx.Assert.Zero(sb.Physical.passCalls, "the Network passed nobody to the world again");
         }
 
+        /// <summary>
+        /// Phase 3.2A supports held custody for NAMED people; the custody that is still unsupported is an ANONYMOUS member held by vanilla (its
+        /// promotion to a Known Character is Phase 3.2B). The invariant is unchanged: unsupported custody quarantines, the pawn is untouched,
+        /// the people stay blocked, and nothing is faked.
+        /// </summary>
         private static void UnsupportedCustody(RuntimeTestContext ctx)
         {
             RuntimeTestSandbox sb = ctx.RequireSandbox();
             ctx.ExpectLog("quarantined (UnsupportedCustody");
-            NetworkActor a = Contractor(ctx, ContractorForm.Solo);
-            KnownCharacter c = Self(sb, a);
-            PhysicalEpisode e = Begin(ctx, a, new[] { c });
+            NetworkActor a = Contractor(ctx, ContractorForm.Company);
+            KnownCharacter lt = Others(sb, a)[0];
+            PhysicalEpisode e = Begin(ctx, a, new[] { lt }, 1);
+            EpisodeMember anon = Anonymous(e)[0];
             int actions = sb.Physical.actions.Count;
-            sb.Physical.Hold(c.pawn, ObservedKind.HeldByPlayer);
+            sb.Physical.Hold(anon.pawn, ObservedKind.HeldByPlayer, HeldKind.PlayerPrisoner);
+            sb.Physical.ExitNormally(lt.pawn, 64);
             L(sb).Reconcile(e, "arrested");
             ctx.Assert.Equal(EpisodeState.Quarantined, e.state, "Quarantined");
             ctx.Assert.True(e.quarantineKey != null && e.quarantineKey.StartsWith("UnsupportedCustody"), "as an unsupported custody (" + e.quarantineKey + ")");
             ctx.Assert.Equal(actions, sb.Physical.actions.Count, "the pawn was not touched (no port action)");
-            ctx.Assert.False(AuthorityGate.CanSimulateAbstractly(c), "the person stays blocked");
-            ctx.Assert.Equal(CharacterStatus.Active, c.status, "no capture is faked");
+            ctx.Assert.False(AuthorityGate.CanSimulateAbstractly(lt), "the named member stays blocked (the episode is not committed)");
+            ctx.Assert.False(e.consequencesApplied, "nothing was committed: no capture is faked, no promotion invented");
             // Released later and observed leaving: the quarantined episode closes through the normal commit.
-            sb.Physical.TokenOf(c.pawn).held = false;
-            sb.Physical.ExitNormally(c.pawn, 64);
+            sb.Physical.TokenOf(anon.pawn).held = false;
+            sb.Physical.ExitNormally(anon.pawn, 64);
             L(sb).Reconcile(e, "released");
             ctx.Assert.True(e.IsComplete, "Quarantined → Closed by a later successful reconcile");
-            ctx.Assert.True(AuthorityGate.CanSimulateAbstractly(c), "and only then abstract");
+            ctx.Assert.True(AuthorityGate.CanSimulateAbstractly(lt), "and only then abstract");
         }
 
         // ================================================================== RT-PHYS-013 .. 019
@@ -923,6 +936,100 @@ namespace TheNetwork.Diagnostics.RuntimeTests.Suites
             ctx.Assert.True(never.IsComplete, "closed and released");
             ctx.Assert.Equal(1, sb.Physical.TokenOf(q.pawn).passedToWorld, "passed to the world exactly once (Decide)");
             ctx.Assert.Equal(CustodyState.Stored, q.custody, "the bound person is Stored");
+        }
+    
+        // ================================================================== RT-PHYS-031 .. 033 (Phase 3.2A, held custody)
+
+        private static bool CustodyWatchExists(RuntimeTestSandbox sb)
+        {
+            return sb.Scheduler.Has(PhysicalLifecycleService.CustodyWatchJob, PhysicalLifecycleService.CustodyWatchTarget);
+        }
+
+        private static PhysicalEpisode Arrest(RuntimeTestContext ctx, NetworkActor a, KnownCharacter c)
+        {
+            RuntimeTestSandbox sb = ctx.RequireSandbox();
+            PhysicalEpisode e = Begin(ctx, a, new[] { c });
+            sb.Physical.Hold(c.pawn, ObservedKind.HeldByPlayer, HeldKind.PlayerPrisoner);
+            L(sb).Reconcile(e, "arrested");
+            return e;
+        }
+
+        private static void HeldEndsEpisodeOnce(RuntimeTestContext ctx)
+        {
+            RuntimeTestSandbox sb = ctx.RequireSandbox();
+            NetworkActor a = Contractor(ctx, ContractorForm.Solo);
+            KnownCharacter c = Self(sb, a);
+            int commits = L(sb).counters.commits;
+            PhysicalEpisode e = Arrest(ctx, a, c);
+            L(sb).Reconcile(e, "duplicate");
+            L(sb).WakeAll("duplicate");
+            ctx.Assert.True(e.IsComplete, "the episode closed and completed although the person is still held");
+            ctx.Assert.Equal(MemberOutcome.HeldByPlayer, e.members[0].outcome, "outcome HeldByPlayer");
+            ctx.Assert.Equal(commits + 1, L(sb).counters.commits, "reconciled exactly once");
+            ctx.Assert.Equal(CustodyState.OutOfCustody, c.custody, "custody OutOfCustody");
+            ctx.Assert.Equal(HeldKind.PlayerPrisoner, c.heldBy, "held as the player's prisoner");
+            ctx.Assert.Equal(CharacterStatus.Captured, c.status, "status Captured");
+            ctx.Assert.Equal(PersonAuthority.VanillaHeld, AuthorityGate.AuthorityOf(c), "authority VanillaHeld");
+            ctx.Assert.False(AuthorityGate.CanSimulateAbstractly(c), "never abstract while held");
+            ctx.Assert.True(CustodyWatchExists(sb), "the custody watch exists");
+            sb.Advance(10 * Ticks.PerDay);
+            ctx.Assert.Equal(CharacterStatus.Captured, c.status, "ten days of abstract upkeep changed nothing");
+            ctx.Assert.Equal(Availability.Unavailable, sb.Ctx.Contractors.AvailabilityOf(a), "unavailable for work");
+            ctx.Assert.Equal(1, sb.Physical.creates, "one pawn, never regenerated");
+            ctx.Assert.Zero(sb.Physical.passCalls, "no Network PassToWorld");
+        }
+
+        private static void CustodyWatchReturns(RuntimeTestContext ctx)
+        {
+            RuntimeTestSandbox sb = ctx.RequireSandbox();
+            NetworkActor a = Contractor(ctx, ContractorForm.Solo);
+            KnownCharacter c = Self(sb, a);
+            Arrest(ctx, a, c);
+            PawnRef binding = c.pawn.Copy();
+            sb.Physical.Script(c.pawn, new PhysicalObservation { kind = ObservedKind.Unknown });
+            sb.Advance(PhysicalLifecycleService.CustodyWatchPeriod + 1);
+            ctx.Assert.Equal(CustodyState.OutOfCustody, c.custody, "an unclassifiable observation keeps the person held");
+            ctx.Assert.Equal(HeldKind.Unknown, c.heldBy, "held by an unknown holder (fail closed)");
+            sb.Physical.Free(c.pawn);
+            sb.Advance(PhysicalLifecycleService.CustodyWatchPeriod + 1);
+            ctx.Assert.Equal(CustodyState.Stored, c.custody, "a free world pawn the registry reserves: Stored");
+            ctx.Assert.True(AuthorityGate.CanSimulateAbstractly(c), "abstract again after the Custody episode's RELEASE");
+            ctx.Assert.True(c.pawn.SameBinding(binding), "the same pawn");
+            int commits = L(sb).counters.commits;
+            sb.Advance(3 * PhysicalLifecycleService.CustodyWatchPeriod);
+            ctx.Assert.Equal(commits, L(sb).counters.commits, "nothing more happens: exactly once");
+            ctx.Assert.False(CustodyWatchExists(sb), "nobody held: the custody watch is gone");
+            ctx.Assert.Zero(sb.Physical.passCalls, "no Network PassToWorld");
+        }
+
+        private static void HeldNeverReturned(RuntimeTestContext ctx)
+        {
+            RuntimeTestSandbox sb = ctx.RequireSandbox();
+            NetworkActor a = Contractor(ctx, ContractorForm.Solo), b = Contractor(ctx, ContractorForm.Solo), d = Contractor(ctx, ContractorForm.Solo);
+            KnownCharacter ca = Self(sb, a), cb = Self(sb, b), cd = Self(sb, d);
+            Arrest(ctx, a, ca);
+            sb.Physical.Hold(ca.pawn, ObservedKind.JoinedPlayer, HeldKind.PlayerColonist);
+            sb.Advance(PhysicalLifecycleService.CustodyWatchPeriod + 1);
+            sb.Physical.Free(ca.pawn);
+            sb.Advance(PhysicalLifecycleService.CustodyWatchPeriod + 1);
+            ctx.Assert.Equal(CharacterStatus.Defected, ca.status, "recruited: Defected");
+            ctx.Assert.Equal(CustodyState.OutOfCustody, ca.custody, "a recruited person is never stored back, even free");
+            PhysicalEpisode eb = Begin(ctx, b, new[] { cb });
+            sb.Physical.Hold(cb.pawn, ObservedKind.Kidnapped, HeldKind.Kidnapped);
+            L(sb).Reconcile(eb, "kidnapped");
+            sb.Physical.JoinOtherFaction(cb.pawn);
+            sb.Advance(PhysicalLifecycleService.CustodyWatchPeriod + 1);
+            ctx.Assert.Equal(HeldKind.OtherFaction, cb.heldBy, "recruited by the captor: held by OtherFaction");
+            ctx.Assert.Equal(CustodyState.OutOfCustody, cb.custody, "never a free return");
+            Arrest(ctx, d, cd);
+            sb.Physical.Die(cd.pawn);
+            sb.Advance(PhysicalLifecycleService.CustodyWatchPeriod + 1);
+            ctx.Assert.Equal(CharacterStatus.Dead, cd.status, "died while held: Dead");
+            ctx.Assert.Equal(CustodyState.Released, cd.custody, "custody Released");
+            ctx.Assert.False(d.IsActive, "the Solo ended with its person");
+            sb.Advance(3 * PhysicalLifecycleService.CustodyWatchPeriod);
+            ctx.Assert.Equal(CharacterStatus.Dead, cd.status, "monotonic");
+            ctx.Assert.Equal(3, sb.Physical.creates, "nobody regenerated");
         }
     }
 }

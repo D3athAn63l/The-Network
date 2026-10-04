@@ -92,11 +92,23 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         public bool armed = true;
         public string slice = "3.1";
 
+        /// <summary>
+        /// Non-null when the scenario is RETIRED: its id and name are kept for history (stable ids are never renumbered or reused), the menu item
+        /// only says so and runs nothing, and the text names what superseded it.
+        /// </summary>
+        public string retired;
+
+        public bool IsRetired => retired != null;
+
         /// <summary>The Dev Mode label: the scenario id and name FIRST, so nobody translates letters into menu items.</summary>
         public string Label => id + " — " + name;
     }
 
-    /// <summary>The 3.1 scenario table (§ 21.2). RT-PHYX-013/014 are 3.2 and are deliberately absent.</summary>
+    /// <summary>
+    /// The scenario table (§ 21.2): the 3.1 ids, and the Phase 3.2A custody ids (RT-PHYX-020 … 025, S21). RT-PHYX-013/014 are 3.2B (groups) and
+    /// are deliberately absent. RT-PHYX-009 is RETIRED: Phase 3.2A supports an arrest as held custody, so "an arrest quarantines" is no longer
+    /// production behaviour; the arrest is RT-PHYX-020.
+    /// </summary>
     public static class PhysicalScenarioTable
     {
         public static readonly List<PhysicalScenarioInfo> All = new List<PhysicalScenarioInfo>
@@ -109,12 +121,19 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             new PhysicalScenarioInfo { id = "RT-PHYX-006", name = "Same-pawn rematerialization", solo = SoloNeed.Stored },
             new PhysicalScenarioInfo { id = "RT-PHYX-007", name = "Registry, redress and GC protection", solo = SoloNeed.Stored },
             new PhysicalScenarioInfo { id = "RT-PHYX-008", name = "Temporary faction lifecycle", solo = SoloNeed.Any },
-            new PhysicalScenarioInfo { id = "RT-PHYX-009", name = "Unsupported custody: dev arrest quarantines", solo = SoloNeed.Any },
+            new PhysicalScenarioInfo { id = "RT-PHYX-009", name = "Unsupported custody: dev arrest quarantines", solo = SoloNeed.Any,
+                retired = "retired in Phase 3.2A, superseded by RT-PHYX-020: an arrest is now a supported held custody (the episode closes once, the person stays held), never a quarantine" },
             new PhysicalScenarioInfo { id = "RT-PHYX-010", name = "Save/load matrix", solo = SoloNeed.Any, slice = "3.1 (S24)" },
             new PhysicalScenarioInfo { id = "RT-PHYX-011", name = "Role-constrained real pawn generation", solo = SoloNeed.None, slice = "3.1 (S25)" },
             new PhysicalScenarioInfo { id = "RT-PHYX-012", name = "Truthful aging mechanism", solo = SoloNeed.None, slice = "3.1 (S12)" },
             new PhysicalScenarioInfo { id = "RT-PHYX-015", name = "Normal-exit M1 regression", solo = SoloNeed.Any, slice = "3.1 (M1)" },
-            new PhysicalScenarioInfo { id = "RT-PHYX-016", name = "Map-removal M1 regression", solo = SoloNeed.Any, slice = "3.1 (M1)" }
+            new PhysicalScenarioInfo { id = "RT-PHYX-016", name = "Map-removal M1 regression", solo = SoloNeed.Any, slice = "3.1 (M1)" },
+            new PhysicalScenarioInfo { id = "RT-PHYX-020", name = "Arrest: held once, then freed and stored", solo = SoloNeed.Any, slice = "3.2A (S21)" },
+            new PhysicalScenarioInfo { id = "RT-PHYX-021", name = "Recruitment: Defected, never stored", solo = SoloNeed.Fresh, slice = "3.2A (S21)" },
+            new PhysicalScenarioInfo { id = "RT-PHYX-022", name = "Enslavement: held as a slave", solo = SoloNeed.Fresh, slice = "3.2A (S21)" },
+            new PhysicalScenarioInfo { id = "RT-PHYX-023", name = "Kidnapped, then recruited by the captor", solo = SoloNeed.Fresh, slice = "3.2A (S21)" },
+            new PhysicalScenarioInfo { id = "RT-PHYX-024", name = "Death while held", solo = SoloNeed.Fresh, slice = "3.2A (S21)" },
+            new PhysicalScenarioInfo { id = "RT-PHYX-025", name = "Held people after save/load", solo = SoloNeed.None, armed = false, slice = "3.2A (S21, S24)" }
         };
 
         public static PhysicalScenarioInfo Get(string id)

@@ -348,8 +348,8 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
 
         public const string ArmWarning = "The physical tests create and change REAL game state in this save: a dedicated test map on an empty tile (never your "
             + "colony map), temporary hidden encounter and fixture factions, real pawns for Network Solo contractors (who become retained, stored people of "
-            + "this save for good), disposable test pawns, a hidden registry quest, and deliberate dev damage, a dev arrest and test-map removals. They never "
-            + "touch your colonists or maps. Use a DISPOSABLE save. One arm authorises exactly ONE action; it is never saved and is cleared on load and on quit.";
+            + "this save for good), disposable test pawns, a hidden registry quest, and deliberate dev damage, dev arrests, a dev recruitment, enslavement "
+            + "and kidnapping (3.2A custody: those people stay held by vanilla) and test-map removals. They never touch your colonists or maps. Use a DISPOSABLE save. One arm authorises exactly ONE action; it is never saved and is cleared on load and on quit.";
 
         /// <summary>A new game object (load, new game) clears the arm and forgets the old run. Called by FinalizeInit and every frame.</summary>
         public static void ResetForNewGame()
@@ -442,6 +442,14 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             if (observer != null) return;
             observer = new PhysicalSignalObserver();
             Find.SignalManager.RegisterReceiver(observer);
+        }
+
+        /// <summary>A RETIRED scenario's menu item: it runs nothing, needs no arm, and says what superseded it (its id is never reused).</summary>
+        public static void Retired(PhysicalScenarioInfo info)
+        {
+            string text = info.Label + ": " + (info.retired ?? "retired");
+            PhysLog.Info(text);
+            Messages.Message("[TheNetwork] " + text, MessageTypeDefOf.RejectInput, false);
         }
 
         public static void Record(PhysicalRun run, string text)
