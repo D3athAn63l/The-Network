@@ -33,6 +33,8 @@
 14. [Adding a suite in a later phase](#14-adding-a-suite-in-a-later-phase)
 15. [Owner-observed runtime evidence](#15-owner-observed-runtime-evidence)
 16. [What was and was not validated](#16-what-was-and-was-not-validated)
+17. [The physical tier (Phase 3.1)](#17-the-physical-tier-phase-31)
+18. [Phase 3.2A: held custody](#18-phase-32a-held-custody)
 
 ---
 
@@ -373,10 +375,10 @@ marks headless-only (007, 011, 015, 027, 028) are in the headless suite (`Phys.*
 | RT-PHYS-004 | rematerialization reuses the same binding (token), never a new pawn (P3-INV-006) |
 | RT-PHYS-005 | a physical wound becomes the abstract recovery truth (`woundedUntilTick` or a wounded bucket) once |
 | RT-PHYS-006 | physical death is final: no abstract availability or resurrection, even with abstract jobs running (P3-INV-004) |
-| RT-PHYS-008 | held, unknown or absent is never `Returned` (P3-INV-005, -010) |
+| RT-PHYS-008 | held, unknown or absent is never `Returned` (P3-INV-005, -010); *(3.2A)* a kidnapped member closes the episode as `Kidnapped`, `OutOfCustody`, not abstract |
 | RT-PHYS-009 | a group member's death changes that member only; tier conservation holds (P3-INV-007) |
 | RT-PHYS-010 | map removal cannot silently erase a person |
-| RT-PHYS-012 | an unsupported custody quarantines; the pawn is untouched, the person blocked |
+| RT-PHYS-012 | an unsupported custody quarantines; the pawn is untouched, the person blocked *(3.2A: re-targeted to the case that still quarantines, an **anonymous** member held; a named person's custody is supported)* |
 | RT-PHYS-013 | a reconcile that throws restores the exact durable state; the retry applies once |
 | RT-PHYS-014 | publication resumes at its cursor; nothing accepted is published twice; a throwing consumer is not redispatched (P3-INV-025) |
 | RT-PHYS-016 | a person is never owned by an episode and an operation at once (ADR-039 extended) |
@@ -386,6 +388,9 @@ marks headless-only (007, 011, 015, 027, 028) are in the headless suite (`Phys.*
 | RT-PHYS-025 | truthful aging asks for the full, uncapped interval (1, 10, 70 years; rare = frequent) (P3-INV-022) |
 | RT-PHYS-026 | commit fault sweep: a throw after every step restores the fingerprint; coverage proof; applied once (P3-INV-023) |
 | RT-PHYS-029 | release interruption keeps the gate closed until COMPLETE; zero `PassToWorld` for `WorldFree`; an invalid request is rejected (P3-INV-029, -031) |
+| RT-PHYS-031 | *(3.2A)* a held person ends the episode once and is never abstract while held (P3-INV-040) |
+| RT-PHYS-032 | *(3.2A)* the custody watch returns the same person only on positive evidence, once (P3-INV-041) |
+| RT-PHYS-033 | *(3.2A)* recruitment, a captor's recruitment and death while held never return the person (P3-INV-041) |
 
 **Infrastructure — `RT-INFRA-*` (appended to every run)**
 
@@ -786,14 +791,14 @@ A suite visit lasts 1,250 ticks at the chill spot (the same vanilla Lord as prod
 | RT-PHYX-006 | Same-pawn rematerialization | a **Stored** Solo | the same `Pawn` object, thing id and name; `BirthAbsTicks` unchanged; biological age advanced by the full stored interval; no second insertion into `WorldPawns`; a permanent scar survives storage and the next rematerialization; a temporary bruise is normalized; a stored pawn does not age on its own |
 | RT-PHYX-007 | Registry, redress and GC protection | a **Stored** Solo | ReservedByQuest, Suspended, not in the Free or FactionLeader pools, kept by three GC accumulation passes, lookup cost; then real forced generations that cannot redress it (run only when vanilla's pool for the request is empty) |
 | RT-PHYX-008 | Temporary faction lifecycle | any Solo | hidden, temporary, neutral, named after the actor, goodwill as seeded; removed after the episode; the stored pawn's faction nulled harmlessly |
-| RT-PHYX-009 | Unsupported custody: dev arrest quarantines | any Solo | **two phases, asserted separately.** Phase 1: a dev arrest ⇒ `Quarantined(UnsupportedCustody:HeldByPlayer)`; the facts (still the colony's prisoner, authority closed, nothing committed, no Network pass) are **captured on the frame the quarantine is first observed**, before anything else happens. Phase 2: map removal (vanilla clears the guest status) ⇒ re-observed, the ordinary Returned path, the same pawn and binding, no Network pass. The final state is **not** required to still be Quarantined |
+| RT-PHYX-009 | Unsupported custody: dev arrest quarantines — **RETIRED in 3.2A** (superseded by `RT-PHYX-020`; its id is never reused, and its menu item now only says so) | any Solo | *(the 3.1 behaviour, kept as history)* **two phases, asserted separately.** Phase 1: a dev arrest ⇒ `Quarantined(UnsupportedCustody:HeldByPlayer)`; the facts (still the colony's prisoner, authority closed, nothing committed, no Network pass) are **captured on the frame the quarantine is first observed**, before anything else happens. Phase 2: map removal (vanilla clears the guest status) ⇒ re-observed, the ordinary Returned path, the same pawn and binding, no Network pass. The final state is **not** required to still be Quarantined |
 | RT-PHYX-010 | Save/load matrix | any Solo | `010A` / `010B` set up a meaningful state, **pause** the game at the checkpoint and ask the owner to save; after reloading, `010V` (read-only, no arm) either checks the load state of a still-incomplete episode (nothing generated, rerolled or cloned, bindings resolve, **the registry reserves every Deployed or Stored living person (stage 1 and 2 of the load, before the first tick)**, no binding unresolved, discarded or mismatching, tags agree, episodes watched) and follows it to completion, or, if the episode already completed, validates its persisted terminal result |
 | RT-PHYX-011 | Role-constrained real pawn generation | — | every role × 4 seeds × 2 competence bands through the production projection with a fixture faction; no contradicting pawn ever returned; aborts counted; every pawn disposed; **each real pawn's kind came from the encounter faction's generic member pool (the allowed provenance is reported; any pawn outside it FAILS)**; **each real pawn carries its person's first gender and age (vanilla request inputs, whole years in the race's adult window), and the same person projected with different seeds, roles and bands is identical within a kind (INCONCLUSIVE if no pin applied)** |
 | RT-PHYX-012 | Truthful aging mechanism | — | four disposable 25-year-olds aged by 1 day, 1, 10 and 70 years through the production catch-up; full interval applied, `BirthAbsTicks` untouched, biological age advanced exactly; birthday effects listed |
 | RT-PHYX-015 | Normal-exit M1 regression | any Solo | at vanilla's synchronous `LeftMap` (after vanilla's own pass): ReservedByQuest, reserved, faction unchanged, custody still Deployed; per frame: covered while spawned, **an actual Free (or a `ReservationBroken` quarantine) is a FAIL**, authority closed until COMPLETE; then the same pawn rematerializes and leaves again; **0 passes, 0 skipped, 0 refused (no pass action exists in a Returned release)** |
 | RT-PHYX-016 | Map-removal M1 regression | 1–3 Solos | up to three Solos (one episode each) on the test map when vanilla removes it: each a reserved world pawn at once (an actual Free is a FAIL), no `LeftMap`, faction unchanged; each Returned once; 0 Network passes |
 
-`RT-PHYX-013` and `014` (cohesion, concretization) and `020+` (held custody, groups) are Phase 3.2 and do not exist.
+`RT-PHYX-013` and `014` (cohesion, concretization) are Phase 3.2B and do not exist. `RT-PHYX-020…025` (held custody) are Phase 3.2A: [§ 18](#18-phase-32a-held-custody).
 
 **"Solo" in the Needs column means an NPC Solo _contractor_** (`ContractorService.IsNpcSoloContractor`: an individual that is not an organization, with a contractor profile and simulation). **A Fixer is never selected**: Phase 3.1 exercises one existing NPC Solo contractor, and the picker, still deterministic (the lowest eligible actor id), keeps every other check (active, embodied, alive, abstractly simulatable, not on an operation, binding and custody agreement, the scenario's need). A world with only Fixers has no candidate and the run says so.
 
@@ -888,6 +893,58 @@ isolated evidence confirmed production load behavior; and the harness and docs w
 * **Registry and M1 protections** held under redress and GC pressure, and the registry was reconstructed correctly across a save and load (stage 1 by thing id, stage 2 by validated pointer, before the first gameplay tick).
 * **`010A` / `010B` load results** are the two rows above: both reloads were clean, and the `010B` reload showed that RimWorld may resume gameplay immediately after a load, which the production load invariant already tolerates.
 
-**What this does not claim.** It is the Phase 3.1 scope only. **Phase 3.2 does not exist** (no held custody, rescue, **group** extraction or any other custody case beyond the quarantine above), arbitrary **modded races** are not validated, and no claim is made for **every RimWorld/mod combination**. The physical tier remains dev-only: there is no player-facing content,
-no Harmony, and the save format stays 5. PR #10 remains open and unmerged pending final review.
+**What this does not claim.** It is the Phase 3.1 scope only. **Phase 3.2 does not exist** *(at the 3.1 sign-off; Phase 3.2A has since been implemented and is only headless validated, [§ 18](#18-phase-32a-held-custody))* (no held custody, rescue, **group** extraction or any other custody case beyond the quarantine above), arbitrary **modded races** are not validated, and no claim is made for **every RimWorld/mod combination**. The physical tier remains dev-only: there is no player-facing content,
+no Harmony, and the save format stays 5. PR #10 has since been merged.
 
+
+## 18. Phase 3.2A: held custody
+
+> **Status: Phase 3.2A Held Custody — IMPLEMENTED / HEADLESS VALIDATED. The owner has not run these physical scenarios yet; nothing below is
+> an owner runtime result.** The design is [PHYSICAL_LIFECYCLE § 9](PHYSICAL_LIFECYCLE.md#9-custody-model). What was built is
+> [Appendix L](PHYSICAL_LIFECYCLE.md#appendix-l-phase-32a-as-built-held-custody) and ADR-056. The spike records are
+> [S21](spikes/S21-observation-completeness.md) (PARTIAL: headless PASS, owner run pending) and [S11](spikes/S11-rescue-site-holder.md) (FAIL
+> by source audit; the rescue site is not built, so there is **no rescue scenario**).
+
+### 18.1 The safe tier
+
+`RT-PHYS-031`, `032` and `033` join `PhysicalRuntimeSuite` (§ 7). *Full safe regression* now holds **73 tests**, and they pass headlessly.
+`RT-PHYS-008` and `RT-PHYS-012` were updated: the first encoded, and the second still covers (for an anonymous member), the 3.1 quarantine.
+
+### 18.2 The physical scenarios
+
+The same tier, menu, arm, guard, test map and log format as § 17. The stable ids are new: `RT-PHYX-020…025`. `013` and `014` stay
+reserved for 3.2B. **`RT-PHYX-009` is retired**: its menu item now only prints that it was superseded by `020`, and its id is never reused.
+
+| ID | Name | Needs | What it does and proves |
+|---|---|---|---|
+| RT-PHYX-020 | Arrest: held once, then freed and stored | any Solo | a dev arrest (`CapturedBy` the player) ⇒ the mission episode closes **once** as `HeldByPlayer`: `Captured`, `OutOfCustody(PlayerPrisoner)`, `VanillaHeld`, the same pawn, reserved by the registry, the person tag kept, the custody watch running, no Network pass; duplicate wake-ups change nothing; then vanilla's `PrisonerRelease` (or, if the pawn has not left within 4,000 ticks, the test map's removal) ⇒ **one** Custody episode returns the person from `WorldFree`: `Stored`, holder cleared, abstract only after its RELEASE, the same `Pawn`, `ReservedByQuest`, 0 Network passes; on every frame, never abstract while held and never `Stored` while vanilla holds the pawn |
+| RT-PHYX-021 | Recruitment: Defected, never stored | a never-materialized Solo | the arrest as in 020, then `RecruitUtility.Recruit` ⇒ one Custody episode: `JoinedPlayer`, `Defected`, `OutOfCustody(PlayerColonist)`, never `Stored` or abstract; the colonist untouched (the player's, on the map). **Leaves the person a colonist on the test map** (deliberate; O-20 is the owner's open decision) |
+| RT-PHYX-022 | Enslavement: held as a slave | a never-materialized Solo; **Ideology** | the arrest, then vanilla's enslavement (`SetGuestStatus(player, Slave)`) ⇒ a change of holder only (`PlayerSlave`, still `Captured`, no Custody episode, no event). Without Ideology it reports a **GAP**, never a pass. **Leaves the person enslaved** |
+| RT-PHYX-023 | Kidnapped, then recruited by the captor | a never-materialized Solo; an enemy humanlike faction | a dev kidnapping by a real enemy faction (`KidnappedPawnsTracker.Kidnap`) ⇒ the episode closes once as `Kidnapped` (`Captured`); vanilla still reports `Kidnapped`, so the reservation masks nothing; then vanilla's two steps of "the captor recruits a kidnapped pawn" ⇒ held by `OtherFaction`, still `Captured`, never a free return, no Custody episode, still `ReservedByQuest` and never an ordinary `Free` pawn. **Leaves the person with that faction** |
+| RT-PHYX-024 | Death while held | a never-materialized Solo | the arrest, then dev damage kills the prisoner ⇒ one Custody episode commits `Killed`: `Dead`, custody `Released`, the registry no longer reserves it, the binding still names the same dead pawn, the Solo ends; a duplicate wake-up commits nothing |
+| RT-PHYX-025 | Held people after save/load | — (read-only, **no arm**) | after a save and a load in which 021, 022 or 023 left people held: the custody watch exists; every held person's binding resolves to the same live pawn, still `OutOfCustody` with a holder, not abstract, and reserved by the registry; nothing generated or returned by the load. With nobody held it reports a GAP |
+
+Caravan, transport and held-by-another-faction have **headless proof only** (`Custody.CaravanAndTransportHolders`, the rules matrix, the
+Solo-held rescue matrix). Building a caravan or a pod launch needs a colonist to carry the person, and the tier never touches colonists.
+
+### 18.3 Owner checklist (a FRESH disposable save)
+
+1. Use the build from this PR. The first `[TheNetwork]` line in `Player.log` names the source commit. Turn on Dev Mode. **Use a disposable
+   save**: 021–024 deliberately leave people held, recruited or dead.
+2. For each of `RT-PHYX-020`, `021`, `022` (Ideology only), `023`, `024`: `PHYX — Arm physical tests (type the phrase)...`, then the
+   scenario's `[armed]` item. Let the game run at normal or fast speed until the run block ends, then copy the block
+   (`===== RT-PHYX-0NN — <name>: PASS|FAIL|INCONCLUSIVE …` … `===== end RT-PHYX-0NN …`). The guard refuses while another run or an
+   incomplete episode exists, and a refusal does not spend the arm.
+3. Open The Network → `Episode Monitor (read-only)`. Its **HELD BY VANILLA** section should list the people 021–023 left held (holder,
+   since, status `Captured`/`Defected`, authority `VanillaHeld`) and a custody watch that is due. The person from 020 should be back
+   (`Stored`), and the person from 024 dead.
+4. **Save, then load that save.** RimWorld may resume time straight after a load; that is fine. Run `RT-PHYX-025 — Held people after
+   save/load (read-only)` with **no arm**.
+5. Optional, for a long hold: let a few in-game days pass and look at the monitor again. Every held person stays held, the watch keeps
+   rescheduling, nobody is `Stored`, and there is no repeated log spam.
+6. Report each block's verdict. **INCONCLUSIVE and GAP are never a PASS.** Only the owner's report can turn
+   "IMPLEMENTED / HEADLESS VALIDATED" into "owner runtime validated" for 3.2A.
+
+**What a FAIL looks like.** The episode quarantined on an arrest; a second commit or Custody episode for one transition; a held person
+`Stored` or abstract; an actual `Free` world pawn or a `ReservationBroken` (the M1 reservation failing for a held pawn); any Network
+`PassToWorld`; a different `Pawn` after the return; a recruited person sent home.

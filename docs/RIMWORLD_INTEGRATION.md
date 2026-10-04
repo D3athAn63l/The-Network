@@ -122,7 +122,8 @@ Verdict:
 - `SitePart.things` is a deep-saved `ThingOwner` (`SitePart.cs:16, 101`). `GenStep_ItemStash`
   places `parms.sitePart.things` onto the map when it is generated (`GenStep_ItemStash.cs`).
   The vanilla **`ItemStash` SitePartDef** (Core `Sites/Parts/ItemStash.xml`) can therefore carry
-  exactly the Things the Network committed, **with no Network Def**.
+  exactly the Things the Network committed, **with no Network Def**. *(Things only: it is not a pawn holder. `SymbolResolver_Stockpile`
+  destroys every content that did not spawn, and the pawn-consuming steps force a refugee or prisoner state; S11, Phase 3.2A.)*
 - Vanilla threat parts that combine with stashes: `Outpost`, `BanditCamp`, `AmbushHidden`,
   `AmbushEdge`, `Manhunters`, `SleepingMechanoids`, `Turrets` (their tags include
   `ItemStashQuestThreat`).
@@ -516,7 +517,7 @@ result in `docs/spikes/Sx-<name>.md` (created when run).
 | **S8** | 1 | Determinism: resolve Intel, reload before the due tick, let it resolve again; repeat with Odyssey on | identical tile, amount, archetype and threat both times |
 | **S9** | 3 | Registry quest custody (see [ABSTRACT_PHYSICAL_LIFECYCLE § 12](ABSTRACT_PHYSICAL_LIFECYCLE.md#12-spikes-that-must-pass-before-phase-3-builds-on-this)) | as listed there |
 | **S10** | 3 | Temporary encounter factions | as listed there |
-| **S11** | 3 | Pawns in the `SitePart.things` holder | as listed there |
+| **S11** | 3 | Pawns in the `SitePart.things` holder | as listed there. **Phase 3.2A: FAIL by source audit** ([spikes/S11](spikes/S11-rescue-site-holder.md)): every vanilla step that places a pawn from `things` forces a refugee or prisoner state and makes the pawn join the player when rescued, and the item steps destroy unplaced contents; the rescue site is not built |
 | **S12** | 3 | Catch-up healing and aging of suspended pawns | as listed there |
 | **S13** | 2 | Drop-pod delivery: destination map missing, roofed or crowded; incoming transporters blocking map removal | delivery lands or reroutes; no stuck state. **Phase 2: NOT RUN** ([spikes/S13](spikes/S13-drop-pod-delivery.md)); `Integration/DeliveryAdapter.cs` uses `DropCellFinder.TryFindDropSpotNear` (no roof punching, no random cell) and `DropPodUtility.DropThingsNear` |
 | **S14** | 3 | Walk-in delivery or visit Lord; hostility flip mid-visit | as listed there |

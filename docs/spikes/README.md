@@ -11,6 +11,7 @@ question, the build, the environment, the steps, the result, the logs, the verdi
 | **PARTIAL** | Some of the question was answered by real evidence: either not a RimWorld runtime run (for example the real Verse `Scribe` executed headlessly), or a runtime run that covered only some of the cases. What remains is listed. |
 | **NOT RUN — OWNER RUNTIME VALIDATION REQUIRED** | Needs the RimWorld player (maps, sites, caravans, UI, letters). It was **not** run. The owner steps below are reproducible. |
 | **FAIL** | Run and did not meet the criteria. |
+| **FAIL — SOURCE AUDIT** | Not run, because the decompiled 1.6 source already shows the candidate cannot meet the criteria. The file and line evidence is in the record. A runtime run could only confirm it. |
 
 **Only one spike file in this folder is marked PASS: [S31](S31-retained-pawn-exit-reservation.md).** The environment that built Phases 1 and 2 cannot launch RimWorld, and
 compiling, static inspection or headless tests are not runtime passes. The single recorded owner-runtime spike PASS is **S31** (Phase 3,
@@ -65,11 +66,13 @@ complete S20: its spatial scenarios run in a sandbox over a synthetic world grap
 | [S13](S13-drop-pod-delivery.md) drop-pod delivery (Phase 2) | PARTIAL — normal home delivery PASSED in the owner's runtime test; edge cases NOT RUN |
 | [S20](S20-abstract-spatial-routing.md) abstract spatial routing, charter transport and Last Known Location placement (Phase 2.5) | NOT RUN — OWNER RUNTIME VALIDATION REQUIRED |
 | **S31** retained pawn exit reservation / the Free-world-pawn window (Phase 3; mandatory gate on 3.1) | [**PASS — OWNER RUNTIME VALIDATED; M1 ACCEPTED**](S31-retained-pawn-exit-reservation.md) ([ADR-053](../DECISIONS.md#adr-053--retained-pawn-exit-reservation-uses-m1)). Validated the *mechanism* only; the separate Phase 3.1 physical suite (`RT-PHYX-*`) has since been **owner runtime validated** too ([RUNTIME_TESTING § 17.5](../RUNTIME_TESTING.md#175-final-phase-31-owner-runtime-evidence)) |
+| [S11](S11-rescue-site-holder.md) site-part pawn holder for a rescue site (Phase 3.2A; a mandatory gate on the rescue site) | **FAIL — SOURCE AUDIT.** Every vanilla step that places a pawn from `SitePart.things` forces a refugee or prisoner state and makes the pawn join the player when rescued; the item steps destroy unplaced contents; a retained world pawn cannot also be in `things`. **The rescue-site implementation is stopped**; the narrowest alternative is documented, not built |
+| [S21](S21-observation-completeness.md) observation completeness for held custody (Phase 3.2A) | **PARTIAL — headless PASS**; the physical-tier scenarios `RT-PHYX-020…025` are written and **not run by the owner** |
 
 ## Phase 3 spikes (planned; no records yet)
 
 The Phase 3 design review revised the Phase 0 spike list and added four; the **amendment pass** extended S12 and S22 and added
-S25 to S30. Apart from **S31** (below), they are **defined, not run**, and have no record files yet; each gets one when its subphase starts. The questions, narrowest experiments and pass criteria are in
+S25 to S30. Apart from **S31** (below) and, since Phase 3.2A, **S11** and **S21**, they are **defined, not run**, and have no record files yet; each gets one when its subphase starts. The questions, narrowest experiments and pass criteria are in
 [PHYSICAL_LIFECYCLE § 25](../PHYSICAL_LIFECYCLE.md#25-open-questions-and-spikes): **S9r** registry reservation (revises S9),
 S10 temporary faction, S11 site-part pawn holder, **S12** store-time normalization **and truthful aging catch-up**, S14 visit
 Lord, S17 tag hygiene, **S21** observation completeness, **S22** the physical-tier guard (a session-only arm and a dedicated test
@@ -95,3 +98,12 @@ owner-assisted save/load points) and S25 (role-constrained creation), and the ph
 evidence is the physical suite's, in [RUNTIME_TESTING § 17.5](../RUNTIME_TESTING.md#175-final-phase-31-owner-runtime-evidence). S31 is different: it was a dedicated spike the owner had already run before 3.1 was
 implemented (PASS, above), so the two statuses stay separate: **S31 / M1: owner-runtime PASS, accepted. Phase 3.1 physical
 runtime suite: owner-runtime PASS** (evidence accumulated across the S31 spike, the initial run, the corrected reduced rerun and an isolated `010B` follow-up; it is not one run). Neither is Phase 3.2.
+
+**Phase 3.2A (held custody: IMPLEMENTED / HEADLESS VALIDATED; owner runtime run pending).** Two Phase 3 spikes now have records.
+**S11** ([S11-rescue-site-holder.md](S11-rescue-site-holder.md)) **FAILED its source audit**: the vanilla pawn-holding site parts mutate the
+pawn (forced downing, a prison cell, *join the player if rescued*) or destroy it, and a retained world pawn cannot also sit in `SitePart.things`.
+As the 3.2A prompt requires, the rescue-site implementation stopped there, with no Harmony and no custom site lifecycle. The narrowest viable
+alternative (materialize a Rescue episode at the existing site's map generation through the 3.1 placement path) is documented for an
+owner decision. **S21** ([S21-observation-completeness.md](S21-observation-completeness.md)) is **PARTIAL**: every custody state is told
+apart from positive vanilla state, and the headless suite proves the pass criteria; the owner's physical-tier run of `RT-PHYX-020…025` is
+still outstanding. Neither record is an owner runtime pass.

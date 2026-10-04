@@ -1,6 +1,6 @@
 # The Network
 
-**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; the formal in-game S20 checklist has not been run); Phase 2.75 merged (the contractor career foundation); Phase 2.9 merged and owner-runtime-tested (in-game runtime regression test infrastructure, developer-only); Phase 3 (abstract ↔ physical lifecycle): design reviewed; Phase 3.0 (authority + Physical Episode foundation) implemented; Phase 3.1 (one controlled physical episode, dev-triggered on a separate, session-armed test tier) implemented and owner runtime validated (PASS, Phase 3.1 scope only)**
+**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; the formal in-game S20 checklist has not been run); Phase 2.75 merged (the contractor career foundation); Phase 2.9 merged and owner-runtime-tested (in-game runtime regression test infrastructure, developer-only); Phase 3 (abstract ↔ physical lifecycle): design reviewed; Phase 3.0 (authority + Physical Episode foundation) implemented; Phase 3.1 (one controlled physical episode, dev-triggered on a separate, session-armed test tier) implemented and owner runtime validated (PASS, Phase 3.1 scope only); Phase 3.2A (held custody) IMPLEMENTED / HEADLESS VALIDATED (owner runtime run pending; the rescue site is not built: S11 failed its source audit)**
 
 The Network is a persistent, procedural contractor ecosystem that runs behind the normal RimWorld
 game. The player hires outsiders to find and fetch things they cannot easily get themselves. The
@@ -104,13 +104,26 @@ and is **reconciled exactly once**, atomically, from observed state, with every 
 carrying its own durable marker; death is final; custody beyond the map is never mistaken for "home"; **no Harmony** for the recommended slice. Four subphases:
 3.0 the abstract foundation (no pawn), 3.1 one controlled physical episode (first real pawn, in a separate, session-armed test
 tier on its own test map), 3.2 custody, rescue and groups (first player-visible content), 3.3 procurement fulfillment / physical
-handoff (**design direction only**). **3.0 began once the design was accepted. The mandatory runtime spike S31 (the retained-pawn exit-reservation window) was run by the owner and PASSED: M1 (reserve a retained named pawn while it is spawned) is accepted (ADR-053; the original record is [docs/spikes/S31-retained-pawn-exit-reservation.md](docs/spikes/S31-retained-pawn-exit-reservation.md)). The owner then validated the Phase 3.1 physical suite in RimWorld (a first run found six issues, corrected; a reduced rerun passed; the save/load cases were closed by an isolated follow-up): Phase 3.1 is IMPLEMENTED AND OWNER RUNTIME VALIDATED. S31/M1 accepted. Full Phase 3.1 physical QA passed. Save/load registry reconstruction validated. The PR remains unmerged pending final review. This is not Phase 3.2: held custody, rescue, groups and group extraction do not exist, arbitrary modded races are not validated, and no claim is made for every RimWorld/mod combination.** Full Safe Regression stays safe on a real colony. Open questions and the spikes that settle
+handoff (**design direction only**). **3.0 began once the design was accepted. The mandatory runtime spike S31 (the retained-pawn exit-reservation window) was run by the owner and PASSED: M1 (reserve a retained named pawn while it is spawned) is accepted (ADR-053; the original record is [docs/spikes/S31-retained-pawn-exit-reservation.md](docs/spikes/S31-retained-pawn-exit-reservation.md)). The owner then validated the Phase 3.1 physical suite in RimWorld (a first run found six issues, corrected; a reduced rerun passed; the save/load cases were closed by an isolated follow-up): Phase 3.1 is IMPLEMENTED AND OWNER RUNTIME VALIDATED. S31/M1 accepted. Full Phase 3.1 physical QA passed. Save/load registry reconstruction validated. PR #10 has since been merged. That sign-off was not Phase 3.2: held custody, rescue, groups and group extraction did not exist, arbitrary modded races are not validated, and no claim is made for every RimWorld/mod combination.** Full Safe Regression stays safe on a real colony. Open questions and the spikes that settle
 them are listed, not hidden; apart from S31 (and the Phase 3.1 suite above), none has been run by the owner.
+
+**Phase 3.2A (held custody): IMPLEMENTED / HEADLESS VALIDATED.** The owner has not yet run its physical-tier scenarios (`RT-PHYX-020…025`), so it is
+**not** owner runtime validated ([RUNTIME_TESTING § 18](docs/RUNTIME_TESTING.md#18-phase-32a-held-custody)). When vanilla holds a named contractor's
+pawn (the player arrests, enslaves or recruits them, a raider kidnaps them, another faction holds them, a caravan carries them), the episode ends
+**once** and the contractor does **not** go home: they stay held by vanilla, unavailable, never simulated abstractly, watched by a bounded
+custody watch (one scheduler job, only while someone is held). Only positive evidence (the same pawn, free again as a world pawn the Network
+reserves) brings them back. A recruited contractor is recorded as `Defected` and left as the player's colonist; what that means for the
+Network is an open owner decision. A death while held is final. **The rescue site is not built:** spike S11 failed its source audit
+([docs/spikes/S11-rescue-site-holder.md](docs/spikes/S11-rescue-site-holder.md)). Vanilla's pawn-holding site parts force a refugee or prisoner
+state (and make the pawn join the player when rescued) or destroy what they hold, so the rescue's player-facing half waits for an owner
+decision on the documented alternative. Its domain half is proven headlessly. Save format **5**, no Harmony, no new persisted field
+([Appendix L](docs/PHYSICAL_LIFECYCLE.md#appendix-l-phase-32a-as-built-held-custody), ADR-056). Groups (3.2B) and mixed-group
+reconciliation (3.2C) are not started.
 
 The contract board, the player as contractor and the social layer are later phases
 ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
 
-**Test status.** The headless tests pass (315 tests, 20,331 checks, 0 failures, including an 18-in-game-year
+**Test status.** The headless tests pass (460 tests, 34,473 checks, 0 failures at Phase 3.2A, including an 18-in-game-year
 procurement soak, three 20-in-game-year career soaks with daily money, capacity, spatial and career invariant
 checks, and the runtime-runner tests).
 
@@ -174,7 +187,7 @@ same change.
 | [docs/EVENTS_AND_HISTORY.md](docs/EVENTS_AND_HISTORY.md) | Network events, history ledger, summaries, reputation, awareness, gossip, legends |
 | [docs/STATE_MACHINES.md](docs/STATE_MACHINES.md) | Intel, opportunity, contract, procurement, offer, operation, custody, actor lifecycles |
 | [docs/SIMULATION.md](docs/SIMULATION.md) | Scheduler, abstract resolver, willingness/refusal, morale, determinism and RNG |
-| [docs/PHYSICAL_LIFECYCLE.md](docs/PHYSICAL_LIFECYCLE.md) | **Phase 3 design (normative; 3.0 implemented, Appendix H):** authority, identity and progressive concretization, Episodes, provenance, Operational Roles and role composition, team cohesion, truthful aging, custody, atomic reconciliation, save/load, the equipment seams, the Phase 3.3 handoff direction, RimWorld API audit, invariants, subphases |
+| [docs/PHYSICAL_LIFECYCLE.md](docs/PHYSICAL_LIFECYCLE.md) | **Phase 3 design (normative; 3.0 implemented, Appendix H; 3.1 Appendices I–K; 3.2A held custody, Appendix L):** authority, identity and progressive concretization, Episodes, provenance, Operational Roles and role composition, team cohesion, truthful aging, custody, atomic reconciliation, save/load, the equipment seams, the Phase 3.3 handoff direction, RimWorld API audit, invariants, subphases |
 | [docs/ABSTRACT_PHYSICAL_LIFECYCLE.md](docs/ABSTRACT_PHYSICAL_LIFECYCLE.md) | The Phase 0 lifecycle design (confirmed in its core; superseded in part by PHYSICAL_LIFECYCLE) |
 | [docs/RIMWORLD_INTEGRATION.md](docs/RIMWORLD_INTEGRATION.md) | What vanilla 1.6 APIs we reuse, avoid or wrap; Harmony policy; runtime spikes |
 | [docs/SAVE_AND_MIGRATION.md](docs/SAVE_AND_MIGRATION.md) | Save layout, `NetworkSaveVersion`, migrations, mod add/remove behaviour |
