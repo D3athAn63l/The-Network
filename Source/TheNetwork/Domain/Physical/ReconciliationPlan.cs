@@ -114,6 +114,9 @@ namespace TheNetwork.Domain.Physical
         public int captured;
         public int missing;
 
+        /// <summary>CharacterStored only: the tick the pawn stopped ticking (the observed exit), or -1 for "now" (§ 6.4).</summary>
+        public int agedThrough = -1;
+
         public override string ToString()
         {
             return kind + (character != null ? " " + character.id : "") + (member != null && !member.IsNamed ? " slot" + member.slot : "") + (key != null ? " " + key : "");

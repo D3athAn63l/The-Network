@@ -82,13 +82,26 @@ namespace TheNetwork.Domain.Physical
     }
 
     /// <summary>
-    /// The operational role of a person or seat (§ 6.6). Phase 3.0 declares the persisted shape only: every value is
-    /// <see cref="Unset"/> ("not yet stored", never "not yet decided"); the derivation from immutable origin facts and the
-    /// role vocabulary land with projection (3.1) and composition (3.2). Nothing in 3.0 assigns a role.
+    /// The operational role of a person or seat (§ 6.6): a semantic job, never a class, perk or bonus. <see cref="Unset"/> means "not
+    /// yet stored", never "not yet decided": a role is a pure function of immutable origin facts (<see cref="RoleDerivation"/>), so it is
+    /// the same whenever it is first stored. Persisted BY NAME (NetScribe.LookEnum), so adding a value needs no format change and an
+    /// older build reads an unknown name as Unset. Values are never renumbered.
     /// </summary>
     public enum OperationalRole : byte
     {
-        Unset = 0
+        Unset = 0,
+        Leader = 1,
+        Marksman = 2,
+        Rifleman = 3,
+        Heavy = 4,
+        Breacher = 5,
+        Medic = 6,
+        Scout = 7,
+        Engineer = 8,
+        Technician = 9,
+        Logistician = 10,
+        Negotiator = 11,
+        Specialist = 12
     }
 
     /// <summary>The episode's result for a linked operation, recorded in the commit (§ 5.3 "operation marker").</summary>

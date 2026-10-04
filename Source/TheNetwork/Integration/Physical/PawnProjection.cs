@@ -1,0 +1,257 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using RimWorld;
+using TheNetwork.Domain;
+using TheNetwork.Domain.Physical;
+using TheNetwork.Kernel;
+using UnityEngine;
+using Verse;
+
+namespace TheNetwork.Integration.Physical
+{
+    /// <summary>
+    /// Reads an unbound, unspawned candidate pawn into the pure <see cref="RoleCandidate"/> the role verdict decides on, and applies the ONE
+    /// correction the verdict allows (raise one role-defining skill's base level). Nothing else is ever written: no passion, trait,
+    /// backstory, gene, incapability, hediff, age, gender, name (except the established name pins, applied separately) or relation.
+    /// </summary>
+    public static class PawnRoleReader
+    {
+        /// <summary>The work tags a role may require (vanilla WorkTags names).</summary>
+        public static readonly string[] WorkTagNames = { "Violent", "Caring", "Social", "Hauling", "Crafting", "Constructing", "Intellectual" };
+
+        public static RoleCandidate Snapshot(Pawn p)
+        {
+            RoleCandidate c = new RoleCandidate();
+            if (p == null) return c;
+            for (int i = 0; i < WorkTagNames.Length; i++)
+            {
+                WorkTags tag;
+                if (Enum.TryParse(WorkTagNames[i], out tag) && p.WorkTagIsDisabled(tag)) c.disabledWorkTags.Add(WorkTagNames[i]);
+            }
+            if (p.story?.traits?.allTraits != null) foreach (Trait t in p.story.traits.allTraits) if (t?.def != null) c.traits.Add(t.def.defName);
+            if (p.skills?.skills != null)
+            {
+                foreach (SkillRecord s in p.skills.skills)
+                {
+                    if (s?.def == null) continue;
+                    c.skills[s.def.defName] = new SkillFacts { levelBase = s.levelInt, aptitude = s.Aptitude, totallyDisabled = s.TotallyDisabled, passion = (int)s.passion };
+                }
+            }
+            c.name = p.Name?.ToStringFull;
+            c.gender = p.gender.ToString();
+            c.childhood = p.story?.Childhood?.defName;
+            c.adulthood = p.story?.Adulthood?.defName;
+            c.xenotype = p.genes?.Xenotype?.defName;
+            c.bioAgeTicks = p.ageTracker?.AgeBiologicalTicks ?? -1;
+            c.genes = p.genes?.GenesListForReading?.Count ?? 0;
+            c.hediffs = p.health?.hediffSet?.hediffs?.Count ?? 0;
+            return c;
+        }
+
+        /// <summary>The allowed correction on the real skill record: raise the base level to the verdict's target, never lower, never passion.</summary>
+        public static bool ApplyCorrection(Pawn p, RoleVerdict v)
+        {
+            if (p?.skills == null || v == null || !v.Correctable) return false;
+            SkillDef def = DefDatabase<SkillDef>.GetNamedSilentFail(v.correctSkill);
+            SkillRecord s = def == null ? null : p.skills.GetSkill(def);
+            if (s == null || s.TotallyDisabled || v.correctBaseTo <= s.levelInt) return false;
+            s.levelInt = Mathf.Clamp(v.correctBaseTo, 0, 20);
+            return true;
+        }
+    }
+
+    /// <summary>The outcome of one first projection (measured: attempts, corrections, generation time).</summary>
+    public sealed class ProjectionResult
+    {
+        public Pawn pawn;
+        public int attempts;
+        public int corrections;
+        public int rejected;
+        public double ms;
+        public string kind;
+        public string failure;
+        public RoleSpec spec;
+        public RoleVerdict verdict;
+
+        public override string ToString()
+        {
+            return (pawn != null ? "pawn #" + pawn.thingIDNumber + " (" + kind + ")" : "FAILED (" + failure + ")") + ", " + attempts + " attempt(s), " + rejected + " rejected, "
+                + corrections + " correction(s), " + ms.ToString("0.0") + " ms" + (spec != null ? ", role " + spec.Describe() : "");
+        }
+    }
+
+    /// <summary>
+    /// Role-constrained first projection (PHYSICAL_LIFECYCLE § 6.8, ADR-050, S25): request → candidate → AUTHORITATIVE verification →
+    /// at most the smallest correction → re-verification → returned (the lifecycle binds it before it is spawned). Bounded: K outer attempts,
+    /// each at most vanilla's own 120 internal tries. The request forces a NEW pawn (never a redressed world pawn), generates no relations,
+    /// uses only EXISTING kinds chosen by capability, and never reads fame. A rejected candidate is unbound, unspawned and unreferenced: it is
+    /// dropped (RT-PHYX-011 measures residue). No contradicting candidate is ever returned.
+    /// </summary>
+    public static class PawnProjection
+    {
+        public const int MaxAttempts = 4;
+
+        private static List<KindFacts> kindCache;
+        private static int kindCacheCount = -1;
+
+        /// <summary>Every loaded PawnKindDef as plain capability facts (cached per def count; mods included, none named).</summary>
+        public static List<KindFacts> Kinds()
+        {
+            List<PawnKindDef> defs = DefDatabase<PawnKindDef>.AllDefsListForReading;
+            if (kindCache != null && kindCacheCount == defs.Count) return kindCache;
+            List<KindFacts> r = new List<KindFacts>();
+            for (int i = 0; i < defs.Count; i++)
+            {
+                PawnKindDef k = defs[i];
+                if (k?.race?.race == null) continue;
+                bool ranged = false, melee = false;
+                if (k.weaponTags != null)
+                {
+                    for (int t = 0; t < k.weaponTags.Count; t++)
+                    {
+                        string w = k.weaponTags[t] ?? "";
+                        if (w.IndexOf("Melee", StringComparison.OrdinalIgnoreCase) >= 0) melee = true;
+                        if (w.IndexOf("Gun", StringComparison.OrdinalIgnoreCase) >= 0 || w.IndexOf("Rifle", StringComparison.OrdinalIgnoreCase) >= 0 || w.IndexOf("Ranged", StringComparison.OrdinalIgnoreCase) >= 0) ranged = true;
+                    }
+                }
+                r.Add(new KindFacts
+                {
+                    defName = k.defName,
+                    humanlike = k.race.race.Humanlike,
+                    toolUser = k.race.race.ToolUser,
+                    fighter = k.isFighter,
+                    factionLeader = k.factionLeader,
+                    playerKind = k.defaultFactionDef != null && k.defaultFactionDef.isPlayer,
+                    humanlikeFaction = k.defaultFactionDef != null && k.defaultFactionDef.humanlikeFaction,
+                    ranged = ranged,
+                    melee = melee,
+                    combatPower = k.combatPower
+                });
+            }
+            kindCache = r;
+            kindCacheCount = defs.Count;
+            return r;
+        }
+
+        /// <summary>The kind chain: the two best capability matches, then the faction's own basic member kind, then vanilla's Villager.</summary>
+        public static List<PawnKindDef> KindChain(RoleSpec spec, int equipmentTier, Faction f)
+        {
+            List<PawnKindDef> chain = new List<PawnKindDef>();
+            List<string> ranked = KindPolicy.Rank(Kinds(), spec.kindClass, equipmentTier);
+            for (int i = 0; i < ranked.Count && chain.Count < 2; i++)
+            {
+                PawnKindDef k = DefDatabase<PawnKindDef>.GetNamedSilentFail(ranked[i]);
+                if (k != null && !chain.Contains(k)) chain.Add(k);
+            }
+            PawnKindDef basic = f?.def?.basicMemberKind;
+            if (basic != null && basic.RaceProps != null && basic.RaceProps.Humanlike && !chain.Contains(basic)) chain.Add(basic);
+            if (PawnKindDefOf.Villager != null && !chain.Contains(PawnKindDefOf.Villager)) chain.Add(PawnKindDefOf.Villager);
+            return chain;
+        }
+
+        public static ProjectionResult Project(ProjectionRequest r, Faction f)
+        {
+            ProjectionResult res = new ProjectionResult();
+            Stopwatch sw = Stopwatch.StartNew();
+            RoleSpec spec = RoleRules.SpecFor(r.role, r.capability);
+            res.spec = spec;
+            List<PawnKindDef> chain = KindChain(spec, r.equipmentTier, f);
+            if (chain.Count == 0)
+            {
+                res.failure = "no humanlike tool-using PawnKindDef is loaded";
+                return Done(res, sw);
+            }
+            List<TraitDef> prohibited = new List<TraitDef>();
+            for (int i = 0; i < spec.prohibitedTraits.Count; i++)
+            {
+                TraitDef t = DefDatabase<TraitDef>.GetNamedSilentFail(spec.prohibitedTraits[i]);
+                if (t != null) prohibited.Add(t);
+            }
+            // An optimization only (vanilla drops validators after 100 tries): the hard clauses, so vanilla re-rolls instead of us.
+            Predicate<Pawn> hard = c =>
+            {
+                RoleVerdict v = RoleRules.Verify(spec, PawnRoleReader.Snapshot(c));
+                return v.holds || v.Correctable;
+            };
+            for (int attempt = 0; attempt < MaxAttempts; attempt++)
+            {
+                PawnKindDef kind = chain[Math.Min(attempt / 2, chain.Count - 1)];
+                res.attempts++;
+                Pawn c = null;
+                Rand.PushState(NetHash.Combine(r.seed, attempt));
+                try
+                {
+                    PawnGenerationRequest req = new PawnGenerationRequest(kind, f, PawnGenerationContext.NonPlayer, null,
+                        forceGenerateNewPawn: true, allowDead: false, allowDowned: false, canGeneratePawnRelations: false,
+                        mustBeCapableOfViolence: spec.NeedsViolence, colonistRelationChanceFactor: 0f, allowPregnant: false,
+                        validatorPreGear: hard, prohibitedTraits: prohibited.Count > 0 ? prohibited : null,
+                        developmentalStages: DevelopmentalStage.Adult);
+                    c = PawnGenerator.GeneratePawn(req);
+                }
+                catch (Exception ex)
+                {
+                    res.failure = "generation threw (" + kind.defName + "): " + ex.Message;
+                    c = null;
+                }
+                finally
+                {
+                    Rand.PopState();
+                }
+                if (c == null)
+                {
+                    if (res.failure == null) res.failure = "vanilla returned no pawn (" + kind.defName + ")";
+                    continue;
+                }
+                RoleVerdict verdict = RoleRules.Verify(spec, PawnRoleReader.Snapshot(c));
+                if (!verdict.holds && verdict.Correctable && PawnRoleReader.ApplyCorrection(c, verdict))
+                {
+                    res.corrections++;
+                    verdict = RoleRules.Verify(spec, PawnRoleReader.Snapshot(c));
+                }
+                res.verdict = verdict;
+                if (verdict.holds)
+                {
+                    res.pawn = c;
+                    res.kind = kind.defName;
+                    res.failure = null;
+                    return Done(res, sw);
+                }
+                // Rejected: unbound, unspawned, unreferenced. Dropped; never "fixed" beyond the one allowed raise.
+                res.rejected++;
+                res.failure = "role " + spec.role + " not satisfied by " + kind.defName + ": " + verdict.failedClause;
+            }
+            return Done(res, sw);
+        }
+
+        private static ProjectionResult Done(ProjectionResult r, Stopwatch sw)
+        {
+            sw.Stop();
+            r.ms = sw.Elapsed.TotalMilliseconds;
+            return r;
+        }
+
+        /// <summary>
+        /// The established name facts (§ 6.3): pinned parts replace the generated ones; anything the Network never stated stays vanilla's.
+        /// A race whose pawns are not three-part named keeps a single composed name (logged once, OPEN O-7).
+        /// </summary>
+        public static void ApplyNamePins(Pawn p, NamePins pins)
+        {
+            if (p == null || !pins.Any) return;
+            NameTriple old = p.Name as NameTriple;
+            if (old != null)
+            {
+                string first = pins.first ?? old.First;
+                string nick = pins.nick ?? pins.first ?? old.Nick;
+                string last = pins.last ?? old.Last;
+                p.Name = new NameTriple(first, nick, last);
+                return;
+            }
+            if (pins.first != null)
+            {
+                p.Name = new NameSingle(NameSnapshot.Compose(pins.first, pins.nick, pins.last));
+                NetLog.WarnOnce(LogCategory.Physical, "name.single." + p.def?.defName, "Race " + p.def?.defName + " is not three-part named: a single name was used (OPEN O-7).");
+            }
+        }
+    }
+}

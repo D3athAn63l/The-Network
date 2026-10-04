@@ -149,7 +149,13 @@ namespace TheNetwork.Integration
         public void Notify_SignalReceived(Signal signal)
         {
             string tag = signal.tag;
-            if (tag == null || !tag.StartsWith(SiteAdapter.TagPrefix, StringComparison.Ordinal)) return;
+            if (tag == null) return;
+            if (Physical.PhysicalTags.IsNetworkPawnTag(tag))
+            {
+                RoutePawnSignal(signal);
+                return;
+            }
+            if (!tag.StartsWith(SiteAdapter.TagPrefix, StringComparison.Ordinal)) return;
             try
             {
                 if (tag.EndsWith(SettledSuffix, StringComparison.Ordinal))
@@ -170,6 +176,65 @@ namespace TheNetwork.Integration
             {
                 NetLog.ErrorOnce(LogCategory.Sites, "signal:" + tag, "Signal " + tag + " failed: " + ex);
             }
+        }
+
+        /// <summary>Signals routed (runtime diagnostics).</summary>
+        public int pawnSignals;
+        public int pawnSignalsIgnored;
+
+        /// <summary>
+        /// A Network pawn signal (PHYSICAL_LIFECYCLE § 14.3): "TheNetwork.Ep.&lt;id&gt;.&lt;Signal&gt;" or "TheNetwork.Char.&lt;id&gt;.&lt;Signal&gt;".
+        /// SIGNALS WAKE; THEY DO NOT DECIDE. The SUBJECT pawn is proven against the persisted binding by REFERENCE EQUALITY (a tag alone is
+        /// never identity: a copy another mod made is ignored), then the episode's watch is pulled forward to the next tick. Nothing here
+        /// reconciles, reads final state (Killed fires mid-kill), mutates vanilla or throws. O(1): two dictionary lookups.
+        /// </summary>
+        private void RoutePawnSignal(Signal signal)
+        {
+            try
+            {
+                Core.NetworkRuntime current = Core.NetworkRuntime.Current;
+                if (current == null || current.Signals != this || current.Inert) return;
+                Pawn subject;
+                if (!signal.args.TryGetArg("SUBJECT", out subject) || subject == null)
+                {
+                    pawnSignalsIgnored++;
+                    return;
+                }
+                int id;
+                string what;
+                Domain.Physical.PhysicalEpisode e = null;
+                if (Physical.PhysicalTags.TryParse(signal.tag, Physical.PhysicalTags.EpisodePrefix, out id, out what))
+                {
+                    e = ctx.episodes?.Get(new EpisodeId(id));
+                    if (e != null && !BoundIn(e, subject)) e = null;
+                }
+                else if (Physical.PhysicalTags.TryParse(signal.tag, Physical.PhysicalTags.CharacterPrefix, out id, out what))
+                {
+                    Domain.Actors.KnownCharacter c = ctx.characters?.Get(new CharacterId(id));
+                    if (c?.pawn != null && ReferenceEquals(c.pawn.pawn, subject) && c.episode.IsValid) e = ctx.episodes?.Get(c.episode);
+                }
+                if (e == null)
+                {
+                    pawnSignalsIgnored++;
+                    return;
+                }
+                pawnSignals++;
+                if (what == "LeftMap") current.PhysicalWorld?.NoteLeftMap(subject);
+                ctx.Lifecycle?.Wake(e, what);
+            }
+            catch (Exception ex)
+            {
+                NetLog.ErrorOnce(LogCategory.Physical, "signal:" + signal.tag, "Pawn signal " + signal.tag + " could not be routed (the episode watch still observes): " + ex.Message);
+            }
+        }
+
+        private static bool BoundIn(Domain.Physical.PhysicalEpisode e, Pawn subject)
+        {
+            for (int i = 0; i < e.members.Count; i++)
+            {
+                if (e.members[i].pawn != null && ReferenceEquals(e.members[i].pawn.pawn, subject)) return true;
+            }
+            return false;
         }
     }
 }

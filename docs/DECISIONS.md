@@ -987,3 +987,43 @@
   `Quarantined`; deciding a succession from a status the same plan resolves, or by temporarily applying the plan.
 - **Consequences.** 3.2 replaces rule 1 with held-person support and adds anonymous members to linked episodes. Rule 9 is the
   only observable difference from the abstract path, and it is in id numbering alone.
+
+### ADR-054 · Phase 3.1 implementation choices for the controlled physical episode
+- **Status.** **Deviation / clarification, for owner review. Phase 3.1 IMPLEMENTED — OWNER RUNTIME VALIDATION REQUIRED.** Recorded
+  by the Phase 3.1 implementation; none changes an approved principle of ADR-048 to ADR-052. Each settles a point
+  [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md) left open; code locations are in
+  [PHYSICAL_LIFECYCLE Appendix I](PHYSICAL_LIFECYCLE.md#appendix-i-phase-31-as-built). The number ADR-053 is left for the S31 / M1
+  record that the owner's 3.1 brief names; this branch does not write it (it awaits the owner's confirmation). The implementation
+  is built on candidate M1 of PHYSICAL_LIFECYCLE § 7.6 as that brief directs.
+- **Context.** 3.1 connects the Phase 3.0 lifecycle to RimWorld for one Solo, on the physical test tier's own map, with no Harmony
+  and no new durable field.
+- **Decision.**
+  1. **The real port** (`Integration/Physical/RimWorldPhysicalWorldPort`) is the only production `IPhysicalWorldPort`, selected
+     by the live runtime alone; headless code, the sandbox and the soak keep the fail-closed port or the fake. The port gains
+     `EnsureEncounterFaction`, `ReleaseEncounterFaction` and a faction argument on `Place`: the lifecycle decides *when*, the port
+     acts.
+  2. **M1 as built.** Membership is derived (the bound pawn by reference, a living person, custody `Deployed` or `Stored`); the
+     binding precedes the spawn, so the reservation already covers a spawned pawn and is in force when vanilla's exit or map
+     removal passes it; placement is refused unless the registry covers the pawn; RELEASE proves the reservation and never
+     establishes it. One hidden accepted quest with a fieldless Network-owned part answers vanilla's reservation question;
+     the runtime index is rebuilt before the first tick.
+  3. **One temporary encounter faction per episode**, the vanilla refugee pattern (hidden, neutral, named after the actor, goodwill
+     seeded once from the Network standing, never hostile in 3.1), handed back to vanilla's own removal by RELEASE.
+  4. **Vanilla AI only**: `LordJob_VisitColony` with a fixed stay and no gift.
+  5. **Role derivation v1** from the actor's seed and original specialties only, stored at `Instantiate` (or lazily, identically,
+     at the first `Plan`); first creation is bounded (four seeded attempts over a capability-ranked kind chain), verified, corrected
+     at most by raising one role skill's base level, and aborted rather than contradicted.
+  6. **Truthful aging** through `AgeTickMothballed` over the full interval, chunked per game year; a partial catch-up records
+     exactly what was applied and places nobody; `BirthAbsTicks` is never written; the exit tick is the synchronous `LeftMap`
+     when seen, otherwise the commit tick (bounded under-age).
+  7. **Store-time normalization** heals non-permanent vanilla injuries only and logs everything else it leaves.
+  8. **The physical test tier** labels every item with its scenario id first (the owner's handoff rule, replacing the `⚠ PHYSICAL`
+     prefix; the category carries the warning); its guard reads facts only; 007 forces no real GC pass and redresses nothing
+     unrelated; 012 proves the aging mechanism on disposable pawns without skipping the clock (006 proves it on the real person).
+- **Rejected.** A Harmony patch on `ExitMap`, `PassToWorld`, `MapDeiniter`, faction removal or `PawnGenerator`; a synchronous
+  callback (M2) or C-4; a Network `PassToWorld` for a pawn vanilla already passed; a persisted pawn list in the quest part;
+  regenerating, rerolling or "fixing" a person beyond the one skill raise; reading fame for capability; a time skip or a falsified
+  `agedThroughTick` to test aging; a heuristic that decides a save is disposable.
+- **Consequences.** The live game can now create a contractor pawn, but only through the session-armed physical tier. Save
+  format stays 5. Owner validation of `RT-PHYX-001…012`, `015`, `016` in RimWorld is the remaining gate; 3.2 (custody, rescue,
+  groups, group extraction) is not started.

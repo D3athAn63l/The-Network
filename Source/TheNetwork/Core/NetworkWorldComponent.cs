@@ -60,6 +60,8 @@ namespace TheNetwork
         public override void WorldComponentUpdate()
         {
             Diagnostics.RuntimeTests.RuntimeTestGame.PumpFrame(this);
+            // The physical test tier (Dev only, session-armed; PHYSICAL_LIFECYCLE § 21.2): one static null check while no run is active.
+            Diagnostics.RuntimePhysicalTests.PhysicalTestSession.PumpFrame();
         }
 
         public override void ExposeData()
@@ -108,6 +110,8 @@ namespace TheNetwork
         public override void FinalizeInit(bool fromLoad)
         {
             base.FinalizeInit(fromLoad);
+            // The physical tests' session arm is runtime-only and never survives a load or a new game (§ 21.2).
+            Diagnostics.RuntimePhysicalTests.PhysicalTestSession.ResetForNewGame();
             try
             {
                 if (fromLoad && bootstrapped)
@@ -259,8 +263,10 @@ namespace TheNetwork
             int anchored = ctx.Spatial.InitializeAll();
             if (anchored > 0) NetLog.Info(LogCategory.Spatial, "Anchored " + anchored + " contractors in the world (hidden spatial state).");
             ValidationReport report = NetValidator.Run(runtime, ValidationMode.OnLoad);
-            // Phase 3: incomplete Physical Episodes are watched from the first tick (none exist in a live 3.0 game). Nothing is
-            // decided, generated or spawned at load (PHYSICAL_LIFECYCLE § 16.2).
+            // Phase 3: incomplete Physical Episodes are watched from the first tick. Nothing is decided, generated or spawned at load
+            // (PHYSICAL_LIFECYCLE § 16.2). The physical load pass corrects routing tags from the bindings and ensures the registry quest
+            // (its index was rebuilt in FinalizeInit, before the first tick).
+            runtime.PhysicalWorld?.OnLoaded();
             ctx.Lifecycle?.OnLoaded();
             ScheduleSweeps();
             SystemEvent loaded = EventFactory.Make<SystemEvent>(EventKeys.NetworkLoaded, Importance.Minor);

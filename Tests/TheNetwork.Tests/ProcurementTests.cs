@@ -1252,14 +1252,17 @@ namespace TheNetwork.Tests
             foreach (AssemblyName r in net.GetReferencedAssemblies()) T.Check(r.Name.IndexOf("Harmony", StringComparison.OrdinalIgnoreCase) < 0, "no Harmony reference (" + r.Name + ")");
             foreach (Type t in net.GetTypes())
             {
-                // Phase 3.0 declares the binding SHAPE (PHYSICAL_LIFECYCLE § 5.3) in the physical-lifecycle namespace only; nothing binds it.
+                // Phase 3.0 declared the binding SHAPE (PHYSICAL_LIFECYCLE § 5.3) in the lifecycle namespace. Phase 3.1's physical machinery
+                // (the encounter faction, the retained-pawn registry, any Pawn-typed state) lives ONLY in the production adapter
+                // (Integration.Physical) and the session-armed physical test tier (Diagnostics.RuntimePhysicalTests); nowhere else.
+                bool physical = t.Namespace == "TheNetwork.Integration.Physical" || t.Namespace == "TheNetwork.Diagnostics.RuntimePhysicalTests";
                 T.Check(t.Name != "PawnRef" || t.Namespace == "TheNetwork.Domain.Physical", "no PawnRef type outside the Phase 3 lifecycle (" + t.FullName + ")");
-                T.Check(t.Name.IndexOf("Encounter", StringComparison.Ordinal) < 0, "no encounter faction machinery (" + t.Name + ")");
+                T.Check(t.Name.IndexOf("Encounter", StringComparison.Ordinal) < 0 || physical, "no encounter faction machinery outside the physical adapter (" + t.FullName + ")");
                 T.Check(t.Name.IndexOf("Rumor", StringComparison.Ordinal) < 0 && t.Name.IndexOf("Gossip", StringComparison.Ordinal) < 0, "no rumors or gossip (" + t.Name + ")");
-                T.Check(t.Name.IndexOf("Registry", StringComparison.Ordinal) < 0 || t.Name == "ContractKindRegistry", "no registry quest (" + t.Name + ")");
+                T.Check(t.Name.IndexOf("Registry", StringComparison.Ordinal) < 0 || t.Name == "ContractKindRegistry" || physical, "no registry quest outside the physical adapter (" + t.FullName + ")");
                 foreach (FieldInfo f in t.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
                 {
-                    T.Check(f.FieldType.Name != "Pawn" || (t.Name == "PawnRef" && f.Name == "pawn"), "no Pawn fields but the binding's own pointer (" + t.Name + "." + f.Name + ")");
+                    T.Check(f.FieldType.Name != "Pawn" || (t.Name == "PawnRef" && f.Name == "pawn") || physical, "no Pawn fields but the binding's own pointer, outside the physical adapter (" + t.FullName + "." + f.Name + ")");
                 }
             }
             TestNet n = World(10);

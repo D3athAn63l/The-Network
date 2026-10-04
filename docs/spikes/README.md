@@ -78,3 +78,12 @@ mechanism that keeps a retained named pawn from being redressed, discarded or re
 `Stored` authority (reserve while spawned, else a synchronous vanilla callback, else a narrow Harmony contingency, in that
 order; [PHYSICAL_LIFECYCLE § 7.6](../PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31)). **S31 is
 mandatory and blocks Phase 3.1** (3.0 does not need it); it is **NOT RUN**.
+
+**Phase 3.1 (implemented, owner runtime validation required).** The 3.1 slice builds the production side of S9r (registry quest and
+derived reservation), S10 (temporary encounter faction), S12 (store-time normalization and truthful aging catch-up), S14 (visit Lord),
+S21 (observation), S22 (the session-armed physical tier and its own test map), S23 (name pins, modded races by capability), S24 (the
+owner-assisted save/load points) and S25 (role-constrained creation), and the physical tier scenarios that exercise them
+(`RT-PHYX-001…012`, `015`, `016`; [RUNTIME_TESTING § 17](../RUNTIME_TESTING.md#17-the-physical-tier-phase-31)). **None of these spikes is recorded as run**: each
+record is written from the owner's physical run. The S31 paragraph above is left as it stands in this branch: Phase 3.1 is built on
+candidate M1 as the owner's 3.1 brief directs, and the S31 record (on the S31 spike branch) and its status here are updated only
+after the owner confirms that result.

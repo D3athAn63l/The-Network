@@ -1,6 +1,6 @@
 # The Network
 
-**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; the formal in-game S20 checklist has not been run); Phase 2.75 merged (the contractor career foundation); Phase 2.9 merged and owner-runtime-tested (in-game runtime regression test infrastructure, developer-only); Phase 3 (abstract ↔ physical lifecycle): design reviewed; Phase 3.0 (authority + Physical Episode foundation) implemented over a fake port, creating no pawn; Phase 3.1 blocked until spike S31 is run and owner-reviewed**
+**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; the formal in-game S20 checklist has not been run); Phase 2.75 merged (the contractor career foundation); Phase 2.9 merged and owner-runtime-tested (in-game runtime regression test infrastructure, developer-only); Phase 3 (abstract ↔ physical lifecycle): design reviewed; Phase 3.0 (authority + Physical Episode foundation) implemented; Phase 3.1 (one controlled physical episode, dev-triggered on a separate, session-armed test tier) implemented — owner runtime validation required**
 
 The Network is a persistent, procedural contractor ecosystem that runs behind the normal RimWorld
 game. The player hires outsiders to find and fetch things they cannot easily get themselves. The
@@ -90,8 +90,10 @@ stores nothing in the save, and uses no Harmony. It complements the headless sui
 
 **Phase 3 (abstract ↔ physical lifecycle): the design has been reviewed, amended and corrected; Phase 3.0 is implemented** (the
 authority gate, the Episode store, the atomic reconciliation commit and its RELEASE / FOLLOW-UP / PUBLISH stages, over a fake physical
-port; save format 5; **no contractor pawn is ever created**, and gameplay is unchanged). **Phase 3.1 remains blocked until spike S31 is
-run and owner-reviewed.**
+port; save format 5). **Phase 3.1 is implemented — owner runtime validation required**: one Solo contractor can become one real,
+retained, named pawn and later the same pawn again, but only through the Dev Mode physical test tier ("The Network (PHYSICAL TESTS:
+disposable environment only)", session-armed, its own test map); there is no player-facing content and no Harmony
+([Appendix I](docs/PHYSICAL_LIFECYCLE.md#appendix-i-phase-31-as-built), [RUNTIME_TESTING § 17](docs/RUNTIME_TESTING.md#17-the-physical-tier-phase-31)).
 ([docs/PHYSICAL_LIFECYCLE.md](docs/PHYSICAL_LIFECYCLE.md), [ADR-048 to ADR-051](docs/DECISIONS.md)). The design, audited against
 the 1.6 game assemblies: **one authority per person at a time** (abstract, physical, or held by vanilla); `Actor ≠ Person ≠
 Pawn`; a named contractor keeps **one pawn for life** and ages truthfully while stored; a materialized contractor must never

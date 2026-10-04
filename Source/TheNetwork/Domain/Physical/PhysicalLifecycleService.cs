@@ -55,6 +55,7 @@ namespace TheNetwork.Domain.Physical
         public int stageFailures;
         public int completed;
         public int settled;
+        public int signalWakeups;
 
         public override string ToString()
         {
@@ -63,7 +64,7 @@ namespace TheNetwork.Domain.Physical
                 + ", commits " + commits + " (failed " + commitFailures + ", invalid " + invalidPlans + "), quarantined " + quarantined
                 + ", release actions " + releaseActions + " (passed " + passedToWorld + ", already world " + passSkippedAlreadyWorld + ", refused " + passRefused + ")"
                 + ", releases " + releasesCompleted + ", follow-ups " + followUps + ", published " + published + ", stage failures " + stageFailures
-                + ", completed " + completed + ", settled " + settled;
+                + ", completed " + completed + ", settled " + settled + ", signal wake-ups " + signalWakeups;
         }
     }
 
@@ -74,9 +75,11 @@ namespace TheNetwork.Domain.Physical
     /// (<c>releaseApplied</c>, <c>followUpApplied</c>, the outbox cursor and <c>publishedTick</c>) and is resumed from it, never
     /// inferred from side-effect state.
     ///
-    /// Phase 3.0 (§ 23): the live game holds the fail-closed <see cref="UnavailablePhysicalWorldPort"/>, so <see cref="Plan"/> is
-    /// refused, nothing is ever decided without observation, no episode exists and no job runs: zero idle cost and no gameplay
-    /// change. Tests and the sandbox drive this same service over a scriptable fake port.
+    /// Phase 3.1: the live game holds the real adapter (<c>Integration/Physical/RimWorldPhysicalWorldPort</c>); the ONLY production caller
+    /// of <see cref="Plan"/> and <see cref="Materialize"/> is the session-armed physical test tier (a dev trigger, § 22.1), so ordinary
+    /// gameplay creates no episode and no job runs: zero idle cost. Tests and the sandbox drive this same service over a scriptable fake
+    /// port. A retained named pawn is covered by the registry reservation from its binding on (M1): the reservation already exists when
+    /// vanilla passes it into WorldPawns, and RELEASE only proves it.
     /// </summary>
     public sealed class PhysicalLifecycleService
     {
@@ -168,7 +171,10 @@ namespace TheNetwork.Domain.Physical
                 for (int i = 0; i < people.Count; i++)
                 {
                     KnownCharacter c = people[i];
-                    e.members.Add(new EpisodeMember { character = c.id, slot = slot++, tier = Tier.Regular, pawn = c.pawn?.Copy() });
+                    // A Solo's operational role, stored lazily from IMMUTABLE origin facts (§ 6.6.5, P3-INV-030): the same value whenever it
+                    // is first needed. An organization's people get theirs with composition (3.2).
+                    if (c.opRole == OperationalRole.Unset && a.bindings.embodies == c.id) c.opRole = RoleDerivation.ForSolo(a);
+                    e.members.Add(new EpisodeMember { character = c.id, slot = slot++, tier = Tier.Regular, seatRole = c.opRole, pawn = c.pawn?.Copy() });
                     c.custody = CustodyState.Deployed;
                     c.episode = e.id;
                 }
@@ -288,6 +294,21 @@ namespace TheNetwork.Domain.Physical
             if (e == null || e.state != EpisodeState.Planned || !PortAvailable) return 0;
             int now = ctx.Now;
             int present = 0;
+            // S10 (§ 13.2): the episode's own temporary encounter faction, created before anyone is bound or placed and recorded on the
+            // episode (durable, declared in 3.0). No suitable faction ⇒ nobody is placed: the episode closes NeverPlaced.
+            try
+            {
+                e.faction = Port.EnsureEncounterFaction(e.id, e.actor, e.faction, EncounterGoodwill(e.actor));
+            }
+            catch (Exception ex)
+            {
+                counters.materializeFaults++;
+                e.lastError = NetScribe.Truncate("EncounterFaction: " + ex.Message, 300);
+                NetLog.WarnOnce(LogCategory.Physical, "faction." + e.id.Value, "Episode " + e.id + ": no encounter faction could be made (" + ex.Message + "); nobody is placed.");
+                CloseUnplaced(e);
+                StateVersion.Bump();
+                return 0;
+            }
             for (int i = 0; i < e.members.Count; i++)
             {
                 EpisodeMember m = e.members[i];
@@ -298,7 +319,7 @@ namespace TheNetwork.Domain.Physical
                         if (!Bind(e, m, now)) continue;
                         m.state = MemberState.Created;
                     }
-                    if (m.state == MemberState.Created && Port.Place(m.pawn, e.id, e.whereTile, e.whereMapId))
+                    if (m.state == MemberState.Created && Port.Place(m.pawn, e.id, e.whereTile, e.whereMapId, e.faction))
                     {
                         m.state = MemberState.Present;
                         counters.placed++;
@@ -340,14 +361,28 @@ namespace TheNetwork.Domain.Physical
                         e.lastError = "BindingUnresolved " + c.id;
                         return false;
                     }
+                    // Truthful aging (§ 6.4): the FULL interval since agedThroughTick, uncapped, before anything can observe the pawn.
+                    // agedThroughTick advances only by what was really applied: a catch-up that stopped part-way records exactly that much
+                    // and the person is not placed (the binding is untouched).
                     long elapsed = c.pawn.agedThroughTick >= 0 ? (long)now - c.pawn.agedThroughTick : 0L;
-                    if (elapsed > 0) Port.CatchUpAge(c.pawn, elapsed);
+                    if (elapsed > 0)
+                    {
+                        try
+                        {
+                            Port.CatchUpAge(c.pawn, elapsed);
+                        }
+                        catch (AgingIncompleteException ex)
+                        {
+                            if (ex.appliedTicks > 0) c.pawn.agedThroughTick += (int)Math.Min(ex.appliedTicks, elapsed);
+                            throw;
+                        }
+                    }
                     c.pawn.agedThroughTick = now;
                     m.pawn = c.pawn.Copy();
                     counters.rematerialized++;
                     return true;
                 }
-                PawnRef made = Port.Create(new ProjectionRequest { episode = e.id, actor = e.actor, character = c.id, slot = m.slot, tier = m.tier, name = c.name, role = c.opRole, seed = NetHash.Combine(e.seed, m.slot) });
+                PawnRef made = Port.Create(ProjectionPolicy.ForPerson(e, m, c, ctx.actors.Get(e.actor)));
                 if (made == null || !made.IsBound) return false;
                 made.boundTick = now;
                 made.agedThroughTick = now;
@@ -356,7 +391,7 @@ namespace TheNetwork.Domain.Physical
                 counters.created++;
                 return true;
             }
-            PawnRef slot = Port.Create(new ProjectionRequest { episode = e.id, actor = e.actor, slot = m.slot, tier = m.tier, seed = NetHash.Combine(e.seed, m.slot) });
+            PawnRef slot = Port.Create(new ProjectionRequest { episode = e.id, actor = e.actor, slot = m.slot, tier = m.tier, seed = NetHash.Combine(e.seed, m.slot), faction = e.faction });
             if (slot == null || !slot.IsBound) return false;
             slot.boundTick = now;
             slot.agedThroughTick = now;
@@ -626,6 +661,9 @@ namespace TheNetwork.Domain.Physical
                     counters.releaseActions++;
                 }
             }
+            // Episode level (§ 13.2): the encounter faction is handed back to vanilla's own temporary-faction removal (a map removal never
+            // queues it). Idempotent by observed state; vanilla then nulls its members' faction, which a reserved pawn tolerates (S31).
+            if (e.faction != null && e.faction.IsValid) Port.ReleaseEncounterFaction(e.faction);
             // Episode level (§ 15.6 "S"): an actor this commit ended loses its upkeep job and its spatial journey. Both are guarded by
             // observed state, so a re-run repeats nothing; a contained facade fault is caught by re-checking, not swallowed.
             NetworkActor a = ctx.actors.Get(e.actor);
@@ -764,6 +802,29 @@ namespace TheNetwork.Domain.Physical
         }
 
         // ================================================================== watch, load, removal
+
+        /// <summary>
+        /// A signal wake-up (§ 14.3): a vanilla quest-target signal for a BOUND pawn of this episode pulls its watch forward to the next
+        /// tick. It decides nothing, reads no final state and mutates nothing but the watch's due tick; the watch then observes.
+        /// </summary>
+        public void Wake(PhysicalEpisode e, string why)
+        {
+            if (e == null || e.IsComplete) return;
+            counters.signalWakeups++;
+            EnsureWatch(e, ctx.Now + 1);
+        }
+
+        /// <summary>
+        /// The encounter faction's goodwill towards the player, seeded once from the Network's own relation (§ 13.3): the actor's standing
+        /// towards the player (−100…100) scaled into 0…60. A Phase 3.1 visit is never seeded hostile (hostility as content is 3.2+).
+        /// </summary>
+        public int EncounterGoodwill(ActorId actor)
+        {
+            NetworkActor player = ctx.actors?.PlayerProxy;
+            if (player == null || ctx.Relations == null) return 0;
+            float standing = ctx.Relations.Get(actor, player.id).standing;
+            return Math.Max(0, Math.Min(60, (int)Math.Round(standing * 0.6f)));
+        }
 
         /// <summary>Makes sure an incomplete episode is watched (no later than <paramref name="due"/> when one is given). Never duplicates (singleton kind).</summary>
         public void EnsureWatch(PhysicalEpisode e, int due = -1)

@@ -31,6 +31,9 @@ namespace TheNetwork.Integration
             // published), so a linked operation is back on its own path before contracts are voided. No pawn is touched here
             // beyond the port's release actions. None exist in a live 3.0 game.
             int episodes = rt.Ctx.Lifecycle?.SettleForRemoval() ?? 0;
+            // Then the registry reserves nobody, its quest is ended through vanilla's API, and every Network tag leaves our pawns
+            // (§ 20 steps 2–3). The previously retained pawns become ordinary world pawns; nothing is deleted.
+            string physical = rt.PhysicalWorld?.PrepareForRemoval() ?? "no physical adapter";
 
             List<IntelRequest> requests = new List<IntelRequest>(rt.State.intel.requests);
             for (int i = 0; i < requests.Count; i++)
@@ -82,7 +85,7 @@ namespace TheNetwork.Integration
             rt.Root.preparedForRemoval = true;
             StateVersion.Bump();
             string summary = "TheNetwork_RemovalSummary".Translate(sites, searches + contracts, refunded).Resolve();
-            NetLog.Info(LogCategory.Save, "Prepared for removal: " + sites + " sites unbound, " + searches + " searches invalidated, " + contracts + " contracts voided (" + refunded + " silver refunded), " + tags + " extra tags removed, " + episodes + " physical episodes settled.");
+            NetLog.Info(LogCategory.Save, "Prepared for removal: " + sites + " sites unbound, " + searches + " searches invalidated, " + contracts + " contracts voided (" + refunded + " silver refunded), " + tags + " extra tags removed, " + episodes + " physical episodes settled; " + physical + ".");
             return summary;
         }
 
@@ -102,6 +105,9 @@ namespace TheNetwork.Integration
                 QuestUtility.AddQuestTag(wo, SiteAdapter.TagFor(o.id));
             }
             rt.Root.preparedForRemoval = false;
+            // The registry reserves again (rebuilt from the stores) and the routing tags come back from the bindings.
+            string physical = rt.PhysicalWorld?.Resume();
+            if (physical != null) NetLog.Info(LogCategory.Save, physical);
             NetValidator.Run(rt, ValidationMode.Full);
             // Settled episodes stay Closed; a stage they still owe (their publication) resumes from its marker.
             rt.Ctx.Lifecycle?.OnLoaded();

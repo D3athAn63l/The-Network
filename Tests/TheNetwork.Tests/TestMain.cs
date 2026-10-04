@@ -127,6 +127,7 @@ namespace TheNetwork.Tests
             CareerTests.Register(tests);
             RuntimeRunnerTests.Register(tests);
             PhysicalLifecycleTests.Register(tests);
+            Phase31Tests.Register(tests);
             StartupTests.Register(tests);
 
             int ran = 0;

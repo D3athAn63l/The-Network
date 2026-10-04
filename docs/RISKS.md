@@ -49,6 +49,9 @@
 | R-40 | Reputation, fame and capability stay conflated and leak into projection | Medium | Medium | design now; a later focused phase |
 | R-41 | Handoff exploits: cargo duplication, ownership ambiguity, a "reform caravan" loophole, a double charge | High | Medium | Phase 3.3 (design; S28–S30) |
 | R-42 | A retained pawn becomes temporarily `Free` during a vanilla map exit and vanilla redresses, discards or reuses it before the Network's reservation takes effect | High | Medium | Phase 3.1 (S31, **blocks 3.1**) |
+| R-43 | The physical test tier is run on a save that matters, or its cleanup touches what it does not own | High | Low | Phase 3.1 (the session arm, the fact-only guard, ownership-proven disposal) |
+| R-44 | Role-constrained creation cannot satisfy a role on a heavily modded race or kind list (repeated contained aborts) | Medium | Medium | Phase 3.1 (`RT-PHYX-011` on the owner's mod list) |
+| R-45 | A temporary encounter faction leaves residue (its vanilla leader world pawn, or the faction itself after an unusual exit) | Low | Medium | Phase 3.1 (`RT-PHYX-008`; sentinel notes) |
 
 ---
 
@@ -599,3 +602,33 @@
   ([§ 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31)).
 - **Proven by.** Spike **S31** (cases A to G), then the physical-tier regressions `RT-PHYX-015` (normal exit) and
   `RT-PHYX-016` (map removal) and P3-INV-032. None has been run.
+- **Phase 3.1 status (implemented, NOT RUN BY OWNER).** Phase 3.1 is built on candidate **M1** (reserve while spawned), as the
+  owner's 3.1 brief directs: the registry's membership is derived from the binding and the retained custody, the binding precedes
+  the spawn, placement is refused unless the registry already covers the pawn, and RELEASE only proves the reservation; no Network
+  `PassToWorld` for a pawn vanilla passed (source-scanned). `RT-PHYX-015` and `016` are implemented with per-frame and
+  `LeftMap`-instant checks. The S31 record and this risk's rating are updated only after the owner confirms the S31 result.
+
+## R-43 · The physical test tier runs where it should not (Phase 3.1)
+- **Failure modes.** An owner presses a physical scenario in a save that matters; a run's cleanup removes something it did not
+  create; a failed run's evidence is deleted.
+- **Mitigation.** A separate Dev Mode category whose name says "disposable environment only"; a typed phrase arms **one** action for
+  the current game object only (never saved, cleared on load and quit); the guard checks facts only (Dev Mode, armed, Network running,
+  adapter available, no other run, no incomplete episode) and never guesses whether a save matters; every scenario runs on the suite's
+  own test map; the only discard is of a pawn proven to be the run's own (tagged, unbound, never spawned, not a world pawn); bound
+  pawns are never destroyed; cleanup refuses while an incomplete episode has a member on the map; nothing is cleaned up on a failure.
+- **Proven by.** `Phys31.Tier*` and the `Phys31.Scan_*` source scans (headless); the owner's run.
+
+## R-44 · Role-constrained creation fails on a modded kind list (Phase 3.1)
+- **Failure modes.** No loaded kind yields a candidate that satisfies a role, so a person cannot be materialized; or a contradicting
+  pawn slips through.
+- **Mitigation.** Kinds are chosen by capability (never by mod name) with a vanilla fallback chain; four seeded attempts; the
+  authoritative verdict runs on the real candidate; failure is a contained abort (the member stays unplaced, the episode closes
+  `NeverPlaced` through the commit, nothing is bound). A contradicting pawn is never returned.
+- **Proven by.** `RT-PHYS-020` (pure verdict and correction); `RT-PHYX-011` on the owner's mod list (counts aborts by role).
+
+## R-45 · Encounter-faction residue (Phase 3.1)
+- **Failure modes.** Each episode leaves a vanilla faction leader world pawn behind, or a temporary faction is never removed.
+- **Mitigation.** The faction is vanilla's own hidden temporary refugee pattern; a normal exit queues its removal through vanilla and
+  RELEASE hands it back too (covering map removal). Its leader is an ordinary vanilla world pawn the world-pawn GC may collect, exactly
+  as for vanilla's refugee quests. The sentinel reports both as explained deltas.
+- **Proven by.** `RT-PHYX-008` (the faction is removed after the episode); the sentinel notes of every run.

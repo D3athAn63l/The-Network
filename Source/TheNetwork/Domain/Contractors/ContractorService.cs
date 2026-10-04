@@ -222,6 +222,9 @@ namespace TheNetwork.Domain.Contractors
                 KnownCharacter c = NewCharacter(a.name.Copy(), CharacterRole.Freelancer, a.id, 0.25f + 0.1f * (int)t.startingFame);
                 c.embodiedBy = a.id;
                 c.org = ActorId.None;
+                // Eager for new actors (PHYSICAL_LIFECYCLE § 6.6.5): the operational role from immutable origin facts only (seed, original
+                // specialties); an older actor derives the identical value lazily when first needed.
+                c.opRole = Physical.RoleDerivation.SoloRole(a.seed, profile.specialties);
                 a.bindings.embodies = c.id;
                 people.Add(c);
                 sim.skill = Clamp(BandCenter(t.startingExperience) + rng.Range(-0.03f, 0.03f), 0.05f, 1f);

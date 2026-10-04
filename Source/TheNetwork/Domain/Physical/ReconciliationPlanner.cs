@@ -145,6 +145,10 @@ namespace TheNetwork.Domain.Physical
                             CommitOp stored = p.Add(CommitOpKind.CharacterStored);
                             stored.character = c;
                             stored.member = m;
+                            // The stored pawn stops ticking when vanilla passes it (it is reserved, so suspended): its aging is brought
+                            // current from THAT tick at the next materialization. Unknown exit ⇒ the commit tick (§ 6.4).
+                            int exit = d.observation != null ? d.observation.exitTick : -1;
+                            stored.agedThrough = exit >= 0 && exit <= p.now ? exit : -1;
                             // The positive return is authoritative for the person's story status too (a rescued Missing or Captured
                             // person is not left Missing forever): injured ⇒ the shared wound rule (which resolves Missing/Captured to
                             // Wounded), unhurt ⇒ the shared return rule (Missing/Captured ⇒ Active). Neither ever revives Dead or Lost.

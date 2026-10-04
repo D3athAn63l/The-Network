@@ -1,10 +1,13 @@
 # Phase 3 Design: Abstract ↔ Physical Lifecycle
 
-> **Status: Phase 3.0 IMPLEMENTED (the abstract foundation over a port; [Appendix H](#appendix-h-phase-30-as-built)); 3.1 to 3.3
-> NOT implemented; 3.1 blocked until spike S31 is run and owner-reviewed.** Phase 3.0 creates **no** RimWorld pawn: the live game
-> holds a fail-closed physical port, so no production path creates, spawns, moves, reserves or passes a contractor pawn. The
-> save format is **5** (Phase 3.0). The design text below is unchanged by the implementation except where Appendix H records a
-> decision the design left open.
+> **Status: Phase 3.1 IMPLEMENTED — OWNER RUNTIME VALIDATION REQUIRED ([Appendix I](#appendix-i-phase-31-as-built)); Phase 3.0
+> implemented ([Appendix H](#appendix-h-phase-30-as-built)); 3.2 and 3.3 NOT implemented.** The live game now holds the real
+> physical adapter, and the only trigger that creates or places a contractor pawn is the session-armed physical test tier (Dev
+> Mode, its own test map). The physical tier (`RT-PHYX-*`) has **not** been run by the owner. Phase 3.1 is built on candidate
+> **M1** of [§ 7.6](#76-the-vanilla-exit-window-an-open-mandatory-spike-s31) (the reservation covers a bound retained pawn while it is
+> spawned), as the owner's 3.1 brief directs; the S31 record, ADR-053 and the S31 status wording in this document are **not**
+> updated in this branch and await the owner's confirmation. The save format is still **5**. The design text below is unchanged
+> by the implementation except where Appendices H and I record a decision the design left open.
 >
 > *Original design status:* **DESIGN REVIEW.** Written against `main` `6d0352d`
 > (Phase 2.9 merged and owner-runtime-validated; save format stays **4**). Every RimWorld fact below was read
@@ -2386,6 +2389,16 @@ the physical tier's rules); **it has not been run, and nothing in this document 
 
 No player-as-contractor board, no NPC-issued market, no full rival simulation in any of them.
 
+**Implementation status.** 3.0 is implemented (Appendix H). **3.1 is implemented on candidate M1 and awaits the owner's physical
+run** (Appendix I); the S31 gate wording above is the design history and is not rewritten in this branch.
+
+**Design note for 3.2: group extraction (owner requirement; not built in 3.1).** A physical Network group should normally
+**regroup and leave together** through a shared extraction route or extraction region, with bounded cohesion and a safe fallback
+for stragglers and emergencies. Perfect formation is not required. Vanilla's `LordJob_ExitMapBest` sends each pawn to its own
+best edge, so a scattered exit ("everyone for themselves") is a test-fixture artifact, never the desired group presentation.
+OPEN for 3.2 (O-19): the mechanism (a candidate is one shared exit spot chosen for the group's Lord, travel-then-exit, with a
+straggler timeout that falls back to each pawn's own best exit). 3.1 is Solo-only, so nothing here applies to it.
+
 **Where each amendment lands.** *Not needed by 3.0* (they need real pawns or groups): persisted composition, cohesion, the
 concretization policy and the role verification. *Needed by 3.0 as persisted shape*: `opRole` and `firstEncounterTick`
 on `KnownCharacter` and `agedThroughTick` on the binding (so the one format bump carries every shape this document
@@ -3071,3 +3084,131 @@ The real adapter, projection, roles beyond `Unset`, composition, concretization,
 temporary factions, maps, sites, held-person support, the rescue content and anything of 3.3; `RT-PHYS-020…024` and `030`; the
 whole physical tier (`RT-PHYX-*`). The re-entrancy of procurement's own `OnRecovered` internals stays a 3.2 item (FOLLOW-UP runs it
 as one guarded sub-step). **The RT-PHYS suite has run headlessly only; it has not been run inside RimWorld.**
+
+## Appendix I: Phase 3.1 as built
+
+> **Phase 3.1 IMPLEMENTED — OWNER RUNTIME VALIDATION REQUIRED.** HEADLESS: the full suite passes (including the safe physical suite
+> over the fake port and the new source scans). SAFE RUNTIME: the sandbox suite passes headlessly; the in-game safe run on this build
+> is the owner's. **PHYSICAL RUNTIME (`RT-PHYX-*`): NOT RUN BY OWNER.** Phase 3.1 is built on candidate **M1** of
+> [§ 7.6](#76-the-vanilla-exit-window-an-open-mandatory-spike-s31), exactly as described there, because the owner's 3.1 brief directs
+> it. Recording the S31 result itself (the S31 record, ADR-053, the P3-INV-032 wording, the spikes README) is **not** part of this
+> branch: it awaits the owner's confirmation. No Harmony; no new durable field; save format **5**.
+
+Phase 3.1 implements the 3.1 row of [§ 23](#23-suggested-subphases) for **one Solo**: the real `IPhysicalWorldPort`, role-constrained
+first projection, the write-once binding, the retained-pawn registry, the temporary encounter faction, the visit Lord, signal routing
+that only wakes, the bounded watch, unsupported custody ⇒ `Quarantined`, monotonic death, downed/recovery observation, truthful aging,
+store-time normalization, same-pawn rematerialization, map removal, the unchanged RELEASE discipline, a read-only Episode Monitor and
+the separate physical test tier. Everything flows through the Phase 3.0 lifecycle (Plan → Materialize → watch → Reconcile → atomic
+commit → RELEASE → FOLLOW-UP → PUBLISH); no second architecture exists.
+
+### I.1 Where each piece lives
+
+| Design element | Implementation |
+|---|---|
+| The real port (§ 21) | `Integration/Physical/RimWorldPhysicalWorldPort.cs` (create, resolve, catch-up, faction, place, observe, normalize, prove retention, the guarded pass, tag strip, load pass, removal, diagnostics, `DescribeBinding` for the monitor). Built by `NetworkRuntime` after the fail-closed default: `Ctx.physicalPort = PhysicalWorld` (live game only; headless, sandbox and soak keep the fail-closed or fake port) |
+| Port additions | `EnsureEncounterFaction`, `ReleaseEncounterFaction`, `Place(…, FactionRef faction)`; `ProjectionRequest.capability`, `.equipmentTier`, `.faction`; `PhysicalObservation.exitTick`; `AgingIncompleteException`. The fail-closed port refuses the new actions; the fake records them and can fault them |
+| Registry (S9r, M1 timing) | `Integration/Physical/RetainedPawnRegistry.cs`: `RetainedPawnRegistry` (derived membership, O(1) `Reserves`, runtime index rebuilt from the stores, lazy registry quest, inert on prepare-for-removal) and `QuestPart_NetworkRetainedPawns` (a fieldless Network-owned part; the class name is saved) |
+| Role-constrained projection (§ 6.6–6.8) | pure `Domain/Physical/ProjectionModel.cs` (`RoleSpec`, `RoleRules.SpecFor/Verify/ApplyCorrection`, `RoleDerivation` v1, `NamePins`, `KindPolicy`, `ProjectionPolicy`) + `Integration/Physical/PawnProjection.cs` (`PawnRoleReader`, `PawnProjection.Project`, `ApplyNamePins`) |
+| Temporary faction (S10), aging (S12), normalization | `Integration/Physical/EncounterFactions.cs`: `EncounterFactions`, `PawnAging`, `PawnNormalization` |
+| Observation (§ 9.3) | `Integration/Physical/PawnObserver.cs` (`Classify`, `OtherQuestReserves`, `CheckPass`) |
+| Tags (§ 7.3) | `Integration/Physical/PhysicalTags.cs` (`TheNetwork.Ep.<id>`, `TheNetwork.Char.<id>`; routing only) |
+| Signals (§ 14.3) | `SignalBridge.RoutePawnSignal` (`Integration/SiteCallbacks.cs`): reference-proven SUBJECT, `NoteLeftMap`, `Lifecycle.Wake` |
+| Lifecycle changes | `PhysicalLifecycleService`: the encounter faction first in `Materialize`; `Bind` asks `ProjectionPolicy.ForPerson`; a partial catch-up advances `agedThroughTick` by exactly what was applied; RELEASE hands the faction back; `Wake`, `EncounterGoodwill`. `ReconciliationPlanner`: a Returned person's `agedThrough` is the observed exit tick. `ReconciliationApplier`: `agedThroughTick` only advances |
+| Origin role | `ContractorService.Instantiate` stores a Solo's `opRole` from `RoleDerivation.SoloRole(seed, specialties)`; `Plan` stores it lazily (same value) for older actors |
+| Load and removal | `NetworkWorldComponent` runs `PhysicalWorld.OnLoaded()` before the lifecycle's load pass; `RemovalPreparer` calls `PrepareForRemoval()` after the settle and `Resume()` on resume |
+| Episode Monitor | `Diagnostics/EpisodeMonitor.cs` (Dev Mode → The Network → "Episode Monitor (read-only)") |
+| Physical test tier (§ 21.2) | `Diagnostics/RuntimePhysicalTests/` (`PhysicalTestModel`, `PhysicalTestWorld`, `PhysicalTestRunner`, `PhysicalScenarios`, `PhysicalTestDevActions`) and `1.6/Defs/PhysicalTests/TheNetwork_PhysicalTestDefs.xml` |
+| Tests | the safe physical suite gains `RT-PHYS-020`, `021`, `022`, `030`; `Tests/TheNetwork.Tests/Phase31Tests.cs` (tier guard, M1 representation, isolation, faction release, source scans); the Phase 3.0 tripwires are rescoped to the adapter and the tier |
+
+### I.2 Decisions the design left open (recorded in ADR-054, for owner review)
+
+1. **The port grows three faction-aware actions.** The episode's faction is durable lifecycle truth (`PhysicalEpisode.faction`,
+   declared in 3.0), while creating and releasing it is a physical action; so the lifecycle decides *when* and the port does it.
+   `Materialize` makes the faction **before** anyone is bound; no suitable faction ⇒ nobody is placed ⇒ `Closed(NeverPlaced)`.
+2. **M1 as built.** A pawn is reserved iff it is the bound pawn (reference equality with the person's own `PawnRef`) of a living
+   person whose custody is `Deployed` or `Stored`. The binding is written before the pawn is spawned, so the reservation already
+   covers the spawned pawn, and it is in force at the instant vanilla's exit or map removal passes the pawn into `WorldPawns`.
+   `Place` refuses (changing nothing) unless the registry already covers the pawn. RELEASE **proves** the reservation
+   (`EnsureRetained`) and never establishes it; an unproven reservation throws and RELEASE stays pending. No callback, no patch.
+3. **The registry quest.** One hidden, accepted raw quest rooted on vanilla's `Util_GetDefaultRewardValueFromPoints` (a root is
+   mandatory; a root-less quest is dropped on load) holding one fieldless Network-owned part; created lazily at the first creation and
+   whenever a load finds a retained person; ended and removed by prepare-for-removal (the registry is then inert) and recreated on
+   resume. The part persists no pawn list: the Network stores are the truth and the runtime index is rebuilt when the runtime is built
+   (FinalizeInit), before the first tick. An **unprepared** removal makes vanilla drop the unknown part class (one load error) and the
+   pawns become ordinary world pawns: the self-healing outcome S9r prefers.
+4. **The encounter faction.** Vanilla's `OutlanderRefugee` when it qualifies, otherwise the first humanlike, non-player,
+   non-permanent-enemy faction def with a humanlike basic kind, in def-name order (capability, never a mod name). Hidden, temporary,
+   neutral to every faction not permanently hostile to it, named after the Network actor (it is not the actor and never provenance),
+   goodwill towards the player seeded **once** from the Network standing (standing × 0.6, clamped to 0…60: a 3.1 visit is never hostile).
+   A normal exit queues its removal through vanilla itself; RELEASE also hands it back (`Notify_PawnLeftFaction`), which covers map
+   removal. Vanilla generates a leader for the faction; that leader is a vanilla world pawn the sentinel explains.
+5. **The visit.** `LordJob_VisitColony(faction, chill spot, 7,500 ticks)` with an empty gift list (no random gift). The entry cell is
+   the suite's own edge-cell search with a reachability check, because `CanReachColony` fails on a map that is not a player home.
+6. **Role derivation v1.** A fixed specialty → role-candidates map, one pick by `NetHash.Combine(seed, "oprole.v1")`, Specialist for
+   unknown specialties. Stored at `Instantiate` for new Solos; for an older actor `Plan` stores the identical value the first time it is
+   needed. `OperationalRole` gained values; enums are saved by name, so no format change.
+7. **First projection.** Kind chain: the two best capability matches, the faction's basic kind, then `Villager`; at most four outer
+   attempts, each seeded (`Rand.PushState(seed + attempt)`), each a `ForceGenerateNewPawn`, no-relations, adult request with
+   `mustBeCapableOfViolence` for violent roles, the role's prohibited traits and the hard clauses as `validatorPreGear`. Then the
+   authoritative verdict, at most **one** raise of one role skill's base level, re-verification. A rejected candidate is dropped
+   (unbound, unspawned, never a world pawn); no candidate ⇒ a contained abort, the member unplaced. Attempts, rejections, corrections
+   and milliseconds are counted.
+8. **Request facts.** Name pins (first and last; the nickname only when stated), the stored role, capability = the current
+   experience band, the abstract equipment tier, the episode seed and faction. Fame, the reputation score and visibility are never read.
+9. **Truthful aging.** `Pawn_AgeTracker.AgeTickMothballed` in one-game-year chunks over the **full** interval since
+   `agedThroughTick`; a chunk that throws records exactly the ticks already applied and the person is not placed; `BirthAbsTicks` is
+   never written. `agedThroughTick` is the synchronous `LeftMap` tick when one was seen this session; otherwise (map removal, or an exit
+   seen before a load) the commit tick, an under-age of at most one watch period, bounded and documented.
+10. **Needs on rematerialization.** Food and rest are raised to at least 80 % and recreation to 60 % (the organisation looked after the
+    person off-map); never lowered; nothing else touched.
+11. **Store-time normalization.** Only non-permanent `Hediff_Injury` are healed (the abstract recovery owns them). Every other
+    non-permanent bad hediff is left and logged by name (unknown modded hediffs are never healed by guess).
+12. **Observation.** `WorldFree` means in `WorldPawns` and either `Free` or reserved by the Network's own registry and by no other
+    quest; anything else in `WorldPawns` is `WorldOther` (pending, never Returned). An unrecognised holder is held, never returned.
+13. **Signals only wake.** Both routing tags are proven by reference against the binding; `LeftMap` also notes the exit tick;
+    `Killed` and `Discarded` reach the lifecycle through the quest part too. The watch observes and decides.
+14. **Episode Monitor.** Text only, rebuilt at most twice a second while open; pawn facts come from the adapter's plain-text
+    `DescribeBinding`; no button changes anything.
+15. **Save format stays 5.** `opRole`, `PhysicalEpisode.faction` and `agedThroughTick` were declared in 3.0. The registry index and the
+    exit ticks are runtime; the quest is vanilla-saved with a fieldless part. The soak's save grows by about 1–5 KB only because Solos
+    now store their role at creation.
+
+### I.3 The physical test tier as built ([§ 21.2](#212-tier-p-the-physical-integration-suite-armed-per-session-dedicated-test-map-by-default))
+
+* **Menu.** Dev Mode → "The Network (PHYSICAL TESTS: disposable environment only)". Every label starts with its id and name
+  (`RT-PHYX-001 — First materialization`, …): the owner's handoff rule replaces the `⚠ PHYSICAL` prefix of § 21.2, and the category
+  name carries the warning. Items marked `[armed]` spend the arm; `PHYX — Show status`, `PHYX — Last reports`,
+  `PHYX — Stop current run` and `RT-PHYX-010 — … verify after load (read-only)` never need it.
+* **Arm.** A modal states what the suite creates and changes; typing `ARM PHYSICAL TESTS` arms **one** action for the current game
+  object only. Never saved; cleared by `FinalizeInit` on every load and new game; gone on quit; spent by each action.
+* **Guard (facts, never a guess).** Dev Mode on, armed, the Network running, the adapter available, no other run, **no incomplete
+  episode**. Each refusal is named; a refusal does not spend the arm.
+* **Test map.** `TheNetwork_PhysicalTestSite`, a plain `MapParent` (no comps, not a home, no incident target), re-checked at runtime,
+  on an empty temperate tile, 100 × 100, fog cleared. The colony map is never used; no 3.1 scenario needs the home-colony gate.
+* **Runs.** Each scenario is a list of steps pumped once per frame, waiting on **game** ticks (a paused game never times out), with
+  per-step timeouts. A run drives the production lifecycle, observes, and logs one block
+  `[TheNetwork][PHYS] ===== <id> — <name>: PASS|FAIL|INCONCLUSIVE …`. On a failure nothing is cleaned up. A runtime-only override
+  shortens a suite visit to 1,250 ticks (the same vanilla Lord) and is reset when the run ends.
+* **Sentinel.** Bounded tripwires with explained deltas. FAIL only for what the suite promises never to touch: the player's
+  colonists, prisoners and slaves; any other Network person's custody, binding or episode link; a bound pawn leaving `WorldPawns`
+  other than by being spawned. Vanilla's own world activity during a run (quest sites, world-pawn GC, travellers) is reported as notes.
+  The run also fails on any Network error line and on vanilla's "already here" error.
+* **Disposal.** The tier discards a pawn in one place only, and only one it proves its own: tagged `TheNetwork.Test.<runId>`, bound to
+  nobody, never spawned, not a world pawn. Bound pawns are never destroyed or discarded. Cleanup removes the test map and site and
+  leftover fixture factions only; it refuses while an incomplete episode has a member on the map. `PHYX — Remove test map now` ends
+  such episodes through vanilla's map removal.
+* **Deliberate choices per scenario.** 003 ends the visit by removing the test map, because vanilla takes a downed pawn out of its
+  Lord and 3.1 authors no AI for a recovered visitor. 007 forces **no** real GC pass (it would discard unrelated pawns of the save);
+  it runs three GC accumulation passes. It applies real redress pressure only when vanilla's candidate pool for the request is
+  empty, so no unrelated world pawn can be taken, and it proves through vanilla's own private predicate, read by reflection (no
+  patch), that the stored pawn matches the request in every respect but the reservation. 012 proves the aging **mechanism** on
+  disposable pawns (1 day, 1, 10, 70 years) without skipping the game clock or falsifying a person; the real person over a real
+  stored interval is 006. 016 materializes up to three Solos, one episode each (3.1 is Solo-only). 010 is owner-assisted: save
+  points A (visitor present) and B (map removed, not yet reconciled) pause the game; the read-only verification then follows the
+  episodes to completion.
+
+### I.4 Not in 3.1
+
+Groups, anonymous members, composition, concretization, cohesion, group extraction ([§ 23](#23-suggested-subphases) design note),
+held-person support beyond quarantine, rescue, the Last Known Location, site holders, caravans, pods, procurement handoff (3.3),
+leases, notable assets, ambient visits, any player-facing content, Harmony. `RT-PHYX-013`, `014` and `020+` are 3.2.

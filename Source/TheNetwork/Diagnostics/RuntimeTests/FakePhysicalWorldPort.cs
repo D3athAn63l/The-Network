@@ -42,6 +42,9 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             public EpisodeId tag;
             public int tagStrips;
             public int passedToWorld;
+
+            /// <summary>The encounter faction the token was last placed in (a fake load id).</summary>
+            public int factionId = -1;
         }
 
         public bool available = true;
@@ -73,13 +76,20 @@ namespace TheNetwork.Diagnostics.RuntimeTests
         public int normalizes;
         public int retains;
         public int strips;
+        public int factionsCreated;
+        public int factionReleases;
+
+        /// <summary>Live fake encounter factions (by fake load id); a released one stays released (idempotent).</summary>
+        public readonly Dictionary<int, bool> factions = new Dictionary<int, bool>();
+
+        private int nextFaction = 70001;
 
         public bool Available => available;
         public string Name => "Fake (tokens; sandbox and tests only)";
 
         // ------------------------------------------------------------------ scripting
 
-        /// <summary>The next <paramref name="times"/> requests of <paramref name="action"/> (create, age, place, normalize, retain, pass, strip) throw.</summary>
+        /// <summary>The next <paramref name="times"/> requests of <paramref name="action"/> (create, age, place, normalize, retain, pass, strip, faction, faction-release) throw.</summary>
         public void ThrowOn(string action, int times = 1)
         {
             faults[action] = times;
@@ -183,8 +193,12 @@ namespace TheNetwork.Diagnostics.RuntimeTests
 
         // ------------------------------------------------------------------ IPhysicalWorldPort
 
+        /// <summary>Every creation request, as given (RT-PHYS-021/022: what the lifecycle asked for, never what a pawn became).</summary>
+        public readonly List<ProjectionRequest> requests = new List<ProjectionRequest>();
+
         public PawnRef Create(ProjectionRequest request)
         {
+            requests.Add(request);
             Fault("create", null);
             Token t = new Token { thingId = nextThing++, def = "Fake_Human", character = request.character, slot = request.slot };
             tokens[t.thingId] = t;
@@ -213,7 +227,28 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             actions.Add("age " + pawn?.thingIdNumber + " +" + elapsedTicks);
         }
 
-        public bool Place(PawnRef pawn, EpisodeId episode, TileRef tile, int mapId)
+        public FactionRef EnsureEncounterFaction(EpisodeId episode, ActorId actor, FactionRef current, int seededGoodwill)
+        {
+            Fault("faction", null);
+            bool live;
+            if (current != null && current.IsValid && factions.TryGetValue(current.loadId, out live) && live) return current;
+            int id = nextFaction++;
+            factions[id] = true;
+            factionsCreated++;
+            actions.Add("faction " + id + " for " + episode + " goodwill " + seededGoodwill);
+            return new FactionRef { loadId = id, name = "Fake encounter faction " + id, defName = "Fake_Encounter" };
+        }
+
+        public void ReleaseEncounterFaction(FactionRef faction)
+        {
+            Fault("faction-release", null);
+            if (faction == null || !faction.IsValid) return;
+            factionReleases++;
+            factions[faction.loadId] = false;
+            actions.Add("faction-release " + faction.loadId);
+        }
+
+        public bool Place(PawnRef pawn, EpisodeId episode, TileRef tile, int mapId, FactionRef faction)
         {
             Token t = TokenOf(pawn);
             Fault("place", t);
@@ -227,6 +262,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             t.inWorldPawns = false; // placing a token takes it out of the (simulated) world-pawn set
             t.mapId = mapId;
             t.tag = episode;
+            t.factionId = faction?.loadId ?? -1;
             t.scripted = null;
             places++;
             actions.Add("place " + t.thingId);
