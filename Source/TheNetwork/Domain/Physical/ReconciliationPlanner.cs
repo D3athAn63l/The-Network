@@ -31,7 +31,10 @@ namespace TheNetwork.Domain.Physical
             Wounded = 1,
             Captured = 2,
             Missing = 3,
-            Lost = 4
+            Lost = 4,
+
+            /// <summary>Phase 3.2A: recruited by the player (§ 8.2: JoinedPlayer ⇒ status Defected). Physical only; the abstract path never produces it.</summary>
+            Defected = 5
         }
 
         private struct FateEntry
@@ -40,6 +43,9 @@ namespace TheNetwork.Domain.Physical
             public PlannedFate fate;
             public int woundDays;
             public string causeKey;
+
+            /// <summary>Phase 3.2A, physical only: the person-level event a capture publishes (null: none, as on the abstract path).</summary>
+            public string publicationKey;
         }
 
         // ================================================================== DECIDE
@@ -59,32 +65,55 @@ namespace TheNetwork.Domain.Physical
             return 15;
         }
 
-        /// <summary>
-        /// DECIDE for one placed member (§ 15.3, § 9.3). Terminal only on POSITIVE evidence: Returned needs <c>WorldFree</c> AND
-        /// the exit evidence ("not spawned" is never "returned"). Every held custody (player prisoner, colonist, kidnapped, held by
-        /// another faction, a caravan) is not supported before 3.2 and is reported as <paramref name="unsupported"/>: the caller
-        /// quarantines the episode, the pawn is untouched and the person stays blocked (§ 17). Anything else stays Pending.
-        /// </summary>
+        /// <summary>DECIDE for one placed NAMED member (see the full overload).</summary>
         public static MemberOutcome Decide(PhysicalObservation o, out bool unsupported)
         {
+            HeldKind heldBy;
+            bool captive;
+            return Decide(o, true, out unsupported, out heldBy, out captive);
+        }
+
+        /// <summary>
+        /// DECIDE for one placed member (§ 15.3, § 9.3). Terminal only on POSITIVE evidence: Returned needs <c>WorldFree</c> AND the exit
+        /// evidence ("not spawned" is never "returned") AND no allegiance to a permanent faction. Phase 3.2A: a held custody (the player's
+        /// prisoner or slave, recruited, kidnapped, held by another faction, a caravan, or a world pawn another faction recruited) is a
+        /// TERMINAL held outcome of a NAMED member: the episode commits once and the person's continuing captivity is their own custody record
+        /// (<see cref="CustodyRules"/>). A travelling transporter is transit, not custody: the member stays Present (§ 12.3). An ANONYMOUS
+        /// member that is held would first have to be promoted to a Known Character, which is Phase 3.2B: it is reported as
+        /// <paramref name="unsupported"/>, the caller quarantines the episode, the pawn is untouched (§ 17). Anything else stays Pending.
+        /// </summary>
+        public static MemberOutcome Decide(PhysicalObservation o, bool named, out bool unsupported, out HeldKind heldBy, out bool captive)
+        {
             unsupported = false;
+            heldBy = HeldKind.None;
+            captive = false;
             if (o == null) return MemberOutcome.Pending;
+            bool held;
             switch (o.kind)
             {
                 case ObservedKind.Dead: return MemberOutcome.Killed;
                 case ObservedKind.Gone: return MemberOutcome.Lost;
-                case ObservedKind.WorldFree: return o.exitEvidence ? MemberOutcome.Returned : MemberOutcome.Pending;
-                case ObservedKind.HeldByPlayer:
-                case ObservedKind.JoinedPlayer:
-                case ObservedKind.Kidnapped:
-                case ObservedKind.HeldByOther:
-                case ObservedKind.InCaravan:
-                    unsupported = true;
+                case ObservedKind.WorldFree:
+                    if (!o.exitEvidence) return MemberOutcome.Pending;
+                    if (!o.otherAllegiance) return MemberOutcome.Returned;
+                    held = true; // another faction made the pawn a member: never a free return
+                    break;
+                case ObservedKind.InTransport:
+                    // § 12.3 / § 15.3: a pawn in a travelling transporter is in transit, not held: the member stays Present until it lands
+                    // (spawned), or ends up held or a world pawn. (For a person vanilla ALREADY holds, the custody watch records the transport.)
                     return MemberOutcome.Pending;
                 default:
-                    // Spawned (here or elsewhere), InTransport, WorldOther, Unknown, None: the member stays Present.
-                    return MemberOutcome.Pending;
+                    // Spawned (here or elsewhere), WorldOther, ReservationBroken, Unknown, None: the member stays Present.
+                    held = CustodyRules.IsHeldKind(o.kind);
+                    break;
             }
+            if (!held) return MemberOutcome.Pending;
+            if (!named)
+            {
+                unsupported = true;
+                return MemberOutcome.Pending;
+            }
+            return CustodyRules.MissionHeld(o, out heldBy, out captive);
         }
 
         // ================================================================== PLAN
@@ -107,6 +136,9 @@ namespace TheNetwork.Domain.Physical
             p.org = p.actor.Get<OrganizationProfile>();
             p.sim = p.actor.Get<ContractorSimulation>();
             if (e.cause.operation.IsValid) p.operation = ctx.operations?.Get(e.cause.operation);
+            // A Custody episode (Phase 3.2A) reconciles a transition of someone vanilla ALREADY holds: the group took the loss when the person was
+            // first captured, so a later death, recruitment or return is a person-level fact (no second casualty report, no second morale shock).
+            bool custody = CustodyRules.IsCustodyEpisode(e);
 
             List<FateEntry> fates = new List<FateEntry>();
             Dictionary<int, MemberDecision> planned = new Dictionary<int, MemberDecision>();
@@ -155,6 +187,12 @@ namespace TheNetwork.Domain.Physical
                             if (d.woundDays > 0) fates.Add(new FateEntry { character = c, fate = PlannedFate.Wounded, woundDays = d.woundDays });
                             else if (c.status == CharacterStatus.Missing || c.status == CharacterStatus.Captured) p.Add(CommitOpKind.CharacterReturnedFree).character = c;
                             if (p.org == null && c.id == p.actor.bindings.embodies) soloReturn = d;
+                            if (custody)
+                            {
+                                // 3.2A: a person vanilla held is free again (released, escaped or rescued: the observation does not say which).
+                                bool lead = p.org != null ? c.id == p.org.leader : c.id == p.actor.bindings.embodies;
+                                p.Add(CommitOpKind.Publication).spec = Publications.Character(EventKeys.CharacterFreed, Importance.Notable, p.actor, c, ContractId.None, OperationId.None, lead);
+                            }
                             break;
                         case MemberOutcome.NeverPlaced:
                             p.neverPlaced++;
@@ -162,6 +200,32 @@ namespace TheNetwork.Domain.Physical
                             break;
                         case MemberOutcome.Detached:
                             p.Add(CommitOpKind.CharacterDetached).character = c;
+                            break;
+                        case MemberOutcome.HeldByPlayer:
+                        case MemberOutcome.JoinedPlayer:
+                        case MemberOutcome.Kidnapped:
+                        case MemberOutcome.HeldByOther:
+                            // Phase 3.2A (§ 8.2, § 15.3): vanilla holds the SAME pawn. The episode ends here; the continuing captivity is the
+                            // person's own custody record (OutOfCustody, heldBy, heldSinceTick), watched by the custody watch. The pawn is
+                            // untouched and nothing is normalized, stored, healed or abstractly advanced.
+                            p.held++;
+                            if (d.outcome == MemberOutcome.JoinedPlayer)
+                            {
+                                if (c.status != CharacterStatus.Defected) fates.Add(new FateEntry { character = c, fate = PlannedFate.Defected, publicationKey = EventKeys.CharacterDefected });
+                            }
+                            else if (d.captive && c.status != CharacterStatus.Captured && c.status != CharacterStatus.Defected)
+                            {
+                                fates.Add(new FateEntry
+                                {
+                                    character = c,
+                                    fate = PlannedFate.Captured,
+                                    publicationKey = d.outcome == MemberOutcome.HeldByPlayer ? EventKeys.CharacterCapturedByPlayer : EventKeys.ContractorCaptured,
+                                    causeKey = d.holder.ToString()
+                                });
+                            }
+                            CommitOp heldOp = p.Add(CommitOpKind.CharacterHeld);
+                            heldOp.character = c;
+                            heldOp.held = d.holder == HeldKind.None ? HeldKind.Unknown : d.holder;
                             break;
                     }
                 }
@@ -217,13 +281,17 @@ namespace TheNetwork.Domain.Physical
                 anonHealthyBack.TryGetValue(t, out back);
                 return (org == null ? 0 : FateRules.PeekHealthy(org, t)) + back;
             };
-            PlanFates(ctx, p, fates, anonKilled, anonWounded, 0, anonLost, e.cause.contract, e.cause.operation, eligible, healthyOf, true);
+            PlanFates(ctx, p, fates, anonKilled, anonWounded, 0, anonLost, e.cause.contract, e.cause.operation, eligible, healthyOf, true, !custody);
 
             // The returned Solo's hidden anchor, written once (§ 12.2). An organization's main body never moved, so it is left alone.
             if (soloReturn != null && p.sim != null && p.sim.spatial.IsInitialized)
             {
                 TileRef tile = soloReturn.observation?.tile;
                 if (tile == null || tile.tileId < 0) tile = e.whereTile;
+                // A Custody return (Phase 3.2A): a world pawn has no tile, and no location is fabricated. The person's last recorded anchor is
+                // kept; the write only ends any journey frozen since before the episode and restarts the spatial clock now, so the captivity
+                // is never simulated afterwards as ordinary travel or downtime.
+                if (custody && (tile == null || tile.tileId < 0)) tile = p.sim.spatial.anchor;
                 if (tile != null && tile.tileId >= 0) p.Add(CommitOpKind.SoloAnchor).tile = tile;
             }
             if (p.operation != null)
@@ -303,7 +371,7 @@ namespace TheNetwork.Domain.Physical
                 return c.IsAlive && c.status != CharacterStatus.Captured && c.status != CharacterStatus.Missing && AuthorityGate.CanSimulateAbstractly(c);
             };
             Func<Tier, int> healthyOf = t => org == null ? 0 : FateRules.PeekHealthy(org, t);
-            PlanFates(ctx, p, fates, CasualtyReport.Sum(r.killed), CasualtyReport.Sum(r.wounded), CasualtyReport.Sum(r.captured), CasualtyReport.Sum(r.missing), contract, op, eligible, healthyOf, false);
+            PlanFates(ctx, p, fates, CasualtyReport.Sum(r.killed), CasualtyReport.Sum(r.wounded), CasualtyReport.Sum(r.captured), CasualtyReport.Sum(r.missing), contract, op, eligible, healthyOf, false, true);
             p.hasReleaseActions = p.actorEndKey != null;
             if (p.sim != null) p.Add(CommitOpKind.SimDirty);
             return p;
@@ -343,8 +411,13 @@ namespace TheNetwork.Domain.Physical
         /// person-level publication), the group's casualty publication and morale shock, the morale descriptor, then the end of a
         /// Solo or the succession of a lost leader (decided here, from the plan's projected fates).
         /// </summary>
+        /// <remarks>
+        /// <paramref name="groupLoss"/> is false only for a Phase 3.2A Custody episode: the person was already counted as the group's loss when
+        /// first captured, so a later death, recruitment or return of that held person writes the person-level fate and publication (and an
+        /// actor end or succession when it follows) but no second casualty report and no second morale shock.
+        /// </remarks>
         private static void PlanFates(DomainContext ctx, ReconciliationPlan p, List<FateEntry> fates, int anonKilled, int anonWounded, int anonCaptured, int anonMissing,
-            ContractId contract, OperationId op, Func<KnownCharacter, bool> eligible, Func<Tier, int> healthyOf, bool physical)
+            ContractId contract, OperationId op, Func<KnownCharacter, bool> eligible, Func<Tier, int> healthyOf, bool physical, bool groupLoss)
         {
             NetworkActor a = p.actor;
             OrganizationProfile org = p.org;
@@ -389,6 +462,21 @@ namespace TheNetwork.Domain.Physical
                     case PlannedFate.Captured:
                         captured++;
                         p.Add(CommitOpKind.CharacterCaptured).character = c;
+                        // Physical only (3.2A): who holds them is a person-level fact the abstract path never states. Never with the contract:
+                        // the contract's own Troubled story already told the player (no second contract letter).
+                        if (f.publicationKey != null)
+                        {
+                            PublicationSpec held = Publications.Character(f.publicationKey, isLeader ? Importance.Major : Importance.Notable, a, c, ContractId.None, op, isLeader);
+                            held.reasonKey = f.causeKey;
+                            p.Add(CommitOpKind.Publication).spec = held;
+                        }
+                        if (isLeader && org != null) leaderLost = true;
+                        break;
+                    case PlannedFate.Defected:
+                        // Recruited by the player (§ 8.2). Counted with the captured for the group's loss (the person is lost to it the same way).
+                        captured++;
+                        p.Add(CommitOpKind.CharacterDefected).character = c;
+                        p.Add(CommitOpKind.Publication).spec = Publications.Character(f.publicationKey ?? EventKeys.CharacterDefected, isLeader ? Importance.Major : Importance.Notable, a, c, ContractId.None, op, isLeader);
                         if (isLeader && org != null) leaderLost = true;
                         break;
                     case PlannedFate.Missing:
@@ -415,7 +503,7 @@ namespace TheNetwork.Domain.Physical
             p.missing = missing;
             p.leaderLost = leaderLost;
 
-            if (killed + wounded + captured + missing > 0)
+            if (groupLoss && killed + wounded + captured + missing > 0)
             {
                 PublicationSpec cas = Publications.Actor(EventKeys.ContractorCasualties, killed > 0 ? Importance.Notable : Importance.Minor, a, contract, op);
                 cas.killed = killed;
@@ -503,7 +591,9 @@ namespace TheNetwork.Domain.Physical
                         if (c == null || c.id != m.character) throw new PlanInvalidException("CharacterMissing", m.character.ToString());
                         if (!people.Add(c.id.Value)) throw new PlanInvalidException("DuplicatePerson", c.id.ToString());
                         if (c.episode != e.id) throw new PlanInvalidException("LinkMismatch", c.id + " → " + c.episode);
-                        if (c.custody != CustodyState.Deployed) throw new PlanInvalidException("CustodyMismatch", c.id + " " + c.custody);
+                        // A mission member is Deployed; the member of a Custody episode (3.2A) is someone vanilla already holds.
+                        CustodyState expected = CustodyRules.IsCustodyEpisode(e) ? CustodyState.OutOfCustody : CustodyState.Deployed;
+                        if (c.custody != expected) throw new PlanInvalidException("CustodyMismatch", c.id + " " + c.custody);
                         if (c.org != p.actor.id && p.actor.bindings.embodies != c.id) throw new PlanInvalidException("NotAMember", c.id.ToString());
                     }
                     else
@@ -552,6 +642,17 @@ namespace TheNetwork.Domain.Physical
                         // A Lost person cannot be a member (planning requires the living); if a record says otherwise, no return
                         // story is written over it (a found-again person is not this task's content).
                         if (op.kind == CommitOpKind.CharacterStored && c.status == CharacterStatus.Lost) throw new PlanInvalidException("LostTarget", op.ToString());
+                        // Phase 3.2A: a recruited person is never stored back (the professional meaning of recruitment is an OPEN owner decision).
+                        if (op.kind == CommitOpKind.CharacterStored && c.status == CharacterStatus.Defected) throw new PlanInvalidException("DefectedTarget", op.ToString());
+                        break;
+                    case CommitOpKind.CharacterHeld:
+                        // Death is monotonic: a dead person is never "held" (the death path releases them).
+                        if (c.status == CharacterStatus.Dead) throw new PlanInvalidException("DeadTarget", op.ToString());
+                        if (op.held == HeldKind.None) throw new PlanInvalidException("NoHolder", op.ToString());
+                        break;
+                    case CommitOpKind.CharacterDefected:
+                        if (c.status == CharacterStatus.Dead) throw new PlanInvalidException("DeadTarget", op.ToString());
+                        if (!statusTargets.Add(c.id.Value)) throw new PlanInvalidException("DuplicateFate", c.id.ToString());
                         break;
                     case CommitOpKind.CharacterReturnedFree:
                         // A return resolves only Missing or Captured; it is never a way back from Dead or Lost (P3-INV-004).

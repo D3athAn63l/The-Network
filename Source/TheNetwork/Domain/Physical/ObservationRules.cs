@@ -110,7 +110,7 @@ namespace TheNetwork.Domain.Physical
     /// <summary>The plain facts of one living, unspawned, unheld world pawn.</summary>
     public sealed class WorldPawnFacts
     {
-        /// <summary>The Network's registry predicate: a living bound named person whose custody is Deployed or Stored MUST be reserved (M1, ADR-053).</summary>
+        /// <summary>The Network's registry predicate: a living bound named person whose custody is Deployed, Stored or (3.2A, ADR-056) OutOfCustody MUST be reserved (M1, ADR-053).</summary>
         public bool retained;
 
         public WorldSituation situation = WorldSituation.None;

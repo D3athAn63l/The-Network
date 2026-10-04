@@ -109,6 +109,18 @@ namespace TheNetwork.Domain.Physical
                 case CommitOpKind.CharacterReturnedFree:
                     FateRules.ReturnedFree(c, now);
                     break;
+                case CommitOpKind.CharacterHeld:
+                    {
+                        // § 8.2: vanilla holds the person. heldSinceTick is when vanilla began holding them; a change of holder keeps it.
+                        bool alreadyHeld = c.custody == CustodyState.OutOfCustody && c.heldSinceTick >= 0;
+                        c.custody = CustodyState.OutOfCustody;
+                        c.heldBy = op.held;
+                        if (!alreadyHeld) c.heldSinceTick = now;
+                        break;
+                    }
+                case CommitOpKind.CharacterDefected:
+                    FateRules.Defected(c, now);
+                    break;
                 case CommitOpKind.CharacterReverted:
                     c.custody = c.pawn != null && c.pawn.IsBound ? CustodyState.Stored : CustodyState.Unmaterialized;
                     break;
@@ -254,6 +266,8 @@ namespace TheNetwork.Domain.Physical
                 case CommitOpKind.CharacterDetached:
                 case CommitOpKind.CharacterUnlink:
                 case CommitOpKind.CharacterReturnedFree:
+                case CommitOpKind.CharacterHeld:
+                case CommitOpKind.CharacterDefected:
                     w.Add(op.character);
                     break;
                 case CommitOpKind.CharacterStored:

@@ -36,6 +36,9 @@ namespace TheNetwork.Domain
         // Phase 3 (PHYSICAL_LIFECYCLE § 15.1): exists only while an episode is incomplete; none in a live 3.0 game.
         public const string EpisodeWatch = Physical.PhysicalLifecycleService.WatchJob;
 
+        // Phase 3.2A (PHYSICAL_LIFECYCLE § 9.4): one singleton job, exists only while vanilla holds at least one Network person.
+        public const string CustodyWatch = Physical.PhysicalLifecycleService.CustodyWatchJob;
+
         public const int SamplePeriod = 2500;
         public const int SweepPeriod = Ticks.PerQuadrum;
     }

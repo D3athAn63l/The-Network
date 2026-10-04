@@ -365,7 +365,7 @@ namespace TheNetwork.Integration.Physical
         public RegistryLoadReport OnReferencesResolved()
         {
             RegistryLoadReport report = Registry.ResolvePointers();
-            string quest = "not needed (no living Deployed or Stored bound person)";
+            string quest = "not needed (no living Deployed, Stored or held bound person)";
             if (report.durableRetained > 0)
             {
                 try
@@ -386,7 +386,7 @@ namespace TheNetwork.Integration.Physical
             }
             if (report.covered < report.durableRetained)
             {
-                NetLog.Error(LogCategory.Physical, "RESERVATION GAP: " + report.durableRetained + " living Deployed or Stored bound person(s) must be reserved but only " + report.covered
+                NetLog.Error(LogCategory.Physical, "RESERVATION GAP: " + report.durableRetained + " living Deployed, Stored or held bound person(s) must be reserved but only " + report.covered
                     + " are covered; the rest have an unresolved, discarded or mismatching binding (see the integrity findings above).");
             }
             return report;

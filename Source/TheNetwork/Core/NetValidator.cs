@@ -96,7 +96,7 @@ namespace TheNetwork.Core
         /// <summary>
         /// Phase 3.1 runtime-QA correction: the bounded integrity audit of every LIVING bound person (bounded by the bound people, no world
         /// scan). A binding whose pointer is unresolved after the load's cross-references, resolves to a Discarded pawn, or disagrees with its
-        /// persisted thing id fails validation loudly; a Deployed or Stored person the registry does not cover is a reservation gap. It
+        /// persisted thing id fails validation loudly; a Deployed, Stored or held person the registry does not cover is a reservation gap. It
         /// NEVER regenerates a pawn, clears a binding, repairs the registry or marks anyone healthy: the lifecycle handles an open episode's
         /// positive Gone evidence on its own watch, and with no episode this finding is the whole response.
         /// </summary>
@@ -110,7 +110,7 @@ namespace TheNetwork.Core
             {
                 int durable = registry.DurableRetainedCount();
                 int covered = registry.RetainedCount();
-                if (covered < durable) report.Add("PHYSICAL INTEGRITY: reservation gap: " + durable + " living Deployed or Stored bound person(s) must be reserved, " + covered + " are covered.", false);
+                if (covered < durable) report.Add("PHYSICAL INTEGRITY: reservation gap: " + durable + " living Deployed, Stored or held bound person(s) must be reserved, " + covered + " are covered.", false);
             }
         }
 
@@ -329,6 +329,13 @@ namespace TheNetwork.Core
             List<string> upkeepJobs = new List<string>();
             rt.Ctx.Upkeep.EnsureUpkeepJobs(upkeepJobs);
             for (int i = 0; i < upkeepJobs.Count; i++) report.Add(upkeepJobs[i], true);
+            // Phase 3.2A: the custody watch exists while vanilla holds anyone (a derived job; the people's custody is never touched here).
+            if (rt.Ctx.Lifecycle != null && !sch.Has(JobKinds.CustodyWatch, Domain.Physical.PhysicalLifecycleService.CustodyWatchTarget))
+            {
+                rt.Ctx.Lifecycle.RebuildHeldIndex();
+                rt.Ctx.Lifecycle.EnsureCustodyWatch();
+                if (sch.Has(JobKinds.CustodyWatch, Domain.Physical.PhysicalLifecycleService.CustodyWatchTarget)) report.Add("Custody watch missing while " + rt.Ctx.Lifecycle.HeldCount + " person(s) are held by vanilla; recreated.", true);
+            }
             // Jobs whose target is gone.
             List<ScheduledJob> orphans = new List<ScheduledJob>();
             foreach (ScheduledJob j in sch.AllJobs)

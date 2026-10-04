@@ -95,6 +95,22 @@ namespace TheNetwork.Domain.Physical
                 if (bound && c.custody == CustodyState.Unmaterialized) findings.Add(c.id + " has a pawn binding but custody Unmaterialized.");
                 if (bound && c.status == CharacterStatus.Dead && c.custody != CustodyState.Released && !c.episode.IsValid) findings.Add(c.id + " is dead with a binding but custody " + c.custody + ".");
                 if (c.custody == CustodyState.OutOfCustody && c.heldBy == HeldKind.None) findings.Add(c.id + " is OutOfCustody with no holder recorded.");
+                // Phase 3.2A: impossible custody combinations (reported; the gate keeps the people blocked, nothing is repaired).
+                if (c.custody == CustodyState.OutOfCustody && !bound) findings.Add(c.id + " is held by vanilla (OutOfCustody) with no pawn binding: no holder can be observed.");
+                if (c.custody == CustodyState.OutOfCustody && c.heldSinceTick < 0) findings.Add(c.id + " is held by vanilla with no heldSinceTick.");
+                if ((c.custody == CustodyState.Stored || c.custody == CustodyState.Unmaterialized || c.custody == CustodyState.Deployed) && c.heldBy != HeldKind.None)
+                {
+                    findings.Add(c.id + " is " + c.custody + " but still records a vanilla holder (" + c.heldBy + ").");
+                }
+                if (c.custody == CustodyState.Stored && c.status == CharacterStatus.Defected) findings.Add(c.id + " is Defected (recruited by the player) yet Stored: a recruited person is never stored back.");
+            }
+
+            for (int i = 0; i < store.episodes.Count; i++)
+            {
+                PhysicalEpisode e = store.episodes[i];
+                if (e == null || !CustodyRules.IsCustodyEpisode(e)) continue;
+                if (e.members.Count != 1 || !e.members[0].IsNamed) findings.Add("Custody episode " + e.id + " must hold exactly one named person (" + e.members.Count + ").");
+                if (e.cause.operation.IsValid || e.faction != null && e.faction.IsValid) findings.Add("Custody episode " + e.id + " carries an operation or an encounter faction.");
             }
 
             if (ctx.operations != null)

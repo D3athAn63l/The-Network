@@ -44,6 +44,7 @@ namespace TheNetwork.Diagnostics
             b.AppendLine();
             b.AppendLine("INCOMPLETE EPISODES: " + incomplete.Count);
             for (int i = 0; i < incomplete.Count; i++) Episode(b, rt, incomplete[i]);
+            if (ctx.Lifecycle != null) Held(b, rt);
             List<PhysicalEpisode> closed = new List<PhysicalEpisode>();
             foreach (PhysicalEpisode e in ctx.episodes.episodes) if (e.IsComplete) closed.Add(e);
             closed.Sort((x, y) => y.id.Value.CompareTo(x.id.Value));
@@ -81,6 +82,24 @@ namespace TheNetwork.Diagnostics
                 }
                 b.AppendLine();
                 b.AppendLine("        pawn: " + (rt.PhysicalWorld != null ? rt.PhysicalWorld.DescribeBinding(m.pawn).ToString() : m.pawn == null ? "unbound" : "#" + m.pawn.thingIdNumber));
+            }
+        }
+
+        /// <summary>Phase 3.2A: the people vanilla holds (custody OutOfCustody) and the custody watch that observes them.</summary>
+        private static void Held(StringBuilder b, NetworkRuntime rt)
+        {
+            DomainContext ctx = rt.Ctx;
+            List<int> ids = ctx.Lifecycle.HeldIds();
+            ScheduledJob watch = rt.Scheduler.Find(PhysicalLifecycleService.CustodyWatchJob, PhysicalLifecycleService.CustodyWatchTarget);
+            b.AppendLine();
+            b.AppendLine("HELD BY VANILLA: " + ids.Count + "  ·  custody watch: " + (watch == null ? "none" : "due @" + watch.dueTick + " (in " + (watch.dueTick - ctx.Now) + " ticks)"));
+            for (int i = 0; i < ids.Count; i++)
+            {
+                KnownCharacter c = ctx.characters?.Get(new CharacterId(ids[i]));
+                if (c == null) continue;
+                b.AppendLine("    • " + c.name?.Display + " (" + c.id + ")  ·  held by " + c.heldBy + " since " + c.heldSinceTick + " (" + (ctx.Now - c.heldSinceTick) + " ticks)  ·  status " + c.status
+                    + ", authority " + AuthorityGate.AuthorityOf(c) + (c.episode.IsValid ? ", episode link " + c.episode + " (release pending)" : ""));
+                b.AppendLine("        pawn: " + (rt.PhysicalWorld != null ? rt.PhysicalWorld.DescribeBinding(c.pawn).ToString() : c.pawn == null ? "unbound" : "#" + c.pawn.thingIdNumber));
             }
         }
 

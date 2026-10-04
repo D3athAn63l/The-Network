@@ -72,6 +72,18 @@ namespace TheNetwork.Domain.Physical
         /// <summary>A retained named person observed as an actual Free world pawn (M1 failed): the episode was quarantined, never Returned.</summary>
         public int reservationBroken;
 
+        /// <summary>Phase 3.2A: named members whose committed outcome was a vanilla holding (the episode closed; the person stays held).</summary>
+        public int heldOutcomes;
+
+        /// <summary>Phase 3.2A: custody-watch runs, held people observed by it, and what came of it.</summary>
+        public int custodyWatchRuns;
+        public int custodyObserved;
+        public int custodyHolderChanges;
+        public int custodyEpisodes;
+        public int custodyBlind;
+        public int custodyWakeups;
+        public int custodyBrokenReservations;
+
         public override string ToString()
         {
             return "planned " + planned + " (refused " + refusedPlans + "), created " + created + ", rematerialized " + rematerialized + ", placed " + placed
@@ -81,7 +93,9 @@ namespace TheNetwork.Domain.Physical
                 + ", commits " + commits + " (failed " + commitFailures + ", invalid " + invalidPlans + "), quarantined " + quarantined
                 + ", release actions " + releaseActions + " (passed " + passedToWorld + ", already world " + passSkippedAlreadyWorld + ", refused " + passRefused + ")"
                 + ", releases " + releasesCompleted + ", follow-ups " + followUps + ", published " + published + ", stage failures " + stageFailures
-                + ", completed " + completed + ", settled " + settled + ", signal wake-ups " + signalWakeups;
+                + ", completed " + completed + ", settled " + settled + ", signal wake-ups " + signalWakeups
+                + "; held outcomes " + heldOutcomes + ", custody watch runs " + custodyWatchRuns + " (observed " + custodyObserved + ", holder changes " + custodyHolderChanges
+                + ", custody episodes " + custodyEpisodes + ", blind " + custodyBlind + ", wake-ups " + custodyWakeups + ", broken reservations " + custodyBrokenReservations + ")";
         }
     }
 
@@ -101,6 +115,17 @@ namespace TheNetwork.Domain.Physical
     public sealed class PhysicalLifecycleService
     {
         public const string WatchJob = "episode.watch";
+
+        /// <summary>
+        /// Phase 3.2A (§ 9.4): THE custody watch. One persisted, singleton job (target 0) that exists only while at least one person is held by
+        /// vanilla (custody OutOfCustody); every <see cref="CustodyWatchPeriod"/> ticks it observes those people only, through a derived index.
+        /// </summary>
+        public const string CustodyWatchJob = "custody.watch";
+
+        public const int CustodyWatchPeriod = 2500;
+
+        /// <summary>The custody watch's singleton target (it watches the held people as a set, never one job per person).</summary>
+        public const int CustodyWatchTarget = 0;
 
         /// <summary>The Open-episode watch (§ 15.1, § 18.2): one job per incomplete episode, every 250 ticks.</summary>
         public const int WatchPeriod = 250;
@@ -602,6 +627,7 @@ namespace TheNetwork.Domain.Physical
             string unsupported = null;
             string broken = null;
             string failClosed = null;
+            bool custody = CustodyRules.IsCustodyEpisode(e);
             try
             {
                 for (int i = 0; i < e.members.Count; i++)
@@ -634,10 +660,25 @@ namespace TheNetwork.Domain.Physical
                     {
                         // 1 OBSERVE (read-only) · 2 DECIDE (positive evidence only)
                         PhysicalObservation o = Port.Observe(m.pawn, e.id);
-                        bool unsup;
                         d.observation = o;
-                        d.outcome = ReconciliationPlanner.Decide(o, out unsup);
-                        if (unsup && unsupported == null) unsupported = o.kind + " " + m;
+                        if (custody)
+                        {
+                            // A Custody episode (3.2A) always closes at its first successful commit, with the person's custody truth as observed now.
+                            CustodyDecision cd = CustodyRules.EpisodeDecision(d.character != null ? d.character.status : CharacterStatus.Active, d.character != null ? d.character.heldBy : HeldKind.None, o);
+                            d.outcome = cd.outcome;
+                            d.holder = cd.holder;
+                            d.captive = cd.captive;
+                        }
+                        else
+                        {
+                            bool unsup;
+                            HeldKind heldBy;
+                            bool captive;
+                            d.outcome = ReconciliationPlanner.Decide(o, m.IsNamed, out unsup, out heldBy, out captive);
+                            d.holder = heldBy;
+                            d.captive = captive;
+                            if (unsup && unsupported == null) unsupported = o.kind + " " + m;
+                        }
                         if (o.kind == ObservedKind.ReservationBroken && broken == null)
                         {
                             broken = o.kind + " " + m;
@@ -670,7 +711,8 @@ namespace TheNetwork.Domain.Physical
             }
             if (unsupported != null)
             {
-                // § 17: no faked capture support. The pawn is untouched and the person stays blocked.
+                // § 17: no faked capture support. In 3.2A only an ANONYMOUS member that is held lands here (its promotion to a Known Character
+                // is 3.2B). The pawn is untouched and nobody is blocked longer than the observation says.
                 Quarantine(e, "UnsupportedCustody:" + unsupported);
                 return false;
             }
@@ -731,9 +773,13 @@ namespace TheNetwork.Domain.Physical
                 return false;
             }
             counters.commits++;
+            counters.heldOutcomes += plan.held;
             ctx.episodes.RebuildIndex();
-            // Derived runtime state only (never durable truth): a returned Solo's route cache.
+            // Derived runtime state only (never durable truth): a returned Solo's route cache, and the custody watch's index of held people
+            // (a person the commit made OutOfCustody is watched from the moment its episode's RELEASE completes; one it released is dropped).
             if (plan.org == null && plan.actor != null) ctx.Spatial?.ForgetRoute(plan.actor);
+            for (int i = 0; i < plan.touchedCharacters.Count; i++) NoteCustody(plan.touchedCharacters[i]);
+            EnsureCustodyWatch();
             StateVersion.Bump();
             return true;
         }
@@ -1063,7 +1109,205 @@ namespace TheNetwork.Domain.Physical
             ctx.episodes.RebuildIndex();
             List<PhysicalEpisode> open = ctx.episodes.Incomplete();
             for (int i = 0; i < open.Count; i++) EnsureWatch(open[i], ctx.Now + 1);
+            // Phase 3.2A: the held people are re-indexed from durable custody (one bounded pass at load) and watched; the persisted job
+            // normally already exists, and is recreated if it does not. Nothing is observed or decided here.
+            RebuildHeldIndex();
+            EnsureCustodyWatch();
             return open.Count;
+        }
+
+        // ================================================================== custody watch (Phase 3.2A, § 9.4)
+
+        /// <summary>Derived runtime index: the ids of the people whose durable custody is OutOfCustody. Never persisted; rebuilt at load.</summary>
+        private readonly HashSet<int> held = new HashSet<int>();
+
+        private bool heldIndexBuilt;
+
+        /// <summary>Held by vanilla (custody OutOfCustody). The person may still be linked to the episode whose RELEASE is pending.</summary>
+        public static bool IsHeld(KnownCharacter c)
+        {
+            return c != null && c.custody == CustodyState.OutOfCustody;
+        }
+
+        /// <summary>How many people vanilla holds (the custody watch exists iff this is above zero).</summary>
+        public int HeldCount
+        {
+            get
+            {
+                if (!heldIndexBuilt) RebuildHeldIndex();
+                return held.Count;
+            }
+        }
+
+        /// <summary>The held people's ids, ascending (a copy; deterministic order).</summary>
+        public List<int> HeldIds()
+        {
+            if (!heldIndexBuilt) RebuildHeldIndex();
+            List<int> ids = new List<int>(held);
+            ids.Sort();
+            return ids;
+        }
+
+        /// <summary>One bounded pass over the characters store (at load, and lazily once per runtime): never a pawn, map or world scan.</summary>
+        public int RebuildHeldIndex()
+        {
+            held.Clear();
+            heldIndexBuilt = true;
+            List<KnownCharacter> all = ctx.characters?.characters;
+            if (all == null) return 0;
+            for (int i = 0; i < all.Count; i++) if (IsHeld(all[i])) held.Add(all[i].id.Value);
+            return held.Count;
+        }
+
+        /// <summary>Keeps the derived index in step with one person's durable custody (after a commit or a holder change). O(1).</summary>
+        public void NoteCustody(KnownCharacter c)
+        {
+            if (c == null) return;
+            if (!heldIndexBuilt) RebuildHeldIndex();
+            if (IsHeld(c)) held.Add(c.id.Value);
+            else held.Remove(c.id.Value);
+        }
+
+        /// <summary>
+        /// Makes sure the custody watch exists while anyone is held (no later than <paramref name="due"/> when one is given). Never duplicates (a
+        /// singleton job); never creates it when nobody is held, so a world in which vanilla holds nobody pays nothing (§ 18.1).
+        /// </summary>
+        public void EnsureCustodyWatch(int due = -1)
+        {
+            if (ctx.scheduler == null || !ctx.scheduler.IsKnownKind(CustodyWatchJob) || HeldCount == 0) return;
+            ScheduledJob existing = ctx.scheduler.Find(CustodyWatchJob, CustodyWatchTarget);
+            if (existing != null && (due < 0 || existing.dueTick <= due)) return;
+            ctx.scheduler.Schedule(CustodyWatchJob, due >= 0 ? due : ctx.Now + CustodyWatchPeriod, CustodyWatchTarget);
+        }
+
+        /// <summary>
+        /// A signal wake-up for a held person (§ 14.3): the custody watch is pulled forward to the next tick. It decides nothing, reads no final
+        /// state and mutates nothing but the watch's due tick; the watch then observes. A dropped signal only delays the result.
+        /// </summary>
+        public void WakeHeld(KnownCharacter c, string why)
+        {
+            if (!IsHeld(c)) return;
+            counters.custodyWakeups++;
+            NoteCustody(c);
+            EnsureCustodyWatch(ctx.Now + 1);
+        }
+
+        /// <summary>
+        /// custody.watch: observes every held person who is not owned by an incomplete episode (their own episode's RELEASE comes first), and
+        /// reschedules itself only while somebody is still held. Bounded by the held people; never a scan of pawns, maps or world pawns.
+        /// </summary>
+        public void CustodyWatchRun(ScheduledJob job)
+        {
+            counters.custodyWatchRuns++;
+            List<int> ids = HeldIds();
+            for (int i = 0; i < ids.Count; i++)
+            {
+                KnownCharacter c = ctx.characters?.Get(new CharacterId(ids[i]));
+                if (!IsHeld(c))
+                {
+                    held.Remove(ids[i]);
+                    continue;
+                }
+                if (c.episode.IsValid) continue;
+                try
+                {
+                    ReconcileHeld(c, "watch");
+                }
+                catch (Exception ex)
+                {
+                    NetLog.WarnOnce(LogCategory.Physical, "custody." + c.id.Value + ".fail", "Custody watch: observing " + c.id + " failed (" + ex.Message + "); the person stays held and is observed again later.");
+                }
+            }
+            if (HeldCount > 0) ctx.scheduler.Schedule(CustodyWatchJob, ctx.Now + CustodyWatchPeriod, CustodyWatchTarget);
+        }
+
+        /// <summary>
+        /// Observes ONE held person and applies the custody decision (<see cref="CustodyRules.Transition"/>), from positive evidence only:
+        /// <list type="bullet">
+        /// <item>nothing new ⇒ nothing changes (an unclassifiable observation keeps the person held);</item>
+        /// <item>a different vanilla holder ⇒ only <c>heldBy</c> is recorded (no authority, status or event change; idempotent by state);</item>
+        /// <item>a return, a death, a loss, a capture or a recruitment ⇒ a Custody episode reconciles it through the SAME exactly-once machinery as
+        /// any episode (atomic commit, RELEASE with the authority gate closed until COMPLETE, the durable outbox).</item>
+        /// </list>
+        /// The pawn is never touched, generated, passed or regenerated. Returns the decision.
+        /// </summary>
+        public CustodyDecision ReconcileHeld(KnownCharacter c, string wake)
+        {
+            CustodyDecision none = new CustodyDecision { kind = CustodyTransitionKind.None };
+            if (!IsHeld(c) || c.episode.IsValid || c.pawn == null || !c.pawn.IsBound) return none;
+            if (!PortAvailable)
+            {
+                counters.custodyBlind++;
+                return none;
+            }
+            if (busy) return none; // a commit or stage is running: the watch observes again later
+            counters.custodyObserved++;
+            PhysicalObservation o = Port.Observe(c.pawn, EpisodeId.None);
+            CustodyDecision d = CustodyRules.Transition(c.status, c.heldBy, o);
+            switch (d.kind)
+            {
+                case CustodyTransitionKind.None:
+                    if (o != null && o.kind == ObservedKind.ReservationBroken)
+                    {
+                        counters.custodyBrokenReservations++;
+                        NetLog.WarnOnce(LogCategory.Physical, "custody.broken." + c.id.Value, "Held person " + c.id + " (" + c.name?.Display + ") is an ordinary Free world pawn: "
+                            + WorldPawnRules.BrokenReservation + ". They stay held; nothing is returned or repaired.");
+                    }
+                    return d;
+                case CustodyTransitionKind.Holder:
+                    // Plain bookkeeping of WHO holds them; the person stays exactly as held as before, so a re-run repeats nothing.
+                    NetLog.Info(LogCategory.Physical, "Held person " + c.id + " (" + c.name?.Display + "): holder " + c.heldBy + " → " + d.holder + " (" + o + ", " + wake + ").");
+                    c.heldBy = d.holder;
+                    counters.custodyHolderChanges++;
+                    StateVersion.Bump();
+                    return d;
+                default:
+                    PhysicalEpisode e;
+                    if (OpenCustodyEpisode(c, out e)) Reconcile(e, "custody " + wake);
+                    return d;
+            }
+        }
+
+        /// <summary>
+        /// Opens the Custody episode of one held person (§ 9.4 "a custody event"): a one-member episode, already Open, whose member is the person's
+        /// bound pawn as vanilla holds it. Guarded like Plan (restored on a throw). The person keeps custody OutOfCustody and gains the membership
+        /// link, so the authority gate stays closed until that episode's RELEASE completes. Nothing is spawned, created or passed.
+        /// </summary>
+        private bool OpenCustodyEpisode(KnownCharacter c, out PhysicalEpisode episode)
+        {
+            episode = null;
+            ActorId owner = c.embodiedBy.IsValid ? c.embodiedBy : c.org;
+            DurableSnapshot snapshot = new DurableSnapshot().Capture(c).Capture(ctx.ids);
+            PhysicalEpisode e = null;
+            try
+            {
+                e = new PhysicalEpisode
+                {
+                    id = new EpisodeId(ctx.ids.NextId()),
+                    actor = owner,
+                    purposeKey = CustodyRules.Purpose,
+                    cause = new EpisodeCause(),
+                    state = EpisodeState.Open,
+                    createdTick = ctx.Now,
+                    openedTick = ctx.Now
+                };
+                e.seed = NetHash.Combine(NetHash.Combine(c.id.Value, "custody"), e.id.Value);
+                e.members.Add(new EpisodeMember { character = c.id, slot = 0, tier = Tier.Regular, seatRole = c.opRole, pawn = c.pawn.Copy(), state = MemberState.Present });
+                c.episode = e.id;
+                ctx.episodes.Add(e);
+            }
+            catch (Exception ex)
+            {
+                snapshot.Restore();
+                if (e != null && ctx.episodes.Get(e.id) != null) ctx.episodes.Remove(e);
+                NetLog.WarnOnce(LogCategory.Physical, "custody.open." + c.id.Value, "Custody episode for " + c.id + " could not be opened (" + ex.Message + "); nothing changed, the person stays held.");
+                return false;
+            }
+            counters.custodyEpisodes++;
+            EnsureWatch(e);
+            StateVersion.Bump();
+            episode = e;
+            return true;
         }
 
         /// <summary>
@@ -1101,11 +1345,24 @@ namespace TheNetwork.Domain.Physical
                             {
                                 PhysicalObservation o = Port.Observe(m.pawn, e.id);
                                 bool unsup;
-                                MemberOutcome terminal = ReconciliationPlanner.Decide(o, out unsup);
+                                HeldKind heldBy;
+                                bool captive;
+                                MemberOutcome terminal;
+                                if (CustodyRules.IsCustodyEpisode(e))
+                                {
+                                    CustodyDecision cd = CustodyRules.EpisodeDecision(d.character != null ? d.character.status : CharacterStatus.Active, d.character != null ? d.character.heldBy : HeldKind.None, o);
+                                    unsup = o.kind == ObservedKind.ReservationBroken;
+                                    terminal = cd.outcome;
+                                    heldBy = cd.holder;
+                                    captive = cd.captive;
+                                }
+                                else terminal = ReconciliationPlanner.Decide(o, m.IsNamed, out unsup, out heldBy, out captive);
                                 if (!unsup && terminal != MemberOutcome.Pending)
                                 {
                                     d.outcome = terminal;
                                     d.observation = o;
+                                    d.holder = heldBy;
+                                    d.captive = captive;
                                     if (terminal == MemberOutcome.Returned) d.woundDays = ReconciliationPlanner.WoundDaysFor(o);
                                 }
                             }
@@ -1172,7 +1429,7 @@ namespace TheNetwork.Domain.Physical
         {
             int n = ctx.episodes?.Count ?? 0;
             return "Physical lifecycle: port " + (Port?.Name ?? "none") + (PortAvailable ? "" : " (unavailable)") + ", episodes " + n
-                + " (incomplete " + (ctx.episodes?.Incomplete().Count ?? 0) + "); " + counters
+                + " (incomplete " + (ctx.episodes?.Incomplete().Count ?? 0) + "), held by vanilla " + HeldCount + "; " + counters
                 + "; gate refusals " + AuthorityGate.refusedWrites + ", dead-status refusals " + FateRules.refusedDeadWrites;
         }
     }

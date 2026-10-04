@@ -36,6 +36,19 @@ namespace TheNetwork.Domain.Physical
         /// </summary>
         public int exitTick = -1;
 
+        /// <summary>
+        /// Phase 3.2A: for a held observation, what vanilla holds the pawn as (player prisoner or slave, colonist, kidnapped, another faction, a
+        /// player caravan, a transport), positively read by the adapter. <see cref="HeldKind.None"/> when the pawn is not held, or when the adapter
+        /// could not tell (the custody rules then fall back to the coarse kind, and an unknown owner stays <see cref="HeldKind.Unknown"/>).
+        /// </summary>
+        public HeldKind holder = HeldKind.None;
+
+        /// <summary>
+        /// Phase 3.2A: the pawn belongs to a PERMANENT faction other than the player's (a captor recruited it, or another system made it a
+        /// member). A Network pawn otherwise has no faction or a temporary encounter faction. Such a world pawn is never a free return.
+        /// </summary>
+        public bool otherAllegiance;
+
         public static PhysicalObservation Of(ObservedKind kind)
         {
             return new PhysicalObservation { kind = kind };
@@ -43,7 +56,8 @@ namespace TheNetwork.Domain.Physical
 
         public override string ToString()
         {
-            return kind + (downed ? " downed" : "") + (health < 1f ? " hp" + health.ToString("0.00") : "") + (exitEvidence ? " exit" : "") + (note != null ? " [" + note + "]" : "");
+            return kind + (holder != HeldKind.None ? " (" + holder + ")" : "") + (otherAllegiance ? " other-allegiance" : "") + (downed ? " downed" : "")
+                + (health < 1f ? " hp" + health.ToString("0.00") : "") + (exitEvidence ? " exit" : "") + (note != null ? " [" + note + "]" : "");
         }
     }
 
