@@ -41,7 +41,7 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Phys.MigrationV4ToV5InventsNothing", MigrationInventsNothing));
             t.Add(new KeyValuePair<string, Action>("Phys.SaveFormatBumpedExactlyOnce", SaveFormatOnce));
             t.Add(new KeyValuePair<string, Action>("Phys.EpisodeKindKeepsValueNine", EpisodeKind));
-            t.Add(new KeyValuePair<string, Action>("Phys.ProductionPortFailsClosed", ProductionFailsClosed));
+            t.Add(new KeyValuePair<string, Action>("Phys.UnavailablePortFailsClosed", ProductionFailsClosed));
             t.Add(new KeyValuePair<string, Action>("Phys.NoProductionPhysicalCreation", NoPhysicalCreation));
             t.Add(new KeyValuePair<string, Action>("Phys.CompactionRefusesPendingStages", Compaction));
             t.Add(new KeyValuePair<string, Action>("Phys.ZeroIdleCost", ZeroIdleCost));
@@ -60,7 +60,7 @@ namespace TheNetwork.Tests
 
         // ================================================================== helpers
 
-        private static PhysicalLifecycleService L(TestNet n) { return n.ctx.Lifecycle; }
+        internal static PhysicalLifecycleService L(TestNet n) { return n.ctx.Lifecycle; }
 
         private static ContractorTemplate Fixed(ContractorForm form, string id)
         {
@@ -72,18 +72,18 @@ namespace TheNetwork.Tests
             };
         }
 
-        private static NetworkActor Make(TestNet n, ContractorForm form, string id)
+        internal static NetworkActor Make(TestNet n, ContractorForm form, string id)
         {
             NetworkActor a = ContractorTests.Make(n, Fixed(form, id));
             n.ctx.Spatial.EnsureInitialized(a);
             return a;
         }
 
-        private static KnownCharacter Self(TestNet n, NetworkActor a) { return n.ctx.characters.Get(a.bindings.embodies); }
+        internal static KnownCharacter Self(TestNet n, NetworkActor a) { return n.ctx.characters.Get(a.bindings.embodies); }
 
         private static KnownCharacter Leader(TestNet n, NetworkActor a) { return n.ctx.characters.Get(a.Get<OrganizationProfile>().leader); }
 
-        private static List<KnownCharacter> Others(TestNet n, NetworkActor a)
+        internal static List<KnownCharacter> Others(TestNet n, NetworkActor a)
         {
             List<KnownCharacter> l = new List<KnownCharacter>();
             OrganizationProfile org = a.Get<OrganizationProfile>();
@@ -95,7 +95,7 @@ namespace TheNetwork.Tests
             return l;
         }
 
-        private static PhysicalEpisode Begin(TestNet n, NetworkActor a, IEnumerable<KnownCharacter> people, int anon = 0, OperationId op = default(OperationId), bool materialize = true)
+        internal static PhysicalEpisode Begin(TestNet n, NetworkActor a, IEnumerable<KnownCharacter> people, int anon = 0, OperationId op = default(OperationId), bool materialize = true)
         {
             EpisodeRequest r = PhysicalRuntimeSuite.Request(a, people, anon);
             r.cause.operation = op;
@@ -116,7 +116,7 @@ namespace TheNetwork.Tests
         }
 
         /// <summary>Saves the TestNet's stores (episodes included) through the real Scribe, loads them back and swaps them in.</summary>
-        private static NetworkState SaveLoad(TestNet n, int version = SaveMigrations.Current)
+        internal static NetworkState SaveLoad(TestNet n, int version = SaveMigrations.Current)
         {
             string path = PersistenceTests.SaveState(StateOf(n), version);
             NetworkState loaded = Load(path);
@@ -163,7 +163,7 @@ namespace TheNetwork.Tests
         }
 
         /// <summary>The production source tree (the runner runs from a temporary folder; the script passes the repository root).</summary>
-        private static string Root
+        internal static string Root
         {
             get
             {
@@ -180,22 +180,22 @@ namespace TheNetwork.Tests
             }
         }
 
-        private static string Src(string relative)
+        internal static string Src(string relative)
         {
             return File.ReadAllText(Path.Combine(Root, relative));
         }
 
-        private static List<string> SourceFiles(string dir)
+        internal static List<string> SourceFiles(string dir)
         {
             return new List<string>(Directory.GetFiles(Path.Combine(Root, dir), "*.cs", SearchOption.AllDirectories));
         }
 
-        private static string[] AllSources()
+        internal static string[] AllSources()
         {
             return Directory.GetFiles(Root, "*.cs", SearchOption.AllDirectories);
         }
 
-        private static string Rel(string f)
+        internal static string Rel(string f)
         {
             return f.Replace('\\', '/').Substring(Root.Replace('\\', '/').Length - "Source/TheNetwork".Length);
         }
@@ -456,9 +456,16 @@ namespace TheNetwork.Tests
             PhysicalEpisode le2 = n2.ctx.episodes.Get(e2.id);
             L(n2).OnLoaded();
             n2.Advance(5);
+            // PR #10 correction (§ 7.3 rule 7): a BOUND pawn that no longer resolves is positive evidence of LOSS. The first correction pass committed this
+            // as NeverPlaced, whose RELEASE then refused to pass a pawn that no longer exists and stranded the Closed episode forever.
             T.Eq(EpisodeState.Closed, le2.state, "no resolvable pointer ⇒ Closed");
-            T.Eq(ReconciliationPlanner.CloseNeverPlaced, le2.closeReasonKey, "NeverPlaced");
-            T.Eq(MemberOutcome.NeverPlaced, le2.members[0].outcome, "the member was never placed");
+            T.Eq(ReconciliationPlanner.CloseReconciled, le2.closeReasonKey, "through the ordinary reconciliation (the bound pawn is observed Gone)");
+            T.Eq(MemberOutcome.Lost, le2.members[0].outcome, "the member is Lost: a bound pawn that is gone is never 'never placed'");
+            KnownCharacter lself = n2.ctx.characters.Get(self.id);
+            T.Eq(CharacterStatus.Lost, lself.status, "the person is Lost (the existing Lost semantics)");
+            T.Eq(CustodyState.Lost, lself.custody, "custody Lost");
+            T.Check(le2.IsComplete, "the episode is complete: no RELEASE waits on a pawn that no longer exists");
+            T.Eq(0, n2.physical.passCalls, "nothing was passed to the world");
             T.Eq(1, n2.physical.creates, "and nothing was generated to replace it");
         }
 
@@ -483,7 +490,7 @@ namespace TheNetwork.Tests
         }
 
         /// <summary>Source text without comments (the purity scan reads code, not prose).</summary>
-        private static string Code(string src)
+        internal static string Code(string src)
         {
             string noBlock = Regex.Replace(src, @"/\*.*?\*/", "", RegexOptions.Singleline);
             return Regex.Replace(noBlock, @"//[^\n]*", "");
@@ -852,7 +859,9 @@ namespace TheNetwork.Tests
             T.Check(!port.Resolves(new PawnRef { thingIdNumber = 5 }), "and resolves nothing");
             T.Eq(PassToWorldCheck.Unknown, port.CheckPassToWorld(null), "and allows no pass");
             T.Throws(() => port.Create(new ProjectionRequest()), "creation is refused");
-            T.Throws(() => port.Place(null, EpisodeId.None, null, -1), "placement is refused");
+            T.Throws(() => port.Place(null, EpisodeId.None, null, -1, null), "placement is refused");
+            T.Throws(() => port.EnsureEncounterFaction(EpisodeId.None, ActorId.None, null, 0), "no encounter faction is made");
+            T.Throws(() => port.ReleaseEncounterFaction(null), "and none is released");
             T.Throws(() => port.PassToWorld(null), "a pass is refused");
             T.Throws(() => port.StripEpisodeTag(null, EpisodeId.None), "a tag strip is refused");
 
@@ -863,12 +872,15 @@ namespace TheNetwork.Tests
             LiveFingerprint before = Print(n);
             PhysicalEpisode e;
             CommandResult r = L(n).Plan(PhysicalRuntimeSuite.Request(a, new[] { c }), out e);
-            T.Check(!r.ok && r.reasonKey == "PhysicalWorldUnavailable", "no episode can be planned in a live 3.0 game");
+            T.Check(!r.ok && r.reasonKey == "PhysicalWorldUnavailable", "no episode can be planned over the fail-closed port");
             Same(before, Print(n), "and nothing changed");
             T.Eq(0, n.ctx.episodes.Count, "no episode exists");
 
+            // Phase 3.1: the live runtime holds the REAL adapter (built from the same context, after a fail-closed default); the soak and
+            // headless contexts keep the fail-closed port. Who may ask the real adapter to create anything is proven by the source scans.
             string runtime = Src("Core/NetworkRuntime.cs");
-            T.Check(runtime.Contains("physicalPort = new Domain.Physical.UnavailablePhysicalWorldPort()"), "the live runtime holds the fail-closed port");
+            T.Check(runtime.Contains("physicalPort = new Domain.Physical.UnavailablePhysicalWorldPort()") && runtime.Contains("Ctx.physicalPort = PhysicalWorld;"),
+                "the live runtime starts fail-closed and then holds the real adapter");
             foreach (string f in AllSources())
             {
                 string rel = Rel(f);
@@ -891,21 +903,35 @@ namespace TheNetwork.Tests
                 foreach (string api in PhysicalApis) T.Check(!Regex.IsMatch(code, @"\b" + Regex.Escape(api) + @"\b"), Path.GetFileName(f) + " calls no " + api);
                 T.Check(!code.Contains("Find."), Path.GetFileName(f) + " reads no live game state (Find.)");
             }
-            // Nothing anywhere ages a pawn by rewriting its birth tick (P3-INV-022).
-            foreach (string f in AllSources()) T.Check(!Code(File.ReadAllText(f)).Contains("BirthAbsTicks"), "no BirthAbsTicks write (" + Path.GetFileName(f) + ")");
-            // The only Pawn-typed field in the assembly is the binding's own pointer, and no code assigns it.
-            foreach (Type t in typeof(PawnRef).Assembly.GetTypes())
-            {
-                foreach (System.Reflection.FieldInfo fi in t.GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
-                {
-                    if (fi.FieldType == typeof(Pawn)) T.Check(t == typeof(PawnRef) && fi.Name == "pawn", "a Pawn field only as PawnRef.pawn (" + t.Name + "." + fi.Name + ")");
-                }
-            }
+            // Nothing anywhere ages a pawn by rewriting its birth tick (P3-INV-022): no write, no access to the backing field, and the
+            // property is READ only by the physical test tier, as evidence that it never changed.
+            Regex birthWrite = new Regex(@"BirthAbsTicks\s*(=(?!=)|\+=|-=|\+\+|--)|birthAbsTicksInt");
             foreach (string f in AllSources())
             {
                 string code = Code(File.ReadAllText(f));
-                T.Check(!Regex.IsMatch(code, @"\.pawn\s*=\s*(?!null)[^=;]*\bPawn\b") && !Regex.IsMatch(code, @"new\s+PawnRef\s*\{\s*pawn\s*=(?!\s*pawn\b)"), "no production code binds a real pawn (" + Path.GetFileName(f) + ")");
+                T.Check(!birthWrite.IsMatch(code), "no BirthAbsTicks write (" + Path.GetFileName(f) + ")");
+                if (!f.Replace('\\', '/').Contains("/Diagnostics/RuntimePhysicalTests/")) T.Check(!code.Contains("BirthAbsTicks"), "BirthAbsTicks is read only as test evidence (" + Path.GetFileName(f) + ")");
             }
+            // Pawn-typed state exists only in the binding's own pointer, the production adapter and the physical test tier (Phase 3.1).
+            foreach (Type t in typeof(PawnRef).Assembly.GetTypes())
+            {
+                bool physical = t.Namespace == "TheNetwork.Integration.Physical" || t.Namespace == "TheNetwork.Diagnostics.RuntimePhysicalTests";
+                foreach (System.Reflection.FieldInfo fi in t.GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
+                {
+                    if (fi.FieldType == typeof(Pawn)) T.Check((t == typeof(PawnRef) && fi.Name == "pawn") || physical, "a Pawn field only as PawnRef.pawn or in the physical adapter (" + t.FullName + "." + fi.Name + ")");
+                }
+            }
+            // A real pawn pointer enters a binding in exactly ONE place: the adapter's Create, after the authoritative role verdict (the
+            // lifecycle then writes the binding, once, before the pawn is spawned).
+            List<string> binders = new List<string>();
+            foreach (string f in AllSources())
+            {
+                string code = Code(File.ReadAllText(f));
+                bool binds = Regex.IsMatch(code, @"\.pawn\s*=\s*(?!null)[^=;]*\bPawn\b") || Regex.IsMatch(code, @"new\s+PawnRef\s*\{\s*pawn\s*=(?!\s*pawn\b)");
+                if (binds) binders.Add(Rel(f));
+            }
+            T.Eq(1, binders.Count, "exactly one source binds a real pawn (" + string.Join(", ", binders.ToArray()) + ")");
+            T.Check(binders.Count == 1 && binders[0].EndsWith("Integration/Physical/RimWorldPhysicalWorldPort.cs", StringComparison.Ordinal), "and it is the production adapter's Create");
         }
 
         private static void Compaction()
@@ -988,19 +1014,25 @@ namespace TheNetwork.Tests
                 TestNet n = new TestNet(9400 + i);
                 NetworkActor a = Make(n, ContractorForm.Solo, "pass-" + s);
                 KnownCharacter c = Self(n, a);
+                // PR #10 correction (§ 7.3 rule 7): the placement legitimately fails and the pawn is positively observed alive, unspawned and held by
+                // nobody, so NeverPlaced is correct. (A pawn already spawned, held, dead or gone when the placement fails is NOT NeverPlaced any
+                // more: Phys31Fix.Fix2_*.) What this test is about is RELEASE's own precondition: the pawn's state changes BETWEEN that
+                // classification and RELEASE, at the commit boundary, so RELEASE meets a § 7.5 precondition that no longer holds.
+                FakePhysicalWorldPort.Token tok = null;
                 n.physical.failPlace = true;
-                n.physical.onPlaceFailed = t =>
+                L(n).commitBoundary = where =>
                 {
-                    if (s == "Spawned") t.spawned = true;
-                    else if (s == "Held") t.held = true;
-                    else if (s == "Dead") t.dead = true;
-                    else t.gone = true;
+                    if (where != "before") return;
+                    tok = n.physical.TokenOf(c.pawn);
+                    if (s == "Spawned") tok.spawned = true;
+                    else if (s == "Held") tok.held = true;
+                    else if (s == "Dead") tok.dead = true;
+                    else tok.gone = true;
                 };
                 PhysicalEpisode e = Begin(n, a, new[] { c });
                 n.physical.failPlace = false;
-                n.physical.onPlaceFailed = null;
+                L(n).commitBoundary = null;
                 EpisodeMember m = e.members[0];
-                FakePhysicalWorldPort.Token tok = n.physical.TokenOf(c.pawn);
                 T.Check(e.state == EpisodeState.Closed && e.consequencesApplied && m.outcome == MemberOutcome.NeverPlaced, s + ": committed as NeverPlaced");
                 T.Eq((byte)0, m.releaseStep, s + ": the cursor does not advance past PassToWorldIfAllowed");
                 T.Check(!e.releaseApplied, s + ": releaseApplied stays false");

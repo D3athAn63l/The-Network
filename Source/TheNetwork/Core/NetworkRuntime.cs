@@ -51,6 +51,12 @@ namespace TheNetwork.Core
         public readonly ContractReadModels ContractsRead;
         public readonly WorldFactsAdapter WorldFacts;
 
+        /// <summary>
+        /// The real physical adapter (Phase 3.1). It owns the retained-pawn registry, rebuilt here (FinalizeInit) before the first tick. Only
+        /// the session-armed physical test tier asks it to create or place anything.
+        /// </summary>
+        public readonly Integration.Physical.RimWorldPhysicalWorldPort PhysicalWorld;
+
         /// <summary>This session's start-up state (runtime only).</summary>
         public readonly SessionGate Session = new SessionGate();
 
@@ -101,7 +107,7 @@ namespace TheNetwork.Core
                 operations = State.operations,
                 consequences = State.consequences,
                 episodes = State.deployments,
-                // Phase 3.0 ships no physical adapter: the fail-closed port refuses every physical action.
+                // Fail-closed until the real adapter below is built from the same context.
                 physicalPort = new Domain.Physical.UnavailablePhysicalWorldPort(),
                 catalog = new LazyCatalog(),
                 comms = new CommsAccessAdapter(),
@@ -125,6 +131,9 @@ namespace TheNetwork.Core
             Ctx.FieldLog = new Domain.Contracts.FieldLogService(Ctx);
             Ctx.Career = new Domain.Contractors.CareerService(Ctx);
             Ctx.Lifecycle = new Domain.Physical.PhysicalLifecycleService(Ctx);
+            // Phase 3.1: the real adapter (its registry index is rebuilt from the characters store right now, before any tick).
+            PhysicalWorld = new Integration.Physical.RimWorldPhysicalWorldPort(Ctx);
+            Ctx.physicalPort = PhysicalWorld;
             RegisterContractKinds();
             Ctx.tuning.targetProvider = () => NetworkMod.Settings?.targetContractorCount ?? 100;
 

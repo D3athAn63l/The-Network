@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    PHYSICAL TEST TIER (Dev Mode only, session-armed; docs/PHYSICAL_LIFECYCLE.md § 21.2): the world object of the suite's own dedicated
+    test map. A plain MapParent with no comps, not a player home and no incident targets, so vanilla neither removes its map, nor times it
+    out, nor sends raids while a test observes its pawns. Nothing creates it except the armed physical tests ("RT-PHYX-..." in Dev Mode →
+    "The Network (PHYSICAL TESTS: disposable environment only)"); "PHYX — Cleanup" removes it. The suite re-checks at runtime that this def
+    is still exactly this narrow before using it.
+  -->
+  <WorldObjectDef ParentName="StaticWorldObjectBase">
+    <defName>TheNetwork_PhysicalTestSite</defName>
+    <label>Network physical test site (dev)</label>
+    <description>A dev-only test map created by The Network's physical test tier. It is not part of normal play.</description>
+    <worldObjectClass>MapParent</worldObjectClass>
+    <texture>World/WorldObjects/Ambush</texture>
+    <expandingIcon>true</expandingIcon>
+    <expandingIconTexture>World/WorldObjects/Expanding/Ambush</expandingIconTexture>
+    <expandingIconPriority>80</expandingIconPriority>
+    <expandMore>true</expandMore>
+  </WorldObjectDef>
+
+</Defs>

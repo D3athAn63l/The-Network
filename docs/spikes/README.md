@@ -12,8 +12,10 @@ question, the build, the environment, the steps, the result, the logs, the verdi
 | **NOT RUN — OWNER RUNTIME VALIDATION REQUIRED** | Needs the RimWorld player (maps, sites, caravans, UI, letters). It was **not** run. The owner steps below are reproducible. |
 | **FAIL** | Run and did not meet the criteria. |
 
-**No spike in this folder is marked PASS.** The environment that built Phases 1 and 2 cannot launch RimWorld, and
-compiling, static inspection or headless tests are not runtime passes.
+**Only one spike file in this folder is marked PASS: [S31](S31-retained-pawn-exit-reservation.md).** The environment that built Phases 1 and 2 cannot launch RimWorld, and
+compiling, static inspection or headless tests are not runtime passes. The single recorded owner-runtime spike PASS is **S31** (Phase 3,
+the retained-pawn exit reservation): its record is [S31-retained-pawn-exit-reservation.md](S31-retained-pawn-exit-reservation.md) (the original spike record from PR #9, whose branch was
+deliberately never merged, carried here with its verdict and results updated), and the result is also recorded by [ADR-053](../DECISIONS.md#adr-053--retained-pawn-exit-reservation-uses-m1). The spike's harness code is not in this repository.
 
 **What the owner has run since, and what it is not.** The owner has since run real-game observations that are
 recorded elsewhere and are deliberately **not** counted as spike passes here: the Phase 2 / 2.75 legacy
@@ -62,11 +64,12 @@ complete S20: its spatial scenarios run in a sandbox over a synthetic world grap
 | [S19](S19-loot-without-extermination.md) loot without extermination | NOT RUN — OWNER RUNTIME VALIDATION REQUIRED |
 | [S13](S13-drop-pod-delivery.md) drop-pod delivery (Phase 2) | PARTIAL — normal home delivery PASSED in the owner's runtime test; edge cases NOT RUN |
 | [S20](S20-abstract-spatial-routing.md) abstract spatial routing, charter transport and Last Known Location placement (Phase 2.5) | NOT RUN — OWNER RUNTIME VALIDATION REQUIRED |
+| **S31** retained pawn exit reservation / the Free-world-pawn window (Phase 3; mandatory gate on 3.1) | [**PASS — OWNER RUNTIME VALIDATED; M1 ACCEPTED**](S31-retained-pawn-exit-reservation.md) ([ADR-053](../DECISIONS.md#adr-053--retained-pawn-exit-reservation-uses-m1)). Validated the *mechanism* only; the separate Phase 3.1 physical suite (`RT-PHYX-*`) has since been **owner runtime validated** too ([RUNTIME_TESTING § 17.5](../RUNTIME_TESTING.md#175-final-phase-31-owner-runtime-evidence)) |
 
 ## Phase 3 spikes (planned; no records yet)
 
 The Phase 3 design review revised the Phase 0 spike list and added four; the **amendment pass** extended S12 and S22 and added
-S25 to S30. They are **defined, not run**, and have no record files yet; each gets one when its subphase starts. The questions, narrowest experiments and pass criteria are in
+S25 to S30. Apart from **S31** (below), they are **defined, not run**, and have no record files yet; each gets one when its subphase starts. The questions, narrowest experiments and pass criteria are in
 [PHYSICAL_LIFECYCLE § 25](../PHYSICAL_LIFECYCLE.md#25-open-questions-and-spikes): **S9r** registry reservation (revises S9),
 S10 temporary faction, S11 site-part pawn holder, **S12** store-time normalization **and truthful aging catch-up**, S14 visit
 Lord, S17 tag hygiene, **S21** observation completeness, **S22** the physical-tier guard (a session-only arm and a dedicated test
@@ -76,5 +79,19 @@ role-constrained creation, **S26** team cohesion, **S27** encounter evidence, an
 **micro-correction** added **S31**, *retained pawn exit reservation / the Free-world-pawn window*: the smallest safe 1.6
 mechanism that keeps a retained named pawn from being redressed, discarded or reused between a **vanilla** map exit and
 `Stored` authority (reserve while spawned, else a synchronous vanilla callback, else a narrow Harmony contingency, in that
-order; [PHYSICAL_LIFECYCLE § 7.6](../PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31)). **S31 is
-mandatory and blocks Phase 3.1** (3.0 does not need it); it is **NOT RUN**.
+order; [PHYSICAL_LIFECYCLE § 7.6](../PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-resolved-by-m1-spike-s31-owner-validated)). **S31 is
+mandatory and blocked Phase 3.1** (3.0 did not need it). **Result: the owner ran S31 on a real 1.6 game and it PASSED with M1, the
+first option (reserve a retained named pawn while it is spawned), which is accepted ([ADR-053](../DECISIONS.md#adr-053--retained-pawn-exit-reservation-uses-m1)).** The
+cases passed were: a normal vanilla exit; a retained pawn covered while spawned; no Free-world-pawn window observed; no faction rewrite;
+no Network double `PassToWorld`; same-pawn rematerialization; the injured-return path; several retained named pawns; populated
+world-pawn / redress pressure; save and load; map removal with no `LeftMap`. Neither a synchronous-callback mechanism (M2) nor a
+Harmony patch (C-4) is needed.
+
+**Phase 3.1 (Controlled Physical Episode: implemented and owner runtime validated, PASS; Phase 3.1 scope only).** The 3.1 slice builds the production side of S9r (registry quest and
+derived reservation), S10 (temporary encounter faction), S12 (store-time normalization and truthful aging catch-up), S14 (visit Lord),
+S21 (observation), S22 (the session-armed physical tier and its own test map), S23 (name pins, modded races by capability), S24 (the
+owner-assisted save/load points) and S25 (role-constrained creation), and the physical tier scenarios that exercise them
+(`RT-PHYX-001…012`, `015`, `016`; [RUNTIME_TESTING § 17](../RUNTIME_TESTING.md#17-the-physical-tier-phase-31)). **None of these spikes is recorded here as a separate spike pass**: no spike record file exists for them, and the owner's
+evidence is the physical suite's, in [RUNTIME_TESTING § 17.5](../RUNTIME_TESTING.md#175-final-phase-31-owner-runtime-evidence). S31 is different: it was a dedicated spike the owner had already run before 3.1 was
+implemented (PASS, above), so the two statuses stay separate: **S31 / M1: owner-runtime PASS, accepted. Phase 3.1 physical
+runtime suite: owner-runtime PASS** (evidence accumulated across the S31 spike, the initial run, the corrected reduced rerun and an isolated `010B` follow-up; it is not one run). Neither is Phase 3.2.

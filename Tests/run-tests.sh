@@ -87,11 +87,11 @@ if grep -nE "ctx\.bus|\.Publish\(|[Ss]cheduler|NetLog|Verse\.|Rand\.|System\.Ran
 fi
 echo "ok"
 
-echo "### Source scan: production holds only the fail-closed physical port; the fake exists in the safe test code only"
+echo "### Source scan: the live runtime holds the real physical adapter (Phase 3.1); the fake exists in the safe test code only"
 if grep -rln "FakePhysicalWorldPort" Source/TheNetwork --include=*.cs | grep -v "^Source/TheNetwork/Diagnostics/RuntimeTests/" ; then
   echo "FAIL: production code names the fake physical port" >&2; exit 1
 fi
-grep -q "physicalPort = new Domain.Physical.UnavailablePhysicalWorldPort()" Source/TheNetwork/Core/NetworkRuntime.cs || { echo "FAIL: the live runtime does not hold the fail-closed physical port" >&2; exit 1; }
+grep -q "Ctx.physicalPort = PhysicalWorld;" Source/TheNetwork/Core/NetworkRuntime.cs || { echo "FAIL: the live runtime does not hold the real physical adapter" >&2; exit 1; }
 echo "ok"
 
 REPO="$(pwd)"

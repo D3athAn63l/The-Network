@@ -41,7 +41,9 @@
   the deep-load path. The null is removed (`components.RemoveAll(null)`) and the game continues.
 - `FinalizeInit(bool fromLoad)`: for **new worlds** it is called from
   `WorldGenerator.cs:67` **during world generation**, before the colony and scenario exist. On
-  load it is called from `Game.LoadGame` (`Game.cs:586`). **Consequence:** the bootstrap runs
+  load it is called from `Game.LoadGame` (`Game.cs:586`), **right after the world's `LoadingVars` and BEFORE `Scribe.loader.FinalizeLoading()` (`Game.cs:611`) resolves cross-references: no `Pawn` or `Thing`
+  reference is usable in it** (the Phase 3.1 retained-pawn registry was empty after every load until it learned this; pointer-dependent structures are built at the world component's `PostLoadInit`,
+  which runs inside `FinalizeLoading`, and the world-pawn GC ticks before any world component). **Consequence:** the bootstrap runs
   lazily on first use (normally the first `WorldComponentTick`), not in `FinalizeInit`; only the
   `networkSeed` of a not-yet-bootstrapped world is derived there, from the world's seed
   ([ARCHITECTURE § 6.1](ARCHITECTURE.md#61-networkworldcomponent-kernel-root)).
@@ -149,7 +151,7 @@ only the `OpportunityId` and forwards callbacks. It stays inert on sites it is n
   colonists and for player-faction or player-hosted pawns (`MapDeiniter.cs:173–180`). Any other pawn, including a
   non-colonist Network contractor, is passed to `WorldPawns` **without** a `LeftMap` signal and without
   `FactionManager.Notify_PawnLeftMap`; the Network learns of it from the map-removal callbacks and observation
-  ([PHYSICAL_LIFECYCLE § 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31), audit row A52).
+  ([PHYSICAL_LIFECYCLE § 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-resolved-by-m1-spike-s31-owner-validated), audit row A52).
 - There is no "about to be removed" hook available to comps. Only `SitePartWorker` has
   `Notify_SiteMapAboutToBeRemoved`, and it requires a Network SitePartDef. Claim accounting
   therefore uses `PostCaravanFormed` plus a low-frequency sample
@@ -389,7 +391,7 @@ The Network uses the same property for its access gate, found through
 ### 3.1 Policy
 
 1. **No Harmony patch is currently adopted. Phases 1–3 target zero Harmony. A patch may be adopted only after a runtime spike proves vanilla extension points insufficient **and** an ADR explicitly adopts the patch.** The Network will not even declare a Harmony dependency until a patch is adopted. (The one pre-specified
-   candidate that a Phase 3 spike could still force is C-4, § 3.3, gated by S31.)
+   candidate that a Phase 3 spike could have forced was C-4, § 3.3: S31 passed with M1, so C-4 is not needed. ADR-053.)
 2. A patch may be adopted only if a vanilla extension point is shown to be insufficient **by a
    failed spike**, not by convenience.
 3. Every adopted patch must be documented with: exact target · why vanilla is insufficient ·
@@ -452,7 +454,7 @@ These patches are documented in advance so a failed spike does not lead to an im
 | Fallback | sampling (current design) |
 | Phase | 1 only if playtesting demands it; expected to be unnecessary |
 
-**C-4 · Exit-window reservation guard (only if Spike S31 proves reservation-while-spawned and the vanilla callbacks insufficient)**
+**C-4 · Exit-window reservation guard (only if Spike S31 proves reservation-while-spawned and the vanilla callbacks insufficient) — NOT NEEDED: S31 passed with M1 (ADR-053); never adopted**
 
 | Field | Value |
 |---|---|
@@ -460,8 +462,8 @@ These patches are documented in advance so a failed spike does not lead to an im
 | Why vanilla is insufficient | only if S31 shows both that a *spawned* reserved pawn misbehaves and that no synchronous vanilla callback precedes every path that passes a pawn (notably a map removal on a map type with no pre-removal hook) |
 | Call frequency | once per pawn passed to the world (map exit, map removal, quests, pods); never per tick |
 | Compatibility risk | Low to medium. About fifty vanilla call sites and other mods call it; a prefix that only adds to the Network's own list and always lets the original run composes, and costs O(1) |
-| Fallback | M1 / M2 of [PHYSICAL_LIFECYCLE § 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-an-open-mandatory-spike-s31); or C-1 plus C-2 (a redress guard and a GC keep reason), a larger surface that covers redress and GC but **not** quest-generation selection of `Free` pawns |
-| Phase | 3.1, conditional (expected unnecessary). Needs its own ADR; **not adopted** |
+| Fallback | M1 / M2 of [PHYSICAL_LIFECYCLE § 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-resolved-by-m1-spike-s31-owner-validated); or C-1 plus C-2 (a redress guard and a GC keep reason), a larger surface that covers redress and GC but **not** quest-generation selection of `Free` pawns |
+| Phase | 3.1, conditional (**unnecessary: S31 passed with M1, ADR-053**). Needs its own ADR; **not adopted** |
 
 No other contingency is anticipated through Phase 6. Black contracts, witnesses, rumors and
 bidding are domain logic plus vanilla observation.

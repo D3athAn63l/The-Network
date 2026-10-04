@@ -41,7 +41,11 @@ namespace TheNetwork.Diagnostics.RuntimeTests.Suites
             yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-017", "The spatial anchor is frozen while physical and written once at close", SpatialFrozen, true);
             yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-018", "Prepare-for-removal settles every open episode; nothing is deleted", RemovalSettle, true);
             yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-019", "The validator reports episode contradictions and repairs none", ValidatorReports, true);
+            yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-020", "Role verdict: incapability rejected; only one role skill's base level is ever raised", RoleVerdictAndCorrection, true);
+            yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-021", "Established truth beats randomness: the request carries only durable statements", EstablishedTruth, true);
+            yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-022", "Fame invariance: fame, score and visibility change no projection request or role", FameInvariance, true);
             yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-025", "Truthful aging asks for the full, uncapped interval", TruthfulAging, true);
+            yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-030", "Time-independent identity: the same origin facts give the same role in year 1 and year 10", TimeIndependentIdentity, true);
             yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-026", "Commit fault sweep: every injected throw restores the fingerprint", FaultSweep, true);
             yield return RuntimeTestCase.Immediate(Suite, "RT-PHYS-029", "Release interruption keeps the gate closed until COMPLETE; no second PassToWorld", ReleaseInterruption, true);
         }
@@ -589,6 +593,156 @@ namespace TheNetwork.Diagnostics.RuntimeTests.Suites
             ctx.Assert.True(all.Contains("publish cursor 5"), "a publish cursor out of bounds");
             Same(ctx, before, Print(sb), "nothing was repaired");
             ctx.Assert.False(AuthorityGate.CanSimulateAbstractly(x) || AuthorityGate.CanSimulateAbstractly(y), "both stay blocked");
+        }
+
+        // ================================================================== RT-PHYS-020, 021, 022, 030 (Phase 3.1: projection truth)
+
+        private static readonly string[] SkillNames = { "Shooting", "Melee", "Construction", "Mining", "Cooking", "Plants", "Animals", "Crafting", "Artistic", "Medicine", "Social", "Intellectual" };
+
+        /// <summary>A plain candidate: every skill at the given base level, a passion on Shooting and Medicine, some identity facts.</summary>
+        public static RoleCandidate Candidate(int level, int aptitude = 0)
+        {
+            RoleCandidate c = new RoleCandidate { name = "Ada 'Ace' Vale", gender = "Female", childhood = "UrbworldUrchin", adulthood = "Mercenary", xenotype = "Baseliner", bioAgeTicks = 25L * Ticks.PerYear, genes = 3, hediffs = 1 };
+            for (int i = 0; i < SkillNames.Length; i++) c.skills[SkillNames[i]] = new SkillFacts { levelBase = level, aptitude = aptitude, passion = SkillNames[i] == "Shooting" ? 2 : SkillNames[i] == "Medicine" ? 1 : 0 };
+            c.traits.Add("Tough");
+            return c;
+        }
+
+        private static void RoleVerdictAndCorrection(RuntimeTestContext ctx)
+        {
+            // An incapability is identity: rejected, never corrected.
+            RoleSpec rifle = RoleRules.SpecFor(OperationalRole.Rifleman, ExperienceBand.Veteran);
+            RoleCandidate pacifist = Candidate(12);
+            pacifist.disabledWorkTags.Add("Violent");
+            RoleVerdict v = RoleRules.Verify(rifle, pacifist);
+            ctx.Assert.True(!v.holds && !v.Correctable, "a candidate incapable of violence is rejected as a Rifleman: " + v);
+            RoleCandidate deaf = Candidate(12);
+            deaf.skills["Shooting"].totallyDisabled = true;
+            ctx.Assert.True(!RoleRules.Verify(rifle, deaf).Correctable, "a totally disabled role skill is rejected, never corrected");
+            RoleCandidate brawler = Candidate(15);
+            brawler.traits.Add("Brawler");
+            ctx.Assert.True(!RoleRules.Verify(RoleRules.SpecFor(OperationalRole.Marksman, ExperienceBand.Elite), brawler).holds, "a Brawler is never a Marksman");
+            RoleCandidate noCare = Candidate(15);
+            noCare.disabledWorkTags.Add("Caring");
+            ctx.Assert.True(!RoleRules.Verify(RoleRules.SpecFor(OperationalRole.Medic, ExperienceBand.Elite), noCare).holds, "a candidate who cannot care is never a Medic");
+
+            // A role-skill shortfall: ONE skill's base level is raised just enough (aptitudes included), and nothing else moves.
+            foreach (OperationalRole role in System.Enum.GetValues(typeof(OperationalRole)))
+            {
+                foreach (ExperienceBand band in System.Enum.GetValues(typeof(ExperienceBand)))
+                {
+                    RoleSpec spec = RoleRules.SpecFor(role, band);
+                    RoleCandidate low = Candidate(1, 2);
+                    RoleCandidate before = low.Copy();
+                    RoleVerdict verdict = RoleRules.Verify(spec, low);
+                    if (verdict.holds) continue;
+                    ctx.Assert.True(verdict.Correctable, role + "/" + band + ": a plain shortfall is correctable (" + verdict + ")");
+                    ctx.Assert.True(RoleRules.ApplyCorrection(low, verdict), role + "/" + band + ": the correction applies");
+                    ctx.Assert.True(RoleRules.Verify(spec, low).holds, role + "/" + band + ": re-verified, it holds");
+                    ctx.Assert.Equal(before.IdentityKey(), low.IdentityKey(), role + "/" + band + ": passion, aptitudes, traits, backstory, genes, hediffs, age, gender and name are unchanged");
+                    int raised = 0;
+                    foreach (string sk in SkillNames)
+                    {
+                        int was = before.skills[sk].levelBase, now = low.skills[sk].levelBase;
+                        ctx.Assert.True(now >= was, role + "/" + band + ": " + sk + " was not lowered");
+                        if (now != was)
+                        {
+                            raised++;
+                            ctx.Assert.Equal(verdict.correctSkill, sk, role + "/" + band + ": only the verdict's skill moved");
+                            ctx.Assert.Equal(spec.floor - 2, now, role + "/" + band + ": raised exactly to the floor minus the aptitude");
+                        }
+                    }
+                    ctx.Assert.True(raised == 1, role + "/" + band + ": exactly one skill raised (" + raised + ")");
+                }
+            }
+            ctx.Assert.True(!RoleRules.ApplyCorrection(Candidate(1), RoleVerdict.Holds), "a holding verdict corrects nothing");
+            ctx.Assert.True(RoleRules.FloorFor(ExperienceBand.Green) < RoleRules.FloorFor(ExperienceBand.Experienced) && RoleRules.FloorFor(ExperienceBand.Elite) < RoleRules.FloorFor(ExperienceBand.Legendary), "the floor rises with competence");
+        }
+
+        private static void EstablishedTruth(RuntimeTestContext ctx)
+        {
+            RuntimeTestSandbox sb = ctx.RequireSandbox();
+            NetworkActor a = Contractor(ctx, ContractorForm.Solo);
+            KnownCharacter c = Self(sb, a);
+            int before = sb.Physical.requests.Count;
+            PhysicalEpisode e = Begin(ctx, a, new[] { c });
+            ctx.Assert.Equal(before + 1, sb.Physical.requests.Count, "one creation request");
+            ProjectionRequest r = sb.Physical.requests[sb.Physical.requests.Count - 1];
+            ctx.Assert.Equal(c.id, r.character, "the request names the person");
+            ctx.Assert.True(ReferenceEquals(c.name, r.name), "the established name snapshot itself is the request's name");
+            ctx.Assert.True(c.opRole != OperationalRole.Unset && r.role == c.opRole, "the stored operational role (" + c.opRole + ") is the request's role");
+            ctx.Assert.Equal(RoleDerivation.ForSolo(a), c.opRole, "and it is the one derived from the actor's origin facts");
+            ctx.Assert.Equal(ContractorService.Experience(a), r.capability, "competence is the current experience band");
+            ctx.Assert.Equal(a.Get<ContractorSimulation>().equipment.tier, r.equipmentTier, "the abstract equipment tier");
+            ctx.Assert.Equal(NetHash.Combine(e.seed, e.members[0].slot), r.seed, "the seed is the episode's");
+            ctx.Assert.True(r.faction != null && r.faction.loadId == e.faction.loadId, "the episode's encounter faction");
+            // Nothing the Network never established is in the request: there is no field for it. (The person's first gender and age position
+            // are ESTABLISHED, by a pure function of the world seed and the person: § 6.3; the pawn is the truth once it exists.)
+            HashSet<string> allowed = new HashSet<string> { "episode", "actor", "character", "slot", "tier", "name", "role", "capability", "equipmentTier", "seed", "faction", "identity" };
+            ctx.Assert.Equal(PersonIdentity.For(sb.Ctx.networkSeed, c.id).ToString(), r.identity.ToString(), "the request's first identity is the person's, from the world seed and the person only");
+            foreach (System.Reflection.FieldInfo f in typeof(ProjectionRequest).GetFields()) ctx.Assert.True(allowed.Contains(f.Name), "the request has no field for an unestablished fact (" + f.Name + ")");
+            NamePins pins = NamePins.From(new NameSnapshot { first = "Ada", last = "Vale" });
+            ctx.Assert.True(pins.first == "Ada" && pins.last == "Vale" && pins.nick == null, "stated first and last names are pinned; an unstated nickname is not");
+            NamePins split = NamePins.From(new NameSnapshot { display = "Rook Calder" });
+            ctx.Assert.True(split.first == "Rook" && split.last == "Calder", "a display-only record pins its two parts");
+            ctx.Assert.True(!NamePins.From(new NameSnapshot()).Any, "a nameless record pins nothing (vanilla's name stands)");
+        }
+
+        private static void FameInvariance(RuntimeTestContext ctx)
+        {
+            RuntimeTestSandbox sb = ctx.RequireSandbox();
+            NetworkActor a = Contractor(ctx, ContractorForm.Solo);
+            KnownCharacter c = Self(sb, a);
+            PhysicalEpisode e = Begin(ctx, a, new[] { c });
+            EpisodeMember m = e.members[0];
+            string key = ProjectionPolicy.Key(ProjectionPolicy.ForPerson(e, m, c, a, sb.Ctx.networkSeed));
+            OperationalRole role = RoleDerivation.ForSolo(a);
+            CareerRecord career = a.Get<ContractorSimulation>().career;
+            foreach (FameBand band in System.Enum.GetValues(typeof(FameBand)))
+            {
+                a.reputation.SetBand(band);
+                ctx.Assert.Equal(key, ProjectionPolicy.Key(ProjectionPolicy.ForPerson(e, m, c, a, sb.Ctx.networkSeed)), "fame " + band + " changes no projection request");
+                ctx.Assert.Equal(role, RoleDerivation.ForSolo(a), "fame " + band + " changes no role");
+            }
+            int[] scores = { 0, 1, 250, 5000, int.MaxValue };
+            for (int i = 0; i < scores.Length; i++)
+            {
+                a.reputation.SetScore(scores[i]);
+                career.reputationEarned = scores[i] / 2;
+                career.triumphs = i * 7;
+                ctx.Assert.Equal(key, ProjectionPolicy.Key(ProjectionPolicy.ForPerson(e, m, c, a, sb.Ctx.networkSeed)), "reputation score " + scores[i] + " changes no projection request");
+            }
+            ctx.Assert.Equal(role, RoleDerivation.ForSolo(a), "nor the role");
+        }
+
+        private static void TimeIndependentIdentity(RuntimeTestContext ctx)
+        {
+            RuntimeTestSandbox sb = ctx.RequireSandbox();
+            NetworkActor a = Contractor(ctx, ContractorForm.Solo);
+            KnownCharacter c = Self(sb, a);
+            ContractorSimulation sim = a.Get<ContractorSimulation>();
+            ContractorProfile profile = a.Get<ContractorProfile>();
+            OperationalRole year1 = RoleDerivation.SoloRole(a.seed, profile.specialties);
+            ExperienceBand band1 = ContractorService.Experience(a);
+            ctx.Assert.Equal(year1, c.opRole, "the role stored at Instantiate is the year-1 derivation");
+            // Ten years of a career: experience, doctrine, fame and funds all move.
+            for (int y = 0; y < 10; y++)
+            {
+                sb.Clock.Now += Ticks.PerYear;
+                sim.skill = System.Math.Min(1f, sim.skill + 0.08f);
+                sim.doctrine.caution = (y % 3) / 3f;
+                sim.doctrine.professionalism = 1f - y / 20f;
+                sim.funds += 5000;
+                a.reputation.SetScore(a.reputation.score + 400);
+            }
+            OperationalRole year10 = RoleDerivation.SoloRole(a.seed, profile.specialties);
+            ctx.Assert.Equal(year1, year10, "the same origin facts give the identical role ten years later");
+            ctx.Assert.Equal(year1, RoleDerivation.ForSolo(a), "ForSolo agrees");
+            ctx.Assert.Equal(year1, c.opRole, "the stored role was never rewritten");
+            ctx.Assert.True(ContractorService.Experience(a) >= band1, "while competence may change (" + band1 + " → " + ContractorService.Experience(a) + ")");
+            // Determinism across inputs: the same (seed, specialties) always gives the same role; the version is pinned.
+            for (int s = 1; s < 200; s++) ctx.Assert.Equal(RoleDerivation.SoloRole(s * 7919, profile.specialties), RoleDerivation.SoloRole(s * 7919, new List<string>(profile.specialties)), "seed " + s + " is deterministic");
+            ctx.Assert.Equal(1, RoleDerivation.Version, "derivation version 1 is frozen");
         }
 
         // ================================================================== RT-PHYS-025, 026, 029

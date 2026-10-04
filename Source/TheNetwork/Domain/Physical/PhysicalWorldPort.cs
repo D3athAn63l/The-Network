@@ -26,6 +26,16 @@ namespace TheNetwork.Domain.Physical
 
         public int mapId = -1;
 
+        /// <summary>A plain-text diagnosis the adapter attaches when the observation is an invariant violation (runtime only, never persisted).</summary>
+        public string note;
+
+        /// <summary>
+        /// When the pawn stopped being physically present, if the adapter saw it happen (the synchronous LeftMap of this session); -1 when
+        /// unknown (a map removal, or a reload in between). Runtime data, never persisted: the commit uses it so a stored pawn's
+        /// <c>agedThroughTick</c> is the tick it stopped ticking, not the later tick reconciliation ran (§ 6.4: never under-aged).
+        /// </summary>
+        public int exitTick = -1;
+
         public static PhysicalObservation Of(ObservedKind kind)
         {
             return new PhysicalObservation { kind = kind };
@@ -33,7 +43,7 @@ namespace TheNetwork.Domain.Physical
 
         public override string ToString()
         {
-            return kind + (downed ? " downed" : "") + (health < 1f ? " hp" + health.ToString("0.00") : "") + (exitEvidence ? " exit" : "");
+            return kind + (downed ? " downed" : "") + (health < 1f ? " hp" + health.ToString("0.00") : "") + (exitEvidence ? " exit" : "") + (note != null ? " [" + note + "]" : "");
         }
     }
 
@@ -64,7 +74,10 @@ namespace TheNetwork.Domain.Physical
         Unknown = 5
     }
 
-    /// <summary>What a first materialization asks the physical side to create (§ 6). In 3.0 only the fake port ever receives one.</summary>
+    /// <summary>
+    /// What a first materialization asks the physical side to create (§ 6.5): durable Network truth only, built by
+    /// <see cref="ProjectionPolicy"/>. Fame, the reputation score and visibility are never part of it (P3-INV-019).
+    /// </summary>
     public sealed class ProjectionRequest
     {
         public EpisodeId episode;
@@ -78,16 +91,33 @@ namespace TheNetwork.Domain.Physical
         public NameSnapshot name;
         public OperationalRole role = OperationalRole.Unset;
 
+        /// <summary>Competence within the role (§ 6.5): the actor's current experience band. Never fame.</summary>
+        public ExperienceBand capability = ExperienceBand.Green;
+
+        /// <summary>The abstract equipment tier (1–5): which existing kind or loadout class is requested (O-3). Not an item list.</summary>
+        public int equipmentTier = 2;
+
         /// <summary>Seeds the first creation only (§ 5.3); a rematerialization never asks for a creation.</summary>
         public int seed;
+
+        /// <summary>
+        /// The person's first gender and age position (§ 6.3): a pure function of the world seed and the person's id, never of the episode, slot,
+        /// map or time. Honoured only by a first creation, only through vanilla's request inputs; never persisted and never applied to a pawn later.
+        /// </summary>
+        public FirstIdentity identity;
+
+        /// <summary>The episode's temporary encounter faction (§ 13.2), when one exists.</summary>
+        public FactionRef faction;
     }
 
     /// <summary>
     /// THE port through which lifecycle code observes and acts on physical truth (§ 21.1, the ports pattern of comms, payment and
-    /// the catalog). Production code calls only this interface, so the future real adapter (3.1) and the scriptable test fake
-    /// exercise the same lifecycle. Every action is phrased so that it can be made idempotent by OBSERVED state.
+    /// the catalog). Production code calls only this interface, so the real adapter (3.1, <c>Integration/Physical</c>) and the scriptable
+    /// test fake exercise the same lifecycle. Every action is phrased so that it can be made idempotent by OBSERVED state.
     ///
-    /// Phase 3.0 ships NO real adapter: the live game holds <see cref="UnavailablePhysicalWorldPort"/>, which refuses every action.
+    /// Phase 3.1 extends the 3.0 shape narrowly: the temporary encounter faction (S10, § 13.2) has no other way in: the episode's
+    /// <c>faction</c> is durable Network truth the lifecycle writes, while creating and releasing a vanilla faction is a physical action
+    /// only the port may perform, and placement must put the pawn into that faction.
     /// </summary>
     public interface IPhysicalWorldPort
     {
@@ -102,11 +132,31 @@ namespace TheNetwork.Domain.Physical
         /// <summary>Does the binding still resolve to its pawn? (Load and rematerialization evidence; never a decision by itself.)</summary>
         bool Resolves(PawnRef pawn);
 
-        /// <summary>Truthful aging (§ 6.4): bring the retained pawn's biological age forward by the FULL elapsed interval.</summary>
+        /// <summary>
+        /// Truthful aging (§ 6.4): bring the retained pawn's biological age forward by the FULL elapsed interval. Throws
+        /// <see cref="AgingUncertainException"/> when a vanilla step threw after it may have changed the pawn (the progress is then not provable);
+        /// any other exception means nothing was changed and the interval may be replayed.
+        /// </summary>
         void CatchUpAge(PawnRef pawn, long elapsedTicks);
 
-        /// <summary>Place the bound pawn at the episode's anchor. False when placement failed (the member stays unplaced).</summary>
-        bool Place(PawnRef pawn, EpisodeId episode, TileRef tile, int mapId);
+        /// <summary>
+        /// The episode's temporary encounter faction (S10, § 13.2): returns <paramref name="current"/> when it still resolves to a live
+        /// temporary faction, otherwise creates one (hidden, temporary, no settlement, relations seeded once). The lifecycle records the
+        /// result on the episode. Throws when no suitable faction can exist (the episode then places nobody).
+        /// </summary>
+        FactionRef EnsureEncounterFaction(EpisodeId episode, ActorId actor, FactionRef current, int seededGoodwill);
+
+        /// <summary>RELEASE, episode level: hand the faction back to vanilla's own temporary-faction removal. Idempotent by observed state.</summary>
+        void ReleaseEncounterFaction(FactionRef faction);
+
+        /// <summary>
+        /// Place the bound pawn at the episode's anchor, in the episode's encounter faction. A retained pawn's reservation must already cover it
+        /// (M1, ADR-053): placement never removes it. The return value (or a throw) is NOT evidence of what happened to the pawn: vanilla's
+        /// <c>GenSpawn.Spawn</c> returns the pawn even when <c>SpawnSetup</c> discarded it, and a mod may throw anywhere. After any placement that
+        /// did not report success the lifecycle classifies the bound pawn from POSITIVE observation (<see cref="PlacementRules"/>), never from this
+        /// result.
+        /// </summary>
+        bool Place(PawnRef pawn, EpisodeId episode, TileRef tile, int mapId, FactionRef faction);
 
         /// <summary>Classify the bound pawn now (§ 9.3). Pure read.</summary>
         PhysicalObservation Observe(PawnRef pawn, EpisodeId episode);
@@ -114,7 +164,11 @@ namespace TheNetwork.Domain.Physical
         /// <summary>RELEASE: store-time normalization of a returned named pawn (S12). Idempotent by observed state.</summary>
         void Normalize(PawnRef pawn);
 
-        /// <summary>RELEASE: prove (or establish) the retained reservation of a named pawn (§ 7.4; the mechanism is S31's). Idempotent.</summary>
+        /// <summary>
+        /// RELEASE: PROVE the retained reservation of a named pawn (§ 7.4). Under M1 the registry already covered the pawn before its exit, so
+        /// this establishes nothing and CREATES nothing (no registry quest is made here): a reservation that cannot be proven throws, and RELEASE
+        /// stays pending. A violation is never repaired quietly by the stage that finds it. Idempotent.
+        /// </summary>
         void EnsureRetained(PawnRef pawn);
 
         /// <summary>RELEASE: the § 7.5 precondition, observed at the moment of asking.</summary>
@@ -131,8 +185,36 @@ namespace TheNetwork.Domain.Physical
     public sealed class PhysicalWorldUnavailableException : InvalidOperationException
     {
         public PhysicalWorldUnavailableException(string action)
-            : base("No physical world adapter exists in this build (Phase 3.0): '" + action + "' was refused. No contractor pawn is ever created, spawned, moved, reserved or passed.")
+            : base("No physical world is available here: '" + action + "' was refused. No contractor pawn is created, spawned, moved, reserved or passed.")
         {
+        }
+    }
+
+    /// <summary>
+    /// A truthful-aging step THREW (§ 6.4). Vanilla's <c>Pawn_AgeTracker.AgeTickMothballed</c> is not atomic: it advances the biological age by the
+    /// WHOLE step first and only then runs growth, the age-reversal check and each birthday's effects, with no rollback. So when a step throws, the
+    /// pawn may be older by the whole step with some, all or none of its birthday consequences applied, and which of them cannot be proven.
+    ///
+    /// What IS provable is <see cref="completedTicks"/>: the steps before the failing one returned normally, so every birthday inside them ran.
+    /// <see cref="uncertainTicks"/> is the interval of the failing step, whose progress is NOT known (measured biological ticks before and after are
+    /// kept as evidence). The lifecycle advances <c>agedThroughTick</c> by <see cref="completedTicks"/> only, never replays the uncertain interval,
+    /// never sets the bookmark to "now", and quarantines the episode: the person is blocked until the owner decides.
+    /// </summary>
+    public sealed class AgingUncertainException : InvalidOperationException
+    {
+        public readonly long completedTicks;
+        public readonly long uncertainTicks;
+        public readonly long bioTicksBefore;
+        public readonly long bioTicksAfter;
+
+        public AgingUncertainException(long completed, long uncertain, long bioBefore, long bioAfter, Exception inner)
+            : base("an aging step of " + uncertain + " ticks threw after " + completed + " ticks completed (biological ticks " + bioBefore + " → " + bioAfter
+                + "; the failing step's progress is not provable): " + (inner?.Message ?? "unknown"), inner)
+        {
+            completedTicks = completed;
+            uncertainTicks = uncertain;
+            bioTicksBefore = bioBefore;
+            bioTicksAfter = bioAfter;
         }
     }
 
@@ -149,10 +231,10 @@ namespace TheNetwork.Domain.Physical
     }
 
     /// <summary>
-    /// The production port of Phase 3.0 (§ 23 gating): there is no real adapter yet, so it is FAIL-CLOSED. It is never available,
-    /// every action throws <see cref="PhysicalWorldUnavailableException"/>, nothing resolves, and an observation is always
-    /// <see cref="ObservedKind.Unknown"/> (which never ends a member: authority stays blocked, nothing is invented). It references no
-    /// RimWorld API at all.
+    /// The FAIL-CLOSED port: never available, every action throws <see cref="PhysicalWorldUnavailableException"/>, nothing resolves,
+    /// and an observation is always <see cref="ObservedKind.Unknown"/> (which never ends a member: authority stays blocked, nothing is
+    /// invented). It references no RimWorld API. Phase 3.0's live game held it; Phase 3.1 keeps it for any context without a real world
+    /// (the soak, headless contexts) and as the safe default of a <see cref="DomainContext"/>.
     /// </summary>
     public sealed class UnavailablePhysicalWorldPort : IPhysicalWorldPort
     {
@@ -160,7 +242,7 @@ namespace TheNetwork.Domain.Physical
         public int refused;
 
         public bool Available => false;
-        public string Name => "Unavailable (Phase 3.0)";
+        public string Name => "Unavailable (fail-closed)";
 
         private Exception Refuse(string action)
         {
@@ -171,7 +253,9 @@ namespace TheNetwork.Domain.Physical
         public PawnRef Create(ProjectionRequest request) { throw Refuse("Create"); }
         public bool Resolves(PawnRef pawn) { return false; }
         public void CatchUpAge(PawnRef pawn, long elapsedTicks) { throw Refuse("CatchUpAge"); }
-        public bool Place(PawnRef pawn, EpisodeId episode, TileRef tile, int mapId) { throw Refuse("Place"); }
+        public FactionRef EnsureEncounterFaction(EpisodeId episode, ActorId actor, FactionRef current, int seededGoodwill) { throw Refuse("EnsureEncounterFaction"); }
+        public void ReleaseEncounterFaction(FactionRef faction) { throw Refuse("ReleaseEncounterFaction"); }
+        public bool Place(PawnRef pawn, EpisodeId episode, TileRef tile, int mapId, FactionRef faction) { throw Refuse("Place"); }
         public PhysicalObservation Observe(PawnRef pawn, EpisodeId episode) { return PhysicalObservation.Of(ObservedKind.Unknown); }
         public void Normalize(PawnRef pawn) { throw Refuse("Normalize"); }
         public void EnsureRetained(PawnRef pawn) { throw Refuse("EnsureRetained"); }

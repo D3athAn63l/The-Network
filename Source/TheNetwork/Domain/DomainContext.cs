@@ -101,9 +101,10 @@ namespace TheNetwork.Domain
         public ISpatialWorld graph;
 
         /// <summary>
-        /// How lifecycle code observes and acts on physical truth (Phase 3.0, PHYSICAL_LIFECYCLE § 21.1). The live game uses the
-        /// fail-closed <see cref="Physical.UnavailablePhysicalWorldPort"/>: Phase 3.0 has no real adapter and no production path
-        /// that creates, spawns, moves, reserves or passes a contractor pawn. Tests and the sandbox use a scriptable fake.
+        /// How lifecycle code observes and acts on physical truth (PHYSICAL_LIFECYCLE § 21.1). The live game uses the real adapter
+        /// (Phase 3.1, <c>Integration/Physical/RimWorldPhysicalWorldPort</c>); only the session-armed physical test tier asks it to create or
+        /// place anything. Contexts without a real world (the soak) hold the fail-closed <see cref="Physical.UnavailablePhysicalWorldPort"/>;
+        /// tests and the sandbox use a scriptable fake. Safe suites never reach the real adapter (P3-INV-013).
         /// </summary>
         public Physical.IPhysicalWorldPort physicalPort;
 

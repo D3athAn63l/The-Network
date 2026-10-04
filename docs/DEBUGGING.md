@@ -107,8 +107,8 @@ run the production services in an isolated in-memory sandbox and read the live g
 | Report | Runtime tests: **Last report** (to the log) · **Export last report** (`<SaveDataFolderPath>/TheNetwork/runtime-tests-YYYYMMDD-HHMMSS.txt`) · **Inspect preserved failure** (the kept sandbox of the last failed test, in memory only) |
 
 A run logs a summary when it starts and when it ends and shows one Message (positive, negative or neutral);
-it sends no letter. It **never starts or repairs the live Network**: in a game loaded paused (never ticked) the
-tests that need a started Network report SKIP with the advice to unpause for one tick and rerun, and RT-INFRA-001
+it sends no letter. It **never starts or repairs the live Network**: in a game in which no world tick has run since the load yet (RimWorld may resume time by itself, so this is only a moment) the
+tests that need a started Network report SKIP with the advice to let one tick pass and rerun, and RT-INFRA-001
 says nothing was verified. A WARN result means production code logged a warning or error while a test ran (the
 lines are in the report and the real log). The runner restores every static dev override to its previous value after every step, so
 the forced draws above are never changed by a run.
@@ -135,6 +135,7 @@ the repair is safe.
 | **Lineage** | contract, opportunity and actor lineage graphs are acyclic; depth is within the cap | cut cycles and log |
 | **Roster arithmetic** | `committed ≤ healthy + wounded`; no negative counts | clamp and log |
 | **Money** | ledger sums are consistent with contract states | none (report only) |
+| **Bound people (Phase 3.1 runtime-QA)** | every living bound person: an unresolved binding, a binding to a discarded pawn, a thing-id disagreement, and a Deployed or Stored person the registry does not cover (a reservation gap); reported, never repaired ([PHYSICAL_LIFECYCLE § 16.3](PHYSICAL_LIFECYCLE.md#163-the-registry-across-load-corrected-by-the-phase-31-runtime-qa-pass)) |
 | **Episodes (Phase 3.0)** | episode, binding, custody and stage-marker contradictions ([PHYSICAL_LIFECYCLE § 16.5](PHYSICAL_LIFECYCLE.md#165-migration-and-version-implications-the-number-is-not-chosen-here)): a person `Deployed` with no episode, a link to a missing episode, two incomplete memberships, a shared binding, a publish or release cursor out of bounds, a stage unfinished after 30 days, a `Physical` operation no episode holds, a person on an operation and in another episode | **none: report only** (`EpisodeChecks`); only the derived episode index is rebuilt. Custody, links and markers are never "fixed" |
 | **Caps** | history, journal, legends and characters are within caps; the bound-pawn **soft** cap is reported when exceeded (protected characters are never released to meet it) | schedule a retention sweep; release only unprotected dormant characters |
 

@@ -65,6 +65,7 @@ namespace TheNetwork.Core
             CheckSpatial(rt, report);
             CheckCareers(rt, report);
             CheckEpisodes(rt, report);
+            CheckBindings(rt, report);
             int endedProxies = ctx.Actors.ReconcileFactionProxies();
             if (endedProxies > 0) report.Add(endedProxies + " faction proxies ended (FactionVanished).", true);
             CheckCaps(rt, report);
@@ -90,6 +91,27 @@ namespace TheNetwork.Core
             for (int i = 0; i < s.contracts.contracts.Count; i++) Check(s.contracts.contracts[i].id.Value, "contract", seen, next, report, e => s.contracts.contracts[e].quarantinedReason = "DuplicateId", i);
             for (int i = 0; i < s.contracts.offers.Count; i++) Check(s.contracts.offers[i].id.Value, "offer", seen, next, report, e => s.contracts.offers[e].quarantinedReason = "DuplicateId", i);
             for (int i = 0; i < s.operations.operations.Count; i++) Check(s.operations.operations[i].id.Value, "operation", seen, next, report, e => s.operations.operations[e].quarantinedReason = "DuplicateId", i);
+        }
+
+        /// <summary>
+        /// Phase 3.1 runtime-QA correction: the bounded integrity audit of every LIVING bound person (bounded by the bound people, no world
+        /// scan). A binding whose pointer is unresolved after the load's cross-references, resolves to a Discarded pawn, or disagrees with its
+        /// persisted thing id fails validation loudly; a Deployed or Stored person the registry does not cover is a reservation gap. It
+        /// NEVER regenerates a pawn, clears a binding, repairs the registry or marks anyone healthy: the lifecycle handles an open episode's
+        /// positive Gone evidence on its own watch, and with no episode this finding is the whole response.
+        /// </summary>
+        private static void CheckBindings(NetworkRuntime rt, ValidationReport report)
+        {
+            Integration.Physical.RetainedPawnRegistry registry = rt.PhysicalWorld?.Registry;
+            if (registry == null) return;
+            List<Domain.Physical.BindingFinding> findings = registry.Audit();
+            for (int i = 0; i < findings.Count; i++) report.Add(findings[i].ToString(), false);
+            if (!registry.inert)
+            {
+                int durable = registry.DurableRetainedCount();
+                int covered = registry.RetainedCount();
+                if (covered < durable) report.Add("PHYSICAL INTEGRITY: reservation gap: " + durable + " living Deployed or Stored bound person(s) must be reserved, " + covered + " are covered.", false);
+            }
         }
 
         /// <summary>

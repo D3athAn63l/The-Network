@@ -102,8 +102,9 @@ namespace TheNetwork.Domain.Physical
                     c.custody = CustodyState.Stored;
                     c.heldBy = HeldKind.None;
                     c.heldSinceTick = -1;
-                    if (c.pawn != null) c.pawn.agedThroughTick = now;
-                    if (op.member?.pawn != null) op.member.pawn.agedThroughTick = now;
+                    int aged = op.agedThrough >= 0 ? op.agedThrough : now;
+                    if (c.pawn != null && aged > c.pawn.agedThroughTick) c.pawn.agedThroughTick = aged;
+                    if (op.member?.pawn != null && aged > op.member.pawn.agedThroughTick) op.member.pawn.agedThroughTick = aged;
                     break;
                 case CommitOpKind.CharacterReturnedFree:
                     FateRules.ReturnedFree(c, now);

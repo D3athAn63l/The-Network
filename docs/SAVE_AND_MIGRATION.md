@@ -182,10 +182,14 @@ invariants ([DEBUGGING § 6](DEBUGGING.md#6-headless-tests)). Fixture files live
 | Step | Scribe mode / hook | Network work |
 |---|---|---|
 | 1 | `LoadingVars` | read `saveVersion` first; read stores through tolerant list loading (per-element try/catch, S5); read legacy fields where versioned |
-| 2 | `ResolvingCrossRefs` | vanilla resolves `PawnRef` pointers (warnings for any that are unresolvable) |
-| 3 | `PostLoadInit` | defaults for null collections; nothing else |
-| 4 | `FinalizeInit(fromLoad: true)` | run migrations; rebuild runtime caches (ID maps, heaps, reverse maps); **no events, no world mutation** |
+| 2 | `FinalizeInit(fromLoad: true)` | vanilla calls it (`Game.LoadGame`, `Game.cs:586`) right after the world's `LoadingVars` and **BEFORE** cross-references resolve: run migrations; rebuild runtime caches **from persisted values only** (ID maps, heaps, reverse maps; the retained-pawn registry's thing-id stage); **no events, no world mutation, and never a `Pawn`/`Thing` reference (all still null here)** |
+| 3 | `ResolvingCrossRefs` | vanilla resolves `PawnRef` pointers (warnings for any that are unresolvable) |
+| 4 | `PostLoadInit` | defaults for null collections; **the pointer-dependent runtime structures: the retained-pawn registry's validated pointer index, its quest restored from durable state, and the binding-integrity audit** (still before the first tick, still no events) |
 | 5 | first `WorldComponentTick` → `EnsureStarted` (or an earlier callback or command; if it throws, the Network stays inactive for the session and the save data is left as loaded — [ARCHITECTURE § 6.1](ARCHITECTURE.md#61-networkworldcomponent-kernel-root)) | validators: reference resolution (`ReferenceInvalidated` events), custody audit and re-reservation, scheduler/entity agreement, orphan detection; re-register `SignalBridge`; process queued migration follow-ups; then normal scheduling |
+
+> **Why the order matters (Phase 3.1 runtime-QA correction).** An earlier version of this table listed `FinalizeInit` after `PostLoadInit`; that was wrong, and a registry built from pointers in `FinalizeInit` was empty after every load.
+> Anything that needs a resolved reference waits for step 4; anything vanilla can ask before the first tick (it runs `WorldPawns` before any world component) must already answer from persisted values at step 2
+> ([PHYSICAL_LIFECYCLE § 16.3](PHYSICAL_LIFECYCLE.md#163-the-registry-across-load-corrected-by-the-phase-31-runtime-qa-pass)).
 
 Step 5 is where the world may change (refunds, cancellations, letters). It happens inside the
 game's tick, after the game is fully loaded. It runs once per load and is budgeted and logged.
