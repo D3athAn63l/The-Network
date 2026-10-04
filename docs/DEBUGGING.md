@@ -107,8 +107,8 @@ run the production services in an isolated in-memory sandbox and read the live g
 | Report | Runtime tests: **Last report** (to the log) · **Export last report** (`<SaveDataFolderPath>/TheNetwork/runtime-tests-YYYYMMDD-HHMMSS.txt`) · **Inspect preserved failure** (the kept sandbox of the last failed test, in memory only) |
 
 A run logs a summary when it starts and when it ends and shows one Message (positive, negative or neutral);
-it sends no letter. It **never starts or repairs the live Network**: in a game loaded paused (never ticked) the
-tests that need a started Network report SKIP with the advice to unpause for one tick and rerun, and RT-INFRA-001
+it sends no letter. It **never starts or repairs the live Network**: in a game in which no world tick has run since the load yet (RimWorld may resume time by itself, so this is only a moment) the
+tests that need a started Network report SKIP with the advice to let one tick pass and rerun, and RT-INFRA-001
 says nothing was verified. A WARN result means production code logged a warning or error while a test ran (the
 lines are in the report and the real log). The runner restores every static dev override to its previous value after every step, so
 the forced draws above are never changed by a run.

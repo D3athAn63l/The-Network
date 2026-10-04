@@ -54,6 +54,17 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         {
             return devKey != null && devKey.StartsWith(DevKeyPrefix, StringComparison.Ordinal);
         }
+
+        /// <summary>
+        /// The scenario family id a suite episode was created for, read from the EXISTING persisted cause ("PhysicalTest:&lt;runId&gt;:&lt;scenarioId&gt;",
+        /// see <see cref="DevKey"/>): the scenario id is the last segment. Null for a key that is not the suite's. No new persisted field.
+        /// </summary>
+        public static string ScenarioOf(string devKey)
+        {
+            if (!IsTestDevKey(devKey)) return null;
+            int i = devKey.LastIndexOf(':');
+            return i < 0 || i == devKey.Length - 1 ? null : devKey.Substring(i + 1);
+        }
     }
 
     /// <summary>What a scenario needs from the Solo it drives.</summary>

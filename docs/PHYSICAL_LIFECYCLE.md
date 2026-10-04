@@ -1,17 +1,17 @@
 # Phase 3 Design: Abstract ↔ Physical Lifecycle
 
-> **Status: Phase 3.1 IMPLEMENTED; OWNER PHYSICAL VALIDATION IN PROGRESS. NOT a Phase 3.1 PASS.** The owner's first physical run (build `29f31dd`, a
-> disposable save) produced positive evidence and six real findings, corrected in [Appendix K](#appendix-k-phase-31-runtime-qa-correction-pass-pr-10)
-> (the retained registry did not survive a load; first projections used special-purpose kinds; an individual's role could stay `Unset`; three
-> harness defects). Earlier: implemented and corrected after review ([Appendix I](#appendix-i-phase-31-as-built), [Appendix J](#appendix-j-phase-31-post-review-correction-pass-pr-10)).
-> Phase 3.0 implemented ([Appendix H](#appendix-h-phase-30-as-built)); 3.2 and 3.3 NOT implemented.** Two things must never be conflated:
-> **(1) S31 / M1 is owner-runtime VALIDATED and ACCEPTED** ([§ 7.6](#76-the-vanilla-exit-window-resolved-by-m1-spike-s31-owner-validated), ADR-053): the owner
-> ran the dedicated S31 spike on a real 1.6 game before 3.1 was implemented, and reserving a retained named pawn **while it is spawned**
-> is the accepted production mechanism. **(2) Phase 3.1 as a whole is NOT runtime-validated**: the owner's first run was on the pre-correction build and its
-> findings are fixed in this one; `RT-PHYX-001…012`, `015` and `016` on the CORRECTED build, the 3.1 save/load matrix (010A and 010B, each with a reload), role
-> generation on real pawns and truthful aging on real disposable pawns are still the owner's runs. The live game holds the real physical adapter, and the only trigger that creates or places a contractor pawn is the
-> session-armed physical test tier (Dev Mode, its own test map). The save format is still **5**; there is no Harmony. The design text
-> below is unchanged by the implementation except where Appendices H, I and J record a decision the design left open or a correction.
+> **Phase 3.1 Controlled Physical Episode — IMPLEMENTED AND OWNER RUNTIME VALIDATED (PASS).** This status applies to the Phase 3.1 scope only. Phase 3.0 is implemented
+> ([Appendix H](#appendix-h-phase-30-as-built)); **3.2 and 3.3 are NOT implemented.** The history, in order ([Appendix K.9](#k9-final-sign-off-phase-31-owner-runtime-validated)): the owner's first physical run
+> (build `29f31dd`) produced positive evidence and real defects (the retained registry did not survive a load; first projections used special-purpose kinds; an individual's role could stay
+> `Unset`; three harness defects), corrected in [Appendix K](#appendix-k-phase-31-runtime-qa-correction-pass-pr-10); the corrected build then passed the owner's reduced rerun; `RT-PHYX-010B` exposed a false
+> harness assumption (that a loaded save stays paused), not a production defect; isolated evidence confirmed the production load behaviour; and the harness and docs were cleaned up. Two statuses, kept apart:
+> **(1) S31 / M1 is owner-runtime VALIDATED and ACCEPTED** ([§ 7.6](#76-the-vanilla-exit-window-resolved-by-m1-spike-s31-owner-validated), ADR-053, the original record
+> [S31-retained-pawn-exit-reservation](spikes/S31-retained-pawn-exit-reservation.md)): the owner ran the dedicated S31 spike on a real 1.6 game before 3.1 was implemented, and reserving a retained named pawn
+> **while it is spawned** is the accepted production mechanism. **(2) The Phase 3.1 physical suite is owner-runtime validated** ([RUNTIME_TESTING § 17.5](RUNTIME_TESTING.md#175-final-phase-31-owner-runtime-evidence): evidence accumulated across
+> the S31 spike, the initial run, the corrected reduced rerun and an isolated 010B follow-up, not one run); save/load registry reconstruction is validated. Earlier: implemented and corrected after review
+> ([Appendix I](#appendix-i-phase-31-as-built), [Appendix J](#appendix-j-phase-31-post-review-correction-pass-pr-10)). **Not claimed:** Phase 3.2, held custody, rescue, groups or group extraction; arbitrary modded races; every RimWorld/mod combination.
+> The live game holds the real physical adapter, and the only trigger that creates or places a contractor pawn is the session-armed physical test tier (Dev Mode, its own test map). The save format is still **5**; there is no Harmony.
+> The design text below is unchanged by the implementation except where Appendices H, I, J and K record a decision the design left open or a correction.
 >
 > *Original design status:* **DESIGN REVIEW.** Written against `main` `6d0352d`
 > (Phase 2.9 merged and owner-runtime-validated; save format stays **4**). Every RimWorld fact below was read
@@ -1247,8 +1247,8 @@ pawn is **not** passed a second time. `Decide` only; `Discard` is never used for
 
 > **Status: RESOLVED. S31 was run by the owner on a real 1.6 game and PASSED; M1 (reserve a retained named pawn while it is spawned) is
 > accepted as the production mechanism ([ADR-053](DECISIONS.md)).** The analysis below is the design record the spike answered and is
-> kept as written (in the future tense where it asked a question). **What this does not say:** the Phase 3.1 implementation is not
-> runtime-validated by it; `RT-PHYX-015` and `RT-PHYX-016` on the 3.1 build are still the owner's runs.
+> kept as written (in the future tense where it asked a question). The original spike record is [S31-retained-pawn-exit-reservation](spikes/S31-retained-pawn-exit-reservation.md). **What this does not say:** the S31 spike validated the *mechanism* only; the Phase 3.1
+> implementation was validated by the separate `RT-PHYX-*` suite (`RT-PHYX-015` and `RT-PHYX-016` on the 3.1 build included), which the owner later passed ([Appendix K.9](#k9-final-sign-off-phase-31-owner-runtime-validated)).
 
 **Result: the owner's S31 runtime spike** (run before Phase 3.1 was implemented; recorded by ADR-053). M1 passed every required case:
 
@@ -1268,7 +1268,7 @@ pawn is **not** passed a second time. `Decide` only; `Discard` is never used for
 
 What this proves: reserving a retained named pawn while it is spawned is safe in vanilla 1.6 and closes the exit window, so neither the
 synchronous-callback mechanism (M2) nor a Harmony patch (M3, C-4) is needed. It proves nothing more than the cases above: the spike's
-harness and report are the owner's, and no spike code is in this repository (a source scan enforces that).
+harness and report are the owner's, and no spike code is in this repository (a source scan enforces that). The original spike record (question, source facts, scenarios, owner checklist, result) is [spikes/S31-retained-pawn-exit-reservation.md](spikes/S31-retained-pawn-exit-reservation.md), carried from PR #9.
 
 **The hazard.** The design keeps a retained named pawn off the `Free` list while it is stored ([§ 7.4](#74-the-registry-reservation-retained-pawns-only)).
 But a *normal* exit is performed by **vanilla**, which passes the pawn to the world before the Network has had any chance to
@@ -2477,7 +2477,7 @@ split would only add review overhead.
 | Subphase | Content | Proof | Owner gate |
 |---|---|---|---|
 | **3.0 Authority and episode foundation** (no RimWorld pawn) | `EpisodeStore`, `PawnRef` (with `agedThroughTick`), the character fields (`pawn`, `episode`, `heldBy`, `opRole`, `firstEncounterTick`), `AuthorityGate` and its call sites, **the reconciliation planner, validator and the atomic Applier**, the physical-apply split of the casualty/succession/ending paths, the `PhysicalWorldPort` + scriptable fake, the validator, compaction, prepare-for-removal settle, `RT-PHYS-001…019` and **025–029**, the save-version bump + no-op migration | headless suite (incl. the fault-injection sweep and the parity test) + soaks + the **safe** runtime tier in the owner's real colony. **Zero new risk to a real save.** | review the abstract core before any pawn exists; S31 is **not** required |
-| **3.1 The controlled physical episode** (the slice) | the real `PhysicalWorldPort` adapter, **role-constrained projection for a Solo**, **truthful aging catch-up**, binding, tags, `SignalBridge` routes, the visit Lord, the temporary faction, the registry quest, store-time normalization, the **physical test tier with its session arm and own test map**, `RT-PHYS-020…022` and `030`, `RT-PHYX-001…012` and `015…016`, a read-only Episode Monitor | the physical tier on the suite's own test map; the owner's save/load checklist; **spike S31 run and owner-reviewed before any 3.1 implementation (done: PASS, M1, ADR-053)** | review real pawns before any content; **gated on the owner's physical run of the 3.1 suite** |
+| **3.1 The controlled physical episode** (the slice) | the real `PhysicalWorldPort` adapter, **role-constrained projection for a Solo**, **truthful aging catch-up**, binding, tags, `SignalBridge` routes, the visit Lord, the temporary faction, the registry quest, store-time normalization, the **physical test tier with its session arm and own test map**, `RT-PHYS-020…022` and `030`, `RT-PHYX-001…012` and `015…016`, a read-only Episode Monitor | the physical tier on the suite's own test map; the owner's save/load checklist; **spike S31 run and owner-reviewed before any 3.1 implementation (done: PASS, M1, ADR-053)** | review real pawns before any content; **the owner's physical run of the 3.1 suite passed (Phase 3.1 owner runtime validated, Appendix K.9)** |
 | **3.2 Custody, rescue and groups** | held-person observation (arrest, recruit, enslave, kidnap, caravan, pod), the custody watch, **group materialization, organization role composition and mission composition, anonymous vs concretized people, promotion, team cohesion**, the **rescue** episode for a Troubled operation (site holder, `OpStatus.Physical`, `OnPhysicalResolved`), the Last Known Location with survivors/captives, the events, `RT-PHYS-023…024`, `RT-PHYX-013…014`, `RT-PHYX-020+` | physical tier + owner play | **first player-visible content** |
 | **3.3 Procurement fulfillment / physical handoff** (**design direction only**, [§ 27](#27-phase-33-procurement-fulfillment-and-physical-handoff-design-direction)) | delivery-mode selection and capability, per-contract orbital charter, freight vs personal carry, the colony handoff and rendezvous episodes, the explicit handoff (an idempotent staged protocol), the robbery / betrayal consequence hook, future-rivalry seams | decided when 3.2 has merged and been reviewed | owner review before any implementation |
 
@@ -3202,15 +3202,14 @@ as one guarded sub-step). **The RT-PHYS suite has run headlessly only; it has no
 
 ## Appendix I: Phase 3.1 as built
 
-> **Phase 3.1 IMPLEMENTED; OWNER PHYSICAL VALIDATION IN PROGRESS (not a PASS).** The text below is the build as first delivered; the post-review
+> **Phase 3.1 IMPLEMENTED AND OWNER RUNTIME VALIDATED (PASS; Phase 3.1 scope only).** The text below is the build as first delivered; the post-review
 > correction ([Appendix J](#appendix-j-phase-31-post-review-correction-pass-pr-10)) and the runtime-QA correction after the owner's first run
 > ([Appendix K](#appendix-k-phase-31-runtime-qa-correction-pass-pr-10)) amend it where they say so (notably the registry's two load stages, the first-projection kind pool and the role of individuals
-> that predate the field). HEADLESS: the full suite passes (including the safe physical suite over the fake port, the `Phys31Fix.*` and `Phys31Qa.*` regressions and the source scans). SAFE RUNTIME: the sandbox suite passes headlessly; the in-game safe run on this build
-> is the owner's. **PHYSICAL RUNTIME (`RT-PHYX-*`): the owner's first run (build `29f31dd`) is done and its findings are corrected; the corrected build awaits its reduced retest.** Two statuses, kept apart: **S31 / M1 is owner-runtime PASS and
-> accepted** ([§ 7.6](#76-the-vanilla-exit-window-resolved-by-m1-spike-s31-owner-validated), ADR-053: the owner ran the dedicated S31 spike before 3.1 was implemented),
-> while **Phase 3.1 as a complete controlled physical episode is NOT runtime-validated**: `RT-PHYX-001…012`, the production regressions
-> `RT-PHYX-015` and `RT-PHYX-016` on the corrected build, the 3.1 save/load matrix (010A and 010B, each with a reload), role generation on real pawns and truthful aging on real
-> disposable pawns are all still the owner's runs. No Harmony; no new durable field; save format **5**.
+> that predate the field). HEADLESS: the full suite passes (including the safe physical suite over the fake port, the `Phys31Fix.*`, `Phys31Qa.*` and `Phys31Fin.*` regressions and the source scans). SAFE RUNTIME: the sandbox suite passes headlessly; the in-game safe run on this build
+> is the owner's. **PHYSICAL RUNTIME (`RT-PHYX-*`): owner validated.** The owner's first run (build `29f31dd`) found real defects, they were corrected, and the corrected reduced rerun passed; the save/load cases were closed by an isolated follow-up
+> ([K.9](#k9-final-sign-off-phase-31-owner-runtime-validated), [RUNTIME_TESTING § 17.5](RUNTIME_TESTING.md#175-final-phase-31-owner-runtime-evidence)). Two statuses, kept apart: **S31 / M1 is owner-runtime PASS and
+> accepted** ([§ 7.6](#76-the-vanilla-exit-window-resolved-by-m1-spike-s31-owner-validated), ADR-053: the owner ran the dedicated S31 spike before 3.1 was implemented), and **the Phase 3.1 controlled physical episode is owner-runtime validated**. Neither is Phase 3.2: held custody, rescue,
+> groups and group extraction do not exist, and arbitrary modded races and every RimWorld/mod combination are not claimed. No Harmony; no new durable field; save format **5**.
 
 Phase 3.1 implements the 3.1 row of [§ 23](#23-suggested-subphases) for **one Solo**: the real `IPhysicalWorldPort`, role-constrained
 first projection, the write-once binding, the retained-pawn registry, the temporary encounter faction, the visit Lord, signal routing
@@ -3338,7 +3337,7 @@ leases, notable assets, ambient visits, any player-facing content, Harmony. `RT-
 
 ## Appendix J: Phase 3.1 post-review correction pass (PR #10)
 
-> **Status: implemented headlessly; OWNER PHYSICAL RUNTIME VALIDATION of Phase 3.1 is still required.** This pass followed the architecture
+> **Status: implemented headlessly when written; the owner has since runtime-validated Phase 3.1 ([K.9](#k9-final-sign-off-phase-31-owner-runtime-validated)).** This pass followed the architecture
 > review of PR #10. It changed nothing the review approved (Phase 3.0 stays the lifecycle authority; one authority at a time;
 > Actor ≠ Person ≠ Pawn; one pawn for life; the write-once binding; the real port; M1; one hidden registry quest; one temporary encounter
 > faction per episode; vanilla `LordJob_VisitColony`; signals only wake; the bounded watch; monotonic death; unsupported custody
@@ -3440,12 +3439,12 @@ runtime suite: not yet run by the owner when this pass was written** (the owner'
 
 ## Appendix K: Phase 3.1 runtime-QA correction pass (PR #10)
 
-> **Status: Phase 3.1 implemented; owner physical validation in progress. This is NOT a Phase 3.1 PASS.** The owner ran the first real physical suite on build
+> **Status: Phase 3.1 implemented and owner runtime validated (PASS, Phase 3.1 scope only; the sign-off is [K.9](#k9-final-sign-off-phase-31-owner-runtime-validated)).** This pass was written when the owner's first run had just exposed real defects. The owner ran the first real physical suite on build
 > `29f31dd` in a disposable save (RimWorld, its DLCs and The Network only). S31 / M1 timing itself stays accepted (ADR-053); this pass is about making production
 > M1 **survive a save and load** and about three production defects and three harness defects the run exposed. Phase 3.0's lifecycle (authority, episodes,
 > the atomic commit, RELEASE) is unchanged, as is every design principle the review approved. No Harmony. No new durable field: save format **5**. The owner's QA save
 > is forensic evidence (retained pawns were discarded by vanilla after the registry gap, leaving bindings that point at discarded things) and is **not** to be reused,
-> and nothing here makes that one save look clean: the retest uses a fresh disposable save.
+> and nothing here makes that one save look clean: the retest used a fresh disposable save.
 
 ### K.1 What the first owner run showed
 
@@ -3505,12 +3504,11 @@ ever had a pawn is never given one retroactively; no save-version bump (it fills
   at 0. The old assertion expected it to increment. Now: 0 passed, 0 skipped, 0 refused. P3-INV-031's protection and RELEASE are unchanged.
 * **`RT-PHYX-009`.** Two phases, asserted separately. During the unsupported custody the facts are captured on the frame the quarantine is first observed (`sawUnsupportedQuarantine`, `sawPawnStillPrisoner`, `sawAuthorityClosed`, `sawNoCommit`, `sawNoPassToWorld`),
   **before** the map is removed. After vanilla clears the custody: re-observation, the ordinary Returned path, the same pawn and binding, no Network pass. The final state is **not** required to still be Quarantined.
-* **`RT-PHYX-010`.** Display labels only (the family id stays `RT-PHYX-010` everywhere): **`010A SAVE — visitor spawned`**, **`010B SAVE — post-map`**, **`010V VERIFY — loaded save`**. A save made while paused loads paused, so no tick runs
-  between the load and the verifier; no harness change was needed for that, and nothing about the test is persisted. The workflow is in [RUNTIME_TESTING § 17.3](RUNTIME_TESTING.md#173-rt-phyx-010-the-save-and-load-workflow-owner-steps).
-  **Stopping `010V` stops only the read-only QA runner; it does not cancel a real production episode**, which keeps blocking the next destructive scenario until it completes.
+* **`RT-PHYX-010`.** Display labels only (the family id stays `RT-PHYX-010` everywhere): **`010A SAVE — visitor spawned`**, **`010B SAVE — post-map`**, **`010V VERIFY — loaded save`**. Nothing about the test is persisted. The workflow is in [RUNTIME_TESTING § 17.3](RUNTIME_TESTING.md#173-rt-phyx-010-the-save-and-load-workflow-owner-steps).
+  **Stopping `010V` stops only the read-only QA runner; it does not cancel a real production episode**, which keeps blocking the next destructive scenario until it completes. *(An earlier version of this entry, and of the owner instructions, assumed a reloaded save stays paused so that no game tick passes before the verifier; the owner's `010B` reload showed that is false. Corrected in [K.9](#k9-final-sign-off-phase-31-owner-runtime-validated).)*
 * **`RT-PHYX-011`** additionally reports the allowed kind provenance (K.4).
 
-### K.7 Evidence and what is still owed
+### K.7 Evidence and what was then owed *(all of it since done: see [K.9](#k9-final-sign-off-phase-31-owner-runtime-validated))*
 
 * **Headless:** the full suite, **422 tests, 31,336 checks, 0 failures** (385 / 29,887 before this pass, plus 37 `Phys31Qa.*` regressions: 33 from the runtime-QA fixes, and the Fixer exclusion of K.8 replaced one and added four), zero C# warnings, save format 5, no Harmony. Five existing tests were updated because they encoded the defects or the superseded
   status: the label convention (`Phys31.TierScenarioTableAndMenuLabels`), the "rebuilt in `FinalizeInit`" scan with its thing-id-less fixture (`Phys31.M1RuleIsRepresentedInTheRealAdapter`), the registry-quest place count, and the two docs-status assertions of the previous pass
@@ -3532,3 +3530,30 @@ had picked it. The follow-up review's answer, applied narrowly:
 * **Plan fails closed.** `Plan` refuses (`RoleUnderivable`, nothing changed) an embodied person whose role is `Unset` and not derivable, rather than inventing one. A Phase 3.1 dev test cannot reach it once the picker is right.
 
 A Fixer may become physically realizable in a later design (its own role design, if any); nothing here implements that.
+
+### K.9 Final sign-off: Phase 3.1 owner runtime validated
+
+**Status: Phase 3.1 Controlled Physical Episode — IMPLEMENTED AND OWNER RUNTIME VALIDATED. S31/M1 accepted. Full Phase 3.1 physical QA passed. Save/load registry reconstruction validated. PR #10 remains unmerged pending final review.**
+This status applies to the Phase 3.1 scope only. The history, kept intact and in order: *first owner run found real defects → defects corrected → reduced owner rerun passed → 010B exposed the false paused-load harness assumption → isolated evidence confirmed production load behavior → harness and docs cleaned up.* In full:
+
+1. **The first owner run found real defects.** Build `29f31dd`, a disposable save: positive evidence plus six issues (K.1): the retained registry did not survive a load; first projections used special-purpose kinds; an individual's role could stay `Unset`; and three harness defects.
+2. **The defects were corrected.** The runtime-QA pass (K.2 to K.7: the two-stage registry load, the generic first-projection kind pool, role compatibility, the harness fixes) and the Fixer exclusion (K.8: Phase 3.1 exercises an NPC Solo *contractor*, never a Fixer).
+3. **The reduced owner rerun passed.** On the corrected build, in a fresh disposable save: `001`, `002`, `004`, `007`, `009`, `010A` + save/load, `010B` + save/load, `011`, `015` (the evidence of `003`, `005`, `006`, `008`, `012` and `016` from the earlier run stays valid because the corrections do not touch their paths).
+4. **`010B` exposed the false paused-load harness assumption.** The owner's instructions and a source comment claimed that a checkpoint saved at a pause reloads still paused, so that no game tick passes before the verifier. In the `010B` reload RimWorld **resumed gameplay by itself**, and the saved episode closed normally on the first gameplay tick before `010V` could run.
+5. **Isolated evidence confirmed production load behavior.** The saved episode closed on that first tick with the same Episode and the same Pawn, `ObservedKind.WorldFree`, outcome `Returned`, the `COMMIT`, `RELEASE`, `FOLLOW-UP` and `PUBLISH` stages, and the character `Stored`: no gap, no duplicate, no reroll, no Network error. That is what the production
+   load invariant requires: the registry and the load safety are correct **before the first gameplay tick**, whether or not the owner's verifier has run yet (§ 16.3).
+6. **The harness and docs were cleaned up.** This pass (docs and QA harness only; **production lifecycle code unchanged**): every claim that a reload stays paused, or that no tick can pass before the verifier, was removed from source comments and docs; `010V` now handles both branches (below); the owner instructions say RimWorld may resume time immediately after a load; the finalized S31 spike record
+   was carried into this PR from its original on PR #9; the status is recorded as owner runtime validated everywhere; and the final evidence block was added ([RUNTIME_TESTING § 17.5](RUNTIME_TESTING.md#175-final-phase-31-owner-runtime-evidence)).
+
+**The corrected statement about loading.** RimWorld may resume time immediately after a load, even when the checkpoint was saved while paused. The production load invariant must therefore be true before the first gameplay tick (it is: two stages, § 16.3), and the human verifier may run after the saved episode has already reconciled.
+
+**`010V`, two branches (read-only; no production reconciliation change).** *Branch A*: a matching `RT-PHYX-010` episode is still incomplete: verify the load facts and follow it to completion, as before. *Branch B*: the relevant episode already completed: validate the persisted terminal result:
+state `Closed` with `RELEASE`, `FOLLOW-UP` and `PUBLISH` complete; outcome `Returned`; the expected `WorldFree` observation; the same durable `Pawn` binding (no replacement); the character `Stored` with no active episode link; abstract authority; a world pawn that is `ReservedByQuest` and covered by the registry; no duplicated thing id; no integrity finding, reservation failure or quarantine;
+no load-time generation or reroll. The log says: *"The RT-PHYX-010 episode completed before the owner could run 010V; validating the persisted terminal result instead."* The episode is found through its existing durable provenance (`EpisodeCause.devKey`, `PhysicalTest:<runId>:RT-PHYX-010`); no field is added to any save. Selection is deterministic (the latest creation tick wins; two candidates with the same latest tick are **inconclusive**, never guessed), and a world with no unambiguous relevant episode reports a gap, never a pass.
+A terminal state does not prove the instantaneous pre-reconciliation state at the load: that is established by the `010A`/`010B` SAVE-time evidence and the isolated follow-up above.
+
+**Headless evidence of this pass.** The full suite: **432 tests, 33,241 checks, 0 failures** (422 / 31,336 before it, plus the ten `Phys31Fin.*` tests: the `010V` branch selection, the terminal verdict and its rejections, the read-only scan, the no-paused-load-claim scan, and the documentation assertions), zero C# warnings, save format 5, no Harmony. Six mutations of the pure `010V` rules (the outcome clause, the ambiguity rule,
+the active-link clause, the incomplete-first rule, the binding clause, the registry clause) are each caught. Two existing documentation tests were updated deliberately because they encoded the earlier "validation in progress" status (`Phys31Fix.Docs_*`, `Phys31Qa.Docs_*`); no production test was changed. **Production lifecycle code is unchanged:** the source diff of this pass touches only the dev-only QA harness (`Diagnostics/RuntimePhysicalTests/`).
+No owner rerun is required for this pass: it changes a read-only verifier, tests and documentation, never the lifecycle, the registry or the save.
+
+**What is not claimed.** Phase 3.2 does not exist: held custody, rescue, groups and group extraction are not implemented. Arbitrary modded races are not validated, and no claim is made for every RimWorld/mod combination. The physical tier stays dev-only; there is no player-facing content, no Harmony, and the save format stays **5**.

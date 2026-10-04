@@ -702,10 +702,14 @@ namespace TheNetwork.Tests
             T.Check(integration.Contains("BEFORE `Scribe.loader.FinalizeLoading()`"), "RIMWORLD_INTEGRATION states FinalizeInit precedes cross-reference resolution");
             foreach (string stale in new[] { "rebuilt from the characters store in `FinalizeInit`", "the runtime index is rebuilt when the runtime is built", "(after cross-references\nresolve, before any first tick)" })
                 T.Check(!lifecycle.Contains(stale), "no stale claim remains: " + stale.Replace("\n", " "));
-            // Status wording: not a PASS, in progress, and S31 kept apart.
+            // Status wording. (The final cleanup pass: the owner has runtime-validated Phase 3.1, so the earlier "not a PASS / in progress" wording is replaced by the validated status,
+            // asserted in full by Phys31Fin.Docs_*; this check keeps what the QA pass established: S31 is kept apart, and no document claims more than Phase 3.1.)
             foreach (KeyValuePair<string, string> kv in new[] { new KeyValuePair<string, string>("README", readme), new KeyValuePair<string, string>("PHYSICAL_LIFECYCLE", lifecycle), new KeyValuePair<string, string>("RUNTIME_TESTING", testing), new KeyValuePair<string, string>("IMPLEMENTATION_PHASES", phases), new KeyValuePair<string, string>("DECISIONS", decisions) })
-                T.Check(!Regex.IsMatch(kv.Value, @"(?<!NOT a |not a |NOT )Phase 3\.1 PASS\b"), kv.Key + " never claims a Phase 3.1 PASS (it may only deny one)");
-            T.Check(lifecycle.Contains("OWNER PHYSICAL VALIDATION IN PROGRESS") && testing.Contains("OWNER PHYSICAL VALIDATION IN PROGRESS") && phases.Contains("OWNER PHYSICAL VALIDATION IN PROGRESS") && readme.Contains("owner physical validation in progress"), "every status says validation is in progress");
+            {
+                T.Check(Regex.IsMatch(kv.Value, @"(?i)owner runtime validated"), kv.Key + " states that Phase 3.1 is owner runtime validated");
+                T.Check(!Regex.IsMatch(kv.Value, @"(?i)owner physical validation in progress"), kv.Key + " no longer says validation is in progress");
+                T.Check(!Regex.IsMatch(kv.Value, @"(?i)Phase 3\.2 (is )?(implemented|started|begun|in progress)"), kv.Key + " does not claim Phase 3.2");
+            }
             T.Check(!Regex.IsMatch(testing + phases + readme, @"physical suite \(`RT-PHYX-\*`\) has not yet been run by the owner") && !testing.Contains("**PHYSICAL RUNTIME — NOT YET RUN BY OWNER.**"), "no document still says the owner has not run the physical suite");
             T.Check(lifecycle.Contains("S31 / M1 is owner-runtime VALIDATED and ACCEPTED") && decisions.Contains("**Accepted — owner runtime validated.**"), "S31 / M1 stays recorded as accepted, apart from the Phase 3.1 status");
             // The owner's workflow and labels.

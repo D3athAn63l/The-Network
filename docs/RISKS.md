@@ -48,13 +48,13 @@
 | R-39 | Team cohesion is infeasible, over-trusted, or drifts into sanitizing real social history | Low | Medium | Phase 3.2 (S26) |
 | R-40 | Reputation, fame and capability stay conflated and leak into projection | Medium | Medium | design now; a later focused phase |
 | R-41 | Handoff exploits: cargo duplication, ownership ambiguity, a "reform caravan" loophole, a double charge | High | Medium | Phase 3.3 (design; S28–S30) |
-| R-42 | A retained pawn becomes temporarily `Free` during a vanilla map exit and vanilla redresses, discards or reuses it before the Network's reservation takes effect | High | Medium → **Low (mitigated by M1; S31 passed in the owner's runtime, ADR-053); the 3.1 regressions are the owner's pending run** | Phase 3.1 (S31 **done**) |
+| R-42 | A retained pawn becomes temporarily `Free` during a vanilla map exit and vanilla redresses, discards or reuses it before the Network's reservation takes effect | High | Medium → **Low (mitigated by M1; S31 passed in the owner's runtime, ADR-053; the 3.1 regressions `RT-PHYX-015` and `016` passed in the owner's runtime too)** | Phase 3.1 (S31 **done**) |
 | R-43 | The physical test tier is run on a save that matters, or its cleanup touches what it does not own | High | Low | Phase 3.1 (the session arm, the fact-only guard, ownership-proven disposal) |
 | R-44 | Role-constrained creation cannot satisfy a role on a heavily modded race or kind list (repeated contained aborts) | Medium | Medium | Phase 3.1 (`RT-PHYX-011` on the owner's mod list) |
 | R-45 | A temporary encounter faction leaves residue (its vanilla leader world pawn, or the faction itself after an unusual exit) | Low | Medium | Phase 3.1 (`RT-PHYX-008`; sentinel notes) |
-| R-46 | **The retained registry does not survive a load:** it is built before the load's cross-references resolve, so retained people are `Free` on the first tick and vanilla discards them | **High** | **Observed** | Phase 3.1 (owner run on `29f31dd`; corrected; `RT-PHYX-010` A and B with a reload) |
-| R-47 | A first projection borrows a special-purpose kind (boss, royal, ancient, cultist) because its combat stats fit the role | High | **Observed** | Phase 3.1 (owner run on `29f31dd`; corrected; `RT-PHYX-011` provenance) |
-| R-48 | A person reaches first materialization with their operational role unknown (`Unset`) | Medium | **Observed** | Phase 3.1 (owner run on `29f31dd`; corrected; `RT-PHYX-001`) |
+| R-46 | **The retained registry does not survive a load:** it is built before the load's cross-references resolve, so retained people are `Free` on the first tick and vanilla discards them | **High** | **Observed** | Phase 3.1 (owner run on `29f31dd`; corrected; `RT-PHYX-010` A and B with a reload: **owner runtime validated**) |
+| R-47 | A first projection borrows a special-purpose kind (boss, royal, ancient, cultist) because its combat stats fit the role | High | **Observed** | Phase 3.1 (owner run on `29f31dd`; corrected; `RT-PHYX-011` provenance: **owner runtime validated**) |
+| R-48 | A person reaches first materialization with their operational role unknown (`Unset`) | Medium | **Observed** | Phase 3.1 (owner run on `29f31dd`; corrected; `RT-PHYX-001`: **owner runtime validated**) |
 
 ---
 
@@ -605,8 +605,8 @@
   affected (it creates no pawn) ([§ 7.6](PHYSICAL_LIFECYCLE.md#76-the-vanilla-exit-window-resolved-by-m1-spike-s31-owner-validated)).
 - **Proven by.** Spike **S31** (cases A to G): **PASSED in the owner's runtime; M1 accepted** (ADR-053). Then the physical-tier
   regressions `RT-PHYX-015` (normal exit) and `RT-PHYX-016` (map removal) and P3-INV-032 on the 3.1 build: implemented; the owner's first run
-  (build `29f31dd`) showed M1 holding while spawned and across a vanilla exit, and exposed the **load-time gap of R-46** (corrected); the corrected build awaits its reduced retest.
-- **Phase 3.1 status (implemented; owner physical validation in progress, not a PASS).** Phase 3.1 is built on the accepted
+  (build `29f31dd`) showed M1 holding while spawned and across a vanilla exit, and exposed the **load-time gap of R-46** (corrected); the corrected build then passed the owner's reduced rerun (including `RT-PHYX-015`), and `RT-PHYX-016` stands on the earlier run ([RUNTIME_TESTING § 17.5](RUNTIME_TESTING.md#175-final-phase-31-owner-runtime-evidence)).
+- **Phase 3.1 status (Controlled Physical Episode — implemented and owner runtime validated, PASS; Phase 3.1 scope only).** Phase 3.1 is built on the accepted
   **M1** (reserve while spawned): the registry's membership is derived from the binding and the retained custody, the binding precedes
   the spawn, placement is refused unless the registry already covers the pawn, and RELEASE only **proves** the reservation (it never
   creates it); no Network `PassToWorld` for a pawn vanilla passed (source-scanned). After M1 an **actual `Free` on a retained named
@@ -645,14 +645,14 @@
 - **Mitigation.** Two load stages: the durable thing-id index at `FinalizeInit` (a narrow bridge: the persisted `PawnRef` stays authoritative, a resolved pointer must agree) and the validated pointer index at the world component's `PostLoadInit`; the registry quest restored
   from durable state before the first tick; a bounded integrity audit of every living bound person (unresolved, discarded, mismatching) that reports and never repairs; nothing is generated, spawned, cleared or healed at load
   ([PHYSICAL_LIFECYCLE § 16.3](PHYSICAL_LIFECYCLE.md#163-the-registry-across-load-corrected-by-the-phase-31-runtime-qa-pass), P3-INV-037).
-- **Proven by.** `Phys31Qa.Fix1_*` and `Phys31Qa.Fix7_*` (headless, over real `Pawn` objects; five mutations that reintroduce the defect are caught); the owner's `RT-PHYX-010` A and B, each with a reload and `010V`, on a fresh save.
+- **Proven by.** `Phys31Qa.Fix1_*` and `Phys31Qa.Fix7_*` (headless, over real `Pawn` objects; five mutations that reintroduce the defect are caught); the owner's `RT-PHYX-010` A and B, each with a reload, on a fresh save (**owner runtime validated**: in the `010B` reload the saved episode closed normally on the first gameplay tick, [RUNTIME_TESTING § 17.5](RUNTIME_TESTING.md#175-final-phase-31-owner-runtime-evidence)).
 
 ## R-47 · A first projection borrows a special-purpose kind (Phase 3.1, observed)
 - **Failure modes.** A global capability ranking admits boss, royal, ancient and cultist kinds as ordinary contractors; later gameplay (resurrection, titles, ideology) is then genuinely wrong for the person.
 - **Mitigation.** The encounter faction's own generic member pool only, admitted by what the kind carries (P3-INV-038); no named list; a faction with no generic member is not chosen and the projection aborts before anything is bound; a pawn that already exists is never sanitized.
-- **Proven by.** `Phys31Qa.Fix2_*`; `RT-PHYX-011` reports the allowed provenance on the owner's mod list.
+- **Proven by.** `Phys31Qa.Fix2_*`; `RT-PHYX-011` reports the allowed provenance on the owner's mod list (**owner runtime validated**: generic kinds only, no special-purpose leakage).
 
 ## R-48 · A person's role is unknown at first materialization (Phase 3.1, observed)
 - **Failure modes.** The derivation returned `Unset` for an individual with no `ContractorProfile` (a Fixer, which `IsSolo` counts and the physical tier's lowest-id picker selected), so the first projection was unconstrained and `RT-PHYX-001` failed, and the tier could PASS without exercising a contractor.
 - **Mitigation.** The picker, the role compatibility pass and the derivation are limited to NPC Solo contractors (`IsNpcSoloContractor`); a Fixer is outside Phase 3.1 and untouched (a role an earlier build stored on one is neither cleared nor rewritten); the pass stores a contractor's role once at bootstrap and load; `Plan` stays the safety net and fails closed (`RoleUnderivable`) rather than inventing a role; never overwritten, never reconstructed for a bound person (P3-INV-039, Appendix K.8).
-- **Proven by.** `Phys31Qa.Fix3_*`; `RT-PHYX-001`.
+- **Proven by.** `Phys31Qa.Fix3_*`; `RT-PHYX-001` (**owner runtime validated**: the actors were NPC Solo contractors, not Fixers).

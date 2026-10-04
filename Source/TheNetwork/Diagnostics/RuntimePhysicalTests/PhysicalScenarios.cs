@@ -783,7 +783,9 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
     /// <summary>
     /// RT-PHYX-010 — owner-assisted save points (menu: 010A SAVE — visitor spawned, 010B SAVE — post-map). Each one sets up a meaningful state,
     /// PAUSES the game and asks the owner to save and load; "010V VERIFY — loaded save" then checks the loaded state read-only. There is no
-    /// save/reload automation. A save made while paused loads paused, so no tick runs between the load and the verifier.
+    /// save/reload automation. RimWorld may resume time immediately after a load even when the checkpoint was saved while paused, so the saved episode
+    /// may already have reconciled on the first gameplay tick before 010V can be run: nothing here depends on the pause surviving, because the production
+    /// load invariant (the retained registry is correct before the first tick) is what makes that safe, and 010V validates either state.
     /// </summary>
     public sealed class Phyx010SavePoint : PhysicalRun
     {
@@ -811,8 +813,9 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 }
                 else Snap(p, "before saving");
                 v.Check(true, "save point " + (removeMap ? "B (map removed, not yet reconciled)" : "A (visitor present)") + " is set: episode " + e.id + ", person " + c.id + ", pawn #" + p.thingIDNumber);
-                v.Note("NOW: save the game (it is paused), return to the main menu and load that save, then IMMEDIATELY run \"" + PhysicalTestIds.Label010V + "\" (NO ARM) and let the verifier and the episode finish naturally (unpause). "
-                    + "Stopping the verifier stops only the read-only QA runner: it does NOT cancel the real production episode, which keeps blocking the next destructive physical scenario until it completes.");
+                v.Note("NOW: save at this checkpoint, return to the main menu and load that save, then run \"" + PhysicalTestIds.Label010V + "\" (NO ARM) as soon as practical. "
+                    + "RimWorld may resume time right after the load even though this checkpoint is saved while paused, so the saved episode may already have reconciled on the first gameplay tick: 010V handles both (an incomplete episode is verified and followed; "
+                    + "a completed one has its persisted terminal result validated). Stopping the verifier stops only the read-only QA runner: it does NOT cancel the real production episode, which keeps blocking the next destructive physical scenario until it completes.");
                 return StepResult.Next;
             });
         }
@@ -1268,9 +1271,21 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
     }
 
     /// <summary>
-    /// RT-PHYX-010 — "Verify after load" (READ-ONLY, no arm): nothing generated, spawned, destroyed, rerolled or cloned by the load; the
-    /// bindings resolve to exactly one Pawn each; the registry was rebuilt before the first tick; tags agree with the bindings; every
-    /// incomplete episode is watched; no terminal outcome invented. With incomplete episodes it then follows them, read-only, to the end.
+    /// RT-PHYX-010 — "010V VERIFY — loaded save" (READ-ONLY, no arm): nothing generated, spawned, destroyed, rerolled or cloned by the load; the
+    /// bindings resolve to exactly one Pawn each; the registry is covered (stage 1 at FinalizeInit, stage 2 at PostLoadInit, both before the first tick);
+    /// tags agree with the bindings; every incomplete episode is watched; no terminal outcome invented.
+    ///
+    /// TWO legitimate branches (<see cref="Phyx010Selection"/>), because RimWorld may resume time immediately after a load even when the checkpoint was
+    /// saved while paused, so the saved episode can reconcile on the first gameplay tick before the owner can click this:
+    /// <list type="bullet">
+    /// <item><b>A, a matching RT-PHYX-010 episode is still incomplete:</b> verify it and follow it, read-only, to completion.</item>
+    /// <item><b>B, the relevant episode already completed after the load:</b> validate its PERSISTED TERMINAL RESULT (<see cref="Phyx010Terminal"/>): Returned,
+    /// the same Pawn, Stored, no episode link, abstract authority, a reserved world pawn, release/follow-up/publication complete, no integrity finding. The
+    /// episode is found from the existing cause (the dev key), never a new persisted field; a latest-wins deterministic rule, or an inconclusive report when
+    /// it cannot be told apart, never "some completed 010 exists". A terminal state cannot prove the instantaneous pre-reconciliation state at load: that
+    /// is established by the 010A / 010B SAVE setup evidence.</item>
+    /// </list>
+    /// It changes nothing: it calls no lifecycle, registry-mutating or world-mutating method.
     /// </summary>
     public sealed class Phyx010VerifyAfterLoad : PhysicalRun
     {
@@ -1287,7 +1302,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 Verify();
                 return StepResult.Next;
             });
-            Then("follow incomplete episodes to completion (read-only; unpause the game)", () =>
+            Then("follow incomplete episodes to completion (read-only; needs game time to pass)", () =>
             {
                 if (!follow) return StepResult.Next;
                 List<PhysicalEpisode> open = ctx.episodes.Incomplete();
@@ -1352,7 +1367,47 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 }
             }
             if (rt.Session.IsRunning) v.Check(unwatched == 0, open.Count + " incomplete episode(s), every one watched (" + unwatched + " not)");
-            else v.Note("the Network has not started yet (paused right after the load): the watch is restored at the first tick; unpause and run this again");
+            else v.Note("the Network's start-up has not run yet this session (no world tick since the load): the watch is restored at the first tick; run this again after it if you want the watch check");
+
+            // Which RT-PHYX-010 episode is relevant, and which branch applies.
+            Phyx010Selection sel = Phyx010Selection.Select(ctx.episodes.episodes);
+            v.Note("RT-PHYX-010 episode selection: " + sel.diagnostic);
+            switch (sel.branch)
+            {
+                case Phyx010Branch.Incomplete:
+                    v.Note("Branch A: the matching episode is still incomplete; it is verified above and followed, read-only, to completion.");
+                    break;
+                case Phyx010Branch.Terminal:
+                    TerminalBranch(sel.relevant, byId);
+                    break;
+                default:
+                    v.Gap(sel.diagnostic + " (INCONCLUSIVE, never a guess)");
+                    break;
+            }
+        }
+
+        /// <summary>Branch B: the saved episode already completed after the load. Validates the persisted terminal result; reads, never writes.</summary>
+        private void TerminalBranch(PhysicalEpisode ep, Dictionary<int, int> byId)
+        {
+            v.Note("The RT-PHYX-010 episode completed before the owner could run 010V; validating the persisted terminal result instead. "
+                + "(A terminal state does not prove the instantaneous pre-reconciliation state at load: that is established by the 010A / 010B SAVE setup evidence.)");
+            KnownCharacter c = ep.members.Count > 0 ? ctx.characters.Get(ep.members[0].character) : null;
+            Pawn p = c?.pawn?.pawn;
+            Phyx010WorldFacts w = new Phyx010WorldFacts { pawnResolved = p != null, pawnThingId = p != null ? p.thingIDNumber : 0, pawnsWithThatThingId = 0 };
+            if (p != null)
+            {
+                int copies;
+                byId.TryGetValue(p.thingIDNumber, out copies);
+                w.pawnsWithThatThingId = copies;
+                w.worldPawn = Find.WorldPawns != null && Find.WorldPawns.Contains(p);
+                w.reservedByQuest = w.worldPawn && Find.WorldPawns.GetSituation(p) == WorldPawnSituation.ReservedByQuest;
+                w.registryReserves = port.Registry.Reserves(p);
+                v.Note("snapshot " + PawnSnap.Of(p, "terminal state after the load").Line());
+            }
+            w.integrityFindings = port.Registry.Audit().Count;
+            if (c != null) testPeople.Add(c.id.Value);
+            List<Phyx010Clause> clauses = Phyx010Terminal.Judge(ep, c, w);
+            for (int i = 0; i < clauses.Count; i++) v.Check(clauses[i].ok, "terminal " + ep.id + ": " + clauses[i].text);
         }
 
         private string MemberLine(PhysicalEpisode ep)

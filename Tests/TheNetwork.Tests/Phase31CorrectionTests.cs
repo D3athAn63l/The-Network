@@ -830,11 +830,11 @@ namespace TheNetwork.Tests
             T.Check(adr.Contains("**Accepted — owner runtime validated.**"), "ADR-053 is Accepted, owner runtime validated");
             T.Check(adr.Contains("RELEASE merely proves the reservation; it does not create it") && adr.Contains("P3-INV-032"), "it records that RELEASE proves and never creates, and closes P3-INV-032");
             T.Check(adr.Contains("no Free-world-pawn window observed") && adr.Contains("no faction") && adr.Contains("no Network double `PassToWorld`"), "it records the owner's findings");
-            T.Check(adr.Contains("Phase 3.1 as a complete controlled physical episode is not"), "and does not claim the whole of Phase 3.1");
+            T.Check(adr.Contains("it validated the **mechanism** only") && adr.Contains("It did not run the Phase 3.1 implementation"), "and does not let the mechanism validation stand in for the Phase 3.1 implementation (the final cleanup pass: the suite itself was validated separately)");
             string spikes = File.ReadAllText(Path.Combine(docs, "spikes/README.md"));
             Match row = Regex.Match(spikes, @"\| \*\*S31\*\*[^\n]*");
-            // The runtime-QA pass: the owner has since run the first physical pass (build 29f31dd), so the 3.1 suite is "in owner validation", not "not yet run".
-            T.Check(row.Success && row.Value.Contains("PASS") && row.Value.Contains("M1 accepted") && row.Value.Contains("in owner validation") && !row.Value.Contains("NOT YET RUN"), "the spikes README lists S31 as an owner-runtime PASS and the 3.1 suite as in owner validation");
+            // The final cleanup pass: the owner has runtime-validated the 3.1 suite, so the row says so (and links the S31 record carried from PR #9).
+            T.Check(row.Success && row.Value.Contains("PASS") && row.Value.Contains("M1 ACCEPTED") && row.Value.Contains("owner runtime validated") && !row.Value.Contains("in owner validation") && !row.Value.Contains("retest owed") && !row.Value.Contains("NOT YET RUN"), "the spikes README lists S31 as an owner-runtime PASS and the 3.1 suite as owner runtime validated");
             string lifecycle = File.ReadAllText(Path.Combine(docs, "PHYSICAL_LIFECYCLE.md"));
             T.Check(lifecycle.Contains("### 7.6 The vanilla exit window: RESOLVED by M1 (spike S31, owner-validated)"), "§ 7.6 says the window is resolved");
             T.Check(lifecycle.Contains("## Appendix J: Phase 3.1 post-review correction pass (PR #10)"), "Appendix J records the correction pass");
@@ -854,12 +854,14 @@ namespace TheNetwork.Tests
                 if (text.Contains("#adr-053--retained-pawn-exit-reservation-uses-m1")) T.Check(adr53 > 0, name + ": the ADR-053 anchor resolves");
                 if (text.Contains("#appendix-j-phase-31-post-review-correction-pass-pr-10")) T.Check(lifecycle.Contains("## Appendix J: Phase 3.1 post-review correction pass (PR #10)"), name + ": the Appendix J anchor resolves");
             }
-            // Status wording never lets the S31 pass stand in for the 3.1 suite, and the 3.1 suite is never claimed as passed. (The runtime-QA pass: the owner has
-            // since run a first physical pass, so the status is "owner physical validation in progress", not "not yet run".)
+            // Status wording keeps the S31 mechanism validation and the Phase 3.1 suite validation as two separate statements. (The final cleanup pass: the owner has runtime-validated
+            // the 3.1 suite, so the earlier "in progress" status is gone; the history stays in Appendix K.)
             foreach (string name in new[] { "PHYSICAL_LIFECYCLE.md", "IMPLEMENTATION_PHASES.md", "RUNTIME_TESTING.md", "RISKS.md" })
             {
                 string text = File.ReadAllText(Path.Combine(docs, name));
-                T.Check(text.Contains("OWNER PHYSICAL VALIDATION IN PROGRESS") || text.Contains("owner physical validation in progress"), name + " states that the 3.1 physical validation is in progress (not a pass)");
+                T.Check(Regex.IsMatch(text, "(?i)owner runtime validated"), name + " states that Phase 3.1 is owner runtime validated");
+                T.Check(!Regex.IsMatch(text, "(?i)owner physical validation in progress"), name + " no longer says the 3.1 validation is in progress");
+                if (name != "RISKS.md") T.Check(text.Contains("mechanism"), name + " still says S31 validated the mechanism (a separate statement from the 3.1 suite)");
             }
         }
 
