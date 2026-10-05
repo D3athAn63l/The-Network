@@ -98,3 +98,16 @@ operation's `physicalEpisode` already carry the links).
 
 No production rescue-site code, no `SitePart.things` use for pawns, no GenStep, no Harmony, no new persisted field (save format **5**). The
 3.1 `SiteAdapter` is untouched.
+
+## 8. Owner-selected rescue semantics (documentation only)
+
+**S11 remains FAIL. The rescue site, captive staging, trigger and letter remain STOPPED / unimplemented.** This locks the desired story outcome for a future separately proven alternative; it is not a runtime result or authorization to build that alternative in PR #11.
+
+| Outcome | Same person's future |
+|---|---|
+| **Rescue** | The player physically frees the same captive/stranded Pawn. Once positive evidence proves the person is genuinely free and has left the rescue situation, they return to Network custody with `heldBy = None`, `heldSinceTick = -1`, the same KnownCharacter and original contractor organization. They may return Wounded; after recovery they can resume that career. Being freed does not rewrite permanent organization/history or make them join the colony. |
+| **Recruitment** | Vanilla makes the same Pawn `Faction.OfPlayer`. Identity, relationships, provenance and history remain, but old NPC availability permanently ends. Phase 3 keeps `Defected` + `OutOfCustody(PlayerColonist)`; future Phase 4 participation comes from the real colony / PlayerProxy, never a former-contractor simulator. |
+
+Do not use vanilla `WillJoinColonyIfRescued` for a contractor rescue. Rescue and recruitment must be visibly separate outcomes.
+
+**Preferred future physical question:** captor state → liberation → free contractor temporarily behaves on their own contractor side → leaves the map → Network stores the same pawn again. Reuse of the existing temporary encounter-faction architecture is the preferred direction: it provides only a physical vanilla shell, while Network Actor / KnownCharacter remain identity. Organizations must not become permanent RimWorld factions. The future alternative spike must first prove the exact faction, guest and Lord transitions safely; none is implemented here.

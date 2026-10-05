@@ -499,8 +499,7 @@ whom vanilla holds (the player's prisoner or slave, the player's recruit, kidnap
 and stays held on their own record (`OutOfCustody`, `heldBy`, `heldSinceTick`, `VanillaHeld`, never abstract). A bounded custody watch (one
 persisted job, only while someone is held) and the pawn's signals observe them. A transition with consequences is reconciled once through a
 one-member Custody episode on the existing pipeline. Only positive evidence (a free, reserved world pawn) returns them to `Stored`. M1 covers held
-pawns. A recruit is `Defected` and never `Stored`; what that means professionally is an OPEN owner decision (O-20). A death while held is
-final. **S11 failed its source audit**, so the rescue site is not built ([S11](spikes/S11-rescue-site-holder.md)); the rescue's domain half (the
+pawns. A recruit is `Defected` and never `Stored`: O-20 locks permanent exit from old NPC availability, with future Player Contractor participation through the real colony / `PlayerProxy`. Phase 4 and the final affiliation schema are not implemented. A death while held is final; all departures from held custody clear live holder metadata. Rescue returns a free contractor to the original organization and does not recruit them. R-50 remains open after the [bookmark source audit](spikes/R50-held-aging-bookmark-audit.md). **S11 failed its source audit**, so the rescue site is not built ([S11](spikes/S11-rescue-site-holder.md)); the rescue's domain half (the
 Troubled handoff and the `OnPhysicalResolved` failure/retry matrix) is proven headlessly. S21 is PARTIAL ([S21](spikes/S21-observation-completeness.md)). New
 runtime ids: safe `RT-PHYS-031…033`, physical `RT-PHYX-020…025` (`009` retired). Save format **5**; no Harmony; no new persisted field. See
 [PHYSICAL_LIFECYCLE Appendix L](PHYSICAL_LIFECYCLE.md#appendix-l-phase-32a-as-built-held-custody), [ADR-056](DECISIONS.md) and

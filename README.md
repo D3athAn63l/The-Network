@@ -112,18 +112,17 @@ them are listed, not hidden; apart from S31 (and the Phase 3.1 suite above), non
 pawn (the player arrests, enslaves or recruits them, a raider kidnaps them, another faction holds them, a caravan carries them), the episode ends
 **once** and the contractor does **not** go home: they stay held by vanilla, unavailable, never simulated abstractly, watched by a bounded
 custody watch (one scheduler job, only while someone is held). Only positive evidence (the same pawn, free again as a world pawn the Network
-reserves) brings them back. A recruited contractor is recorded as `Defected` and left as the player's colonist; what that means for the
-Network is an open owner decision. A death while held is final. **The rescue site is not built:** spike S11 failed its source audit
+reserves) brings them back. A recruited contractor is recorded as `Defected` and left as the player's real colonist: a permanent exit from old NPC availability (O-20). Future Player Contractor work uses the real colony through `PlayerProxy`; Phase 4 is not implemented here. A death while held is final and clears live holder metadata. **The rescue site is not built:** spike S11 failed its source audit
 ([docs/spikes/S11-rescue-site-holder.md](docs/spikes/S11-rescue-site-holder.md)). Vanilla's pawn-holding site parts force a refugee or prisoner
 state (and make the pawn join the player when rescued) or destroy what they hold, so the rescue's player-facing half waits for an owner
 decision on the documented alternative. Its domain half is proven headlessly. Save format **5**, no Harmony, no new persisted field
 ([Appendix L](docs/PHYSICAL_LIFECYCLE.md#appendix-l-phase-32a-as-built-held-custody), ADR-056). Groups (3.2B) and mixed-group
-reconciliation (3.2C) are not started.
+reconciliation (3.2C) are not started. Rescue is distinct from recruitment: a freed contractor returns to the original organization, possibly Wounded, and may resume work after recovery. R-50 remains open after the [source audit](docs/spikes/R50-held-aging-bookmark-audit.md): `agedThroughTick` already exists, but no reliable general suspension boundary was proved.
 
 The contract board, the player as contractor and the social layer are later phases
 ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
 
-**Test status.** The headless tests pass (460 tests, 34,473 checks, 0 failures at Phase 3.2A, including an 18-in-game-year
+**Test status.** The headless tests pass (466 tests, 34,888 checks, 0 failures after the PR #11 correction, including an 18-in-game-year
 procurement soak, three 20-in-game-year career soaks with daily money, capacity, spatial and career invariant
 checks, and the runtime-runner tests).
 

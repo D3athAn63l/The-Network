@@ -56,8 +56,8 @@
 | R-47 | A first projection borrows a special-purpose kind (boss, royal, ancient, cultist) because its combat stats fit the role | High | **Observed** | Phase 3.1 (owner run on `29f31dd`; corrected; `RT-PHYX-011` provenance: **owner runtime validated**) |
 | R-48 | A person reaches first materialization with their operational role unknown (`Unset`) | Medium | **Observed** | Phase 3.1 (owner run on `29f31dd`; corrected; `RT-PHYX-001`: **owner runtime validated**) |
 | R-49 | **No vanilla site part can carry a retained pawn to a rescue site** (S11 FAIL by source audit): the player-facing rescue has no safe vehicle yet | Medium | **Observed** (source) | Phase 3.2A (S11 recorded; the rescue site stopped; the alternative needs an owner decision and its own runtime proof) |
-| R-50 | **A held person who is a quest-reserved world pawn does not age, and a later return skips that interval** (the M1 reservation makes such a pawn `Suspended`) | Low | Medium | Phase 3.2A (recorded, not fixed: a fix needs a new persisted field) |
-| R-51 | **Held people accumulate and their meaning is open:** a recruited contractor is `Defected` and held for good (O-20); a captor's recruit stays reserved, so vanilla never sends them back in a raid | Medium | Medium | Phase 3.2A (owner decision O-20; RT-PHYX-021, 023) |
+| R-50 | **A held person who is a quest-reserved world pawn does not age, and a later return skips that interval** (the M1 reservation makes such a pawn `Suspended`) | Low | Medium | Phase 3.2A (source-audited, OPEN: existing bookmark is sufficient; exact suspension boundary missing) |
+| R-51 | **Held people and actor shells accumulate:** recruitment exits old NPC availability (O-20 direction locked); a captor's recruit stays reserved, so vanilla never sends them back in a raid | Medium | Medium | Phase 3.2A (O-20 locked; lifecycle/schema details later; RT-PHYX-021, 023) |
 
 ---
 
@@ -677,18 +677,16 @@
 - **Proven by.** The S11 source audit (FAIL). The alternative needs an owner decision, then its own physical-tier proof.
 
 ## R-50 · A held, quest-reserved world pawn does not age (Phase 3.2A)
-- **Failure modes.** The M1 reservation makes a world pawn whose vanilla situation would otherwise be `Free` read `ReservedByQuest`, and therefore `Suspended`. This covers another faction's off-map prisoner, a captor's recruit, and a freed recruit.
-  A suspended pawn does not tick, so it does not age. A kidnapped pawn (`Kidnapped` comes first) and a caravan member (`CaravanMember` comes first) are not affected, and a spawned prisoner ticks normally. If such a person later
-  returns, `Stored` sets `agedThroughTick` to the return, so the suspended interval is never aged: the pawn is under-aged by it (§ 6.4).
-- **Mitigation.** Recorded, not fixed. Knowing when a held pawn became suspended needs a new persisted field, which the 3.2A prompt says to stop
-  before adding. The case is narrow: the typical held states (the player's prisoner or slave, kidnapped, in a caravan) tick normally.
-- **Proven by.** Nothing yet. If the owner wants it closed, the fix is a reviewed persisted bookmark (for example, the tick a held pawn was last
-  seen ticking), with a save-format decision.
+- **Status: OPEN after source audit. Production aging unchanged.** The [full audit](spikes/R50-held-aging-bookmark-audit.md) identifies the owner-provided 1.6 assembly, vanilla methods, custody-state matrix and every Network age write/call.
+- **Failure modes.** `ReservedByQuest` makes a world pawn suspended; both normal and mothball age paths skip it. The existing `Stored` fallback can advance `agedThroughTick` to observation/commit time and erase suspended time. Blindly replaying from an older bookmark instead double-ages time vanilla already applied. Kidnapped/caravan situations precede reservation; transport follows it and is not proof that age is current.
+- **Existing bookmark.** `PawnRef.agedThroughTick` means the latest game tick through which biological age is known to have actually been brought current, not the last observed tick. It can represent the preferred model. Another persisted field is not justified.
+- **Missing evidence.** `becameWorldPawnTickAbs` records world entry, not a later kidnapped → captor-recruitment boundary. Session-only `LeftMap` is absent after reload and can predate later suspension. AgeTracker persists no last-applied biological-aging tick. Holder observation latency is normally at most 2,500 ticks; biological uncertainty is not bounded by that period and may span years.
+- **Narrow future alternative.** Prove a one-time exact vanilla/lifecycle aging-to-suspension boundary, then reuse the existing bookmark and existing vanilla catch-up immediately before physical reuse. Network-controlled handoffs alone do not cover every captor transition. No Harmony, per-pawn/per-tick polling, background aging, new field or migration is introduced in this pass.
+- **Evidence limits.** Source audit only. No new R-50 closure tests or runtime aging scenario are claimed. Existing successful catch-up and uncertain-failure handling remain unchanged; save format stays 5.
 
-## R-51 · Held people accumulate, and their meaning is open (Phase 3.2A)
-- **Failure modes.** A recruited contractor stays `Defected` and `OutOfCustody(PlayerColonist)` for good: never `Stored`, never abstract, the Solo actor not ended (O-20, open). A captor's recruit stays reserved by the
+## R-51 · Held people and actor shells accumulate (Phase 3.2A)
+- **Failure modes.** A recruited contractor stays `Defected` and `OutOfCustody(PlayerColonist)` for good: never `Stored`, never abstract, the Solo actor not ended (O-20 direction locked: old NPC availability permanently ends). A captor's recruit stays reserved by the
   registry, so vanilla never redresses that pawn into one of the captor's raids (the "kidnapped colonist returns as a raider" story cannot happen for a Network person). The custody watch's work grows with the number of held people.
 - **Mitigation.** The watch is bounded by the held people (one observation each per 2,500 ticks; `Custody.WorkIsBoundedByTheHeldPeople`), and it costs nothing when nobody is held. Exposing a captor's recruit to redress would break
-  P3-INV-032 (a retained named pawn is never exposed to redress, discard or reuse), so it is not done. What a recruited contractor means professionally (the actor's fate, reputation, relations, a later return) is
-  recorded as an open owner decision instead of being invented.
+  P3-INV-032 (a retained named pawn is never exposed to redress, discard or reuse), so it is not done. O-20 locks future Player Contractor participation through the real colony / PlayerProxy. Actor retirement, public reactions and the final current-condition / affiliation-history schema remain future work; no former-contractor simulator is created.
 - **Proven by.** `Custody.RecruitmentIsDefectedAndNeverStored`, `Custody.KidnappedThenRecruitedByTheCaptor`; RT-PHYX-021 and 023 (owner run pending).

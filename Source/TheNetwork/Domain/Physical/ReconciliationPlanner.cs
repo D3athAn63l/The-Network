@@ -642,7 +642,7 @@ namespace TheNetwork.Domain.Physical
                         // A Lost person cannot be a member (planning requires the living); if a record says otherwise, no return
                         // story is written over it (a found-again person is not this task's content).
                         if (op.kind == CommitOpKind.CharacterStored && c.status == CharacterStatus.Lost) throw new PlanInvalidException("LostTarget", op.ToString());
-                        // Phase 3.2A: a recruited person is never stored back (the professional meaning of recruitment is an OPEN owner decision).
+                        // O-20: a player recruit permanently exits old NPC availability; Phase 4 uses the real colony through PlayerProxy.
                         if (op.kind == CommitOpKind.CharacterStored && c.status == CharacterStatus.Defected) throw new PlanInvalidException("DefectedTarget", op.ToString());
                         break;
                     case CommitOpKind.CharacterHeld:

@@ -98,9 +98,13 @@ namespace TheNetwork.Domain.Physical
                 // Phase 3.2A: impossible custody combinations (reported; the gate keeps the people blocked, nothing is repaired).
                 if (c.custody == CustodyState.OutOfCustody && !bound) findings.Add(c.id + " is held by vanilla (OutOfCustody) with no pawn binding: no holder can be observed.");
                 if (c.custody == CustodyState.OutOfCustody && c.heldSinceTick < 0) findings.Add(c.id + " is held by vanilla with no heldSinceTick.");
-                if ((c.custody == CustodyState.Stored || c.custody == CustodyState.Unmaterialized || c.custody == CustodyState.Deployed) && c.heldBy != HeldKind.None)
+                if (c.custody != CustodyState.OutOfCustody && c.heldBy != HeldKind.None)
                 {
                     findings.Add(c.id + " is " + c.custody + " but still records a vanilla holder (" + c.heldBy + ").");
+                }
+                if (c.custody != CustodyState.OutOfCustody && c.heldSinceTick >= 0)
+                {
+                    findings.Add(c.id + " is " + c.custody + " but still records a live heldSinceTick (" + c.heldSinceTick + ").");
                 }
                 if (c.custody == CustodyState.Stored && c.status == CharacterStatus.Defected) findings.Add(c.id + " is Defected (recruited by the player) yet Stored: a recruited person is never stored back.");
             }

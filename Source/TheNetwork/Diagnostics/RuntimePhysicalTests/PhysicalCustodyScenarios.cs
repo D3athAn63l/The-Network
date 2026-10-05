@@ -4,6 +4,7 @@ using RimWorld;
 using RimWorld.Planet;
 using TheNetwork.Core;
 using TheNetwork.Domain.Actors;
+using TheNetwork.Domain.Contractors;
 using TheNetwork.Domain.Physical;
 using TheNetwork.Integration.Physical;
 using TheNetwork.Kernel;
@@ -235,9 +236,11 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             v.Check(lc.counters.custodyEpisodes == custodyEpisodes0 + 1, "exactly one Custody episode");
             v.Check(c.status == CharacterStatus.Defected && c.custody == CustodyState.OutOfCustody && c.heldBy == HeldKind.PlayerColonist, "Defected, OutOfCustody(PlayerColonist): never Stored");
             v.Check(!AuthorityGate.CanSimulateAbstractly(c), "never abstract: the Network does not simulate a recruited person as if they went home");
+            v.Check(ctx.Contractors.AvailabilityOf(a) == Availability.Unavailable && ctx.Contractors.Strength(a) == 0f,
+                "the old Solo contractor has no available person or abstract deployment capability");
             v.Check(p.Faction == Faction.OfPlayer && p.Spawned, "the colonist is untouched (still the player's, on the map): no faction change back, no removal, no clone");
             v.Check(c.pawn != null && ReferenceEquals(c.pawn.pawn, p), "the SAME pawn is bound");
-            v.Note("the recruited contractor stays the player's colonist on the test map (deliberate). What a recruited contractor means professionally is an OPEN owner decision (O-20).");
+            v.Note("O-20: the same pawn is a real player colonist and permanently leaves old NPC availability. Future Player Contractor work uses the real colony through PlayerProxy (Phase 4, not implemented).");
             CheckInvariants();
         }
     }
@@ -395,6 +398,9 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             PhysicalEpisode ce = LatestCustodyEpisode();
             v.Check(ce != null && ce.IsComplete && ce.members[0].outcome == MemberOutcome.Killed, "a Custody episode recorded the death once (" + ce + ")");
             v.Check(c.status == CharacterStatus.Dead && c.custody == CustodyState.Released && c.diedTick >= 0, "Dead, custody Released, died tick " + c.diedTick);
+            v.Check(c.custody != CustodyState.OutOfCustody && c.heldBy == HeldKind.None && c.heldSinceTick == -1,
+                "terminal custody clears the live holder and heldSinceTick");
+            v.Check(!PhysicalLifecycleService.IsHeld(c) && !lc.HeldIds().Contains(c.id.Value), "the custody watch no longer considers this person held");
             v.Check(!port.Registry.Reserves(p), "the registry no longer reserves a dead person's pawn");
             v.Check(c.pawn != null && ReferenceEquals(c.pawn.pawn, p), "the binding still points to the same (dead) pawn: never regenerated");
             v.Check(!a.IsActive, "the Solo actor ended with its person (" + a.status + ")");

@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.Serialization;
 using System.Text.RegularExpressions;
+using RimWorld;
 using TheNetwork.Core;
 using TheNetwork.Domain;
 using TheNetwork.Domain.Actors;
@@ -14,6 +16,7 @@ using TheNetwork.Kernel;
 using TheNetwork.Persist;
 using TheNetwork.Persist.Events;
 using TheNetwork.Settings;
+using Verse;
 
 namespace TheNetwork.Tests
 {
@@ -50,6 +53,12 @@ namespace TheNetwork.Tests
             t.Add(new KeyValuePair<string, Action>("Custody.WorkIsBoundedByTheHeldPeople", BoundedWork));
             t.Add(new KeyValuePair<string, Action>("Custody.Scan_PureRulesNoHarmonyNoSaveFormatChange", ScanCustody));
             t.Add(new KeyValuePair<string, Action>("Custody.Docs_StatusIsHeadlessValidatedAndS11IsRecorded", DocsStatus));
+            t.Add(new KeyValuePair<string, Action>("Custody.Correction_PlayerRecruitCannotRedeployForOriginalNpc", PlayerRecruitCannotRedeploy));
+            t.Add(new KeyValuePair<string, Action>("Custody.Correction_TerminalMetadataSurvivesSaveLoad", TerminalMetadataSaveLoad));
+            t.Add(new KeyValuePair<string, Action>("Custody.Correction_RevertedClearsLiveHolder", RevertedClearsHolder));
+            t.Add(new KeyValuePair<string, Action>("Custody.Correction_HolderChangesKeepContinuousSinceTick", HolderChangesKeepSince));
+            t.Add(new KeyValuePair<string, Action>("Custody.Correction_AllNonHeldStatesReportStaleMetadata", NonHeldMetadataValidation));
+            t.Add(new KeyValuePair<string, Action>("Custody.Correction_TerminalRollbackRestoresLiveHolder", TerminalRollbackRestoresHolder));
             t.Add(new KeyValuePair<string, Action>("Rescue.HandoffSuspendsTheTroubledDeadline", HandoffSuspendsDeadline));
             t.Add(new KeyValuePair<string, Action>("Rescue.EpisodeAndAbstractPathCannotBothResolve", NoDoubleResolution));
             t.Add(new KeyValuePair<string, Action>("Rescue.OnPhysicalResolvedFaultMatrix_Found", FollowUpMatrixFound));
@@ -368,7 +377,7 @@ namespace TheNetwork.Tests
             T.Eq(MemberOutcome.JoinedPlayer, CustodyEpisodes(n, c)[0].members[0].outcome, "JoinedPlayer");
             T.Eq(1, n.recorder.Count(EventKeys.CharacterDefected), "KnownCharacter.Defected once");
             T.Eq(1, n.recorder.Count(EventKeys.ContractorCasualties), "no second casualty report for a person already lost to the group");
-            T.Check(a.IsActive, "the Solo actor is not ended or transformed by a recruitment (an OPEN owner decision, O-20)");
+            T.Check(a.IsActive, "the Solo actor is not ended or transformed by the Phase 3 bridge (O-20: permanent exit from NPC availability)");
             // Banished or released later: a free world pawn, but a recruited person is never stored back.
             n.physical.Free(c.pawn);
             RunWatch(n);
@@ -404,6 +413,8 @@ namespace TheNetwork.Tests
             n.physical.Die(c.pawn);
             RunWatch(n);
             T.Check(c.status == CharacterStatus.Dead && c.custody == CustodyState.Released && c.diedTick >= 0, "death while held: Dead, Released (" + Rec(c) + ")");
+            T.Check(c.heldBy == HeldKind.None && c.heldSinceTick == -1, "death clears current holder metadata");
+            T.Check(!PhysicalLifecycleService.IsHeld(c), "a dead person is not in held custody");
             T.Check(!a.IsActive && a.endReasonKey == "Died", "the Solo ended with its person (" + a.status + ", " + a.endReasonKey + ")");
             T.Eq(killed0 + 1, n.recorder.Count(EventKeys.CharacterKilled), "KnownCharacter.Killed once");
             T.Eq(1, n.recorder.Count(EventKeys.ContractorEnded), "Contractor.Ended once");
@@ -502,9 +513,182 @@ namespace TheNetwork.Tests
             n.physical.Vanish(c.pawn);
             RunWatch(n);
             T.Check(c.status == CharacterStatus.Lost && c.custody == CustodyState.Lost, "a held pawn discarded with no evidence ⇒ Lost (" + Rec(c) + ")");
+            T.Check(c.heldBy == HeldKind.None && c.heldSinceTick == -1, "Lost clears current holder metadata");
+            T.Check(!WatchExists(n) && L(n).HeldCount == 0 && !PhysicalLifecycleService.IsHeld(c), "Lost leaves the held index and watch");
             T.Eq(1, n.recorder.Count(EventKeys.CharacterVanished), "KnownCharacter.Vanished (the design's KnownCharacter.Lost) once");
             T.Eq(1, n.physical.creates, "never regenerated");
             T.Check(!a.IsActive && a.endReasonKey == "Lost", "the Solo ended as Lost");
+        }
+
+        private static void PlayerRecruitCannotRedeploy()
+        {
+            // Real, unspawned Pawn and player-faction shell; vanilla recruitment itself still needs RT-PHYX-021.
+            // The fake port scripts ownership only. The production reconciliation and abstract checkout are real.
+            foreach (ContractorForm form in new[] { ContractorForm.Solo, ContractorForm.Crew })
+            {
+                TestNet n = new TestNet(9830 + (int)form);
+                NetworkActor a = PhysicalLifecycleTests.Make(n, form, "recruit-no-redeploy");
+                OrganizationProfile org = a.Get<OrganizationProfile>();
+                KnownCharacter c = org != null ? n.ctx.characters.Get(org.leader) : Self(n, a);
+                ActorId originalOrg = c.org;
+                CharacterId identity = c.id;
+                PhysicalEpisode mission = PhysicalLifecycleTests.Begin(n, a, new[] { c });
+                // Def constructors load Unity graphics; these minimal fixtures need only the pure category/player fields.
+                ThingDef pawnDef = (ThingDef)FormatterServices.GetUninitializedObject(typeof(ThingDef));
+                pawnDef.category = ThingCategory.Pawn;
+                FactionDef playerDef = (FactionDef)FormatterServices.GetUninitializedObject(typeof(FactionDef));
+                playerDef.isPlayer = true;
+                Pawn pawn = new Pawn { thingIDNumber = c.pawn.thingIdNumber, def = pawnDef };
+                Faction player = new Faction { def = playerDef };
+                pawn.SetFactionDirect(player);
+                c.pawn.pawn = pawn;
+                mission.members[0].pawn.pawn = pawn;
+                n.physical.Hold(c.pawn, ObservedKind.JoinedPlayer, HeldKind.PlayerColonist);
+                L(n).Reconcile(mission, "watch");
+                for (int i = 0; i < 3; i++) RunWatch(n);
+                T.Check(mission.IsComplete && c.status == CharacterStatus.Defected && c.custody == CustodyState.OutOfCustody,
+                    form + ": recruited, episode complete, vanilla authoritative");
+                T.Check(ReferenceEquals(pawn, c.pawn.pawn) && ReferenceEquals(pawn.Faction, player) && pawn.Faction.IsPlayer,
+                    form + ": the same real Pawn stays in the player faction");
+                T.Check(c.id == identity && c.org == originalOrg, form + ": identity and previous affiliation kept, no Phase 4 transfer");
+                T.Check(!AuthorityGate.CanSimulateAbstractly(c) && !c.IsAvailable, form + ": excluded from NPC person simulation and availability");
+                if (form == ContractorForm.Solo)
+                    T.Eq(Availability.Unavailable, n.ctx.Contractors.AvailabilityOf(a), "old Solo contractor unavailable");
+                ForceCommitment next = n.ctx.Contractors.Checkout(a, new OperationId(n.ids.NextId()), 1f);
+                T.Check(!next.characters.Contains(c.id), form + ": actual NPC checkout excludes the recruited person");
+                PhysicalEpisode refused;
+                CommandResult plan = L(n).Plan(TheNetwork.Diagnostics.RuntimeTests.Suites.PhysicalRuntimeSuite.Request(a, new[] { c }), out refused);
+                T.Check(!plan.ok && refused == null, form + ": physical checkout also refuses the old NPC membership");
+                T.Check(ReferenceEquals(c.pawn.pawn, pawn) && ReferenceEquals(pawn.Faction, player), form + ": all denied deployment attempts leave the player pawn untouched");
+                T.Eq(1, n.physical.creates, form + ": no replacement pawn");
+            }
+        }
+
+        private static void TerminalMetadataSaveLoad()
+        {
+            foreach (ObservedKind outcome in new[] { ObservedKind.Dead, ObservedKind.Gone, ObservedKind.WorldFree })
+            {
+                TestNet n = new TestNet(9840 + (int)outcome);
+                NetworkActor a = Solo(n, "terminal-save-" + outcome);
+                KnownCharacter c = Self(n, a);
+                Arrested(n, a, c);
+                if (outcome == ObservedKind.Dead) n.physical.Die(c.pawn);
+                else if (outcome == ObservedKind.Gone) n.physical.Vanish(c.pawn);
+                else n.physical.Free(c.pawn);
+                RunWatch(n);
+                CustodyState expected = outcome == ObservedKind.Dead ? CustodyState.Released : outcome == ObservedKind.Gone ? CustodyState.Lost : CustodyState.Stored;
+                T.Eq(expected, c.custody, outcome + ": leaves held custody");
+                T.Check(c.heldBy == HeldKind.None && c.heldSinceTick == -1, outcome + ": metadata cleared by the real transition");
+                string record = Rec(c);
+                PhysicalLifecycleTests.SaveLoad(n);
+                KnownCharacter loaded = n.ctx.characters.Get(c.id);
+                L(n).OnLoaded();
+                T.Eq(record, Rec(loaded), outcome + ": corrected metadata round-trips through real Scribe");
+                T.Check(loaded.heldBy == HeldKind.None && loaded.heldSinceTick == -1, outcome + ": save/load does not resurrect a holder");
+                T.Check(!PhysicalLifecycleService.IsHeld(loaded) && L(n).HeldCount == 0 && !WatchExists(n), outcome + ": held index and watch remain empty after load");
+            }
+        }
+
+        private static void RevertedClearsHolder()
+        {
+            foreach (bool bound in new[] { false, true })
+            {
+                TestNet n = new TestNet(bound ? 9851 : 9850);
+                NetworkActor a = Solo(n, "never-placed");
+                KnownCharacter c = Self(n, a);
+                if (bound)
+                {
+                    PhysicalEpisode prior = PhysicalLifecycleTests.Begin(n, a, new[] { c });
+                    n.physical.ExitNormally(c.pawn, 71);
+                    L(n).Reconcile(prior, "watch");
+                    T.Check(prior.IsComplete && c.custody == CustodyState.Stored, "a real earlier episode established the retained binding");
+                }
+                PhysicalEpisode e = PhysicalLifecycleTests.Begin(n, a, new[] { c }, materialize: false);
+                // Stale metadata must not survive a never-placed episode's production revert.
+                c.heldBy = HeldKind.OtherFaction;
+                c.heldSinceTick = 12;
+                L(n).Reconcile(e, "dev test-correction");
+                T.Check(e.IsComplete && e.members[0].outcome == MemberOutcome.NeverPlaced, "never-placed episode reverted normally");
+                T.Eq(bound ? CustodyState.Stored : CustodyState.Unmaterialized, c.custody, "revert preserves the existing bound/unbound distinction");
+                T.Check(c.heldBy == HeldKind.None && c.heldSinceTick == -1, "revert clears holder metadata");
+            }
+        }
+
+        private static void HolderChangesKeepSince()
+        {
+            TestNet n = new TestNet(9852);
+            NetworkActor a = Solo(n, "continuous-held");
+            KnownCharacter c = Self(n, a);
+            Arrested(n, a, c);
+            int since = c.heldSinceTick;
+            n.physical.Hold(c.pawn, ObservedKind.HeldByPlayer, HeldKind.PlayerSlave);
+            RunWatch(n);
+            T.Eq(since, c.heldSinceTick, "prisoner to slave preserves the original heldSinceTick");
+            T.Eq(HeldKind.PlayerSlave, c.heldBy, "holder updated to slave");
+            n.physical.Hold(c.pawn, ObservedKind.JoinedPlayer, HeldKind.PlayerColonist);
+            RunWatch(n); // CharacterHeld in a new Custody episode, rather than holder-only bookkeeping.
+            T.Eq(since, c.heldSinceTick, "recruitment commit also preserves the continuous holding start");
+            T.Check(c.status == CharacterStatus.Defected && c.heldBy == HeldKind.PlayerColonist, "now a player colonist");
+            PhysicalLifecycleTests.SaveLoad(n);
+            c = n.ctx.characters.Get(c.id);
+            L(n).OnLoaded();
+            T.Eq(since, c.heldSinceTick, "continuous start survives save/load");
+            T.Eq(HeldKind.PlayerColonist, c.heldBy, "save/load keeps a genuinely live holder");
+        }
+
+        private static void NonHeldMetadataValidation()
+        {
+            foreach (CustodyState state in (CustodyState[])Enum.GetValues(typeof(CustodyState)))
+            {
+                if (state == CustodyState.OutOfCustody) continue;
+                TestNet n = new TestNet(9860 + (int)state);
+                NetworkActor a = Solo(n, "metadata-" + state);
+                KnownCharacter c = Self(n, a);
+                c.custody = state;
+                c.heldBy = HeldKind.OtherFaction;
+                c.heldSinceTick = 42;
+                List<string> findings = new List<string>();
+                EpisodeChecks.Report(n.ctx, findings);
+                string report = string.Join("\n", findings.ToArray());
+                T.Check(report.Contains(c.id + " is " + state + " but still records a vanilla holder"), state + ": stale holder diagnosed");
+                T.Check(report.Contains(c.id + " is " + state + " but still records a live heldSinceTick"), state + ": stale timestamp diagnosed");
+                T.Check(c.heldBy == HeldKind.OtherFaction && c.heldSinceTick == 42, "validation remains report-only");
+                c.heldBy = HeldKind.None;
+                findings.Clear();
+                EpisodeChecks.Report(n.ctx, findings);
+                T.Check(string.Join("\n", findings.ToArray()).Contains("still records a live heldSinceTick"), state + ": timestamp alone is diagnosed too");
+            }
+            // Old/default records do not require a migration or invent held history.
+            KnownCharacter defaults = new KnownCharacter();
+            T.Check(defaults.custody == CustodyState.Unmaterialized && defaults.heldBy == HeldKind.None && defaults.heldSinceTick == -1,
+                "existing defaults already satisfy the non-held invariant");
+        }
+
+        private static void TerminalRollbackRestoresHolder()
+        {
+            foreach (bool died in new[] { true, false })
+            {
+                for (int k = 0; k <= 30; k++)
+                {
+                    TestNet n = new TestNet(9870 + k);
+                    NetworkActor a = Solo(n, "terminal-rollback");
+                    KnownCharacter c = Self(n, a);
+                    Arrested(n, a, c);
+                    string held = Rec(c).Replace("|ep 0|", "|ep ?|");
+                    if (died) n.physical.Die(c.pawn); else n.physical.Vanish(c.pawn);
+                    L(n).commitFaultAfter = k;
+                    L(n).ReconcileHeld(c, "fault sweep");
+                    PhysicalEpisode ce = CustodyEpisodes(n, c)[0];
+                    if (ce.consequencesApplied) break;
+                    T.Eq(held, Rec(c).Replace("|ep " + ce.id.Value + "|", "|ep ?|"), "k=" + k + ": fault restores status, custody and live holder exactly");
+                    T.Check(c.custody == CustodyState.OutOfCustody && c.heldBy == HeldKind.PlayerPrisoner && c.heldSinceTick >= 0,
+                        "k=" + k + ": rollback does not clear a genuinely held record");
+                    L(n).Reconcile(ce, "retry");
+                    T.Check(ce.IsComplete && c.heldBy == HeldKind.None && c.heldSinceTick == -1,
+                        "k=" + k + ": retry commits terminal metadata cleanup exactly once");
+                    T.Eq(1, n.recorder.Count(died ? EventKeys.CharacterKilled : EventKeys.CharacterVanished), "k=" + k + ": one terminal event");
+                }
+            }
         }
 
         private static void RemovalWithHeld()

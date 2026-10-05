@@ -45,8 +45,8 @@ namespace TheNetwork.Domain.Physical
     /// <item>Only positive evidence returns a held person: a free world pawn the Network's own registry reserves, that has left its map, owes
     /// allegiance to no permanent faction, and was never recruited. "Not spawned" is never evidence of anything.</item>
     /// <item>An observation the rules cannot classify keeps the person held (<see cref="HeldKind.Unknown"/>): fail closed, never home.</item>
-    /// <item>A recruited person (<see cref="CharacterStatus.Defected"/>) is never returned to Stored: what a recruited contractor means for the
-    /// Network professionally is an OPEN owner decision, so the truthful vanilla-held state is kept instead of a permanent rule being invented.</item>
+    /// <item>A recruited person (<see cref="CharacterStatus.Defected"/>) permanently exits the old NPC contractor's availability. This is the
+    /// Phase 3 bridge; future Player Contractor participation reads the real colony through PlayerProxy, never an ex-contractor simulation.</item>
     /// </list>
     /// </summary>
     public static class CustodyRules
@@ -174,7 +174,7 @@ namespace TheNetwork.Domain.Physical
                 case ObservedKind.WorldFree:
                     if (!o.exitEvidence) return None();
                     if (o.otherAllegiance) return Holder(current, HeldKind.OtherFaction);
-                    // A recruited person who is free again (banished, released, left): no permanent professional meaning is invented (OPEN, owner).
+                    // A former player recruit remains outside old NPC availability even after banishment, release or departure (O-20).
                     if (status == CharacterStatus.Defected) return Holder(current, HeldKind.Unaffiliated);
                     return Reconcile(MemberOutcome.Returned, HeldKind.None, false);
                 case ObservedKind.HeldByPlayer:
