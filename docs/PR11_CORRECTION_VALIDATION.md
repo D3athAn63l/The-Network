@@ -62,7 +62,25 @@ The Scribe test inputs are the audited null/cache outcomes; it does not execute 
 
 ### Corrected build and final validation
 
-Pre-publication complete suite: **474 tests, 34,979 checks, 0 failures**; production/test compilation **0 warnings, 0 errors** (warnings as errors), all nine repository source gates PASS. Final source SHA, DLL stamp/hash and two complete runs against final committed source/DLL are recorded here in the artifact/validation commit after publication. The earlier 466-test validation below remains historical evidence for source 76b3ae1, not the new totals.
+| Final check | Result |
+|---|---|
+| Complete headless suite, run 1 against final committed source and shipped DLL | **474 tests, 34,979 checks, 0 failures** |
+| Complete headless suite, run 2 against the same committed source and shipped DLL | **474 tests, 34,979 checks, 0 failures** |
+| Production and test compilation | **0 warnings, 0 errors**, warnings treated as errors |
+| All nine repository source-scan gates | **PASS** |
+| Owner corrected 022 / save / load / 025 | **PENDING** |
+
+The shipped DLL was built from published corrected source **`db0f795882ceb2ec388e940930e510d46d66899c`**. The subsequent artifact/validation commit changes only this record and the shipped DLL; production and test source are identical to that source commit. Both final suite runs occur after that commit and load a byte-identical copy of its committed DLL. All tests run without a filter. The earlier 466-test validation below remains historical evidence for source 76b3ae1, not the new totals.
+
+| DLL provenance | Value |
+|---|---|
+| Source stamp | `built 2026-10-05T11:45Z, source commit db0f795` |
+| Informational version | `0.1.0+db0f795882ceb2ec388e940930e510d46d66899c` |
+| SHA-256 | `cc3d70fd5b4cf4fba38adb755f79ed7b712b3f99783a773a7e7ec9db7bdd8fb8` |
+| Bytes | **1,136,128** |
+| Target / save format / production Harmony | **net472 / 5 unchanged / no reference** |
+
+Build environment: SDK 8.0.130 Roslyn, C# 7.3, optimized deterministic net472, supplied game references. The SDK compiler is invoked directly with project sources/generated attributes and the existing stamp rule, as in the earlier validation; repository build scripts are unchanged. The headless environment supplies the missing unmodified Steamworks.NET 2024.8.0 dependency (commit `a2fc889ab2672981ec3e6225d551d86ce6923121`). Both complete runs use Mono 6.8 with **`MONO_ENV_OPTIONS=--optimize=-inline`**, preserving the earlier workaround for its native JIT crash in the existing procurement soak. No test is skipped or weakened; no test-only dependency is shipped.
 
 ### Required owner rerun
 
