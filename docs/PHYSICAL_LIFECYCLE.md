@@ -3669,7 +3669,7 @@ cohesion (3.2B); mixed multi-person reconciliation (3.2C); 3.3; Harmony; any new
 
 ### L.8 Evidence
 
-Headless only. The full suite, run twice on the final corrected source: **466 tests, 34,888 checks, 0 failures** (the Phase 3.1 baseline was 432 /
+Headless only. The full suite, run twice on the final corrected source: **466 tests, 34,910 checks, 0 failures** (the Phase 3.1 baseline was 432 /
 33,241), zero C# compiler warnings, save format 5, no Harmony. The original 28 `Custody.*` / `Rescue.*` tests are preserved; the PR #11 correction
 adds six custody regressions and strengthens the existing death/loss tests. RT-PHYS-031…033 remain. The owner's
 physical run of `RT-PHYX-020…025` is the evidence still owed.

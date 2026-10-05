@@ -122,7 +122,7 @@ reconciliation (3.2C) are not started. Rescue is distinct from recruitment: a fr
 The contract board, the player as contractor and the social layer are later phases
 ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
 
-**Test status.** The headless tests pass (466 tests, 34,888 checks, 0 failures after the PR #11 correction, including an 18-in-game-year
+**Test status.** The headless tests pass (466 tests, 34,910 checks, 0 failures after the PR #11 correction, including an 18-in-game-year
 procurement soak, three 20-in-game-year career soaks with daily money, capacity, spatial and career invariant
 checks, and the runtime-runner tests).
 
