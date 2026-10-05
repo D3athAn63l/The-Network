@@ -182,10 +182,12 @@ namespace TheNetwork.Core
             scheduler.RegisterKind(JobKinds.ConsequenceFollowUp, ctx.Consequences.FollowUpJobRun, true, false);
         }
 
-        /// <summary>Phase 3 lifecycle jobs (shared with the sandbox and the headless harness): the per-episode watch only.</summary>
+        /// <summary>Phase 3 lifecycle jobs (shared with the sandbox and the headless harness): the per-episode watch and (3.2A) the custody watch.</summary>
         public static void RegisterPhaseThreeJobs(NetScheduler scheduler, DomainContext ctx)
         {
-            if (ctx.Lifecycle != null) scheduler.RegisterKind(JobKinds.EpisodeWatch, ctx.Lifecycle.WatchJobRun, true, true);
+            if (ctx.Lifecycle == null) return;
+            scheduler.RegisterKind(JobKinds.EpisodeWatch, ctx.Lifecycle.WatchJobRun, true, true);
+            scheduler.RegisterKind(JobKinds.CustodyWatch, ctx.Lifecycle.CustodyWatchRun, true, true);
         }
 
         /// <summary>Contract kind rules from XML (NetworkContractKindDef); the built-in Procurement rules otherwise.</summary>

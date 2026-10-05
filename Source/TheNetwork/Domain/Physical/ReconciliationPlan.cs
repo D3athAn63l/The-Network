@@ -24,7 +24,7 @@ namespace TheNetwork.Domain.Physical
         /// <summary>The shared wound rule (abstract recovery: <c>woundedUntilTick</c>).</summary>
         CharacterWounded = 2,
 
-        /// <summary>The shared capture rule (the abstract casualty vocabulary; physical held custody is 3.2).</summary>
+        /// <summary>The shared capture rule (the abstract casualty vocabulary; a physical captive custody also writes <see cref="CharacterHeld"/>).</summary>
         CharacterCaptured = 3,
 
         /// <summary>The shared missing rule (the abstract casualty vocabulary).</summary>
@@ -88,7 +88,16 @@ namespace TheNetwork.Domain.Physical
         SimDirty = 24,
 
         /// <summary>A named person positively returned unhurt: Missing or Captured resolves to Active (the shared rule; never revives).</summary>
-        CharacterReturnedFree = 25
+        CharacterReturnedFree = 25,
+
+        /// <summary>
+        /// Phase 3.2A: vanilla holds the person (§ 8.2): custody OutOfCustody, the holder, and when the holding began (kept when they were
+        /// already held). The pawn is untouched.
+        /// </summary>
+        CharacterHeld = 26,
+
+        /// <summary>Phase 3.2A: recruited by the player (§ 8.2: JoinedPlayer ⇒ status Defected), through the shared status setter (never revives).</summary>
+        CharacterDefected = 27
     }
 
     /// <summary>One durable assignment of the plan. Plain data: the Applier interprets it; nothing here runs code.</summary>
@@ -117,6 +126,9 @@ namespace TheNetwork.Domain.Physical
         /// <summary>CharacterStored only: the tick the pawn stopped ticking (the observed exit), or -1 for "now" (§ 6.4).</summary>
         public int agedThrough = -1;
 
+        /// <summary>CharacterHeld only: what vanilla holds the person as.</summary>
+        public HeldKind held = HeldKind.None;
+
         public override string ToString()
         {
             return kind + (character != null ? " " + character.id : "") + (member != null && !member.IsNamed ? " slot" + member.slot : "") + (key != null ? " " + key : "");
@@ -131,6 +143,12 @@ namespace TheNetwork.Domain.Physical
         public MemberOutcome outcome;
         public PhysicalObservation observation;
         public int woundDays;
+
+        /// <summary>Phase 3.2A, a held outcome only: who holds the person (the commit writes it to the character's own record).</summary>
+        public HeldKind holder = HeldKind.None;
+
+        /// <summary>Phase 3.2A, a held outcome only: a captive custody (the person becomes Captured), not a carry, a recruitment or a keeping.</summary>
+        public bool captive;
     }
 
     /// <summary>
@@ -175,6 +193,10 @@ namespace TheNetwork.Domain.Physical
         public int missing;
         public int lost;
         public int neverPlaced;
+
+        /// <summary>Phase 3.2A: named members whose outcome is a vanilla holding (diagnostics; the Episode.Closed spec is unchanged).</summary>
+        public int held;
+
         public bool leaderLost;
         public string actorEndKey;
 

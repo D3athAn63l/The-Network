@@ -81,6 +81,15 @@ namespace TheNetwork.Domain.Contractors
             SetStatus(c, CharacterStatus.Active, now);
         }
 
+        /// <summary>
+        /// Recruited by the player (PHYSICAL_LIFECYCLE § 8.2: JoinedPlayer ⇒ Defected). Physical only: the abstract resolver never produces it.
+        /// Through the shared setter, so a dead person is never revived by it.
+        /// </summary>
+        public static void Defected(KnownCharacter c, int now)
+        {
+            SetStatus(c, CharacterStatus.Defected, now);
+        }
+
         /// <summary>The person is gone with no evidence (§ 17): Lost, never "home", never regenerated.</summary>
         public static void Lost(KnownCharacter c, int now)
         {

@@ -315,7 +315,7 @@ namespace TheNetwork.Tests
             T.Check(Src("Domain/Contracts/Willingness.cs").Contains("ctx.Contractors.AvailabilityOf(a)"), "willingness (procurement selection) reads AvailabilityOf");
 
             // 2. The shared fate rules are reachable only from the gated abstract path and the lifecycle's commit.
-            Regex fateCall = new Regex(@"FateRules\.(SetStatus|Killed|Wounded|Captured|Missing|Lost|ReturnedFree)\(");
+            Regex fateCall = new Regex(@"FateRules\.(SetStatus|Killed|Wounded|Captured|Missing|Lost|ReturnedFree|Defected)\(");
             foreach (string f in AllSources())
             {
                 string rel = Rel(f);

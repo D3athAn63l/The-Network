@@ -83,7 +83,7 @@ namespace TheNetwork.Domain.Physical
                     break;
                 case CommitOpKind.CharacterKilled:
                     FateRules.Killed(c, now, op.key);
-                    if (op.flag) c.custody = CustodyState.Released;
+                    if (op.flag) LeaveHeldCustody(c, CustodyState.Released);
                     break;
                 case CommitOpKind.CharacterWounded:
                     FateRules.Wounded(c, now, op.woundDays);
@@ -96,12 +96,10 @@ namespace TheNetwork.Domain.Physical
                     break;
                 case CommitOpKind.CharacterLost:
                     FateRules.Lost(c, now);
-                    c.custody = CustodyState.Lost;
+                    LeaveHeldCustody(c, CustodyState.Lost);
                     break;
                 case CommitOpKind.CharacterStored:
-                    c.custody = CustodyState.Stored;
-                    c.heldBy = HeldKind.None;
-                    c.heldSinceTick = -1;
+                    LeaveHeldCustody(c, CustodyState.Stored);
                     int aged = op.agedThrough >= 0 ? op.agedThrough : now;
                     if (c.pawn != null && aged > c.pawn.agedThroughTick) c.pawn.agedThroughTick = aged;
                     if (op.member?.pawn != null && aged > op.member.pawn.agedThroughTick) op.member.pawn.agedThroughTick = aged;
@@ -109,8 +107,20 @@ namespace TheNetwork.Domain.Physical
                 case CommitOpKind.CharacterReturnedFree:
                     FateRules.ReturnedFree(c, now);
                     break;
+                case CommitOpKind.CharacterHeld:
+                    {
+                        // § 8.2: vanilla holds the person. heldSinceTick is when vanilla began holding them; a change of holder keeps it.
+                        bool alreadyHeld = c.custody == CustodyState.OutOfCustody && c.heldSinceTick >= 0;
+                        c.custody = CustodyState.OutOfCustody;
+                        c.heldBy = op.held;
+                        if (!alreadyHeld) c.heldSinceTick = now;
+                        break;
+                    }
+                case CommitOpKind.CharacterDefected:
+                    FateRules.Defected(c, now);
+                    break;
                 case CommitOpKind.CharacterReverted:
-                    c.custody = c.pawn != null && c.pawn.IsBound ? CustodyState.Stored : CustodyState.Unmaterialized;
+                    LeaveHeldCustody(c, c.pawn != null && c.pawn.IsBound ? CustodyState.Stored : CustodyState.Unmaterialized);
                     break;
                 case CommitOpKind.CharacterDetached:
                     c.custody = CustodyState.OutOfCustody;
@@ -230,6 +240,14 @@ namespace TheNetwork.Domain.Physical
             }
         }
 
+        /// <summary>Holder fields describe current vanilla custody, never historical capture provenance.</summary>
+        private static void LeaveHeldCustody(KnownCharacter c, CustodyState next)
+        {
+            c.custody = next;
+            c.heldBy = HeldKind.None;
+            c.heldSinceTick = -1;
+        }
+
         /// <summary>
         /// What each operation DECLARES it writes (§ 15.7 coverage proof): every object listed must be inside
         /// <see cref="TouchedSet"/>, or be the characters store's membership (<see cref="CharacterMembership"/>), which the
@@ -254,6 +272,8 @@ namespace TheNetwork.Domain.Physical
                 case CommitOpKind.CharacterDetached:
                 case CommitOpKind.CharacterUnlink:
                 case CommitOpKind.CharacterReturnedFree:
+                case CommitOpKind.CharacterHeld:
+                case CommitOpKind.CharacterDefected:
                     w.Add(op.character);
                     break;
                 case CommitOpKind.CharacterStored:

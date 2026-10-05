@@ -30,34 +30,44 @@ namespace TheNetwork.Integration.Physical
             }
             o.downed = p.Downed;
             o.health = p.health?.summaryHealth?.SummaryHealthPercent ?? 1f;
+            // Phase 3.2A: the holder is read POSITIVELY from vanilla's own state, in the § 9.3 order, so a held person's custody record says
+            // who holds them. Allegiance to a permanent faction other than the player's (a captor recruited them) is a fact of its own.
+            o.otherAllegiance = p.Faction != null && !p.Faction.IsPlayer && !p.Faction.temporary;
             if (p.IsPrisonerOfColony || p.IsSlaveOfColony)
             {
                 o.kind = ObservedKind.HeldByPlayer;
+                o.holder = p.IsSlaveOfColony ? HeldKind.PlayerSlave : HeldKind.PlayerPrisoner;
                 return o;
             }
             if (p.Faction != null && p.Faction.IsPlayer)
             {
                 o.kind = ObservedKind.JoinedPlayer;
+                o.holder = HeldKind.PlayerColonist;
                 return o;
             }
             if (PawnUtility.IsKidnappedPawn(p))
             {
                 o.kind = ObservedKind.Kidnapped;
+                o.holder = HeldKind.Kidnapped;
                 return o;
             }
             if (p.HostFaction != null && (p.IsPrisoner || p.IsSlave))
             {
                 o.kind = ObservedKind.HeldByOther;
+                o.holder = HeldKind.OtherFaction;
                 return o;
             }
             if (p.IsCaravanMember())
             {
                 o.kind = ObservedKind.InCaravan;
+                Caravan caravan = p.GetCaravan();
+                o.holder = caravan == null || caravan.Faction == null ? HeldKind.Unknown : caravan.Faction.IsPlayer ? HeldKind.PlayerCaravan : HeldKind.OtherFaction;
                 return o;
             }
             if (PawnUtility.IsTravelingInTransportPodWorldObject(p))
             {
                 o.kind = ObservedKind.InTransport;
+                o.holder = HeldKind.Transport;
                 return o;
             }
             if (p.Spawned || p.SpawnedOrAnyParentSpawned)

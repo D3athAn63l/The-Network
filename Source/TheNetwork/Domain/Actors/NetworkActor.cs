@@ -268,6 +268,7 @@ namespace TheNetwork.Domain.Actors
         /// <summary>What vanilla holds this person as while custody is OutOfCustody (§ 8.2).</summary>
         public Physical.HeldKind heldBy = Physical.HeldKind.None;
 
+        /// <summary>Start of the current continuous vanilla holding; -1 outside OutOfCustody. Holder changes preserve it.</summary>
         public int heldSinceTick = -1;
 
         /// <summary>The operational role (§ 6.6), distinct from the organizational <see cref="role"/>. Unset in Phase 3.0.</summary>

@@ -15,8 +15,9 @@ using Verse.AI.Group;
 namespace TheNetwork.Diagnostics.RuntimePhysicalTests
 {
     // Every scenario drives the PRODUCTION lifecycle (Plan → Materialize; then vanilla AI, vanilla exits and the episode watch) and observes.
-    // The deliberate test actions are few and named in the log: dev damage (003, 004, 006), a dev arrest (009), removing the suite's own
-    // test map (003, 005, 009, 016, 010-B), the suite's own disposable pawns and fixture factions (007, 011, 012).
+    // The deliberate test actions are few and named in the log: dev damage (003, 004, 006), removing the suite's own test map (003, 005, 016,
+    // 010-B), the suite's own disposable pawns and fixture factions (007, 011, 012). RT-PHYX-009 (a dev arrest that quarantined) is RETIRED in
+    // Phase 3.2A, where an arrest is a supported held custody: the held-custody scenarios are PhysicalCustodyScenarios.cs (RT-PHYX-020 … 025).
 
     /// <summary>RT-PHYX-001 — generate + bind + spawn exactly one named pawn on the test map; tags and binding agree; role truth holds.</summary>
     public sealed class Phyx001FirstMaterialization : PhysicalRun
@@ -673,114 +674,6 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
     }
 
     /// <summary>
-    /// RT-PHYX-009 — unsupported custody (a dev arrest) ⇒ Quarantined, pawn untouched, person blocked; then ended by vanilla's map removal.
-    ///
-    /// TWO phases, asserted separately (the 3.1 runtime-QA correction: the first owner run reached the intended quarantine and then judged "still
-    /// quarantined / still a prisoner" facts AFTER the scenario had deliberately moved on). The facts that hold DURING the unsupported custody are
-    /// captured on the very frame the quarantine is actually observed (<see cref="Capture"/>), before the map is removed; the facts that hold AFTER
-    /// vanilla clears the custody (re-observation, the ordinary Returned path, the same pawn and binding, no Network PassToWorld) are asserted at
-    /// the end. The episode is NOT required to still be quarantined at the end: ending the custody is exactly what lifts it.
-    /// </summary>
-    public sealed class Phyx009UnsupportedCustody : PhysicalRun
-    {
-        private int arrestTick, commits0, passes0, quarantineTick = -1, framesQuarantined, wakeups0;
-        private IntVec3 cell;
-        private bool armed, removed;
-
-        // Intermediate evidence: captured when the quarantine is observed, never reconstructed later.
-        private bool sawUnsupportedQuarantine, sawPawnStillPrisoner, sawAuthorityClosed, sawNoCommit, sawNoPassToWorld, sawPawnOnTestMap;
-        private string quarantineSeen;
-        private PawnSnap prisonerSnap;
-
-        public Phyx009UnsupportedCustody(NetworkRuntime rt, string runId) : base(PhysicalScenarioTable.Get("RT-PHYX-009"), runId, rt)
-        {
-        }
-
-        protected override void Script()
-        {
-            Then("pick a Solo", () => PickSolo(SoloNeed.Any));
-            Then("materialize through the production lifecycle", MaterializeOnTestMap);
-            Then("let the visitor walk in", WaitOnMap(300));
-            Then("dev arrest: the player's faction captures the visitor", () =>
-            {
-                if (!p.Spawned)
-                {
-                    v.Gap("the pawn left before the arrest");
-                    return StepResult.Abort;
-                }
-                commits0 = lc.counters.commits;
-                passes0 = port.counters.passes;
-                wakeups0 = lc.counters.wakeups;
-                p.guest.CapturedBy(Faction.OfPlayer);
-                arrestTick = PhysLog.Tick;
-                cell = p.Position;
-                v.Check(p.IsPrisonerOfColony, "the dev arrest made the pawn a prisoner of the colony");
-                armed = true;
-                everyFrame = Capture;
-                return StepResult.Next;
-            });
-            Then("PHASE 1 — wait for the watch to quarantine the episode (the evidence is captured on that very frame)", () =>
-            {
-                if (sawUnsupportedQuarantine) return StepResult.Next;
-                if (e.IsComplete || (e.state != EpisodeState.Open && e.state != EpisodeState.Quarantined))
-                {
-                    v.Fail("the episode reached " + e.state + " WITHOUT ever being observed as Quarantined(UnsupportedCustody) while the pawn was the colony's prisoner (key " + e.quarantineKey + ")");
-                    return StepResult.Abort;
-                }
-                return StepResult.Wait;
-            }, 12 * PhysicalLifecycleService.WatchPeriod);
-            Then("PHASE 1 — assert the facts captured DURING the unsupported custody", () =>
-            {
-                v.Check(sawUnsupportedQuarantine && quarantineSeen != null && quarantineSeen.StartsWith("UnsupportedCustody:HeldByPlayer", StringComparison.Ordinal),
-                    "the episode was observed Quarantined(UnsupportedCustody) " + (quarantineTick - arrestTick) + " ticks after the arrest — " + quarantineSeen);
-                v.Check(sawNoCommit, "nothing was committed while quarantined (member Present/Pending, commits unchanged): no capture is faked");
-                v.Check(sawAuthorityClosed, "the person stayed non-abstract while quarantined (custody Deployed, authority closed)");
-                v.Check(sawPawnStillPrisoner && sawPawnOnTestMap, "the pawn was untouched by the Network: still the colony's prisoner, on the test map, when the quarantine was observed");
-                v.Check(sawNoPassToWorld, "no Network PassToWorld while quarantined");
-                if (prisonerSnap != null) v.Note("snapshot at the quarantine: " + prisonerSnap.Line());
-                return StepResult.Next;
-            });
-            Then("PHASE 2 — end the unsupported custody through vanilla's map removal (vanilla clears the guest status and passes the pawn)", () =>
-            {
-                removed = true;
-                v.Note(TestSite.RemoveMap(false));
-                return StepResult.Next;
-            });
-            Then("PHASE 2 — the quarantined episode is re-observed and completes through the ordinary path", () => WaitComplete(e), 20000);
-        }
-
-        /// <summary>Every frame from the arrest to the map removal: records the facts the FIRST time the episode is observed Quarantined.</summary>
-        private void Capture()
-        {
-            if (!armed || removed || e == null || p == null) return;
-            if (e.state != EpisodeState.Quarantined || e.quarantineKey == null || !e.quarantineKey.StartsWith("UnsupportedCustody:", StringComparison.Ordinal)) return;
-            framesQuarantined++;
-            if (sawUnsupportedQuarantine) return;
-            sawUnsupportedQuarantine = true;
-            quarantineTick = PhysLog.Tick;
-            quarantineSeen = e.quarantineKey;
-            sawPawnStillPrisoner = p.IsPrisonerOfColony && p.Spawned;
-            sawPawnOnTestMap = p.Spawned && TestSite.IsTestMap(p.Map);
-            sawAuthorityClosed = c.custody == CustodyState.Deployed && !AuthorityGate.CanSimulateAbstractly(c);
-            sawNoCommit = e.members[0].state == MemberState.Present && e.members[0].outcome == MemberOutcome.Pending && lc.counters.commits == commits0;
-            sawNoPassToWorld = port.counters.passes == passes0;
-            prisonerSnap = PawnSnap.Of(p, "at the quarantine");
-            if (p.Position != cell) v.Note("the prisoner moved on its own (vanilla AI) from " + cell + " to " + p.Position + " before the quarantine was observed");
-        }
-
-        protected override void Finish()
-        {
-            // PHASE 2: after vanilla cleared the custody. The ordinary Returned path, the same pawn and binding, and still no Network pass.
-            v.Check(framesQuarantined > 0, "the quarantine was observed on " + framesQuarantined + " frame(s) before the custody ended");
-            v.Check(lc.counters.wakeups > wakeups0, "the episode was re-observed after the custody ended (" + (lc.counters.wakeups - wakeups0) + " wake-ups)");
-            v.Check(e.IsComplete && e.state != EpisodeState.Quarantined && e.quarantineKey == null, "the episode is no longer quarantined: ending the unsupported custody lifted it (" + e.state + ", quarantine " + (e.quarantineKey ?? "none") + ")");
-            CheckReturnedAndStored(e, c, p);
-            v.Check(e.members[0].pawn != null && e.members[0].pawn.SameBinding(c.pawn), "the same pawn and binding the episode started with");
-            v.Check(port.counters.passes == passes0, "no Network PassToWorld over the whole scenario (vanilla's map removal passed the pawn)");
-        }
-    }
-
-    /// <summary>
     /// RT-PHYX-010 — owner-assisted save points (menu: 010A SAVE — visitor spawned, 010B SAVE — post-map). Each one sets up a meaningful state,
     /// PAUSES the game and asks the owner to save and load; "010V VERIFY — loaded save" then checks the loaded state read-only. There is no
     /// save/reload automation. RimWorld may resume time immediately after a load even when the checkpoint was saved while paused, so the saved episode
@@ -1345,7 +1238,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             v.Check(unresolved == 0, bound + " binding(s): every one resolves to its persisted thing id (" + unresolved + " do not)");
             v.Check(clones == 0, "no bound pawn has a twin with the same thing id (" + clones + ")");
             v.Check(port.Registry.pointersResolved, "the registry's pointer index was built after the load's cross-references (post-load-init), before the first tick");
-            v.Check(unreserved == 0, "the registry reserves every Deployed or Stored living person's pawn (" + unreserved + " not)");
+            v.Check(unreserved == 0, "the registry reserves every Deployed, Stored or held living person's pawn (" + unreserved + " not)");
             v.Check(port.Registry.RetainedCount() == port.Registry.DurableRetainedCount(), "every person the durable state says must be reserved IS covered (" + port.Registry.RetainedCount() + " of " + port.Registry.DurableRetainedCount() + ")");
             List<BindingFinding> integrity = port.Registry.Audit();
             for (int i = 0; i < integrity.Count; i++) v.Fail(integrity[i].ToString());

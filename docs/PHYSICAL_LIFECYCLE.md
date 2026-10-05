@@ -1,7 +1,7 @@
 # Phase 3 Design: Abstract ↔ Physical Lifecycle
 
 > **Phase 3.1 Controlled Physical Episode — IMPLEMENTED AND OWNER RUNTIME VALIDATED (PASS).** This status applies to the Phase 3.1 scope only. Phase 3.0 is implemented
-> ([Appendix H](#appendix-h-phase-30-as-built)); **3.2 and 3.3 are NOT implemented.** The history, in order ([Appendix K.9](#k9-final-sign-off-phase-31-owner-runtime-validated)): the owner's first physical run
+> ([Appendix H](#appendix-h-phase-30-as-built)); **3.2B, 3.2C and 3.3 are NOT implemented; 3.2A (held custody) is implemented and headless validated only (see the next paragraph).** The history, in order ([Appendix K.9](#k9-final-sign-off-phase-31-owner-runtime-validated)): the owner's first physical run
 > (build `29f31dd`) produced positive evidence and real defects (the retained registry did not survive a load; first projections used special-purpose kinds; an individual's role could stay
 > `Unset`; three harness defects), corrected in [Appendix K](#appendix-k-phase-31-runtime-qa-correction-pass-pr-10); the corrected build then passed the owner's reduced rerun; `RT-PHYX-010B` exposed a false
 > harness assumption (that a loaded save stays paused), not a production defect; isolated evidence confirmed the production load behaviour; and the harness and docs were cleaned up. Two statuses, kept apart:
@@ -11,7 +11,11 @@
 > the S31 spike, the initial run, the corrected reduced rerun and an isolated 010B follow-up, not one run); save/load registry reconstruction is validated. Earlier: implemented and corrected after review
 > ([Appendix I](#appendix-i-phase-31-as-built), [Appendix J](#appendix-j-phase-31-post-review-correction-pass-pr-10)). **Not claimed:** Phase 3.2, held custody, rescue, groups or group extraction; arbitrary modded races; every RimWorld/mod combination.
 > The live game holds the real physical adapter, and the only trigger that creates or places a contractor pawn is the session-armed physical test tier (Dev Mode, its own test map). The save format is still **5**; there is no Harmony.
-> The design text below is unchanged by the implementation except where Appendices H, I, J and K record a decision the design left open or a correction.
+> The design text below is unchanged by the implementation except where Appendices H, I, J, K and L record a decision the design left open or a correction.
+>
+> **Phase 3.2A Held Custody — IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED.** Final owner acceptance on `e768fef`: 022 41/0/0 → clean SAVE/LOAD → 025 11/0/0, focused total 52/0/0; 1 bound / 1 healthy / 1-of-1 retained / 0 integrity findings. **PR #11 — MERGE-READY**, open and unmerged ([Appendix L](#appendix-l-phase-32a-as-built-held-custody), ADR-056). The prior slaveFaction, fixture LookTargets and invalid-discard issues are FIXED; S21 remains PARTIAL for headless-only observation paths.
+> A held named person is now a terminal outcome of an episode, watched by a bounded custody watch and returned only on positive evidence. Recruitment is recorded as `Defected`; O-20 locks permanent exit from old NPC availability and future Player Contractor participation through the real colony / `PlayerProxy` (Phase 4 is not implemented). **S11 failed its
+> source audit, so the rescue site is not built** ([S11 record](spikes/S11-rescue-site-holder.md)); the rescue's domain half is proven headlessly. **Not implemented:** the rescue site and its player-facing content, groups (3.2B), mixed-group reconciliation (3.2C), 3.3. The save format is still **5**; there is no Harmony.
 >
 > *Original design status:* **DESIGN REVIEW.** Written against `main` `6d0352d`
 > (Phase 2.9 merged and owner-runtime-validated; save format stays **4**). Every RimWorld fact below was read
@@ -635,8 +639,8 @@ appearance, not skills, not traits.
 
 **`PawnRef`:** the pawn **pointer** (saved with `saveDestroyedThings: true`), `thingIDNumber`, the pawn's `def`
 name (a sanity check), `boundTick`. Write-once per character. Plus **`agedThroughTick`**: the game tick up to which the
-pawn's *biological* age has been brought current; the one piece of bookkeeping truthful aging needs
-([§ 6.4](#64-truthful-aging-of-a-retained-pawn)). It is updated only by that catch-up and when a pawn becomes `Stored`.
+pawn's *biological* age is **known to have actually been brought current**, not merely the last observation tick; the existing piece of bookkeeping truthful aging needs
+([§ 6.4](#64-truthful-aging-of-a-retained-pawn)). Creation, successful catch-up and a proven exact vanilla aging boundary can establish that evidence. The current `Stored` fallback can instead use the commit tick without boundary evidence; that remains the open R-50 defect, not a truthful advance ([source audit](spikes/R50-held-aging-bookmark-audit.md)).
 
 **Organization addition (3.2):** `OrganizationProfile.composition`: a small list of (`role`, `count`) that is the
 organization's persisted **role template**, **derived from immutable origin facts** and stored eagerly for new actors or
@@ -1536,6 +1540,10 @@ of: **reconcile back to abstract** (a world pawn again), **start a new episode**
 context again), or **record death**. An observation the Network cannot classify keeps the person held; it never
 abstracts them.
 
+*As built in 3.2A ([Appendix L](#appendix-l-phase-32a-as-built-held-custody), ADR-056):* the watch is the singleton job `custody.watch`. A transition with consequences (a return, a death, a loss, a recruitment, a capture of
+someone who was only carried) is reconciled by a one-member **Custody episode** through the ordinary exactly-once pipeline; a change of holder only updates `heldBy`. The M1 registry reserves a held
+person's pawn too, so a release or a map removal never exposes it as `Free`.
+
 ### 9.5 What this never does
 
 It never infers custody from the *absence* of a pawn; it never "rescues" a held pawn by regenerating it; it never
@@ -1752,8 +1760,8 @@ events, not a live feed), so history survives faction recreation.
 
 - *Creation:* `FactionGenerator.NewGeneratedFactionWithRelations(def, relations, hidden: true)`, then
   `faction.temporary = true` (a public field) and `FactionManager.Add`.
-- *Def choice:* by capability (humanlike, non-player, not a permanent enemy, tech level near the organization's),
-  never by name; if none exists the episode is not created.
+- *Def choice:* by capability (**FactionDef.hidden**, humanlike, non-player, not a permanent enemy, humanlike basic kind and generic member pool),
+  with the vanilla refugee def preferred and ordinal fallback; if none exists the episode fails closed. The instance's hidden override is not enough for vanilla enslavement ([source audit](PR11_CORRECTION_VALIDATION.md#runtime-enslavement-correction)).
 - *Hostility mid-episode* (the player attacks them, goodwill falls): **vanilla AI handles combat**; reconcile records
   what happened.
 - **OPEN S10:** UI visibility of a hidden temporary faction, whether a faction `leader` is required, and the letter
@@ -2187,7 +2195,7 @@ Prefer **fail safe, preserve truth, quarantine and diagnose, retry idempotently*
 | the contractor actor is missing from the store | an episode referencing it | `Quarantined(ActorMissing)`; **detach** (strip tags, pawns untouched) | delete pawns |
 | a bound pawn is missing on load | member `Present` with a null pointer | outcome `Lost`, status `Lost`, history "vanished", one warning | regenerate or mark `Returned` |
 | a held person cannot be classified | `OutOfCustody` | stays held, logged at most once per day | abstract them |
-| an unsupported custody appears in 3.1 (arrest, recruit, kidnap, caravan) | member observed `HeldBy…`/`InCaravan` | **`Quarantined(UnsupportedCustody)`**: pawn untouched, person blocked from abstraction, a dev diagnostic | fake capture support |
+| an unsupported custody appears in 3.1 (arrest, recruit, kidnap, caravan) *(3.2A: superseded for a **named** person, whose held custody is now a terminal outcome, Appendix L; an **anonymous** member still quarantines until 3.2B)* | member observed `HeldBy…`/`InCaravan` | **`Quarantined(UnsupportedCustody)`**: pawn untouched, person blocked from abstraction, a dev diagnostic | fake capture support |
 
 ---
 
@@ -2457,7 +2465,7 @@ reviews it before any player-facing content.
 **Fail safe, never fake.** If during 3.1 the player arrests, recruits or kidnaps the visitor, or a caravan takes them,
 the member is observed `HeldBy…`/`InCaravan`, the episode becomes **`Quarantined(UnsupportedCustody)`**, the pawn is
 left exactly as vanilla has it, the person is blocked from abstraction, and a dev diagnostic says what happened. Capture
-**support** is 3.2; capture **safety** is 3.1.
+**support** is 3.2; capture **safety** is 3.1. *(3.2A: capture support for a named person is implemented, Appendix L; `RT-PHYX-009` is retired and superseded by `RT-PHYX-020`.)*
 
 ### 22.3 Preconditions (gates)
 
@@ -2492,7 +2500,8 @@ physical run of the 3.1 suite itself.
 No player-as-contractor board, no NPC-issued market, no full rival simulation in any of them.
 
 **Implementation status.** 3.0 is implemented (Appendix H). **3.1 is implemented on the accepted M1, corrected after review (Appendix J), and
-awaits the owner's physical run of its own suite** (Appendix I). S31 / M1 is already owner-validated; the 3.1 suite is not.
+owner runtime validated** (Appendix K.9). **3.2A (held custody) is implemented / headless validated / owner runtime validated** (Appendix L); the historical 194-PASS baseline is preserved and final `e768fef` acceptance reported 022 41/0/0, clean save/load and 025 11/0/0 (focused total 52/0/0),
+and its rescue site is not built because S11 failed. 3.2B (groups) and 3.2C (mixed-group reconciliation) are not started.
 
 **Design note for 3.2: group extraction (owner requirement; not built in 3.1).** A physical Network group should normally
 **regroup and leave together** through a shared extraction route or extraction region, with bounded cohesion and a safe fallback
@@ -2567,11 +2576,11 @@ Do **not** read an OPEN item as a decision. Each names the narrowest experiment.
 |---|---|---|---|---|
 | **S9r** | Does a hidden raw quest (Network-owned part **or** vanilla `QuestPart_ReservePawns` + a vanilla root) give GC protection, redress exclusion, suspension, kill/discard hooks and clean removal at acceptable cost? Which root def is inert? What is the exact removal/cleanup call? | static reading cannot prove it; the per-tick cost is *R* × *W* | N stored pawns; run 200 forced generations incl. `WorldPawnFactionDoesntMatter`; several GC passes; save/load; mod removal; time `GetSituation` at *R* = 150, *W* = 3,000. Pass: none redressed/GC'd, `Suspended`, removal ≤ 3 errors, cost within budget | 3.1 |
 | S10 | Creation of a hidden temporary faction outside `QuestGen`: UI visibility, required `leader`, letters, goodwill seeding, automatic removal and nulling | the lifecycle is verified in code; the UI and edge cases are not | create → visit → leave → auto-remove → recreate; no errors; goodwill mirrored | 3.1 |
-| S11 | Pawns in `SitePart.things` through a vanilla GenStep **without** `DownedRefugee`'s forced downing; site destroyed first ⇒ pawns to world | the two vanilla steps force a state | a Network-seeded rescue site; save/load before generation; destruction | 3.2 |
+| S11 | Pawns in `SitePart.things` through a vanilla GenStep **without** `DownedRefugee`'s forced downing; site destroyed first ⇒ pawns to world | the two vanilla steps force a state | a Network-seeded rescue site; save/load before generation; destruction | 3.2 — **FAIL by source audit (3.2A)**: [record](spikes/S11-rescue-site-holder.md); the rescue site is not built |
 | **S12** | Store-time normalization **and truthful aging**: which vanilla APIs heal temporary hediffs and reset needs; does `AgeTickMothballed(elapsed)` (the aging mechanism M1, [§ 6.4](#64-truthful-aging-of-a-retained-pawn); **not atomic**, so a step that throws is uncertain, § 6.4) run safely on a *non-ticking* pawn for multi-decade gaps (every birthday, no letter, consistent life stage, no exception); the cost of lazy vs periodic catch-up; modded hediffs that block mothballing | not statically provable | a pawn with mixed hediffs; store → advance 1, 10 and 70 game-years → materialize; chronological and biological age both correct; birthday effects present; no errors | 3.1 |
 | S14 | The visit Lord (`LordJob_VisitColony` with a duration): exit, wounded-guest toil, hostility flip, behaviour on a map with no colony | verified structurally, not behaviourally | a visit on a test map and a home map; attack mid-visit | 3.1 |
 | S17 | Tag hygiene: no vanilla path parses our tags; copies by other mods | `Pawn_DuplicateTracker` copies none (read); runtime check with Anomaly | duplicate a tagged pawn | 3.1 |
-| **S21** | Observation completeness: polls catch downed, caravan join, held transitions, map removal, kidnapped-then-recruited; signals dropped at the cap | the gaps are known; the cadence is a choice | scripted scenarios in the physical tier; no person lost | 3.1/3.2 |
+| **S21** | Observation completeness: polls catch downed, caravan join, held transitions, map removal, kidnapped-then-recruited; signals dropped at the cap | the gaps are known; the cadence is a choice | scripted scenarios in the physical tier; no person lost | 3.1/3.2 — **PARTIAL (3.2A)**: historical baseline 194 PASS; final e768fef acceptance 52/0/0 with clean save/load; caravan/transport/other-faction-prisoner observation remains headless-only: [record](spikes/S21-observation-completeness.md) |
 | **S22** | The physical-tier guard: create and remove a **dedicated test map** on a hidden `MapParent`; the **session-only arm** (cleared on load and after a run, never persisted); which scenarios *truly* need a home colony and what the second gate looks like | the Network must not infer whether a save matters (a low-wealth save may be a real early colony) | build the arm flow and the test-map lifecycle; assert the arm is cleared on load; assert no persisted field; a home-colony scenario refuses without the second confirmation | 3.1 |
 | **S23** | First-creation pins and modded races: name mapping, gender/age pins, kind fallback, `CanGeneratePawnRelations = false`, generation time | mod-list dependent | generate N pawns across a heavy list; no relation spam; contained failures | 3.1 |
 | S24 | The save/load matrix ([§ 16.1](#161-save-at-every-point)) on real saves | no save automation exists | owner-assisted checklist, one row per scenario | 3.1 |
@@ -2595,7 +2604,7 @@ Do **not** read an OPEN item as a decision. Each names the narrowest experiment.
 | O-15 | Freight capability model, the charter-fee economics (a pass-through sink or contractor income), and handoff time windows ([§ 27](#27-phase-33-procurement-fulfillment-and-physical-handoff-design-direction)) | design | 3.3 design review | 3.3 |
 | O-17 | The separation of professional reputation, visibility and regional scope: the later focused phase's design and migration ([§ 6.10](#610-professional-reputation-fame-and-capability)) | design | a focused phase before compensation work | later |
 | O-18 | The exact **seat-assignment function** for an origin-era organization's named people, whether to capture an explicit immutable `origin` snapshot on new actors (form, specialties) instead of relying on `capacity` and `specialties` being immutable in practice, and the guard that keeps them so; a world-generated newcomer retains no template ([§ 6.6.5](#665-identity-comes-from-immutable-origin-facts-never-from-when-the-player-first-looks)) | the contract (inputs and purity) is frozen; the function and the snapshot are detail | 3.1 / 3.2 design | 3.1 |
-| **Harmony** | Is Harmony truly avoidable for every required event? | **Yes for 3.1 and 3.2** (§ 14.2); the three hook gaps are polls | if S21 fails: document the one method, specify a postfix, **do not implement** | — |
+| **Harmony** | Is Harmony truly avoidable for every required event? | **Yes for 3.1 and 3.2** (§ 14.2); the three hook gaps are polls | if S21 fails: document the one method, specify a postfix, **do not implement** | — *(3.2A: not triggered; every held state is observed from public vanilla state)* |
 
 ---
 
@@ -2910,7 +2919,7 @@ component callback or a bounded poll provides it. Risk is after the recommended 
 | **P3-INV-029** | **Authority waits for release:** returning to `Stored` durable truth does not permit abstract advancement until the physical release transition is complete: `CanSimulateAbstractly` requires no episode membership, and the `episode` link is cleared only by RELEASE completion | the gate; COMPLETE as the only clearer; the commit never clears the link | RT-PHYS-029, 011 |
 | **P3-INV-030** | **Identity comes from immutable origin facts:** an organization's role composition and a person's `opRole` are pure functions of facts that never change after `Instantiate` (seed, form class from capacity, original specialties, `CharacterId`); lazy *storage* never makes identity depend on when the player first looks; experience, doctrine, fame, funds, morale and career affect projected competence, never the initial role or composition | the derivation inputs of § 6.6.5; a versioned pure function; a source scan | RT-PHYS-030 |
 | **P3-INV-031** | **`PassToWorld` is called only on a positively verified unpassed pawn:** a member observed `WorldFree` (already a world pawn) is never submitted to `PassToWorld` again, and every Network call requires the pawn to be unspawned, not in `WorldPawns` and not held by another vanilla owner, observed at the call ([§ 7.5](#75-who-may-call-passtoworld-an-observed-world-pawn-is-never-passed-again)) | the release-action table; the port's precondition check (the fake port records and rejects violations) | RT-PHYS-029, RT-PHYX-015, 016 |
-| **P3-INV-032** | **A retained named pawn is never exposed to vanilla redress, discard or reuse between physical exit and `Stored` authority.** The mechanism is **M1** (reserve while spawned; spike S31 passed in the owner's runtime, ADR-053, [§ 7.6](#76-the-vanilla-exit-window-resolved-by-m1-spike-s31-owner-validated)) | the registry predicate holds from the binding on; placement is refused unless it covers the pawn; RELEASE proves it | spike S31 (owner runtime, **PASS**); RT-PHYX-015, 016 on the 3.1 build (**owner run pending**) |
+| **P3-INV-032** | **A retained named pawn is never exposed to vanilla redress, discard or reuse between physical exit and `Stored` authority.** The mechanism is **M1** (reserve while spawned; spike S31 passed in the owner's runtime, ADR-053, [§ 7.6](#76-the-vanilla-exit-window-resolved-by-m1-spike-s31-owner-validated)) | the registry predicate holds from the binding on; placement is refused unless it covers the pawn; RELEASE proves it | spike S31 (owner runtime, **PASS**); RT-PHYX-015, 016 on the 3.1 build (**owner runtime PASS**, [RUNTIME_TESTING § 17.5](RUNTIME_TESTING.md#175-final-phase-31-owner-runtime-evidence)) |
 | **P3-INV-033** | **After binding, a pawn's physical state is authoritative:** a placement that did not report success, and any bound member that is not `Present`, is classified from positive observation and never reduced to `NeverPlaced` on assumption; a discarded bound pawn is `Lost`, a spawned or dead one `Present`, a held or unobservable one fails closed; a binding that no longer resolves at load or rematerialization is `Lost` | `PlacementRules`; `PhysicalLifecycleService.SettleBoundButUnplaced`; the observation in `ReconcileCore`; § 7.3 rule 7 | `Phys31Fix.Fix2_*` |
 | **P3-INV-034** | **A retained named person observed as an actual `Free` world pawn is never `Returned`:** it is the M1 reservation failing (`ObservedKind.ReservationBroken`); the episode is quarantined, authority stays closed, nothing repairs the registry, and RELEASE only proves the reservation (it never creates it) | `WorldPawnRules`; `PawnObserver`; `EnsureRetained` as a proof | `Phys31Fix.Fix3_*`; RT-PHYX-002, 005, 015, 016 (an actual `Free` is a FAIL) |
 | **P3-INV-035** | **A named person's first gender and age are a pure function of (world seed, `CharacterId`):** never of the episode, its seed, the slot, the map or the time, and never of fame, reputation, experience, doctrine or funds; they reach vanilla only through its own request inputs, are never persisted and never applied to a pawn later | `PersonIdentity` v1; `AdultAgeWindow`; `PawnIdentityPins` | `Phys31Fix.Fix4_*`; RT-PHYX-011 |
@@ -2918,6 +2927,10 @@ component callback or a bounded poll provides it. Risk is after the recommended 
 | **P3-INV-037** | **A retained person is never exposed across a load:** from the first moment vanilla can ask (`World.FinalizeInit` onward) every living, bound, `Deployed` or `Stored` person's pawn is covered, first by the persisted thing id (`BindingRules.BridgeCovers`, only while no resolved pointer contradicts it), then by the validated pointer index built at `PostLoadInit`; the registry quest is ensured from **durable** state before the first tick; an unresolved, discarded or mismatching binding is reported, never regenerated, cleared or healed | `RetainedPawnRegistry.RebuildEarly` / `ResolvePointers` / `Audit`; `BindingRules`; `NetworkWorldComponent` (PostLoadInit hook); `NetValidator.CheckBindings` | `Phys31Qa.Fix1_*`, `Phys31Qa.Fix7_*`; RT-PHYX-010 (010A + reload + 010V, 010B + reload + 010V) |
 | **P3-INV-038** | **A first projection draws its PawnKind only from the encounter faction's generic member pool:** its basic member kind and the kinds of its Combat and Peaceful groups that carry no special-purpose content (boss, leader, royal title, mutant, trader, fixed backstory, built-in conditions or abilities, forced traits or xenotype, another faction's kind); never a scan of every loaded kind, never a named blacklist, never a fallback to a global kind; no generic member means a clean abort before anything is bound. Role strength is the role's job (the verdict and its one allowed skill raise). Real later history (resurrection, genes, titles) is never sanitized | `GenericMemberPolicy`; `FactionMemberKinds`; `PawnProjection.Project`; `EncounterFactions.Qualifies` | `Phys31Qa.Fix2_*`; RT-PHYX-011 (provenance) |
 | **P3-INV-039** | **A Phase 3.1 materialization starts from a stored operational role, and only an NPC Solo contractor is in scope:** the role of an embodied NPC Solo contractor (`ContractorService.IsNpcSoloContractor`: an individual, not an organization, with a `ContractorProfile` and a `ContractorSimulation`) is stored from its origin facts before it can first materialize; the derivation is **contractor-only** (a Fixer, an organization, a proxy or a profile-less individual derives `Unset`, is never given a contractor-style role, and `Plan` refuses an embodied person whose role is `Unset` and not derivable); a stored role is never overwritten or cleared (a role an earlier build stored on a Fixer is left alone), and never reconstructed for a person who ever had a pawn | `ContractorService.IsNpcSoloContractor`; `RoleDerivation.ForSolo`; `ContractorService.EnsureSoloRoles`; `Plan` (`RoleUnderivable`); the physical tier's `SoloPicker` | `Phys31Qa.Fix3_*`; RT-PHYX-001 |
+| **P3-INV-040** | **A held named person ends the episode once and is never abstract while held:** vanilla holding the pawn (prisoner, slave, recruited, kidnapped, another faction's, a caravan) is a terminal member outcome, committed once; the continuing captivity is the person's own record (`custody = OutOfCustody`, `heldBy`, `heldSinceTick`), authority `VanillaHeld`, `CanSimulateAbstractly` false; a person in transit waits instead | `CustodyRules`; `ReconciliationPlanner.Decide`; the `CharacterHeld` commit op; `AuthorityGate` | `Custody.CaptureCommitsTheEpisodeOnce`, `Custody.EpisodeCompletesWhileThePersonStaysHeld`, `Custody.HeldPersonIsNeverAdvancedAbstractly`; RT-PHYS-031; RT-PHYX-020 (owner baseline PASS) |
+| **P3-INV-041** | **A held person returns only on positive evidence, once:** a world pawn the Network's registry reserves, with exit evidence, owing no allegiance to a permanent faction, and never recruited; through a Custody episode on the ordinary exactly-once pipeline; the same `Pawn`, no Network `PassToWorld`, no invented location. An unknown holder fails closed; a recruited person (`Defected`) is never `Stored`; a captor's recruit stays held; a death while held is final | `CustodyRules.Transition` / `EpisodeDecision`; `ReconciliationPlanner.Validate` (`DefectedTarget`); `EpisodeChecks` | `Custody.ReturnIsExactlyOnceAndWaitsForRelease`, `Custody.UnknownOwnershipFailsClosed`, `Custody.RecruitmentIsDefectedAndNeverStored`, `Custody.KidnappedThenRecruitedByTheCaptor`, `Custody.DeathWhileHeldIsMonotonic`; RT-PHYS-032, 033; RT-PHYX-020, 021, 023, 024 (owner baseline PASS) |
+| **P3-INV-042** | **M1 covers held people:** the registry reserves the pawn of every living, bound person who is `Deployed`, `Stored` or `OutOfCustody`, so a release, a map removal or a captor's recruitment never exposes it as an ordinary `Free` world pawn | `RetainedPawnRegistry.RetainedCustody` (ADR-056) | `Phys31Qa.Fix1_OnlyLivingDeployedStoredOrHeldPeopleAreRetained`; RT-PHYX-020, 023, 025 (owner baseline PASS; final e768fef 022/save/load/025 acceptance PASS, healthy 1-of-1 retained coverage) |
+| **P3-INV-043** | **The custody watch is bounded:** one persisted job exists iff at least one person is held; it observes only the held people through a derived index (never a pawn, map or world-pawn scan); a signal only wakes it, so a dropped signal costs one period and a duplicate changes nothing | `PhysicalLifecycleService.EnsureCustodyWatch` / `CustodyWatchRun`; `NetValidator` | `Custody.WatchJobExistsIffSomeoneIsHeld`, `Custody.WorkIsBoundedByTheHeldPeople`, `Custody.SignalsOnlyWakeAndDroppedSignalsConverge` |
 
 ---
 
@@ -3255,7 +3268,7 @@ commit → RELEASE → FOLLOW-UP → PUBLISH); no second architecture exists.
    § 16.3): the durable thing-id index at `FinalizeInit` (before cross-references resolve) and the validated pointer index at the world
    component's `PostLoadInit`; an index built from pointers at `FinalizeInit` was empty. An **unprepared** removal makes vanilla drop the unknown part class (one load error) and the
    pawns become ordinary world pawns: the self-healing outcome S9r prefers.
-4. **The encounter faction.** Vanilla's `OutlanderRefugee` when it qualifies, otherwise the first humanlike, non-player,
+4. **The encounter faction.** Vanilla's `OutlanderRefugee` when it qualifies, otherwise the first **def-hidden**, humanlike, non-player,
    non-permanent-enemy faction def with a humanlike basic kind, in def-name order (capability, never a mod name). Hidden, temporary,
    neutral to every faction not permanently hostile to it, named after the Network actor (it is not the actor and never provenance),
    goodwill towards the player seeded **once** from the Network standing (standing × 0.6, clamped to 0…60: a 3.1 visit is never hostile).
@@ -3533,7 +3546,7 @@ A Fixer may become physically realizable in a later design (its own role design,
 
 ### K.9 Final sign-off: Phase 3.1 owner runtime validated
 
-**Status: Phase 3.1 Controlled Physical Episode — IMPLEMENTED AND OWNER RUNTIME VALIDATED. S31/M1 accepted. Full Phase 3.1 physical QA passed. Save/load registry reconstruction validated. PR #10 remains unmerged pending final review.**
+**Status: Phase 3.1 Controlled Physical Episode — IMPLEMENTED AND OWNER RUNTIME VALIDATED. S31/M1 accepted. Full Phase 3.1 physical QA passed. Save/load registry reconstruction validated. PR #10 was merged after its final review.**
 This status applies to the Phase 3.1 scope only. The history, kept intact and in order: *first owner run found real defects → defects corrected → reduced owner rerun passed → 010B exposed the false paused-load harness assumption → isolated evidence confirmed production load behavior → harness and docs cleaned up.* In full:
 
 1. **The first owner run found real defects.** Build `29f31dd`, a disposable save: positive evidence plus six issues (K.1): the retained registry did not survive a load; first projections used special-purpose kinds; an individual's role could stay `Unset`; and three harness defects.
@@ -3556,4 +3569,112 @@ A terminal state does not prove the instantaneous pre-reconciliation state at th
 the active-link clause, the incomplete-first rule, the binding clause, the registry clause) are each caught. Two existing documentation tests were updated deliberately because they encoded the earlier "validation in progress" status (`Phys31Fix.Docs_*`, `Phys31Qa.Docs_*`); no production test was changed. **Production lifecycle code is unchanged:** the source diff of this pass touches only the dev-only QA harness (`Diagnostics/RuntimePhysicalTests/`).
 No owner rerun is required for this pass: it changes a read-only verifier, tests and documentation, never the lifecycle, the registry or the save.
 
-**What is not claimed.** Phase 3.2 does not exist: held custody, rescue, groups and group extraction are not implemented. Arbitrary modded races are not validated, and no claim is made for every RimWorld/mod combination. The physical tier stays dev-only; there is no player-facing content, no Harmony, and the save format stays **5**.
+**What is not claimed.** Phase 3.2 does not exist *(at this sign-off; Phase 3.2A has since implemented held custody, Appendix L)*: held custody, rescue, groups and group extraction are not implemented. Arbitrary modded races are not validated, and no claim is made for every RimWorld/mod combination. The physical tier stays dev-only; there is no player-facing content, no Harmony, and the save format stays **5**.
+
+---
+
+## Appendix L: Phase 3.2A as built (held custody)
+
+> **Status: Phase 3.2A Held Custody — IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED. PR #11 — MERGE-READY.**
+> The owner completed final `e768fef` acceptance: **022 41/0/0 → clean SAVE/LOAD → 025 11/0/0**, focused total **52/0/0**;
+> **1 bound / 1 healthy / 1-of-1 retained coverage / 0 integrity findings**. The same PlayerSlave / Captured pawn remains reserved and
+> excluded from old-NPC simulation; `slaveFaction = null`, and the faction-reference, warden LookTargets and invalid-discard issues are FIXED.
+> Historical implementation-only status at `76b3ae1`: **Phase 3.2A Held Custody — IMPLEMENTED / HEADLESS VALIDATED.** Its 020–025
+> baseline reported **194 PASS / 0 FAIL / 0 INCONCLUSIVE**; the later corrections and accepted owner results supersede that earlier status
+> ([acceptance, correction history and source audit](PR11_CORRECTION_VALIDATION.md#final-owner-runtime-acceptance-pass)).
+> Decisions the design left open are recorded in [ADR-056](DECISIONS.md#adr-056--held-custody-the-custody-watch-custody-episodes-and-m1-for-held-people-phase-32a)
+> for owner review. The save format is still **5**; there is no Harmony. **S11 failed its source audit, so the rescue site is not built**
+> ([S11 record](spikes/S11-rescue-site-holder.md)). S21 is PARTIAL: represented held states and final save/load are owner-validated; caravan/transport/other-faction-prisoner observation remains headless-only ([S21 record](spikes/S21-observation-completeness.md)).
+
+### L.1 What it does
+
+A named person whose pawn vanilla holds (the player's prisoner or slave, the player's recruit, kidnapped, another faction's captive, in a
+caravan) ends the episode **once** with a held outcome (§ 15.3). Their continuing captivity is their own persisted record: `custody =
+OutOfCustody`, `heldBy`, `heldSinceTick`, authority `VanillaHeld`. They are never advanced abstractly. A bounded **custody watch** observes
+the held people. A transition with consequences is reconciled through a one-member **Custody episode** on the same exactly-once pipeline
+(§ 15.2). Only positive evidence returns a person to `Stored`.
+
+### L.2 Where each piece lives
+
+| Piece | File | Notes |
+|---|---|---|
+| The custody rules (pure) | `Domain/Physical/CustodyRules.cs` | the holder of an observation, the held member outcome, `Transition` (the watch's decision) and `EpisodeDecision` (what a Custody episode commits); no store, port, job or vanilla object |
+| Held member outcomes | `ReconciliationPlanner.Decide` / `PlanEpisode` / `Validate` | held ⇒ the `CharacterHeld` op (custody, holder, `heldSinceTick` kept across a holder change); a capture ⇒ status `Captured`; a recruitment ⇒ the new `CharacterDefected` op; a Custody episode's `Returned` ⇒ `Stored` plus `KnownCharacter.Freed`; in transit ⇒ the mission episode waits (§ 12.3); an anonymous held member ⇒ `Quarantined(UnsupportedCustody)` (3.2B) |
+| The commit | `ReconciliationApplier` | `CharacterHeld`, `CharacterDefected`; `CharacterKilled` (physical), `CharacterLost`, `CharacterStored` and `CharacterReverted` clear `heldBy` and `heldSinceTick` whenever they leave held custody, inside the same rollback-protected commit |
+| The watch | `PhysicalLifecycleService` (`EnsureCustodyWatch`, `CustodyWatchRun`, `ReconcileHeld`, `OpenCustodyEpisode`, `WakeHeld`) | the job `custody.watch` (target 0, every 2,500 ticks), present iff someone is held; a derived held index (rebuilt at load and lazily, kept at each commit, never persisted); a person still linked to an episode is that episode's |
+| Observation | `Integration/Physical/PawnObserver.cs` | the holder (`PlayerPrisoner`, `PlayerSlave`, `PlayerColonist`, `Kidnapped`, `OtherFaction`, `PlayerCaravan`, `Transport`, `Unknown`) and "owes allegiance to a permanent non-player faction" |
+| M1 for held people | `RetainedPawnRegistry.RetainedCustody` | living, bound, `Deployed`, `Stored` **or `OutOfCustody`** (P3-INV-042) |
+| Wake-ups | `RetainedPawnRegistry.OnPawnEvent`, `SiteCallbacks.RoutePawnSignal` | a held person's signals only wake the watch |
+| Validator | `EpisodeChecks`, `NetValidator` | held with no holder or no `heldSinceTick`; any non-`OutOfCustody` state still naming a holder or live `heldSinceTick`; `Stored` and `Defected`; a malformed Custody episode; the watch recreated if it is missing while someone is held |
+| Events | `Persist/Events/PhaseThreeEvents.cs` | `KnownCharacter.CapturedByPlayer`, `KnownCharacter.Defected`, `KnownCharacter.Freed` (new); `Contractor.Captured`, `KnownCharacter.Killed`, `KnownCharacter.Vanished` reused |
+| Monitor | `Diagnostics/EpisodeMonitor.cs` | a read-only "HELD BY VANILLA" section (holder, since, status, authority, the custody watch) |
+| Runtime tests | `PhysicalRuntimeSuite` (RT-PHYS-031…033, safe tier); `Diagnostics/RuntimePhysicalTests/PhysicalCustodyScenarios.cs` (RT-PHYX-020…025, physical tier) | `RT-PHYX-009` is retired, superseded by 020 |
+
+### L.3 The custody watch's decision (positive evidence only)
+
+| Observation of a held person | Not yet a captive (carried, unaffiliated, unknown) | `Captured` | `Defected` (recruited) |
+|---|---|---|---|
+| a free world pawn, reserved by the Network, exit evidence, no permanent allegiance | **Returned** (Custody episode → `Stored`, `Freed`) | **Returned** | stays held (`Unaffiliated`): never `Stored` |
+| a free world pawn owing allegiance to a permanent faction (a captor's recruit) | held by `OtherFaction` | held by `OtherFaction` | held by `OtherFaction` |
+| the player's prisoner or slave, kidnapped, another faction's captive | **captured** (Custody episode → `Captured`) | holder change only | holder change only |
+| the player's colonist | **recruited** (Custody episode → `Defected`) | **recruited** | unchanged |
+| caravan, transport | holder change only | holder change only | holder change only |
+| spawned somewhere, held by nobody | held (`Unaffiliated`) | held (`Unaffiliated`) | held (`Unaffiliated`) |
+| dead | **Killed** (Custody episode, the existing death path) | **Killed** | **Killed** |
+| gone (null, discarded) | **Lost** | **Lost** | **Lost** |
+| another quest's or vanilla's world situation; a broken reservation | unchanged (a broken reservation is warned about, never repaired) | unchanged | unchanged |
+| unknown | held (`Unknown`): **fail closed** | held (`Unknown`) | held (`Unknown`) |
+
+A holder change only writes `heldBy`. It publishes nothing and opens no episode.
+
+### L.4 Decisions for the owner (ADR-056)
+
+* **O-20 (DIRECTION LOCKED): a real player pawn, permanently outside old NPC availability.** The same Pawn, KnownCharacter, identity, relationships, provenance and personal history remain. `Defected` + `OutOfCustody(PlayerColonist)` is the Phase 3 safety bridge; a Solo actor is not ended or transferred in this pass. Future Phase 4 uses the real colony through `PlayerProxy` + `ContractorProfile` and `ColonyReader`, with no abstract player roster or former-contractor simulation. Current condition and previous affiliation will be distinguished by the future schema; it is not implemented here.
+* A Solo whose **rescue** episode ends with the person held by another faction is written off, and the existing rule ends the actor
+  `LostContact` while the person stays held and watched.
+* **Live custody metadata:** outside `OutOfCustody`, `heldBy = None` and `heldSinceTick = -1`. Death, loss, storage and revert clear both at the durable transition. Holder-to-holder changes preserve the continuous holding start. Capture history belongs in existing events/status transitions, not live fields. The validator reports stale values in old/corrupt saves without inventing a migration or repairing custody.
+* **Aging while held (R-50, OPEN AFTER SOURCE AUDIT).** M1 can make a world pawn `ReservedByQuest` / `Suspended`; normal and mothball aging then skip it. `PawnRef.agedThroughTick` already is the required persisted bookmark; no new field is needed to represent the contract. The general exact aging/suspension boundary is unavailable, especially kidnapped → captor recruitment while remaining in `WorldPawns`. The existing `Stored` fallback can erase a missing interval, whereas blindly replaying from an older bookmark can double-age normal vanilla time. Production aging is deliberately unchanged; [the audit](spikes/R50-held-aging-bookmark-audit.md) records all custody states, available timestamps, uncertainty and the narrow future alternative. No background aging, Harmony, polling or save-format change is added.
+* **A captor's recruit is never redressed** into that faction's raids (R-51): the reservation keeps P3-INV-032.
+* **The rescue site (S11 FAIL).** The narrowest viable alternative is to put no pawn in a site part and materialize a Rescue episode at the
+  existing site's map generation through the 3.1 placement path. It is documented in the S11 record and needs an owner decision before
+  anything is built.
+
+### L.5 The rescue's domain half (proven headlessly)
+
+**Owner-selected rescue semantics (documentation lock only):** physically freeing the same contractor is distinct from recruiting them. A genuinely free contractor who leaves the rescue situation returns to Network custody and the original organization, with holder metadata cleared; an injured return may be Wounded and resumes the contractor career after recovery. Do not auto-join the colony, use `WillJoinColonyIfRescued`, or rewrite permanent organization/history because the player freed the pawn. Recruitment instead makes the same person a real player pawn and permanently ends old NPC availability (O-20).
+
+The future S11 alternative should prove captor → liberation → temporary free contractor faction/guest/Lord behavior → exit → storage. The preferred shell is the existing temporary encounter faction, never a permanent faction per organization. Exact vanilla faction/guest/Lord transitions need a separate spike; [S11 § 8](spikes/S11-rescue-site-holder.md#8-owner-selected-rescue-semantics-documentation-only) records that direction. **S11 remains FAIL and rescue-site production remains STOPPED.**
+
+The Troubled → Physical handoff and `OperationService.OnPhysicalResolved` exist from 3.0. 3.2A proves them over a **real** Troubled contract
+(`Rescue.*`):
+
+* the handoff cancels the Troubled deadline, and nothing resolves the operation abstractly past the old deadline;
+* an abort is deferred to the episode;
+* a stale deadline, a dev advance or a second `OnPhysicalResolved` cannot resolve it again;
+* the **failure/retry matrix** throws after each of the follow-up's sub-steps (Found: 3; WrittenOff: 5; a Solo whose person ends held by
+  another faction: 5) and retries. `OpStatus.Physical` stays authoritative until the last step, `followUpApplied` is written only after the
+  follow-up completed, and the retried end state equals the uninterrupted run in forces, recovery, career, finish, actor end, contract,
+  money, spatial and events.
+
+### L.6 Tests deliberately changed (they encoded the 3.1 quarantine)
+
+* `RT-PHYS-008`: a kidnapped member now closes the episode as `Kidnapped`, `OutOfCustody`, not abstract.
+* `RT-PHYS-012`: re-targeted to the case that still quarantines (an **anonymous** member held).
+* `Phys31Qa.Fix1_*`: the retained set now includes `OutOfCustody`; renamed `…OnlyLivingDeployedStoredOrHeldPeopleAreRetained`.
+* `Phys31Qa.Fix5_*`: the dev-arrest test now expects one held commit and a return of the same pawn. The scan test checks that
+  `RT-PHYX-009` is retired and superseded.
+* `Phys31.*` label and API scans: the 020…025 labels, a second read-only action (025), and `CapturedBy(` (the call, not the new event names).
+* `RuntimeRunner.*`: the safe-tier count includes RT-PHYS-031…033.
+* `PhysicalLifecycle.*`: the fate scan knows `Defected`.
+
+### L.7 Not in 3.2A
+
+The rescue site and its player-facing content (trigger, letter, site); groups, compositions, concretization, anonymous promotion and
+cohesion (3.2B); mixed multi-person reconciliation (3.2C); 3.3; Harmony; any new persisted field.
+
+### L.8 Evidence
+
+Headless only. The full suite, run twice on the final corrected source: **466 tests, 34,910 checks, 0 failures** (the Phase 3.1 baseline was 432 /
+33,241), zero C# compiler warnings, save format 5, no Harmony. The original 28 `Custody.*` / `Rescue.*` tests are preserved; the PR #11 correction
+adds six custody regressions and strengthens the existing death/loss tests. RT-PHYS-031…033 remain. The owner's
+physical run of `RT-PHYX-020…025` is the evidence still owed.

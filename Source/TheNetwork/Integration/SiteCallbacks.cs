@@ -211,7 +211,18 @@ namespace TheNetwork.Integration
                 else if (Physical.PhysicalTags.TryParse(signal.tag, Physical.PhysicalTags.CharacterPrefix, out id, out what))
                 {
                     Domain.Actors.KnownCharacter c = ctx.characters?.Get(new CharacterId(id));
-                    if (c?.pawn != null && ReferenceEquals(c.pawn.pawn, subject) && c.episode.IsValid) e = ctx.episodes?.Get(c.episode);
+                    if (c?.pawn != null && ReferenceEquals(c.pawn.pawn, subject))
+                    {
+                        if (c.episode.IsValid) e = ctx.episodes?.Get(c.episode);
+                        else if (Domain.Physical.PhysicalLifecycleService.IsHeld(c))
+                        {
+                            // Phase 3.2A: a person vanilla holds (no episode owns them): the custody watch is pulled forward. It still decides.
+                            pawnSignals++;
+                            if (what == "LeftMap") current.PhysicalWorld?.NoteLeftMap(subject);
+                            ctx.Lifecycle?.WakeHeld(c, what);
+                            return;
+                        }
+                    }
                 }
                 if (e == null)
                 {

@@ -32,7 +32,8 @@ namespace TheNetwork.Integration.Physical
     /// The production retained-pawn registry (PHYSICAL_LIFECYCLE § 7.4, § 16.3; S9r; M1 timing by ADR-053's rule).
     ///
     /// WHO IS RESERVED is derived, never stored: a pawn is reserved iff it is the bound pawn (reference equality with the character's own
-    /// <see cref="PawnRef"/>) of a living named person whose custody is <see cref="CustodyState.Deployed"/> or <see cref="CustodyState.Stored"/>.
+    /// <see cref="PawnRef"/>) of a living named person whose custody is <see cref="CustodyState.Deployed"/>, <see cref="CustodyState.Stored"/> or
+    /// (Phase 3.2A, ADR-056) <see cref="CustodyState.OutOfCustody"/>.
     /// The binding is written BEFORE the pawn is spawned, so the reservation already covers a retained pawn while it is spawned (where it
     /// changes nothing: every vanilla consumer is gated on WorldPawns.Contains) and is in force at the instant vanilla passes it into
     /// WorldPawns, by a normal exit or a map removal. No Free window, no callback, no patch.
@@ -91,10 +92,17 @@ namespace TheNetwork.Integration.Physical
 
         public int IndexCount => index.Count;
 
-        /// <summary>The persisted custody that keeps a bound pawn reserved (alive, Deployed or Stored).</summary>
+        /// <summary>
+        /// The persisted custody that keeps a bound pawn reserved: alive, and Deployed, Stored or (Phase 3.2A) OutOfCustody. M1 reserves a retained
+        /// named pawn from its binding on (ADR-053); 3.2A keeps that true while vanilla holds the person (ADR-056), so a held person whom vanilla
+        /// releases, who escapes or whose map is removed lands in WorldPawns as ReservedByQuest (positive evidence of a free return), never as an
+        /// ordinary Free pawn that vanilla could redress, discard or give a random faction. Vanilla's own situations are unchanged by it:
+        /// <c>WorldPawns.GetSituation</c> tests FactionLeader, Kidnapped and CaravanMember BEFORE ReservedByQuest, and a reservation of a pawn
+        /// that is not a world pawn is read by nothing.
+        /// </summary>
         public static bool RetainedCustody(KnownCharacter c)
         {
-            return c != null && c.IsAlive && (c.custody == CustodyState.Deployed || c.custody == CustodyState.Stored);
+            return c != null && c.IsAlive && (c.custody == CustodyState.Deployed || c.custody == CustodyState.Stored || c.custody == CustodyState.OutOfCustody);
         }
 
         /// <summary>
@@ -225,7 +233,7 @@ namespace TheNetwork.Integration.Physical
         }
 
         /// <summary>
-        /// The people the durable state says MUST be reserved: living, bound, custody Deployed or Stored. Read from persisted values only
+        /// The people the durable state says MUST be reserved: living, bound, custody Deployed, Stored or OutOfCustody. Read from persisted values only
         /// (no pointer), so it is right at every stage of a load. A covered count below this is a reservation gap.
         /// </summary>
         public int DurableRetainedCount()
@@ -354,6 +362,7 @@ namespace TheNetwork.Integration.Physical
             if (!c.IsAlive) return; // a dead person's corpse going away (a removed map) changes nothing the Network holds
             PhysicalEpisode e = c.episode.IsValid ? ctx.episodes?.Get(c.episode) : null;
             if (e != null) ctx.Lifecycle?.Wake(e, what);
+            else if (PhysicalLifecycleService.IsHeld(c)) ctx.Lifecycle?.WakeHeld(c, what); // 3.2A: the custody watch observes and decides
             else NetLog.WarnOnce(LogCategory.Physical, "retained." + what + "." + id.Value, "Retained person " + id + " (" + c.name?.Display + ", " + c.custody + ") was " + what + " while not in an episode; recorded at their next observation.");
         }
 
@@ -394,7 +403,7 @@ namespace TheNetwork.Integration.Physical
         /// <summary>Bindings whose pointer resolved to a live pawn with the persisted thing id.</summary>
         public int healthy;
 
-        /// <summary>People the durable state says must be reserved (living, bound, Deployed or Stored).</summary>
+        /// <summary>People the durable state says must be reserved (living, bound, Deployed, Stored or OutOfCustody).</summary>
         public int durableRetained;
 
         /// <summary>People the registry actually covers now. Below <see cref="durableRetained"/> is a reservation gap.</summary>

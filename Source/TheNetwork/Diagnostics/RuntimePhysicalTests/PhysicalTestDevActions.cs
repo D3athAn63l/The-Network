@@ -102,10 +102,10 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             PhysicalTestSession.Start((rt, id) => new Phyx008TemporaryFaction(rt, id), PhysicalScenarioTable.Get("RT-PHYX-008"));
         }
 
-        [DebugAction(Cat, "RT-PHYX-009 — Unsupported custody: dev arrest quarantines [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        [DebugAction(Cat, "RT-PHYX-009 — Unsupported custody: dev arrest quarantines — RETIRED in 3.2A, run RT-PHYX-020 (read-only)", allowedGameStates = AllowedGameStates.Playing)]
         public static void Phyx009()
         {
-            PhysicalTestSession.Start((rt, id) => new Phyx009UnsupportedCustody(rt, id), PhysicalScenarioTable.Get("RT-PHYX-009"));
+            PhysicalTestSession.Retired(PhysicalScenarioTable.Get("RT-PHYX-009"));
         }
 
         [DebugAction(Cat, "010A SAVE — visitor spawned [armed]", allowedGameStates = AllowedGameStates.Playing)]
@@ -148,6 +148,44 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         public static void Phyx016()
         {
             PhysicalTestSession.Start((rt, id) => new Phyx016MapRemovalM1(rt, id), PhysicalScenarioTable.Get("RT-PHYX-016"));
+        }
+
+        // ---- Phase 3.2A: held custody (S21). Each one leaves its own test map; 021–024 deliberately leave the person held by vanilla.
+
+        [DebugAction(Cat, "RT-PHYX-020 — Arrest: held once, then freed and stored [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        public static void Phyx020()
+        {
+            PhysicalTestSession.Start((rt, id) => new Phyx020Arrest(rt, id), PhysicalScenarioTable.Get("RT-PHYX-020"));
+        }
+
+        [DebugAction(Cat, "RT-PHYX-021 — Recruitment: Defected, never stored [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        public static void Phyx021()
+        {
+            PhysicalTestSession.Start((rt, id) => new Phyx021Recruitment(rt, id), PhysicalScenarioTable.Get("RT-PHYX-021"));
+        }
+
+        [DebugAction(Cat, "RT-PHYX-022 — Enslavement: held as a slave [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        public static void Phyx022()
+        {
+            PhysicalTestSession.Start((rt, id) => new Phyx022Enslavement(rt, id), PhysicalScenarioTable.Get("RT-PHYX-022"));
+        }
+
+        [DebugAction(Cat, "RT-PHYX-023 — Kidnapped, then recruited by the captor [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        public static void Phyx023()
+        {
+            PhysicalTestSession.Start((rt, id) => new Phyx023Kidnapped(rt, id), PhysicalScenarioTable.Get("RT-PHYX-023"));
+        }
+
+        [DebugAction(Cat, "RT-PHYX-024 — Death while held [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        public static void Phyx024()
+        {
+            PhysicalTestSession.Start((rt, id) => new Phyx024DeathWhileHeld(rt, id), PhysicalScenarioTable.Get("RT-PHYX-024"));
+        }
+
+        [DebugAction(Cat, "RT-PHYX-025 — Held people after save/load (read-only)", allowedGameStates = AllowedGameStates.Playing)]
+        public static void Phyx025Verify()
+        {
+            PhysicalTestSession.StartReadOnly((rt, id) => new Phyx025HeldVerify(rt, id), PhysicalScenarioTable.Get("RT-PHYX-025"));
         }
     }
 }

@@ -55,6 +55,9 @@
 | R-46 | **The retained registry does not survive a load:** it is built before the load's cross-references resolve, so retained people are `Free` on the first tick and vanilla discards them | **High** | **Observed** | Phase 3.1 (owner run on `29f31dd`; corrected; `RT-PHYX-010` A and B with a reload: **owner runtime validated**) |
 | R-47 | A first projection borrows a special-purpose kind (boss, royal, ancient, cultist) because its combat stats fit the role | High | **Observed** | Phase 3.1 (owner run on `29f31dd`; corrected; `RT-PHYX-011` provenance: **owner runtime validated**) |
 | R-48 | A person reaches first materialization with their operational role unknown (`Unset`) | Medium | **Observed** | Phase 3.1 (owner run on `29f31dd`; corrected; `RT-PHYX-001`: **owner runtime validated**) |
+| R-49 | **No vanilla site part can carry a retained pawn to a rescue site** (S11 FAIL by source audit): the player-facing rescue has no safe vehicle yet | Medium | **Observed** (source) | Phase 3.2A (S11 recorded; the rescue site stopped; the alternative needs an owner decision and its own runtime proof) |
+| R-50 | **A held person who is a quest-reserved world pawn does not age, and a later return skips that interval** (the M1 reservation makes such a pawn `Suspended`) | Low | Medium | Phase 3.2A (source-audited, OPEN: existing bookmark is sufficient; exact suspension boundary missing) |
+| R-51 | **Held people and actor shells accumulate:** recruitment exits old NPC availability (O-20 direction locked); a captor's recruit stays reserved, so vanilla never sends them back in a raid | Medium | Medium | Phase 3.2A (O-20 locked; lifecycle/schema details later; RT-PHYX-021, 023) |
 
 ---
 
@@ -165,6 +168,13 @@
   ([PHYSICAL_LIFECYCLE § 9](PHYSICAL_LIFECYCLE.md#9-custody-model)); implementation is subphase 3.2, and 3.1 fails safe
   into `Quarantined(UnsupportedCustody)` rather than faking capture support. Vanilla recruits kidnapped pawns into the
   captor's faction with MTB ≈ 30 days; the watch expects it.
+- **Phase 3.2A (IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED; final e768fef acceptance 52/0/0 with clean save/load).** Held custody is implemented for named people
+  ([Appendix L](PHYSICAL_LIFECYCLE.md#appendix-l-phase-32a-as-built-held-custody), ADR-056). One correction to the mitigation above: the
+  reservation is **kept**, not released, while a person is held (M1 covers `OutOfCustody`, P3-INV-042), because a released, held pawn
+  could become an ordinary `Free` world pawn. Captured and recruited people are set-once fates, committed through one episode. A recruit
+  is `Defected` and never counted home (R-51). Proven headlessly by `Custody.*` and RT-PHYS-031…033. The physical proof is
+  RT-PHYX-020…025 (historical 194-PASS owner baseline), followed by final 022 41/0/0 → clean save/load → 025 11/0/0 acceptance.
+  S21 remains PARTIAL for headless-only caravan/transport/other-faction-prisoner observations.
 
 ## R-12 · World-object deletion
 - **Failure modes.** A site is deleted by vanilla timeout, the player, a mod or a map-settling
@@ -473,7 +483,10 @@
 - **Mitigation.** Signals are only wake-ups; bounded polls (Open-episode members every 250 ticks, held people every
   2,500); `Returned` only on a positive observation; the load pass; Quarantine for the unclassifiable
   ([§ 14](PHYSICAL_LIFECYCLE.md#14-event-detection), [§ 9](PHYSICAL_LIFECYCLE.md#9-custody-model)).
-- **Proven by.** Spike **S21** and the physical tier (`RT-PHYX-*`); `RT-PHYS-008/010`.
+- **Proven by.** Spike **S21** and the physical tier (`RT-PHYX-*`); `RT-PHYS-008/010`. *(3.2A: S21 PARTIAL, a headless PASS, with the
+  owner baseline `RT-PHYX-020…025` passed with a subsequently fixed 022 slaveFaction warning; final e768fef acceptance 52/0/0 with clean save/load;
+  caravan/transport/other-faction-prisoner observation remains headless-only; [record](spikes/S21-observation-completeness.md). The custody watch observes only the held people
+  every 2,500 ticks, and signals only wake it.)*
 
 ## R-32 · The physical test tier damages a real colony (Phase 3)
 - **Failure modes.** A destructive suite is pressed by accident in the owner's real, heavily modded colony: it spawns
@@ -656,3 +669,26 @@
 - **Failure modes.** The derivation returned `Unset` for an individual with no `ContractorProfile` (a Fixer, which `IsSolo` counts and the physical tier's lowest-id picker selected), so the first projection was unconstrained and `RT-PHYX-001` failed, and the tier could PASS without exercising a contractor.
 - **Mitigation.** The picker, the role compatibility pass and the derivation are limited to NPC Solo contractors (`IsNpcSoloContractor`); a Fixer is outside Phase 3.1 and untouched (a role an earlier build stored on one is neither cleared nor rewritten); the pass stores a contractor's role once at bootstrap and load; `Plan` stays the safety net and fails closed (`RoleUnderivable`) rather than inventing a role; never overwritten, never reconstructed for a bound person (P3-INV-039, Appendix K.8).
 - **Proven by.** `Phys31Qa.Fix3_*`; `RT-PHYX-001` (**owner runtime validated**: the actors were NPC Solo contractors, not Fixers).
+
+## R-49 · No vanilla site part can carry a retained pawn to a rescue site (Phase 3.2A, observed in source)
+- **Failure modes.** `GenStep_DownedRefugee` damages the pawn until downed and disables its legs; `GenStep_PrisonerWillingToJoin` builds a prison cell around it. Both set `WillJoinColonyIfRescued`,
+  so the player's "Offer help" **recruits** the contractor. The item steps destroy any content that did not spawn. A retained pawn is a world pawn, and `ThingOwner.TryAdd` would leave it owned twice. The site feeds its
+  contents, and an expired refugee site heals the pawn and notifies its relations ([S11](spikes/S11-rescue-site-holder.md) § 4).
+- **Mitigation.** Nothing is built on it. The rescue-site implementation stopped at S11's FAIL (no Harmony, no custom site lifecycle). The narrowest alternative puts no pawn in a site part: a Rescue episode is
+  materialized at the existing site's map generation through the 3.1 placement path, so a site destroyed earlier touches no pawn.
+- **Proven by.** The S11 source audit (FAIL). The alternative needs an owner decision, then its own physical-tier proof.
+
+## R-50 · A held, quest-reserved world pawn does not age (Phase 3.2A)
+- **Status: OPEN after source audit. Production aging unchanged.** The [full audit](spikes/R50-held-aging-bookmark-audit.md) identifies the owner-provided 1.6 assembly, vanilla methods, custody-state matrix and every Network age write/call.
+- **Failure modes.** `ReservedByQuest` makes a world pawn suspended; both normal and mothball age paths skip it. The existing `Stored` fallback can advance `agedThroughTick` to observation/commit time and erase suspended time. Blindly replaying from an older bookmark instead double-ages time vanilla already applied. Kidnapped/caravan situations precede reservation; transport follows it and is not proof that age is current.
+- **Existing bookmark.** `PawnRef.agedThroughTick` means the latest game tick through which biological age is known to have actually been brought current, not the last observed tick. It can represent the preferred model. Another persisted field is not justified.
+- **Missing evidence.** `becameWorldPawnTickAbs` records world entry, not a later kidnapped → captor-recruitment boundary. Session-only `LeftMap` is absent after reload and can predate later suspension. AgeTracker persists no last-applied biological-aging tick. Holder observation latency is normally at most 2,500 ticks; biological uncertainty is not bounded by that period and may span years.
+- **Narrow future alternative.** Prove a one-time exact vanilla/lifecycle aging-to-suspension boundary, then reuse the existing bookmark and existing vanilla catch-up immediately before physical reuse. Network-controlled handoffs alone do not cover every captor transition. No Harmony, per-pawn/per-tick polling, background aging, new field or migration is introduced in this pass.
+- **Evidence limits.** Source audit only. No new R-50 closure tests or runtime aging scenario are claimed. Existing successful catch-up and uncertain-failure handling remain unchanged; save format stays 5.
+
+## R-51 · Held people and actor shells accumulate (Phase 3.2A)
+- **Failure modes.** A recruited contractor stays `Defected` and `OutOfCustody(PlayerColonist)` for good: never `Stored`, never abstract, the Solo actor not ended (O-20 direction locked: old NPC availability permanently ends). A captor's recruit stays reserved by the
+  registry, so vanilla never redresses that pawn into one of the captor's raids (the "kidnapped colonist returns as a raider" story cannot happen for a Network person). The custody watch's work grows with the number of held people.
+- **Mitigation.** The watch is bounded by the held people (one observation each per 2,500 ticks; `Custody.WorkIsBoundedByTheHeldPeople`), and it costs nothing when nobody is held. Exposing a captor's recruit to redress would break
+  P3-INV-032 (a retained named pawn is never exposed to redress, discard or reuse), so it is not done. O-20 locks future Player Contractor participation through the real colony / PlayerProxy. Actor retirement, public reactions and the final current-condition / affiliation-history schema remain future work; no former-contractor simulator is created.
+- **Proven by.** `Custody.RecruitmentIsDefectedAndNeverStored`, `Custody.KidnappedThenRecruitedByTheCaptor`; RT-PHYX-021 and 023 (owner baseline PASS at `76b3ae1`).

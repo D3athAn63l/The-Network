@@ -17,7 +17,7 @@ namespace TheNetwork.Integration.Physical
     public static class EncounterFactions
     {
         /// <summary>
-        /// The def by capability, never by mod name: a humanlike, non-player faction that is not permanently hostile, has a humanlike basic
+        /// The def by capability, never by mod name: a hidden, humanlike, non-player faction that is not permanently hostile, has a humanlike basic
         /// member kind AND offers at least one GENERIC member (<see cref="FactionMemberKinds"/>: a basic member kind that is a boss, a leader,
         /// a royal, a cultist or a forced-xenotype kind does not count). Vanilla's own OutlanderRefugee (the def its hidden temporary refugee
         /// factions use) is preferred when it qualifies; otherwise the first qualifying def in name order. Null when none exists (the episode
@@ -35,7 +35,9 @@ namespace TheNetwork.Integration.Physical
 
         public static bool Qualifies(FactionDef d)
         {
-            return d != null && d.humanlikeFaction && !d.isPlayer && !d.permanentEnemy && d.basicMemberKind != null && d.basicMemberKind.RaceProps != null
+            // Vanilla TryEnslavePrisoner clears the old faction only for a HIDDEN DEF. The instance's hidden override does not count;
+            // otherwise SetGuestStatus caches our temporary faction as slaveFaction AFTER SetFaction can already have queued its removal.
+            return d != null && d.hidden && d.humanlikeFaction && !d.isPlayer && !d.permanentEnemy && d.basicMemberKind != null && d.basicMemberKind.RaceProps != null
                 && d.basicMemberKind.RaceProps.Humanlike && FactionMemberKinds.HasGenericPool(d);
         }
 
@@ -45,7 +47,7 @@ namespace TheNetwork.Integration.Physical
             Faction live = current?.Resolve();
             if (live != null && live.temporary) return current;
             FactionDef def = ChooseDef();
-            if (def == null) throw new InvalidOperationException("no humanlike, non-player, non-hostile FactionDef is loaded for a temporary encounter faction");
+            if (def == null) throw new InvalidOperationException("no hidden, humanlike, non-player, non-hostile FactionDef with generic members is loaded for a temporary encounter faction");
             List<FactionRelation> relations = new List<FactionRelation>();
             foreach (Faction other in Find.FactionManager.AllFactionsListForReading)
             {

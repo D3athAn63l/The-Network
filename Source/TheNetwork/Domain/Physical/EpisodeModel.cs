@@ -132,7 +132,11 @@ namespace TheNetwork.Domain.Physical
         public string defName;
         public int boundTick = -1;
 
-        /// <summary>The tick up to which the pawn's biological age has been brought current (§ 6.4). Set when it becomes Stored and by the catch-up.</summary>
+        /// <summary>
+        /// The latest game tick through which this pawn's biological age is KNOWN to have actually been brought current (§ 6.4),
+        /// not merely its last observation tick. Creation and successful catch-up establish that evidence; an exact vanilla aging boundary
+        /// can establish it too. R-50 remains open: the existing Stored fallback can advance this bookmark without such boundary evidence.
+        /// </summary>
         public int agedThroughTick = -1;
 
         public bool IsBound => thingIdNumber > 0 || pawn != null;
