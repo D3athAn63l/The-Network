@@ -893,17 +893,18 @@ isolated evidence confirmed production load behavior; and the harness and docs w
 * **Registry and M1 protections** held under redress and GC pressure, and the registry was reconstructed correctly across a save and load (stage 1 by thing id, stage 2 by validated pointer, before the first gameplay tick).
 * **`010A` / `010B` load results** are the two rows above: both reloads were clean, and the `010B` reload showed that RimWorld may resume gameplay immediately after a load, which the production load invariant already tolerates.
 
-**What this does not claim.** It is the Phase 3.1 scope only. **Phase 3.2 does not exist** *(at the 3.1 sign-off; Phase 3.2A has since been implemented, headless validated and owner baseline tested; corrected 022 save/load rerun pending, [§ 18](#18-phase-32a-held-custody))* (no held custody, rescue, **group** extraction or any other custody case beyond the quarantine above), arbitrary **modded races** are not validated, and no claim is made for **every RimWorld/mod combination**. The physical tier remains dev-only: there is no player-facing content,
+**What this does not claim.** It is the Phase 3.1 scope only. **Phase 3.2 does not exist** *(at the 3.1 sign-off; Phase 3.2A has since been implemented, headless validated and owner runtime validated, including the final clean 022/save/load/025 acceptance, [§ 18](#18-phase-32a-held-custody))* (no held custody, rescue, **group** extraction or any other custody case beyond the quarantine above), arbitrary **modded races** are not validated, and no claim is made for **every RimWorld/mod combination**. The physical tier remains dev-only: there is no player-facing content,
 no Harmony, and the save format stays 5. PR #10 has since been merged.
 
 
 ## 18. Phase 3.2A: held custody
 
-> **Status: Phase 3.2A Held Custody — IMPLEMENTED / HEADLESS VALIDATED.** Owner baseline at source `76b3ae1`: **194 PASS / 0 FAIL /
-> 0 INCONCLUSIVE**, with clean retained bindings and a removed Network `slaveFaction` warning from synthetic 022. The corrected
-> **022 → SAVE → LOAD → 025 rerun is PENDING**; the other owner results remain accepted. See the [record and audit](PR11_CORRECTION_VALIDATION.md#runtime-enslavement-correction). The design is [PHYSICAL_LIFECYCLE § 9](PHYSICAL_LIFECYCLE.md#9-custody-model). What was built is
+> **Status: Phase 3.2A Held Custody — IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED. PR #11 — MERGE-READY.**
+> Final `e768fef` acceptance: **022 41/0/0 → clean SAVE/LOAD → 025 11/0/0**, focused total **52/0/0**;
+> **1 bound / 1 healthy / 1-of-1 retained coverage / 0 integrity findings**. All slaveFaction, warden LookTargets and invalid-discard correction
+> issues are FIXED. The original 194-PASS baseline remains historical evidence. See the [acceptance record and audit](PR11_CORRECTION_VALIDATION.md#final-owner-runtime-acceptance-pass). The design is [PHYSICAL_LIFECYCLE § 9](PHYSICAL_LIFECYCLE.md#9-custody-model). What was built is
 > [Appendix L](PHYSICAL_LIFECYCLE.md#appendix-l-phase-32a-as-built-held-custody) and ADR-056. The spike records are
-> [S21](spikes/S21-observation-completeness.md) (PARTIAL: owner baseline passes preserved; corrected 022 rerun pending) and [S11](spikes/S11-rescue-site-holder.md) (FAIL
+> [S21](spikes/S21-observation-completeness.md) (PARTIAL: represented held states and clean save/load owner-validated; other observation paths remain headless-only) and [S11](spikes/S11-rescue-site-holder.md) (FAIL
 > by source audit; the rescue site is not built, so there is **no rescue scenario**).
 
 ### 18.1 The safe tier
@@ -928,7 +929,32 @@ reserved for 3.2B. **`RT-PHYX-009` is retired**: its menu item now only prints t
 Caravan, transport and held-by-another-faction have **headless proof only** (`Custody.CaravanAndTransportHolders`, the rules matrix, the
 Solo-held rescue matrix). Building a caravan or a pod launch needs a colonist to carry the person, and the tier never touches colonists.
 
-### 18.3 Final 022 fixture-cleanup rerun (PENDING)
+### 18.3 Final owner runtime acceptance (PASS)
+
+**Phase 3.2A Held Custody — IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED. PR #11 — MERGE-READY; open and unmerged.**
+
+The owner completed **RT-PHYX-022 → SAVE → LOAD → RT-PHYX-025** on the accepted `e768fef` build in a fresh disposable save with
+Ideology active: **022: 41 PASS, 0 FAIL, 0 INCONCLUSIVE; save/load CLEAN; 025: 11 PASS, 0 FAIL, 0 INCONCLUSIVE**.
+Focused total: **52 PASS, 0 FAIL, 0 INCONCLUSIVE**. Post-load: **1 bound / 1 healthy binding, 1/1 durable retained covered,
+0 integrity findings**. The same contractor remained PlayerSlave / Captured / OutOfCustody(PlayerSlave), reserved by the registry and
+blocked from old-NPC abstract simulation, with no replacement pawn. The old Solo remained unavailable with zero abstract strength.
+
+The real vanilla enslavement API executed; `SlaveFaction == null`; exactly the test-created Message was cleaned before safe warden
+destruction/discard; the encounter faction was removed and repeated RELEASE was harmless. Save/load and actual-save inspection showed
+no dangling Network `slaveFaction`, removed Network faction reference, unresolved warden `Thing_Human...`, `LookTargets /targets/1`
+error, state -1 discard warning or attributable Network deep-save/cross-reference error. The saved `slaveFaction` was null and the
+test-created warden message was absent from the archive. All three correction issues are **FIXED**; no corrected acceptance rerun is pending.
+
+Source `e768fefc3ab613aaa8d08f834f0edabf4ad0e735` and the shipped DLL remain unchanged: stamp
+`built 2026-10-05T14:09Z, source commit e768fef`; SHA-256
+`502a4def6dddadf2686bffad9a2d61f6545941f7628742bffdeb92e5e6f0fc28`.
+Existing headless evidence is **481 tests / 35,084 checks / 0 failures ×2**, zero compiler warnings/errors and all nine source gates PASS.
+This acceptance update is documentation-only; there is no rebuild or new gameplay test run.
+
+S21 stays PARTIAL for the remaining headless-only caravan/transport/other-faction-prisoner observations. R-50 stays OPEN,
+O-20 stays locked, S11 stays FAIL / rescue STOPPED, and 3.2B, 3.2C, 3.3 and Phase 4 remain unimplemented.
+
+**Historical correction sequence (preserved):**
 
 The owner baseline at source `76b3ae1` reported **194 PASS, 0 FAIL, 0 INCONCLUSIVE**, including 020–025 and save/load. Post-load:
 **5 bound / 5 healthy bindings, 4/4 retained covered, 0 integrity findings**. Preserve 020, 021, 023 and 024 as successful evidence.
@@ -937,21 +963,19 @@ then observed **022: 40 PASS, 0 FAIL, 0 INCONCLUSIVE**, followed by save/load an
 **1 bound / 1 healthy binding, 1/1 durable retained covered, 0 integrity findings**. The same contractor remained PlayerSlave / Captured,
 with `slaveFaction = null` and no removed Network faction reference. This accepts the production correction.
 
-The remaining issue was the test warden: its archived vanilla enslavement message still referenced it at `LookTargets /targets/1`
+The remaining issue at `db0f795` was the test warden: its archived vanilla enslavement message still referenced it at `LookTargets /targets/1`
 after invalid despawn/direct-discard cleanup. 022 now snapshots archive identities, removes only its newly created NeutralEvent message
 with the exact contractor/warden target pair through `Archive.Remove`, detaches that one live message's targets, then ownership-guards
 vanilla `PassToWorld(..., Discard)`. Unrelated messages and production custody are untouched. See the
 [fixture source audit, regressions and DLL provenance](PR11_CORRECTION_VALIDATION.md#final-runtime-test-fixture-cleanup).
 
-Minimum rerun, **fresh disposable save and Ideology active**: **RT-PHYX-022 → SAVE → LOAD → RT-PHYX-025**. Confirm both PASS,
-no Network red errors, no slaveFaction reference to a removed Network encounter faction, no disposable-warden `Thing_Human...`
-reference or `LookTargets /targets/1` resolution error, and no `Tried to discard <warden> whose state is -1` warning. The same bound Pawn
-must remain PlayerSlave / Captured, with correct held state, healthy registry coverage and 0 integrity findings. Capture the log across
-save/load. The prior production assertions remain intact; baseline 020/021/023/024 runs need not be repeated.
+The final focused sequence and every acceptance criterion above have now passed. Earlier 020/021/023/024 baseline evidence remains
+accepted; no broader repeated runtime matrix is required for this correction.
 
 ### 18.4 Original owner checklist (for reproduction)
 
-The owner already completed this original full matrix. The current required rerun is § 18.3 above.
+The owner already completed this original full matrix and the final focused acceptance in § 18.3. These steps are preserved for reproduction;
+they are not outstanding acceptance work.
 
 1. Use the build from this PR. The first `[TheNetwork]` line in `Player.log` names the source commit. Turn on Dev Mode. **Use a disposable
    save**: 021–024 deliberately leave people held, recruited or dead.

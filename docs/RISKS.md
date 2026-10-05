@@ -168,12 +168,13 @@
   ([PHYSICAL_LIFECYCLE § 9](PHYSICAL_LIFECYCLE.md#9-custody-model)); implementation is subphase 3.2, and 3.1 fails safe
   into `Quarantined(UnsupportedCustody)` rather than faking capture support. Vanilla recruits kidnapped pawns into the
   captor's faction with MTB ≈ 30 days; the watch expects it.
-- **Phase 3.2A (IMPLEMENTED / HEADLESS VALIDATED; owner baseline passed with a 022 slaveFaction warning; corrected 022 rerun pending).** Held custody is implemented for named people
+- **Phase 3.2A (IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED; final e768fef acceptance 52/0/0 with clean save/load).** Held custody is implemented for named people
   ([Appendix L](PHYSICAL_LIFECYCLE.md#appendix-l-phase-32a-as-built-held-custody), ADR-056). One correction to the mitigation above: the
   reservation is **kept**, not released, while a person is held (M1 covers `OutOfCustody`, P3-INV-042), because a released, held pawn
   could become an ordinary `Free` world pawn. Captured and recruited people are set-once fates, committed through one episode. A recruit
   is `Defected` and never counted home (R-51). Proven headlessly by `Custody.*` and RT-PHYS-031…033. The physical proof is
-  RT-PHYX-020…025, not yet run by the owner.
+  RT-PHYX-020…025 (historical 194-PASS owner baseline), followed by final 022 41/0/0 → clean save/load → 025 11/0/0 acceptance.
+  S21 remains PARTIAL for headless-only caravan/transport/other-faction-prisoner observations.
 
 ## R-12 · World-object deletion
 - **Failure modes.** A site is deleted by vanilla timeout, the player, a mod or a map-settling
@@ -483,7 +484,8 @@
   2,500); `Returned` only on a positive observation; the load pass; Quarantine for the unclassifiable
   ([§ 14](PHYSICAL_LIFECYCLE.md#14-event-detection), [§ 9](PHYSICAL_LIFECYCLE.md#9-custody-model)).
 - **Proven by.** Spike **S21** and the physical tier (`RT-PHYX-*`); `RT-PHYS-008/010`. *(3.2A: S21 PARTIAL, a headless PASS, with the
-  owner baseline `RT-PHYX-020…025` passed with a 022 slaveFaction warning; corrected 022 save/load rerun pending; [record](spikes/S21-observation-completeness.md). The custody watch observes only the held people
+  owner baseline `RT-PHYX-020…025` passed with a subsequently fixed 022 slaveFaction warning; final e768fef acceptance 52/0/0 with clean save/load;
+  caravan/transport/other-faction-prisoner observation remains headless-only; [record](spikes/S21-observation-completeness.md). The custody watch observes only the held people
   every 2,500 ticks, and signals only wake it.)*
 
 ## R-32 · The physical test tier damages a real colony (Phase 3)

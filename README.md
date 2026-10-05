@@ -1,6 +1,6 @@
 # The Network
 
-**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; the formal in-game S20 checklist has not been run); Phase 2.75 merged (the contractor career foundation); Phase 2.9 merged and owner-runtime-tested (in-game runtime regression test infrastructure, developer-only); Phase 3 (abstract ↔ physical lifecycle): design reviewed; Phase 3.0 (authority + Physical Episode foundation) implemented; Phase 3.1 (one controlled physical episode, dev-triggered on a separate, session-armed test tier) implemented and owner runtime validated (PASS, Phase 3.1 scope only); Phase 3.2A (held custody) IMPLEMENTED / HEADLESS VALIDATED (owner 020–025 baseline reported 194 PASS / 0 FAIL / 0 INCONCLUSIVE; corrected 022 save/load rerun pending; the rescue site is not built: S11 failed its source audit)**
+**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; the formal in-game S20 checklist has not been run); Phase 2.75 merged (the contractor career foundation); Phase 2.9 merged and owner-runtime-tested (in-game runtime regression test infrastructure, developer-only); Phase 3 (abstract ↔ physical lifecycle): design reviewed; Phase 3.0 (authority + Physical Episode foundation) implemented; Phase 3.1 (one controlled physical episode, dev-triggered on a separate, session-armed test tier) implemented and owner runtime validated (PASS, Phase 3.1 scope only); Phase 3.2A (held custody) IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED (final e768fef acceptance: 022 41/0/0, clean save/load, 025 11/0/0; PR #11 MERGE-READY, open and unmerged; the rescue site is not built: S11 failed its source audit)**
 
 The Network is a persistent, procedural contractor ecosystem that runs behind the normal RimWorld
 game. The player hires outsiders to find and fetch things they cannot easily get themselves. The
@@ -105,10 +105,13 @@ carrying its own durable marker; death is final; custody beyond the map is never
 3.0 the abstract foundation (no pawn), 3.1 one controlled physical episode (first real pawn, in a separate, session-armed test
 tier on its own test map), 3.2 custody, rescue and groups (first player-visible content), 3.3 procurement fulfillment / physical
 handoff (**design direction only**). **3.0 began once the design was accepted. The mandatory runtime spike S31 (the retained-pawn exit-reservation window) was run by the owner and PASSED: M1 (reserve a retained named pawn while it is spawned) is accepted (ADR-053; the original record is [docs/spikes/S31-retained-pawn-exit-reservation.md](docs/spikes/S31-retained-pawn-exit-reservation.md)). The owner then validated the Phase 3.1 physical suite in RimWorld (a first run found six issues, corrected; a reduced rerun passed; the save/load cases were closed by an isolated follow-up): Phase 3.1 is IMPLEMENTED AND OWNER RUNTIME VALIDATED. S31/M1 accepted. Full Phase 3.1 physical QA passed. Save/load registry reconstruction validated. PR #10 has since been merged. That sign-off was not Phase 3.2: held custody, rescue, groups and group extraction did not exist, arbitrary modded races are not validated, and no claim is made for every RimWorld/mod combination.** Full Safe Regression stays safe on a real colony. Open questions and the spikes that settle
-them are listed, not hidden; apart from S31 (and the Phase 3.1 suite above), none has been run by the owner.
+them are listed, not hidden; apart from S31, the Phase 3.1 suite above and the Phase 3.2A evidence below, other spikes have not been run by the owner.
 
-**Phase 3.2A (held custody): IMPLEMENTED / HEADLESS VALIDATED.** The owner has not yet run its physical-tier scenarios (`RT-PHYX-020…025`), so it is
-**not** owner runtime validated ([RUNTIME_TESTING § 18](docs/RUNTIME_TESTING.md#18-phase-32a-held-custody)). When vanilla holds a named contractor's
+**Phase 3.2A (held custody): IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED.** The original owner baseline
+covered `RT-PHYX-020…025`; final `e768fef` acceptance completed 022 → SAVE → LOAD → 025 with **52 PASS / 0 FAIL / 0 INCONCLUSIVE**,
+clean save/load and healthy 1-of-1 retained coverage. PR #11 is **MERGE-READY**, open and unmerged
+([RUNTIME_TESTING § 18](docs/RUNTIME_TESTING.md#18-phase-32a-held-custody)). S21 remains PARTIAL for headless-only caravan, transport
+and other-faction-prisoner observation. When vanilla holds a named contractor's
 pawn (the player arrests, enslaves or recruits them, a raider kidnaps them, another faction holds them, a caravan carries them), the episode ends
 **once** and the contractor does **not** go home: they stay held by vanilla, unavailable, never simulated abstractly, watched by a bounded
 custody watch (one scheduler job, only while someone is held). Only positive evidence (the same pawn, free again as a world pawn the Network
@@ -122,7 +125,7 @@ reconciliation (3.2C) are not started. Rescue is distinct from recruitment: a fr
 The contract board, the player as contractor and the social layer are later phases
 ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
 
-**Test status.** The headless tests pass (474 tests, 34,979 checks, 0 failures after the PR #11 correction, including an 18-in-game-year
+**Test status.** The headless tests pass (481 tests, 35,084 checks, 0 failures in each of two final PR #11 runs, including an 18-in-game-year
 procurement soak, three 20-in-game-year career soaks with daily money, capacity, spatial and career invariant
 checks, and the runtime-runner tests).
 
@@ -130,8 +133,12 @@ checks, and the runtime-runner tests).
 
 - **Phase 3.2A owner baseline:** source `76b3ae1`, fresh Dev Quicktest, 020–025 and save/load reported **194 PASS / 0 FAIL / 0 INCONCLUSIVE**;
   post-load 5 bound / 5 healthy, 4/4 retained covered, 0 integrity findings. Synthetic 022 left a removed encounter faction in `slaveFaction`;
-  the corrected **022 → SAVE → LOAD → 025 rerun is PENDING**. Other owner passes remain accepted
-  ([record and source audit](docs/PR11_CORRECTION_VALIDATION.md#runtime-enslavement-correction)).
+  that original defect and the subsequent fixture LookTargets/disposal issue are now FIXED. Other owner passes remain accepted.
+- **Phase 3.2A final owner acceptance: PASS**, source `e768fef`: **022 41/0/0 → clean SAVE/LOAD → 025 11/0/0**, focused total
+  **52/0/0**; **1 bound / 1 healthy / 1-of-1 durable retained covered / 0 integrity findings**. The same PlayerSlave / Captured pawn
+  remains reserved, unavailable to the old Solo with zero abstract strength, and has `slaveFaction = null`. No Network faction, warden
+  LookTargets or invalid-discard error remains. The validated source/DLL is unchanged by the documentation-only acceptance update
+  ([acceptance record](docs/PR11_CORRECTION_VALIDATION.md#final-owner-runtime-acceptance-pass)).
 
 - **Phase 2.9 runtime validation: PASS**, in two real-game environments. In a fresh Dev Quicktest colony: Quick
   smoke 12 PASS, Full safe regression 49 PASS / 2 WARN, Live integration scan 10 PASS, zero FAIL. In the real,

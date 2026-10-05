@@ -1,14 +1,36 @@
 # PR #11 correction validation
 
-Existing [PR #11](https://github.com/D3athAn63l/The-Network/pull/11), branch `claude/new-session-nhng3f`. This final correction is limited to **RT-PHYX-022 fixture cleanup**. Production custody, encounter-faction qualification/removal, recruitment, retention and physical lifecycle logic are unchanged. Save format remains **5**, with no production Harmony reference or new persisted Network state. R-50 remains OPEN, O-20 direction remains locked, S11 remains FAIL / rescue STOPPED; their implementation and decision/audit files are untouched.
+Existing [PR #11](https://github.com/D3athAn63l/The-Network/pull/11), branch `claude/new-session-nhng3f`: **Phase 3.2A Held Custody — IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED. PR #11 — MERGE-READY.** The PR remains open and unmerged; draft status is unchanged. This update records the owner's final acceptance and changes documentation only. Production and runtime-test source, tests, build/project files and the validated DLL are untouched; no rebuild or full headless suite rerun is performed. Save format remains **5**, with no production Harmony reference or new persisted Network state. R-50 remains OPEN, O-20 direction remains locked, S11 remains FAIL / rescue STOPPED; Phase 3.2B, 3.2C, 3.3 and Phase 4 are not implemented.
+
+## Final owner runtime acceptance (PASS)
+
+The owner completed **RT-PHYX-022 → SAVE → LOAD → RT-PHYX-025** on the accepted **`e768fef`** build. This is owner-reported in-game evidence and actual-save inspection, not a new runtime run by the documentation agent.
+
+| Acceptance evidence | Result |
+|---|---|
+| RT-PHYX-022 | **41 PASS, 0 FAIL, 0 INCONCLUSIVE** |
+| SAVE → LOAD | **CLEAN** for the entire PR #11 correction chain |
+| RT-PHYX-025 | **11 PASS, 0 FAIL, 0 INCONCLUSIVE** |
+| Focused final total | **52 PASS, 0 FAIL, 0 INCONCLUSIVE** |
+| Post-load Network state | **1 bound, 1 healthy binding, 1/1 durable retained covered, 0 integrity findings** |
+
+The real `GenGuest.TryEnslavePrisoner` path executed on the **same contractor Pawn**, which became PlayerSlave while remaining `CharacterStatus.Captured` and `OutOfCustody(PlayerSlave)`. `SlaveFaction == null`; the old NPC Solo remained unavailable with zero abstract strength; no replacement pawn was generated. Exactly the test's own vanilla enslavement Message was cleaned before the disposable warden was safely destroyed/discarded through the audited vanilla path. The temporary encounter faction was removed, and repeated RELEASE was harmless.
+
+Save/load had **no dangling Network slaveFaction, removed Network Faction_xx reference, unresolved disposable-warden Thing_Human... reference, Verse.LookTargets /targets/1 error, invalid state -1 discard warning, or Network deep-save/cross-reference error attributable to 022**. Actual-save inspection confirmed `slaveFaction = null` and absence of the test-created message with a disposable-warden reference. These three correction issues are **FIXED**. After load, the same PlayerSlave / Captured / OutOfCustody(PlayerSlave) pawn remained reserved by the retained-pawn registry and blocked from old-NPC abstract simulation.
+
+Accepted source remains **`e768fefc3ab613aaa8d08f834f0edabf4ad0e735`**. The validated artifact was delivered at PR HEAD **`4380599f398d2fd727609e8d4052ce86e522c334`**; this documentation-only commit follows that HEAD. Its unchanged stamp is `built 2026-10-05T14:09Z, source commit e768fef`, informational version `0.1.0+e768fefc3ab613aaa8d08f834f0edabf4ad0e735`, and SHA-256 `502a4def6dddadf2686bffad9a2d61f6545941f7628742bffdeb92e5e6f0fc28`. Existing headless evidence remains **481 tests, 35,084 checks, 0 failures ×2; 0 compiler warnings/errors; all nine source gates PASS**.
+
+S21 remains **PARTIAL**: owner evidence covers player prisoner/release, recruitment, enslavement, kidnapping/captor recruitment, death while held and save/load retention of the represented held states. Caravan, transport and other-faction-prisoner observation remain headless-only. This acceptance does not close R-50 truthful aging, unlock O-20's direction, implement S11 rescue, or implement any later phase. No corrected 022/save/load/025 acceptance rerun remains pending.
+
+The documentation-only update changes `README.md`, `docs/PR11_CORRECTION_VALIDATION.md`, `docs/RUNTIME_TESTING.md`, `docs/IMPLEMENTATION_PHASES.md`, `docs/PHYSICAL_LIFECYCLE.md`, `docs/RISKS.md`, `docs/DECISIONS.md`, `docs/spikes/README.md` and `docs/spikes/S21-observation-completeness.md`. Risk/decision edits update acceptance status only; their architecture and open-item decisions are unchanged. The existing documentation source gate runs without rebuilding: **1 test, 69 checks, 0 failures**. Git diff and byte/hash checks verify documentation-only changes and the unchanged validated DLL. GitHub API metadata access returns Forbidden; a complete current replacement PR body is supplied separately for manual application.
 
 ## Final runtime-test fixture cleanup
 
-### Accepted owner evidence and remaining rerun
+### Historical production correction evidence (db0f795)
 
 The owner reran corrected source **`db0f795`** with the real vanilla enslavement action: **RT-PHYX-022: 40 PASS, 0 FAIL, 0 INCONCLUSIVE**, then **SAVE → LOAD → RT-PHYX-025: 11 PASS, 0 FAIL, 0 INCONCLUSIVE**. Post-load state: **1 bound, 1 healthy binding, 1/1 durable retained covered, 0 integrity findings**. The same contractor Pawn remained PlayerSlave / Captured / OutOfCustody(PlayerSlave), unavailable to the old Solo, with healthy binding coverage. Its saved `slaveFaction` was null; there was no dangling Network slave faction or unresolved removed encounter faction. This is owner-supplied production evidence, not a new run by this agent. The `d.hidden` correction is accepted and untouched.
 
-The remaining noise was confined to the disposable warden: `Tried to discard Ed whose state is -1`, followed on load by `Could not resolve reference to object with loadID Thing_Human55842`, under `Verse.LookTargets`, `/targets/1`. **The new fixture-cleanup owner rerun is PENDING.** The earlier 194-PASS baseline and earlier correction validations are preserved below as historical records.
+At `db0f795`, the remaining noise was confined to the disposable warden: `Tried to discard Ed whose state is -1`, followed on load by `Could not resolve reference to object with loadID Thing_Human55842`, under `Verse.LookTargets`, `/targets/1`. The final `e768fef` owner acceptance above closes both fixture issues. The earlier 194-PASS baseline and earlier correction validations are preserved below as historical records.
 
 ### Exact root causes and vanilla audit
 
@@ -49,7 +71,7 @@ The existing real-API source gate is updated to require this safe cleanup. The P
 
 ### Final build and headless validation
 
-Corrected source commit: **`e768fefc3ab613aaa8d08f834f0edabf4ad0e735`**. The subsequent artifact/validation commit changes only this record and the shipped DLL; all runtime and test source is identical to that commit. Final HEAD is reported in the delivery message.
+Corrected source commit: **`e768fefc3ab613aaa8d08f834f0edabf4ad0e735`**. Artifact/validation commit **`4380599f398d2fd727609e8d4052ce86e522c334`** changed only this record and the shipped DLL; all runtime and test source is identical to the source commit. The current acceptance update changes documentation only and preserves that artifact. The new PR HEAD is reported in the delivery message.
 
 | Check | Result |
 |---|---|
@@ -59,7 +81,7 @@ Corrected source commit: **`e768fefc3ab613aaa8d08f834f0edabf4ad0e735`**. The sub
 | All nine repository source-scan gates | **PASS** |
 | New fixture regressions | **7 tests, 49 checks, 0 failures**; included in both final full runs |
 | Save format / production Harmony | **5 unchanged / no reference** |
-| New owner fixture-cleanup rerun | **PENDING** |
+| Final owner fixture-cleanup acceptance | **PASS: 022 41/0/0; clean save/load; 025 11/0/0; total 52/0/0** |
 
 Both full runs are unfiltered and include the existing long procurement/career simulations. Run 1 uses `Tests/run-tests.sh` from `/workspace/The-Network`, with a newly created empty `TEST_OUT`. Run 2 launches `THENETWORK_REPO=/workspace/The-Network mono TheNetwork.Tests.exe` without a filter in that same test-output directory. The rebuilt mod DLL is copied to `1.6/Assemblies/TheNetwork.dll`; byte comparison proves the test copy and shipped artifact are identical for both runs. No stale runner output, skipped/disabled tests or synthetic passing replacements are used.
 
@@ -73,15 +95,15 @@ Both full runs are unfiltered and include the existing long procurement/career s
 
 Build environment: **.NET SDK 8.0.425 / MSBuild 17.11.48 / Mono 6.12.0.199**, supplied game and Harmony 2.4.1.0 references, C# 7.3 Release. The repository's normal build scripts and projects are unchanged. External MSBuild targets keep working output outside the checkout and route the runner to that fresh DLL, with warnings treated as errors; the final validated bytes are explicitly copied into the shipped artifact. The supplied Steamworks assembly is available; no replacement dependency or Mono JIT workaround is needed. Metadata confirms net472 and no Harmony reference in the mod. No test dependency is shipped.
 
-### Exact owner acceptance rerun
+### Completed owner acceptance sequence (PASS)
 
-Use the new shipped DLL in a **fresh disposable save with Ideology active**:
+The owner completed the final requested sequence on the accepted shipped DLL in a **fresh disposable save with Ideology active**:
 
 **RT-PHYX-022 → SAVE → LOAD → RT-PHYX-025**.
 
-022 must PASS: same contractor Pawn, PlayerSlave / Captured, `SlaveFaction == null`, old Solo unavailable with strength zero, encounter faction removed, and exactly the test-created message cleaned before the owned warden is discarded. Save/load must have no Network deep-save error, removed Network faction, disposable-warden `Thing_Human...` reference, `LookTargets /targets/1` error or invalid-state discard warning. 025 must PASS with the same binding, correct custody, healthy retained coverage and **0 integrity findings**. Preserve Player.log across the sequence. The new owner rerun is **PENDING** until actually performed; the accepted `db0f795` production results above remain evidence.
+022 reported **41/0/0** and confirmed the same contractor Pawn, PlayerSlave / Captured, `SlaveFaction == null`, old Solo unavailable with strength zero, encounter faction removed, and exactly the test-created message cleaned before the owned warden was discarded. Save/load was clean: no Network deep-save error, removed Network faction, disposable-warden `Thing_Human...` reference, `LookTargets /targets/1` error or invalid-state discard warning. 025 reported **11/0/0**, with the same binding, correct custody, **1 bound / 1 healthy / 1-of-1 retained coverage / 0 integrity findings**. Focused total: **52/0/0**. Final owner runtime acceptance is **PASS**; no further corrected acceptance rerun is required. The accepted `db0f795` production results above remain historical evidence.
 
-### Files changed and scope
+### Files changed in the fixture correction (historical scope)
 
 - `Source/TheNetwork/Diagnostics/RuntimePhysicalTests/PhysicalCustodyScenarios.cs`: narrow 022 archive snapshot/finally cleanup and vanilla fixture disposal.
 - `Source/TheNetwork/Diagnostics/RuntimePhysicalTests/EnslavementFixtureCleanup.cs`: test-message identity/target cleanup helper; no durable state.
@@ -97,7 +119,7 @@ Use the new shipped DLL in a **fresh disposable save with Ideology active**:
 
 ## Historical enslavement correction record (source db0f795)
 
-The following record is preserved verbatim for provenance. Its pending production-rerun statements describe that earlier point in time; the accepted owner results and the current fixture-only rerun are recorded above.
+The following record is preserved verbatim for provenance. Every pending production-rerun statement below describes an earlier point in time and is superseded by **Final owner runtime acceptance (PASS)** above. The current accepted source/artifact is `e768fef`/`4380599`, not the historical `db0f795`/`eaa921a` state.
 
 Existing [PR #11](https://github.com/D3athAn63l/The-Network/pull/11), branch `claude/new-session-nhng3f`. Phase 3.2A remains **IMPLEMENTED / HEADLESS VALIDATED** with owner baseline passes preserved and the corrected enslavement/save/load rerun **PENDING**. Save format stays **5**. R-50 remains **OPEN**, O-20 direction stays locked, S11 stays **FAIL / rescue STOPPED**. Their production behavior and audit/decision files are untouched by this correction.
 
