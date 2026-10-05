@@ -33,6 +33,7 @@ namespace TheNetwork.Tests
     {
         public static void Register(List<KeyValuePair<string, Action>> t)
         {
+            EnslavementFixtureCleanupTests.Register(t);
             t.Add(new KeyValuePair<string, Action>("Enslavement.RuntimeUsesVanillaAndOwnWarden", RuntimePath));
             t.Add(new KeyValuePair<string, Action>("Enslavement.VanillaClearsHiddenDefBeforeCaching", VanillaSequence));
             t.Add(new KeyValuePair<string, Action>("Enslavement.GuestTrackerReferenceSaveLoadWithNegativeControl", GuestReferenceSaveLoad));
@@ -56,7 +57,8 @@ namespace TheNetwork.Tests
             T.Check(run.Contains("GenGuest.TryEnslavePrisoner(warden, p)"), "022 calls vanilla's exact public warden/prisoner API");
             T.Check(!run.Contains("SetGuestStatus(") && !run.Contains("SetFactionDirect("), "022 does not duplicate vanilla's faction/guest sequence");
             T.Check(run.Contains("TestFixtures.Disposable(PawnKindDefOf.Colonist, Faction.OfPlayer") && run.Contains("TestSite.IsTestMap(p.Map)"), "the warden is the run's own player fixture, on the guarded test map");
-            T.Check(run.Contains("finally") && run.Contains("warden.DeSpawn()") && run.Contains("TestFixtures.TryDispose(warden, runId, ctx"), "the tagged unbound warden is disposed even if vanilla throws");
+            T.Check(run.Contains("finally") && run.Contains("EnslavementFixtureCleanup.TryRemoveMessage") && run.Contains("TestFixtures.DisposeRefusal(warden, runId, ctx)") && run.Contains("Find.WorldPawns.PassToWorld(warden, PawnDiscardDecideMode.Discard)"), "the tagged unbound warden uses vanilla destroy/discard after message cleanup even if enslavement throws");
+            T.Check(!run.Contains("TestFixtures.TryDispose(warden") && !run.Contains("warden.Discard("), "022 never uses the invalid despawn/direct-discard sequence");
             T.Check(run.Contains("p.SlaveFaction == null") && run.Contains("Contains(encounterFaction)") && run.Contains("EncounterFactions.Release(e.faction)"), "022 proves no cached shell reference before and after vanilla removes it through the existing RELEASE");
             T.Check(run.Contains("ReferenceEquals(c.pawn.pawn, p)") && run.Contains("Availability.Unavailable") && run.Contains("CharacterStatus.Captured"), "022 pins identity, old-NPC exclusion and Captured status");
             T.Check(!Regex.IsMatch(run, @"Scribe_\w+\.Look|IExposable|ExposeData"), "the scenario adds no persisted state");

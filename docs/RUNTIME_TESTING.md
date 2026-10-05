@@ -928,17 +928,26 @@ reserved for 3.2B. **`RT-PHYX-009` is retired**: its menu item now only prints t
 Caravan, transport and held-by-another-faction have **headless proof only** (`Custody.CaravanAndTransportHolders`, the rules matrix, the
 Solo-held rescue matrix). Building a caravan or a pod launch needs a colonist to carry the person, and the tier never touches colonists.
 
-### 18.3 Corrected 022 rerun (PENDING)
+### 18.3 Final 022 fixture-cleanup rerun (PENDING)
 
 The owner baseline at source `76b3ae1` reported **194 PASS, 0 FAIL, 0 INCONCLUSIVE**, including 020–025 and save/load. Post-load:
 **5 bound / 5 healthy bindings, 4/4 retained covered, 0 integrity findings**. Preserve 020, 021, 023 and 024 as successful evidence.
-022's synthetic mutation left a removed encounter faction in `slaveFaction`; 025 retained the bindings/custody but that separate warning
-still needs the corrected path verified. See the [exact root cause, vanilla source audit and build provenance](PR11_CORRECTION_VALIDATION.md#runtime-enslavement-correction).
+022's synthetic mutation originally left a removed encounter faction in `slaveFaction`. At corrected source **`db0f795`**, the owner
+then observed **022: 40 PASS, 0 FAIL, 0 INCONCLUSIVE**, followed by save/load and **025: 11 PASS, 0 FAIL, 0 INCONCLUSIVE**;
+**1 bound / 1 healthy binding, 1/1 durable retained covered, 0 integrity findings**. The same contractor remained PlayerSlave / Captured,
+with `slaveFaction = null` and no removed Network faction reference. This accepts the production correction.
+
+The remaining issue was the test warden: its archived vanilla enslavement message still referenced it at `LookTargets /targets/1`
+after invalid despawn/direct-discard cleanup. 022 now snapshots archive identities, removes only its newly created NeutralEvent message
+with the exact contractor/warden target pair through `Archive.Remove`, detaches that one live message's targets, then ownership-guards
+vanilla `PassToWorld(..., Discard)`. Unrelated messages and production custody are untouched. See the
+[fixture source audit, regressions and DLL provenance](PR11_CORRECTION_VALIDATION.md#final-runtime-test-fixture-cleanup).
 
 Minimum rerun, **fresh disposable save and Ideology active**: **RT-PHYX-022 → SAVE → LOAD → RT-PHYX-025**. Confirm both PASS,
-no Network red errors, no slaveFaction reference to a removed Network encounter faction, same bound Pawn, PlayerSlave / Captured,
-correct held state and registry coverage. Capture the log across save/load. The def-hidden predicate preserves vanilla OutlanderRefugee;
-no shared custody behavior changed, so the baseline 020/021/023/024 runs need not be repeated.
+no Network red errors, no slaveFaction reference to a removed Network encounter faction, no disposable-warden `Thing_Human...`
+reference or `LookTargets /targets/1` resolution error, and no `Tried to discard <warden> whose state is -1` warning. The same bound Pawn
+must remain PlayerSlave / Captured, with correct held state, healthy registry coverage and 0 integrity findings. Capture the log across
+save/load. The prior production assertions remain intact; baseline 020/021/023/024 runs need not be repeated.
 
 ### 18.4 Original owner checklist (for reproduction)
 

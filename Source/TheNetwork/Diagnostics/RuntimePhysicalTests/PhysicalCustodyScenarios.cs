@@ -286,8 +286,15 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                     v.Fail("the prisoner must still be on the suite's own test map before vanilla enslavement");
                     return StepResult.Abort;
                 }
+                if (Find.Archive == null)
+                {
+                    v.Fail("vanilla's archive is required to clean up the fixture's enslavement message");
+                    return StepResult.Abort;
+                }
                 Pawn warden = TestFixtures.Disposable(PawnKindDefOf.Colonist, Faction.OfPlayer, 25f, runId);
-                bool enslaved;
+                Archive archive = Find.Archive;
+                HashSet<IArchivable> messagesBefore = new HashSet<IArchivable>(archive.ArchivablesListForReading);
+                bool enslaved = false;
                 try
                 {
                     GenSpawn.Spawn(warden, p.Position, p.Map);
@@ -295,10 +302,26 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 }
                 finally
                 {
-                    // Only this run's tagged, unbound fixture is disposed. The contractor remains vanilla's slave on the test map.
-                    if (warden.Spawned && TestSite.IsTestMap(warden.Map)) warden.DeSpawn();
+                    // The real API archives LookTargets(prisoner, warden). Remove ONLY that new message before the fixture leaves.
+                    // Its live view shares the same Message; detach its targets too, without touching the other live messages.
                     string refusal;
-                    v.Check(TestFixtures.TryDispose(warden, runId, ctx, out refusal), "the run's disposable warden was removed (" + refusal + ")");
+                    int removed;
+                    bool cleaned = EnslavementFixtureCleanup.TryRemoveMessage(archive, messagesBefore, p, warden, out removed, out refusal);
+                    v.Check(cleaned && (!enslaved || removed == 1), "only this run's vanilla enslavement message was removed (" + removed + "; " + refusal + ")");
+                    if (cleaned)
+                    {
+                        if (warden.Spawned && TestSite.IsTestMap(warden.Map)) warden.DeSpawn();
+                        refusal = TestFixtures.DisposeRefusal(warden, runId, ctx);
+                        if (refusal == null)
+                        {
+                            // Vanilla's explicit Discard mode destroys (-2), then discards (-3), with a re-entry guard.
+                            // DeSpawn alone leaves state -1, which cannot legally be passed straight to Pawn.Discard.
+                            Find.WorldPawns.PassToWorld(warden, PawnDiscardDecideMode.Discard);
+                            v.Check(warden.Discarded && !Find.WorldPawns.Contains(warden), "the owned warden was destroyed/discarded by vanilla, never kept as a world pawn");
+                        }
+                        else v.Fail("warden disposal refused (" + refusal + "); fixture preserved");
+                    }
+                    else v.Fail("message cleanup refused; warden preserved on the test map so its save references remain valid");
                 }
                 v.Check(enslaved && p.IsSlaveOfColony, "vanilla made the same pawn a slave of the colony");
                 v.Check(p.SlaveFaction == null && p.Faction == Faction.OfPlayer, "vanilla cleared the hidden encounter faction before caching slaveFaction");

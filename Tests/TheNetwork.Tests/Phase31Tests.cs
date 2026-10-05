@@ -295,8 +295,13 @@ namespace TheNetwork.Tests
                 string code = Code(File.ReadAllText(f));
                 if (Regex.IsMatch(code, @"WorldPawns\.PassToWorld\(")) callers.Add(Rel(f));
             }
-            T.Eq(1, callers.Count, "exactly one source calls vanilla's PassToWorld (" + string.Join(", ", callers.ToArray()) + ")");
-            T.Check(callers.Count == 1 && callers[0].EndsWith("Integration/Physical/RimWorldPhysicalWorldPort.cs", StringComparison.Ordinal), "the adapter");
+            T.Eq(2, callers.Count, "only the production adapter and 022's owned-warden discard call PassToWorld (" + string.Join(", ", callers.ToArray()) + ")");
+            T.Check(callers.Exists(x => x.EndsWith("Integration/Physical/RimWorldPhysicalWorldPort.cs", StringComparison.Ordinal)) &&
+                callers.Exists(x => x.EndsWith("RuntimePhysicalTests/PhysicalCustodyScenarios.cs", StringComparison.Ordinal)), "exactly the adapter and the bounded custody test scenario");
+            string custody = Code(Src("Diagnostics/RuntimePhysicalTests/PhysicalCustodyScenarios.cs"));
+            T.Eq(1, Regex.Matches(custody, @"WorldPawns\.PassToWorld\(").Count, "the scenario has one additional call only");
+            T.Check(custody.Contains("Find.WorldPawns.PassToWorld(warden, PawnDiscardDecideMode.Discard)") &&
+                custody.Contains("refusal = TestFixtures.DisposeRefusal(warden, runId, ctx);") && custody.Contains("if (refusal == null)"), "the exception is discard-only and ownership guarded, never a bound contractor transfer");
             string adapter = Code(Src("Integration/Physical/RimWorldPhysicalWorldPort.cs"));
             T.Check(Regex.IsMatch(adapter, @"PassToWorldCheck check = PawnObserver\.CheckPass\(p\);\s*if \(check != PassToWorldCheck\.Allowed\) throw"), "and it re-checks the § 7.5 precondition first (never a world pawn again)");
             string observer = Code(Src("Integration/Physical/PawnObserver.cs"));

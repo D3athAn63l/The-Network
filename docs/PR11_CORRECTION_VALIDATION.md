@@ -1,5 +1,82 @@
 # PR #11 correction validation
 
+Existing [PR #11](https://github.com/D3athAn63l/The-Network/pull/11), branch `claude/new-session-nhng3f`. This final correction is limited to **RT-PHYX-022 fixture cleanup**. Production custody, encounter-faction qualification/removal, recruitment, retention and physical lifecycle logic are unchanged. Save format remains **5**, with no production Harmony reference or new persisted Network state. R-50 remains OPEN, O-20 direction remains locked, S11 remains FAIL / rescue STOPPED; their implementation and decision/audit files are untouched.
+
+## Final runtime-test fixture cleanup
+
+### Accepted owner evidence and remaining rerun
+
+The owner reran corrected source **`db0f795`** with the real vanilla enslavement action: **RT-PHYX-022: 40 PASS, 0 FAIL, 0 INCONCLUSIVE**, then **SAVE → LOAD → RT-PHYX-025: 11 PASS, 0 FAIL, 0 INCONCLUSIVE**. Post-load state: **1 bound, 1 healthy binding, 1/1 durable retained covered, 0 integrity findings**. The same contractor Pawn remained PlayerSlave / Captured / OutOfCustody(PlayerSlave), unavailable to the old Solo, with healthy binding coverage. Its saved `slaveFaction` was null; there was no dangling Network slave faction or unresolved removed encounter faction. This is owner-supplied production evidence, not a new run by this agent. The `d.hidden` correction is accepted and untouched.
+
+The remaining noise was confined to the disposable warden: `Tried to discard Ed whose state is -1`, followed on load by `Could not resolve reference to object with loadID Thing_Human55842`, under `Verse.LookTargets`, `/targets/1`. **The new fixture-cleanup owner rerun is PENDING.** The earlier 194-PASS baseline and earlier correction validations are preserved below as historical records.
+
+### Exact root causes and vanilla audit
+
+Evidence: reference checkout **`9fcca42215c247135067694cd97c1ed7a4d86a7b`**, supplied **Assembly-CSharp 1.6.9676.17735**, SHA-256 **`5cf1b5be399d5b1c9c56ca72c9d35b4ecf307feacf5859d04ac5a1aa5926356a`**, decompiled with **ILSpy 9.1.0.7988**. These are binary method findings; the reference snapshot's exact game-build/source alignment is still unrecorded. No reference-repository content changed.
+
+| Vanilla type/member | Audited behavior and consequence |
+|---|---|
+| `RimWorld.GenGuest.TryEnslavePrisoner(Pawn warden, Pawn prisoner)` | Calls `Messages.Message("MessagePrisonerEnslaved".Translate(prisoner, warden), new LookTargets(prisoner, warden), MessageTypeDefOf.NeutralEvent)`. Target 0 is the contractor; target 1 is this run's disposable warden. The real API remains the scenario's action. |
+| `Verse.Messages.Message` | Its omitted `historical` argument defaults to true. The **same Message object** goes into `Find.Archive` and the static live-message list. Natural expiry removes the live view only, not the archived message. There is no public API to remove one live message. `Messages.Clear` clears every live message and is unsuitable. |
+| `RimWorld.Archive.ExposeData`, `Verse.Message.ExposeData`, `Verse.LookTargets.ExposeData`, `Verse.Scribe_TargetInfo.Look(GlobalTargetInfo, ...)` | The archive deep-saves its messages; each message deep-saves LookTargets; targets are serialized as GlobalTargetInfo references and cross-resolved on load. A target reference does **not** deep-save the pawn. The old fixture was neither map-owned nor world-owned after cleanup, so its saved load ID could not resolve. This is exactly the `/targets/1` error, independent of contractor binding and `slaveFaction`. |
+| `RimWorld.Archive.Remove(IArchivable)` | Public, narrow removal of one object, including its pin. It leaves unrelated entries/pins alone. Suitable for deleting only the message created by this test. |
+| `Verse.Thing.DeSpawn`, `Verse.Thing.Discard`, `Verse.Pawn.Discard` | DeSpawn leaves `mapIndexOrState = -1`. Thing.Discard accepts only destroyed state **-2**, then writes discarded state **-3**. Calling Pawn.Discard directly after despawn therefore emits the reported state -1 warning; `silentlyRemoveReferences: true` does not fix that precondition. |
+| `RimWorld.Planet.WorldPawns.PassToWorld(..., PawnDiscardDecideMode.Discard)`, private `DiscardPawn`, `Verse.Pawn.Destroy` | Explicit Discard invokes vanilla's guarded disposal: mark the pawn as being discarded, Destroy if necessary, then Discard if necessary, unwind the guard in finally. Pawn.Destroy sees the guard and does not re-add the pawn to WorldPawns. This establishes -2 before -3 without permanently retaining the fixture. |
+| `WorldPawns.ExposeData`, `GetSituation`, `WorldPawnGC.GetCriticalPawnReason` | World-owned pawns are deep-saved; unspawned player faction membership alone does not provide save ownership. Keeping a warden through `KeepForever` pins it; a former humanlike colonist can also become GC-critical. Neither guarantees automatic post-load cleanup. A local unspawned pawn referenced only by LookTargets is not save-safe. |
+
+### Chosen solution and rejected alternatives
+
+Before the real enslavement call, 022 snapshots archived **object identities**. In its finally block, `EnslavementFixtureCleanup.TryRemoveMessage` validates the entire archive delta before mutation. It accepts at most one newly archived NeutralEvent message whose ordered targets are exactly **this contractor Pawn and this fresh warden Pawn**. It does not match translated text. Pre-existing, wrong-type, differently targeted or ambiguous warden references cause a FAIL and preserve the warden on the test map, rather than discarding a save target.
+
+For the identified message only, it calls vanilla `archive.Remove(owned)`, then assigns an empty `LookTargets` to that same object. The detached live UI view can expire normally, with no warden reference. No unrelated message or target is cleared. If vanilla rejects enslavement or throws before creating the message, zero removals are allowed; a successful enslavement must account for exactly one removal.
+
+After successful cleanup, the warden is despawned from the suite's test map, passes the existing `TestFixtures.DisposeRefusal` guard (this run's tag, unbound, unspawned, not a world pawn), and goes through **vanilla explicit Discard mode**. The scenario verifies `Discarded` and absence from WorldPawns. The shared `TestFixtures.TryDispose` implementation remains untouched. The contractor and every prior production assertion remain intact.
+
+Keeping a synthetic warden save-owned until after load was rejected: it either leaves a world/colonist fixture in the save, relies on GC that may retain it, or needs new durable cleanup state. Merely waiting for live-message expiry leaves the archived references. Clearing all messages would alter unrelated player state. A real colonist, synthetic `SetGuestStatus` action, reflection access to private live messages, Harmony patches and new Network fields are unnecessary and unused. The narrow public archive API plus one owned message's public targets provides the cleanup boundary.
+
+### Regression coverage
+
+Seven new tests in `EnslavementFixtureCleanupTests` prove:
+
+- Real `Archive.Remove` removes only the identified new message and its pin; existing and newly added unrelated messages/pins/targets remain. The same live object loses its warden targets, and cleanup is idempotent.
+- Pre-existing, reversed, extra-target, wrong-type and duplicate warden references refuse cleanup **before any mutation**. Missing prerequisites fail closed; early-rejected enslavement needs no message removal.
+- **Real Archive/Message/LookTargets Scribe save/load**, with a negative control reproducing exactly `Thing_Human55842` at `/targets/1`. The cleaned archive round-trips without vanilla warnings/errors and retains the unrelated archived message.
+- Real vanilla IL confirms the historical message/archive behavior and Destroy-before-Discard ordering. Real Thing.Discard reproduces the -1 warning and accepts -2 without a warning.
+- Real `WorldPawns.PassToWorld(..., Discard)` executes Destroy then Discard with its guard and never retains the pawn. Only the map-dependent virtual pawn calls are test probes; this is not a claim of full in-game pawn destruction.
+- Source gates preserve the real enslavement API, test-owned warden, exact snapshot/cleanup/disposal ordering, ownership guard, fail-closed preservation, no broad message clear, no direct despawn/discard, and no retention or new persisted state.
+
+The existing real-API source gate is updated to require this safe cleanup. The Phase 3.1 PassToWorld scope gate keeps the production adapter as the sole production caller and permits exactly one additional **ownership-guarded, Discard-only** call for 022's warden. It continues to reject any other caller. No prior gameplay assertion is weakened.
+
+### Final build and headless validation
+
+Final committed-source builds and both complete runs: **PENDING while preparing the artifact**. The artifact/validation commit will replace this paragraph with actual totals, source stamp, hash and compiler results. No filtered run is final validation.
+
+### Exact owner acceptance rerun
+
+Use the new shipped DLL in a **fresh disposable save with Ideology active**:
+
+**RT-PHYX-022 → SAVE → LOAD → RT-PHYX-025**.
+
+022 must PASS: same contractor Pawn, PlayerSlave / Captured, `SlaveFaction == null`, old Solo unavailable with strength zero, encounter faction removed, and exactly the test-created message cleaned before the owned warden is discarded. Save/load must have no Network deep-save error, removed Network faction, disposable-warden `Thing_Human...` reference, `LookTargets /targets/1` error or invalid-state discard warning. 025 must PASS with the same binding, correct custody, healthy retained coverage and **0 integrity findings**. Preserve Player.log across the sequence. The new owner rerun is **PENDING** until actually performed; the accepted `db0f795` production results above remain evidence.
+
+### Files changed and scope
+
+- `Source/TheNetwork/Diagnostics/RuntimePhysicalTests/PhysicalCustodyScenarios.cs`: narrow 022 archive snapshot/finally cleanup and vanilla fixture disposal.
+- `Source/TheNetwork/Diagnostics/RuntimePhysicalTests/EnslavementFixtureCleanup.cs`: test-message identity/target cleanup helper; no durable state.
+- `Tests/TheNetwork.Tests/EnslavementFixtureCleanupTests.cs`: seven new regression tests.
+- `Tests/TheNetwork.Tests/EnslavementCorrectionTests.cs`: registration and corrected disposal source gate.
+- `Tests/TheNetwork.Tests/Phase31Tests.cs`: exact owned-warden Discard-mode exception to the PassToWorld scope gate.
+- `docs/RUNTIME_TESTING.md`, `docs/spikes/S21-observation-completeness.md`, this record: preserve owner evidence and specify the fixture-only rerun.
+- `1.6/Assemblies/TheNetwork.dll`: rebuilt from the final committed source in the subsequent artifact commit.
+
+**No production custody/encounter/recruitment/retention logic changed. `EncounterFactions.Qualifies(d.hidden)` and `EncounterFactions.Release` are untouched. R-50/O-20/S11 are untouched. No new PR or merge.**
+
+---
+
+## Historical enslavement correction record (source db0f795)
+
+The following record is preserved verbatim for provenance. Its pending production-rerun statements describe that earlier point in time; the accepted owner results and the current fixture-only rerun are recorded above.
+
 Existing [PR #11](https://github.com/D3athAn63l/The-Network/pull/11), branch `claude/new-session-nhng3f`. Phase 3.2A remains **IMPLEMENTED / HEADLESS VALIDATED** with owner baseline passes preserved and the corrected enslavement/save/load rerun **PENDING**. Save format stays **5**. R-50 remains **OPEN**, O-20 direction stays locked, S11 stays **FAIL / rescue STOPPED**. Their production behavior and audit/decision files are untouched by this correction.
 
 ## Runtime enslavement correction

@@ -1,11 +1,16 @@
 # S21 — Observation completeness (held custody)
 
-**Verdict: PARTIAL — HEADLESS PASS; owner baseline 194 PASS, 0 FAIL, 0 INCONCLUSIVE; corrected RT-PHYX-022 save/load rerun PENDING**
+**Verdict: PARTIAL — HEADLESS PASS; owner baseline 194 PASS, 0 FAIL, 0 INCONCLUSIVE; corrected RT-PHYX-022 production rerun PASS; final fixture-cleanup save/load rerun PENDING**
 
 **Phase 3.2A status: IMPLEMENTED / HEADLESS VALIDATED.** The owner ran `RT-PHYX-020…025` and save/load in a fresh Dev Quicktest at
 source `76b3ae1`. All scenarios reported PASS; post-load registry state was 5 bound / 5 healthy, 4/4 retained covered, 0 integrity findings.
 The save/load nevertheless reported a removed Network encounter faction through `slaveFaction` in synthetic 022. Other scenario passes
-remain evidence; corrected 022 → SAVE → LOAD → 025 is pending ([record and source audit](../PR11_CORRECTION_VALIDATION.md#runtime-enslavement-correction)).
+remain evidence. The owner then reran `db0f795`: **022: 40 PASS / 0 FAIL / 0 INCONCLUSIVE**, save/load,
+**025: 11 PASS / 0 FAIL / 0 INCONCLUSIVE**, with **1 bound / 1 healthy, 1/1 retained covered, 0 integrity findings**.
+The same contractor remained PlayerSlave / Captured, `slaveFaction = null`, and no removed Network faction reference survived.
+Production enslavement is accepted. The remaining warden `LookTargets /targets/1` reference and state -1 discard warning are confined to
+the fixture; **022 → SAVE → LOAD → 025** with the final fixture cleanup is PENDING
+([record and source audit](../PR11_CORRECTION_VALIDATION.md#final-runtime-test-fixture-cleanup)).
 Caravan, transport and another faction's prisoner still have headless proof only, so this spike remains PARTIAL.
 
 ## 1. The question
@@ -80,8 +85,10 @@ one method, specify a postfix, do not implement") is not triggered.
 
 Minimum rerun on a fresh disposable save with the corrected source stamp and Ideology: **RT-PHYX-022 → SAVE → LOAD → RT-PHYX-025**.
 Both scenarios must PASS; the same bound pawn remains PlayerSlave / Captured with correct held custody and registry coverage; no
-Network red errors or slaveFaction reference to a removed encounter faction may appear. 020, 021, 023 and 024 are already owner baseline
-PASS and are not required again: the new def-hidden qualification preserves vanilla OutlanderRefugee and no shared custody behavior changed.
+Network red errors or slaveFaction reference to a removed encounter faction may appear. There must also be no disposable-warden
+`Thing_Human...` / `LookTargets /targets/1` error and no state -1 discard warning. The final cleanup removes only 022's own newly archived
+enslavement message and disposes its own warden through vanilla's Destroy-before-Discard path. 020, 021, 023 and 024 are already owner
+baseline PASS and are not required again; production custody and the accepted def-hidden qualification are unchanged.
 The steps and expected log lines are in [RUNTIME_TESTING § 18](../RUNTIME_TESTING.md#18-phase-32a-held-custody). Caravan, transport and held-by-another-faction
 have **headless proof only**. Building a caravan or a pod launch in a dev scenario is more machinery than this slice needs, so they are
 not claimed at runtime.
