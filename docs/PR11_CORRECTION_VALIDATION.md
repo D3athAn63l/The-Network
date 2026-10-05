@@ -1,4 +1,78 @@
-# PR #11 custody, aging and affiliation correction
+# PR #11 correction validation
+
+Existing [PR #11](https://github.com/D3athAn63l/The-Network/pull/11), branch `claude/new-session-nhng3f`. Phase 3.2A remains **IMPLEMENTED / HEADLESS VALIDATED** with owner baseline passes preserved and the corrected enslavement/save/load rerun **PENDING**. Save format stays **5**. R-50 remains **OPEN**, O-20 direction stays locked, S11 stays **FAIL / rescue STOPPED**. Their production behavior and audit/decision files are untouched by this correction.
+
+## Runtime enslavement correction
+
+### Owner evidence (preserved)
+
+The owner tested source **`76b3ae1`** in a fresh Dev Quicktest. `RT-PHYX-020`, `021`, `022`, `023`, `024`, save/load and `025` all reported PASS: **194 PASS, 0 FAIL, 0 INCONCLUSIVE**. Post-load state: **5 bound, 5 healthy bindings, 4/4 retained covered, 0 binding integrity findings**. These are the owner's reported results, not new runtime runs by this correction.
+
+| Scenario | Accepted baseline evidence |
+|---|---|
+| 020 | Arrest, held commit, release and same-pawn return PASS. |
+| 021 | Real vanilla recruitment, same Pawn became player faction / Defected, old Solo unavailable with zero abstract strength. |
+| 022 | Holder transition to PlayerSlave / Captured passed; its synthetic action failed to model vanilla faction clearing, exposed by the later save/load warning. Corrected action rerun PENDING. |
+| 023 | Real kidnapping and captor recruitment, same pawn became ReservedByQuest after leaving the kidnapped tracker; independently supports the already documented R-50 boundary edge without closing R-50. |
+| 024 | Held death, Released / None / -1, held-watch exclusion, same dead pawn binding PASS. |
+| 025 | Bindings and held state survived save/load; the separate slaveFaction warning prevents calling this a completely clean save/load. |
+
+Save reported a `slaveFaction` reference to **Faction_19** that was not deep-saved; load could not resolve Faction_19 in `Pawn_GuestTracker`. The owner identifies it as the 022 contractor's temporary Network encounter faction. No provenance ties the later unrelated `otherPawn` warning to a Network mutation, so it is not attributed or investigated here.
+
+### Exact root cause and production risk
+
+Old 022 called `p.guest.SetGuestStatus(Faction.OfPlayer, GuestStatus.Slave)` directly. The tracker takes the old faction into a local, calls `Pawn.SetFaction(player)`, then writes that local into `slaveFactionInt`. The nested faction change resets guest state and notifies `FactionManager.Notify_PawnLeftFaction(oldFaction)` **before** the outer call installs the slave cache. Vanilla can therefore queue the temporary faction while the pawn already has player faction and no slave cache. A later manager tick removes queued factions without another eligibility check. Removal clears main pawn factions, not the cached guest-tracker slave faction. Scribe then writes a removed faction reference.
+
+The observed default-refugee failure is a **test-path error**, but the audit also proves a **real production fallback risk**: real `GenGuest.TryEnslavePrisoner` skips its pre-clear when a fallback's **def** is not hidden, even if Network made the **instance** hidden. Such a fallback enters the same caching/removal sequence. The spawned/transit removal guard is also insufficient for an ordinary world pawn because those pawns are not scanned. Hidden defs are therefore required for every new eligible encounter shell.
+
+### Vanilla source audit
+
+Primary method evidence is the supplied **Assembly-CSharp 1.6.9676.17735**, SHA-256 **`5cf1b5be399d5b1c9c56ca72c9d35b4ecf307feacf5859d04ac5a1aa5926356a`**, decompiled with ILSpy 9.1.0.7988. The public API is **`bool GenGuest.TryEnslavePrisoner(Pawn warden, Pawn prisoner)`**.
+
+| Source | Evidence and implication |
+|---|---|
+| `GenGuest.TryEnslavePrisoner` | Keeps already-slave/creepjoiner cases; only `prisoner.Faction.def.hidden` triggers `SetFactionDirect(null)` before slave status; then messages, history and apparel unlocking. The real API must be called. |
+| `Pawn_GuestTracker.SetGuestStatus`, `ExposeData`, `Notify_PawnRecruited` | Slave status caches the previous faction after changing pawn faction; ExposeData saves it as `slaveFaction`; recruitment explicitly clears it. |
+| `Pawn.SetFaction` | Nested guest reset precedes old-faction removal notification; this can queue removal before the outer slave cache is assigned. |
+| `Faction.Hidden`, `FactionGenerator.NewGeneratedFactionWithRelations` | Instance Hidden is an override over the def. The generator sets the instance override, not `FactionDef.hidden`; hiding the instance cannot satisfy the enslavement check. |
+| Refugee/beggar quest roots | Both create hidden temporary factions with neutral relations and register them with FactionManager. Refugees use `FactionDefOf.OutlanderRefugee`; beggars use `FactionDefOf.Beggars`. |
+| `RecruitUtility.Recruit` | Unlocks apparel, clears guest status, changes to the recruiting faction and clears the slave cache. No recruitment change is needed. |
+| `GenGuest.PrisonerRelease`, `SlaveRelease`, `GuestRelease`; `Pawn.HomeFaction` | Prisoner release can restore SlaveFaction; release uses HomeFaction to decide whether to stay or exit. A stale slave faction can therefore affect lifecycle behavior as well as serialization. |
+| `GuestUtility.GetExtraFactionsFromGuestStatus`, `QuestUtility.GetExtraFaction`, `QuestPart_ExtraFaction.Notify_FactionRemoved` | SlaveFaction participates in extra home allegiance; quest-owned extra home/mini factions are separately handled by quest parts on removal. Network adds no such extra-faction part; a pawn's HomeFaction is derived, not an independent cleanup cache. |
+| `FactionManager.FactionCanBeRemoved`, `TryQueuePawnFactionForRemoval` | Checks living spawned/transit pawns' main, extra home, extra mini, slave and leader references, world-object faction and quest reservation. Ordinary world pawns are not checked. Queueing also considers extra/slave refs when a pawn leaves a map or dies. These checks do not repair references or recheck an already queued shell. |
+| `FactionManager.QueueForRemoval`, `FactionManagerTick`, `Remove` | Queue deduplicates; tick removes without a new eligibility check; removal nulls only matching main Pawn.Faction and not guest slave caches, then notifies vanilla managers. |
+| Network `EncounterFactions.Release` | Existing temporary-only vanilla notification remains unchanged; duplicates queue once and removed refs resolve null. No custom slave cleanup is added. |
+
+The owner DLL bundle has no game XML. The vanilla-data mirror at **GAarsin/Rimworld_Data commit `673f1fc1792faf998cb40418bf5e01592e4a7966`** confirms the 1.6-era OutlanderRefugee and Beggars defs declare **`hidden = true`**:
+[Royalty Factions_Misc.xml](https://github.com/GAarsin/Rimworld_Data/blob/673f1fc1792faf998cb40418bf5e01592e4a7966/Royalty/Defs/FactionDefs/Factions_Misc.xml) (blob `45c51521dce3ca2f1ed55432040bbcf230fac5f3`),
+[Ideology Factions_Misc.xml](https://github.com/GAarsin/Rimworld_Data/blob/673f1fc1792faf998cb40418bf5e01592e4a7966/Ideology/Defs/FactionDefs/Factions_Misc.xml) (blob `236fcb10e140c0fc4521d8b2a038152468ece370`). This is mirrored vanilla XML, not the owner's exact patched def database. The corrected runtime scenario also verifies the loaded encounter def's hidden property. Vanilla OutlanderRefugee remains preferred; an unsafe patched preferred def is rejected under the same capability rule as any fallback.
+
+### Narrow changes
+
+- `EncounterFactions.Qualifies` adds **`d.hidden`** to the existing predicate; ordinal fallback, generic pool, preferred vanilla choice and temporary creation stay unchanged. No candidate means the existing contained abort, never an unsafe or permanent faction. Existing saved faction instances are not migrated or edited.
+- RT-PHYX-022 invokes **`GenGuest.TryEnslavePrisoner(warden, p)`** with a fresh tagged disposable player warden spawned on the suite's existing test map. In finally it despawns/disposes only that unbound fixture through the existing ownership guard. No home colony pawn is used. Vanilla history records the event ticks, not a persisted reference to that disposable doer (`HistoryEventsManager.RecordEvent`).
+- It observes PlayerSlave / Captured, same binding, holder-only bookkeeping, blocked abstraction and unavailable old Solo; checks SlaveFaction null; retries the completed episode's existing RELEASE and waits for vanilla removal, then verifies no cached shell reference and a harmless repeated RELEASE. The retry is an explicit test cleanup/proof: the first RELEASE was blocked by the prisoner, and vanilla's direct hidden-faction pre-clear does not notify the old faction. No production cleanup schedule changes.
+- No new Harmony patch/reference, persisted field, save schema, custody/recruitment rule, R-50 behavior, O-20 design or rescue work is added.
+
+### Regression coverage and limits
+
+Eight added tests in `EnslavementCorrectionTests` cover the real API source gate and own-warden guard, original vanilla IL clearing/caching/queue ordering, **real Pawn_GuestTracker Scribe save/load with the exact dangling-faction failure as a negative control**, same-Pawn holder-only production reconciliation and NPC checkout exclusion (Solo/Crew), hidden capability, preferred/safe ordinal fallback, fail-closed creation, and idempotent **real vanilla removal queue** with permanent factions untouched. The S21 documentation gate is updated to preserve the owner results and corrected rerun gap.
+
+The Scribe test inputs are the audited null/cache outcomes; it does not execute map-dependent enslavement headlessly. The queue test simulates the completed removal boundary after testing vanilla's queue. Full TryEnslavePrisoner, actual map removal and physical Pawn pointer resolution across a game save/load remain **owner rerun PENDING**. No headless result is presented as an owner runtime pass.
+
+### Corrected build and final validation
+
+Pre-publication complete suite: **474 tests, 34,979 checks, 0 failures**; production/test compilation **0 warnings, 0 errors** (warnings as errors), all nine repository source gates PASS. Final source SHA, DLL stamp/hash and two complete runs against final committed source/DLL are recorded here in the artifact/validation commit after publication. The earlier 466-test validation below remains historical evidence for source 76b3ae1, not the new totals.
+
+### Required owner rerun
+
+On a **fresh disposable save**, Ideology active, corrected DLL source stamp: **RT-PHYX-022 → SAVE → LOAD → RT-PHYX-025**. Both scenarios must PASS, the same bound pawn stays PlayerSlave / Captured, custody and registry coverage remain correct, and no Network red error or removed Network slaveFaction reference may occur. Preserve the log from before save through after 025. Existing 020/021/023/024 baseline passes stand: the only production change narrows unsafe fallback defs, while vanilla OutlanderRefugee remains eligible and shared custody behavior is unchanged. A broader 020–025 rerun is not required for this correction.
+
+R-50 remains OPEN, O-20 direction locked, S11 FAIL / rescue STOPPED. PR #11 remains open and unmerged; no new PR or merge is performed.
+
+---
+
+## Earlier correction: source 76b3ae1 (historical record)
 
 This is a bounded correction on `claude/new-session-nhng3f`, for the existing [PR #11](https://github.com/D3athAn63l/The-Network/pull/11). Phase 3.2A remains **IMPLEMENTED / HEADLESS VALIDATED**, with owner physical runtime evidence pending. Save format remains **5**. S11 remains **FAIL** and rescue-site implementation remains **STOPPED**. No later phase is implemented.
 

@@ -67,7 +67,7 @@ complete S20: its spatial scenarios run in a sandbox over a synthetic world grap
 | [S20](S20-abstract-spatial-routing.md) abstract spatial routing, charter transport and Last Known Location placement (Phase 2.5) | NOT RUN — OWNER RUNTIME VALIDATION REQUIRED |
 | **S31** retained pawn exit reservation / the Free-world-pawn window (Phase 3; mandatory gate on 3.1) | [**PASS — OWNER RUNTIME VALIDATED; M1 ACCEPTED**](S31-retained-pawn-exit-reservation.md) ([ADR-053](../DECISIONS.md#adr-053--retained-pawn-exit-reservation-uses-m1)). Validated the *mechanism* only; the separate Phase 3.1 physical suite (`RT-PHYX-*`) has since been **owner runtime validated** too ([RUNTIME_TESTING § 17.5](../RUNTIME_TESTING.md#175-final-phase-31-owner-runtime-evidence)) |
 | [S11](S11-rescue-site-holder.md) site-part pawn holder for a rescue site (Phase 3.2A; a mandatory gate on the rescue site) | **FAIL — SOURCE AUDIT.** Every vanilla step that places a pawn from `SitePart.things` forces a refugee or prisoner state and makes the pawn join the player when rescued; the item steps destroy unplaced contents; a retained world pawn cannot also be in `things`. **The rescue-site implementation is stopped**; the narrowest alternative is documented, not built |
-| [S21](S21-observation-completeness.md) observation completeness for held custody (Phase 3.2A) | **PARTIAL — headless PASS**; the physical-tier scenarios `RT-PHYX-020…025` are written and **not run by the owner** |
+| [S21](S21-observation-completeness.md) observation completeness for held custody (Phase 3.2A) | **PARTIAL** — owner baseline 194 PASS / 0 FAIL / 0 INCONCLUSIVE; corrected 022 save/load rerun pending after a slaveFaction warning |
 | [R-50](R50-held-aging-bookmark-audit.md) held-pawn age bookmark audit (PR #11 correction) | **OPEN AFTER SOURCE AUDIT** — the existing `agedThroughTick` is sufficient bookkeeping, but a reliable general exact suspension boundary was not proved; production aging is unchanged |
 
 ## Phase 3 spikes (planned; no records yet)
@@ -100,11 +100,12 @@ evidence is the physical suite's, in [RUNTIME_TESTING § 17.5](../RUNTIME_TESTIN
 implemented (PASS, above), so the two statuses stay separate: **S31 / M1: owner-runtime PASS, accepted. Phase 3.1 physical
 runtime suite: owner-runtime PASS** (evidence accumulated across the S31 spike, the initial run, the corrected reduced rerun and an isolated `010B` follow-up; it is not one run). Neither is Phase 3.2.
 
-**Phase 3.2A (held custody: IMPLEMENTED / HEADLESS VALIDATED; owner runtime run pending).** Two Phase 3 spikes now have records.
+**Phase 3.2A (held custody: IMPLEMENTED / HEADLESS VALIDATED; owner baseline passed with a 022 slaveFaction warning; corrected 022 rerun pending).** Two Phase 3 spikes now have records.
 **S11** ([S11-rescue-site-holder.md](S11-rescue-site-holder.md)) **FAILED its source audit**: the vanilla pawn-holding site parts mutate the
 pawn (forced downing, a prison cell, *join the player if rescued*) or destroy it, and a retained world pawn cannot also sit in `SitePart.things`.
 As the 3.2A prompt requires, the rescue-site implementation stopped there, with no Harmony and no custom site lifecycle. The narrowest viable
 alternative (materialize a Rescue episode at the existing site's map generation through the 3.1 placement path) is documented for an
 owner decision. **S21** ([S21-observation-completeness.md](S21-observation-completeness.md)) is **PARTIAL**: every custody state is told
-apart from positive vanilla state, and the headless suite proves the pass criteria; the owner's physical-tier run of `RT-PHYX-020…025` is
-still outstanding. Neither record is an owner runtime pass.
+apart from positive vanilla state, and the headless suite proves the pass criteria; the owner baseline reported 194 PASS / 0 FAIL / 0 INCONCLUSIVE with clean retained bindings, but synthetic 022 cached a removed temporary
+slaveFaction. The corrected 022 → SAVE → LOAD → 025 rerun is pending. Caravan, transport and another faction's prisoner remain headless only;
+S21 stays PARTIAL. S11 remains FAIL / rescue STOPPED.

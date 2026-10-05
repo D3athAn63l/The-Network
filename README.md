@@ -1,6 +1,6 @@
 # The Network
 
-**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; the formal in-game S20 checklist has not been run); Phase 2.75 merged (the contractor career foundation); Phase 2.9 merged and owner-runtime-tested (in-game runtime regression test infrastructure, developer-only); Phase 3 (abstract ↔ physical lifecycle): design reviewed; Phase 3.0 (authority + Physical Episode foundation) implemented; Phase 3.1 (one controlled physical episode, dev-triggered on a separate, session-armed test tier) implemented and owner runtime validated (PASS, Phase 3.1 scope only); Phase 3.2A (held custody) IMPLEMENTED / HEADLESS VALIDATED (owner runtime run pending; the rescue site is not built: S11 failed its source audit)**
+**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; the formal in-game S20 checklist has not been run); Phase 2.75 merged (the contractor career foundation); Phase 2.9 merged and owner-runtime-tested (in-game runtime regression test infrastructure, developer-only); Phase 3 (abstract ↔ physical lifecycle): design reviewed; Phase 3.0 (authority + Physical Episode foundation) implemented; Phase 3.1 (one controlled physical episode, dev-triggered on a separate, session-armed test tier) implemented and owner runtime validated (PASS, Phase 3.1 scope only); Phase 3.2A (held custody) IMPLEMENTED / HEADLESS VALIDATED (owner 020–025 baseline reported 194 PASS / 0 FAIL / 0 INCONCLUSIVE; corrected 022 save/load rerun pending; the rescue site is not built: S11 failed its source audit)**
 
 The Network is a persistent, procedural contractor ecosystem that runs behind the normal RimWorld
 game. The player hires outsiders to find and fetch things they cannot easily get themselves. The
@@ -122,11 +122,16 @@ reconciliation (3.2C) are not started. Rescue is distinct from recruitment: a fr
 The contract board, the player as contractor and the social layer are later phases
 ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
 
-**Test status.** The headless tests pass (466 tests, 34,910 checks, 0 failures after the PR #11 correction, including an 18-in-game-year
+**Test status.** The headless tests pass (474 tests, 34,979 checks, 0 failures after the PR #11 correction, including an 18-in-game-year
 procurement soak, three 20-in-game-year career soaks with daily money, capacity, spatial and career invariant
 checks, and the runtime-runner tests).
 
 **Owner runtime evidence** ([RUNTIME_TESTING § 15](docs/RUNTIME_TESTING.md#15-owner-observed-runtime-evidence)):
+
+- **Phase 3.2A owner baseline:** source `76b3ae1`, fresh Dev Quicktest, 020–025 and save/load reported **194 PASS / 0 FAIL / 0 INCONCLUSIVE**;
+  post-load 5 bound / 5 healthy, 4/4 retained covered, 0 integrity findings. Synthetic 022 left a removed encounter faction in `slaveFaction`;
+  the corrected **022 → SAVE → LOAD → 025 rerun is PENDING**. Other owner passes remain accepted
+  ([record and source audit](docs/PR11_CORRECTION_VALIDATION.md#runtime-enslavement-correction)).
 
 - **Phase 2.9 runtime validation: PASS**, in two real-game environments. In a fresh Dev Quicktest colony: Quick
   smoke 12 PASS, Full safe regression 49 PASS / 2 WARN, Live integration scan 10 PASS, zero FAIL. In the real,

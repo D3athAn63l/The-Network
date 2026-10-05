@@ -1,9 +1,12 @@
 # S21 — Observation completeness (held custody)
 
-**Verdict: PARTIAL — HEADLESS PASS; the physical-tier scenarios `RT-PHYX-020…025` are written and NOT RUN by the owner**
+**Verdict: PARTIAL — HEADLESS PASS; owner baseline 194 PASS, 0 FAIL, 0 INCONCLUSIVE; corrected RT-PHYX-022 save/load rerun PENDING**
 
-**Phase 3.2A status: IMPLEMENTED / HEADLESS VALIDATED.** Nothing here is an owner runtime result. The owner's run of
-`RT-PHYX-020…025` ([RUNTIME_TESTING § 18](../RUNTIME_TESTING.md#18-phase-32a-held-custody)) decides whether this becomes a PASS.
+**Phase 3.2A status: IMPLEMENTED / HEADLESS VALIDATED.** The owner ran `RT-PHYX-020…025` and save/load in a fresh Dev Quicktest at
+source `76b3ae1`. All scenarios reported PASS; post-load registry state was 5 bound / 5 healthy, 4/4 retained covered, 0 integrity findings.
+The save/load nevertheless reported a removed Network encounter faction through `slaveFaction` in synthetic 022. Other scenario passes
+remain evidence; corrected 022 → SAVE → LOAD → 025 is pending ([record and source audit](../PR11_CORRECTION_VALIDATION.md#runtime-enslavement-correction)).
+Caravan, transport and another faction's prisoner still have headless proof only, so this spike remains PARTIAL.
 
 ## 1. The question
 
@@ -20,7 +23,7 @@ still converge on the truth.
 | Base | `main` at `24a4881` (Phase 3.1 merged, owner runtime validated) |
 | Game assemblies | `Assembly-CSharp 1.6.9676.17735` (owner-provided reference set; vanilla behaviour read from the decompiled source) |
 | Headless | Mono; `Tests/run-tests.sh`; the `Custody.*` and `Rescue.*` tests in `Phase32aCustodyTests`, and `RT-PHYS-031…033` (the safe tier over the scriptable fake port) |
-| Runtime | **not run.** `RT-PHYX-020…025` are the owner's physical-tier scenarios for this spike |
+| Runtime | Owner baseline `76b3ae1`: **194 PASS, 0 FAIL, 0 INCONCLUSIVE**; clean bindings, but synthetic 022 left a removed slaveFaction reference; corrected 022 rerun **PENDING** |
 
 ## 3. How each custody state is distinguished (positive vanilla state only)
 
@@ -75,7 +78,10 @@ one method, specify a postfix, do not implement") is not triggered.
 
 ## 7. What the owner's run must still show
 
-`RT-PHYX-020…024` (armed, on the physical tier's own test map) and `RT-PHYX-025` (read-only, after a reload). The steps and the expected
-log lines are in [RUNTIME_TESTING § 18](../RUNTIME_TESTING.md#18-phase-32a-held-custody). Caravan, transport and held-by-another-faction
+Minimum rerun on a fresh disposable save with the corrected source stamp and Ideology: **RT-PHYX-022 → SAVE → LOAD → RT-PHYX-025**.
+Both scenarios must PASS; the same bound pawn remains PlayerSlave / Captured with correct held custody and registry coverage; no
+Network red errors or slaveFaction reference to a removed encounter faction may appear. 020, 021, 023 and 024 are already owner baseline
+PASS and are not required again: the new def-hidden qualification preserves vanilla OutlanderRefugee and no shared custody behavior changed.
+The steps and expected log lines are in [RUNTIME_TESTING § 18](../RUNTIME_TESTING.md#18-phase-32a-held-custody). Caravan, transport and held-by-another-faction
 have **headless proof only**. Building a caravan or a pod launch in a dev scenario is more machinery than this slice needs, so they are
 not claimed at runtime.

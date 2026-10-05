@@ -893,16 +893,17 @@ isolated evidence confirmed production load behavior; and the harness and docs w
 * **Registry and M1 protections** held under redress and GC pressure, and the registry was reconstructed correctly across a save and load (stage 1 by thing id, stage 2 by validated pointer, before the first gameplay tick).
 * **`010A` / `010B` load results** are the two rows above: both reloads were clean, and the `010B` reload showed that RimWorld may resume gameplay immediately after a load, which the production load invariant already tolerates.
 
-**What this does not claim.** It is the Phase 3.1 scope only. **Phase 3.2 does not exist** *(at the 3.1 sign-off; Phase 3.2A has since been implemented and is only headless validated, [§ 18](#18-phase-32a-held-custody))* (no held custody, rescue, **group** extraction or any other custody case beyond the quarantine above), arbitrary **modded races** are not validated, and no claim is made for **every RimWorld/mod combination**. The physical tier remains dev-only: there is no player-facing content,
+**What this does not claim.** It is the Phase 3.1 scope only. **Phase 3.2 does not exist** *(at the 3.1 sign-off; Phase 3.2A has since been implemented, headless validated and owner baseline tested; corrected 022 save/load rerun pending, [§ 18](#18-phase-32a-held-custody))* (no held custody, rescue, **group** extraction or any other custody case beyond the quarantine above), arbitrary **modded races** are not validated, and no claim is made for **every RimWorld/mod combination**. The physical tier remains dev-only: there is no player-facing content,
 no Harmony, and the save format stays 5. PR #10 has since been merged.
 
 
 ## 18. Phase 3.2A: held custody
 
-> **Status: Phase 3.2A Held Custody — IMPLEMENTED / HEADLESS VALIDATED. The owner has not run these physical scenarios yet; nothing below is
-> an owner runtime result.** The design is [PHYSICAL_LIFECYCLE § 9](PHYSICAL_LIFECYCLE.md#9-custody-model). What was built is
+> **Status: Phase 3.2A Held Custody — IMPLEMENTED / HEADLESS VALIDATED.** Owner baseline at source `76b3ae1`: **194 PASS / 0 FAIL /
+> 0 INCONCLUSIVE**, with clean retained bindings and a removed Network `slaveFaction` warning from synthetic 022. The corrected
+> **022 → SAVE → LOAD → 025 rerun is PENDING**; the other owner results remain accepted. See the [record and audit](PR11_CORRECTION_VALIDATION.md#runtime-enslavement-correction). The design is [PHYSICAL_LIFECYCLE § 9](PHYSICAL_LIFECYCLE.md#9-custody-model). What was built is
 > [Appendix L](PHYSICAL_LIFECYCLE.md#appendix-l-phase-32a-as-built-held-custody) and ADR-056. The spike records are
-> [S21](spikes/S21-observation-completeness.md) (PARTIAL: headless PASS, owner run pending) and [S11](spikes/S11-rescue-site-holder.md) (FAIL
+> [S21](spikes/S21-observation-completeness.md) (PARTIAL: owner baseline passes preserved; corrected 022 rerun pending) and [S11](spikes/S11-rescue-site-holder.md) (FAIL
 > by source audit; the rescue site is not built, so there is **no rescue scenario**).
 
 ### 18.1 The safe tier
@@ -919,7 +920,7 @@ reserved for 3.2B. **`RT-PHYX-009` is retired**: its menu item now only prints t
 |---|---|---|---|
 | RT-PHYX-020 | Arrest: held once, then freed and stored | any Solo | a dev arrest (`CapturedBy` the player) ⇒ the mission episode closes **once** as `HeldByPlayer`: `Captured`, `OutOfCustody(PlayerPrisoner)`, `VanillaHeld`, the same pawn, reserved by the registry, the person tag kept, the custody watch running, no Network pass; duplicate wake-ups change nothing; then vanilla's `PrisonerRelease` (or, if the pawn has not left within 4,000 ticks, the test map's removal) ⇒ **one** Custody episode returns the person from `WorldFree`: `Stored`, holder cleared, abstract only after its RELEASE, the same `Pawn`, `ReservedByQuest`, 0 Network passes; on every frame, never abstract while held and never `Stored` while vanilla holds the pawn |
 | RT-PHYX-021 | Recruitment: Defected, never stored | a never-materialized Solo | the arrest as in 020, then `RecruitUtility.Recruit` ⇒ one Custody episode: `JoinedPlayer`, `Defected`, `OutOfCustody(PlayerColonist)`, never `Stored` or abstract; the colonist untouched (the player's, on the map). **Leaves the person a colonist on the test map** (deliberate; O-20 locks exit from old NPC availability). The old Solo must be `Unavailable` with zero abstract strength; future Player Contractor participation belongs to Phase 4 |
-| RT-PHYX-022 | Enslavement: held as a slave | a never-materialized Solo; **Ideology** | the arrest, then vanilla's enslavement (`SetGuestStatus(player, Slave)`) ⇒ a change of holder only (`PlayerSlave`, still `Captured`, no Custody episode, no event). Without Ideology it reports a **GAP**, never a pass. **Leaves the person enslaved** |
+| RT-PHYX-022 | Enslavement: held as a slave | a never-materialized Solo; **Ideology** | the arrest, then real `GenGuest.TryEnslavePrisoner(warden, prisoner)` using the run's disposable player warden on the test map ⇒ a change of holder only (`PlayerSlave`, still `Captured`, no Custody episode, no event). Without Ideology it reports a **GAP**, never a pass. **Leaves the same person enslaved**; checks no cached encounter `slaveFaction`, same binding, unavailable old Solo, and removal through retried existing RELEASE |
 | RT-PHYX-023 | Kidnapped, then recruited by the captor | a never-materialized Solo; an enemy humanlike faction | a dev kidnapping by a real enemy faction (`KidnappedPawnsTracker.Kidnap`) ⇒ the episode closes once as `Kidnapped` (`Captured`); vanilla still reports `Kidnapped`, so the reservation masks nothing; then vanilla's two steps of "the captor recruits a kidnapped pawn" ⇒ held by `OtherFaction`, still `Captured`, never a free return, no Custody episode, still `ReservedByQuest` and never an ordinary `Free` pawn. **Leaves the person with that faction** |
 | RT-PHYX-024 | Death while held | a never-materialized Solo | the arrest, then dev damage kills the prisoner ⇒ one Custody episode commits `Killed`: `Dead`, custody `Released` (never `OutOfCustody`), **`heldBy = None`, `heldSinceTick = -1`**, `IsHeld` false (the custody watch excludes the person), the registry no longer reserves it, the binding still names the same dead pawn, the Solo ends; a duplicate wake-up commits nothing |
 | RT-PHYX-025 | Held people after save/load | — (read-only, **no arm**) | after a save and a load in which 021, 022 or 023 left people held: the custody watch exists; every held person's binding resolves to the same live pawn, still `OutOfCustody` with a holder, not abstract, and reserved by the registry; nothing generated or returned by the load. With nobody held it reports a GAP |
@@ -927,7 +928,21 @@ reserved for 3.2B. **`RT-PHYX-009` is retired**: its menu item now only prints t
 Caravan, transport and held-by-another-faction have **headless proof only** (`Custody.CaravanAndTransportHolders`, the rules matrix, the
 Solo-held rescue matrix). Building a caravan or a pod launch needs a colonist to carry the person, and the tier never touches colonists.
 
-### 18.3 Owner checklist (a FRESH disposable save)
+### 18.3 Corrected 022 rerun (PENDING)
+
+The owner baseline at source `76b3ae1` reported **194 PASS, 0 FAIL, 0 INCONCLUSIVE**, including 020–025 and save/load. Post-load:
+**5 bound / 5 healthy bindings, 4/4 retained covered, 0 integrity findings**. Preserve 020, 021, 023 and 024 as successful evidence.
+022's synthetic mutation left a removed encounter faction in `slaveFaction`; 025 retained the bindings/custody but that separate warning
+still needs the corrected path verified. See the [exact root cause, vanilla source audit and build provenance](PR11_CORRECTION_VALIDATION.md#runtime-enslavement-correction).
+
+Minimum rerun, **fresh disposable save and Ideology active**: **RT-PHYX-022 → SAVE → LOAD → RT-PHYX-025**. Confirm both PASS,
+no Network red errors, no slaveFaction reference to a removed Network encounter faction, same bound Pawn, PlayerSlave / Captured,
+correct held state and registry coverage. Capture the log across save/load. The def-hidden predicate preserves vanilla OutlanderRefugee;
+no shared custody behavior changed, so the baseline 020/021/023/024 runs need not be repeated.
+
+### 18.4 Original owner checklist (for reproduction)
+
+The owner already completed this original full matrix. The current required rerun is § 18.3 above.
 
 1. Use the build from this PR. The first `[TheNetwork]` line in `Player.log` names the source commit. Turn on Dev Mode. **Use a disposable
    save**: 021–024 deliberately leave people held, recruited or dead.

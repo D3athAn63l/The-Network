@@ -15,7 +15,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
     // Phase 3.2A, S21 (PHYSICAL_LIFECYCLE § 9, § 25): held custody on real pawns. Every scenario drives the PRODUCTION lifecycle (Plan →
     // Materialize on the suite's own test map; then the episode watch and the custody watch) and observes. The deliberate test actions are the
     // vanilla custody changes a player or a raid would make, each named in the log: a dev arrest (CapturedBy), vanilla's prisoner release, a dev
-    // recruitment (RecruitUtility.Recruit), the guest-status change vanilla's enslavement makes, a dev kidnapping by a real enemy faction
+    // recruitment (RecruitUtility.Recruit), real vanilla enslavement (GenGuest.TryEnslavePrisoner with the run's own disposable warden), a dev kidnapping by a real enemy faction
     // (KidnappedPawnsTracker.Kidnap) and the two steps of vanilla's own "kidnapped pawn joins the captor" event, dev damage, and the removal of
     // the suite's own test map. They never touch the player's colonists or home maps. 021–024 deliberately LEAVE the person held by vanilla
     // (recruited, enslaved, with another faction, or dead): in a disposable save that is the point. A caravan and a travelling transporter need a
@@ -248,6 +248,8 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
     /// <summary>RT-PHYX-022 — enslavement (Ideology): a prisoner enslaved by the player is held as PlayerSlave (holder only; still Captured). LEAVES the slave.</summary>
     public sealed class Phyx022Enslavement : HeldRun
     {
+        private Faction encounterFaction;
+
         public Phyx022Enslavement(NetworkRuntime rt, string runId) : base(PhysicalScenarioTable.Get("RT-PHYX-022"), runId, rt)
         {
         }
@@ -268,16 +270,50 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             Then("check: held once", () =>
             {
                 CheckHeldOnce(MemberOutcome.HeldByPlayer, HeldKind.PlayerPrisoner, CharacterStatus.Captured);
+                encounterFaction = e.faction?.Resolve();
+                if (encounterFaction == null || !encounterFaction.temporary || !encounterFaction.def.hidden)
+                {
+                    v.Fail("enslavement needs the live encounter faction with a hidden DEF (the instance override is insufficient)");
+                    return StepResult.Abort;
+                }
+                v.Check(p.SlaveFaction == null, "the fresh prisoner has no previous slave faction");
                 return StepResult.Next;
             });
-            Then("dev enslavement (the guest-status change vanilla's enslavement makes)", () =>
+            Then("vanilla GenGuest.TryEnslavePrisoner with this run's disposable player warden on the test map", () =>
             {
-                p.guest.SetGuestStatus(Faction.OfPlayer, GuestStatus.Slave);
-                v.Check(p.IsSlaveOfColony, "vanilla made the pawn a slave of the colony");
+                if (!p.IsPrisonerOfColony || !p.Spawned || !TestSite.IsTestMap(p.Map))
+                {
+                    v.Fail("the prisoner must still be on the suite's own test map before vanilla enslavement");
+                    return StepResult.Abort;
+                }
+                Pawn warden = TestFixtures.Disposable(PawnKindDefOf.Colonist, Faction.OfPlayer, 25f, runId);
+                bool enslaved;
+                try
+                {
+                    GenSpawn.Spawn(warden, p.Position, p.Map);
+                    enslaved = GenGuest.TryEnslavePrisoner(warden, p);
+                }
+                finally
+                {
+                    // Only this run's tagged, unbound fixture is disposed. The contractor remains vanilla's slave on the test map.
+                    if (warden.Spawned && TestSite.IsTestMap(warden.Map)) warden.DeSpawn();
+                    string refusal;
+                    v.Check(TestFixtures.TryDispose(warden, runId, ctx, out refusal), "the run's disposable warden was removed (" + refusal + ")");
+                }
+                v.Check(enslaved && p.IsSlaveOfColony, "vanilla made the same pawn a slave of the colony");
+                v.Check(p.SlaveFaction == null && p.Faction == Faction.OfPlayer, "vanilla cleared the hidden encounter faction before caching slaveFaction");
+                if (!enslaved) return StepResult.Abort;
                 return StepResult.Next;
             });
             Then("wait for the custody watch to record the slave", () => c.heldBy == HeldKind.PlayerSlave ? StepResult.Next : StepResult.Wait, 3 * PhysicalLifecycleService.CustodyWatchPeriod);
             Then("duplicate wake-ups change nothing", DuplicateWakeups);
+            Then("retry the completed episode's existing RELEASE now that the prisoner has left its faction", () =>
+            {
+                // TryEnslavePrisoner's SetFactionDirect(null) does not queue the old faction. The first RELEASE was blocked by the prisoner.
+                v.Check(EncounterFactions.Release(e.faction), "the existing idempotent RELEASE handed the encounter faction back to vanilla");
+                return StepResult.Next;
+            });
+            Then("vanilla removes the released encounter faction without a slave reference", () => Find.FactionManager.AllFactionsListForReading.Contains(encounterFaction) ? StepResult.Wait : StepResult.Next, 2500);
         }
 
         protected override void Finish()
@@ -285,6 +321,10 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             v.Check(c.custody == CustodyState.OutOfCustody && c.heldBy == HeldKind.PlayerSlave && c.status == CharacterStatus.Captured, "OutOfCustody(PlayerSlave), still Captured");
             v.Check(lc.counters.custodyEpisodes == custodyEpisodes0 && lc.counters.custodyHolderChanges > holderChanges0, "a change of holder is bookkeeping only (no Custody episode, no event)");
             v.Check(!AuthorityGate.CanSimulateAbstractly(c) && p.IsSlaveOfColony, "never abstract; the slave untouched");
+            v.Check(c.pawn != null && ReferenceEquals(c.pawn.pawn, p), "the SAME pawn is still bound, never replaced");
+            v.Check(ctx.Contractors.AvailabilityOf(a) == Availability.Unavailable && ctx.Contractors.Strength(a) == 0f, "the old Solo stays unavailable with zero abstract strength");
+            v.Check(p.SlaveFaction == null && !Find.FactionManager.AllFactionsListForReading.Contains(encounterFaction), "the encounter faction was removed; slaveFaction cannot serialize its removed reference");
+            v.Check(!EncounterFactions.Release(e.faction), "another RELEASE after removal is harmless");
             CheckInvariants();
         }
     }

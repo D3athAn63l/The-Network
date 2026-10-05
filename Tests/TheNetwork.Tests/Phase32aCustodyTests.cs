@@ -928,7 +928,7 @@ namespace TheNetwork.Tests
             foreach (string evidence in new[] { "GenStep_DownedRefugee.cs", "GenStep_PrisonerWillingToJoin.cs", "JobDriver_OfferHelp.cs", "SymbolResolver_Stockpile.cs", "ThingOwner.cs", "SitePart.cs", "Integration/SiteAdapter.cs" })
                 T.Check(s11.Contains(evidence), "the S11 record cites " + evidence);
             T.Check(s11.Contains("NOT\nimplemented") || s11.Contains("NOT implemented") || s11.Contains("**not\nimplemented**") || s11.Contains("**not implemented**") || s11.Contains("(documented, NOT implemented)"), "the alternative is documented, not implemented");
-            T.Check(s21.Contains("**Verdict: PARTIAL") && s21.Contains("NOT RUN by the owner"), "the S21 record: PARTIAL, not run by the owner");
+            T.Check(s21.Contains("**Verdict: PARTIAL") && s21.Contains("194 PASS, 0 FAIL, 0 INCONCLUSIVE") && s21.Contains("corrected RT-PHYX-022") && s21.Contains("PENDING"), "S21 preserves owner baseline passes and the corrected enslavement rerun gap");
             T.Check(spikes.Contains("(S11-rescue-site-holder.md)") && spikes.Contains("(S21-observation-completeness.md)") && spikes.Contains("**FAIL — SOURCE AUDIT**"), "the spikes README links both records and defines the verdict");
             // The decision, the invariants, the risks and the runtime ids.
             T.Check(decisions.Contains("### ADR-056 · Held custody: the custody watch, Custody episodes and M1 for held people (Phase 3.2A)"), "ADR-056 exists");
