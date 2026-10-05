@@ -49,7 +49,29 @@ The existing real-API source gate is updated to require this safe cleanup. The P
 
 ### Final build and headless validation
 
-Final committed-source builds and both complete runs: **PENDING while preparing the artifact**. The artifact/validation commit will replace this paragraph with actual totals, source stamp, hash and compiler results. No filtered run is final validation.
+Corrected source commit: **`e768fefc3ab613aaa8d08f834f0edabf4ad0e735`**. The subsequent artifact/validation commit changes only this record and the shipped DLL; all runtime and test source is identical to that commit. Final HEAD is reported in the delivery message.
+
+| Check | Result |
+|---|---|
+| Complete suite, run 1 | **481 tests, 35,084 checks, 0 failures**, exit 0 |
+| Complete suite, run 2, new Mono process over the same shipped DLL bytes | **481 tests, 35,084 checks, 0 failures**, exit 0 |
+| Production and test compilation | **0 warnings, 0 errors**, `TreatWarningsAsErrors=true` confirmed for both projects |
+| All nine repository source-scan gates | **PASS** |
+| New fixture regressions | **7 tests, 49 checks, 0 failures**; included in both final full runs |
+| Save format / production Harmony | **5 unchanged / no reference** |
+| New owner fixture-cleanup rerun | **PENDING** |
+
+Both full runs are unfiltered and include the existing long procurement/career simulations. Run 1 uses `Tests/run-tests.sh` from `/workspace/The-Network`, with a newly created empty `TEST_OUT`. Run 2 launches `THENETWORK_REPO=/workspace/The-Network mono TheNetwork.Tests.exe` without a filter in that same test-output directory. The rebuilt mod DLL is copied to `1.6/Assemblies/TheNetwork.dll`; byte comparison proves the test copy and shipped artifact are identical for both runs. No stale runner output, skipped/disabled tests or synthetic passing replacements are used.
+
+| DLL provenance | Value |
+|---|---|
+| Embedded stamp | `built 2026-10-05T14:09Z, source commit e768fef` |
+| Informational version | `0.1.0+e768fefc3ab613aaa8d08f834f0edabf4ad0e735` |
+| SHA-256 | `502a4def6dddadf2686bffad9a2d61f6545941f7628742bffdeb92e5e6f0fc28` |
+| Bytes | **1,138,176** |
+| Framework | **.NET Framework 4.7.2** |
+
+Build environment: **.NET SDK 8.0.425 / MSBuild 17.11.48 / Mono 6.12.0.199**, supplied game and Harmony 2.4.1.0 references, C# 7.3 Release. The repository's normal build scripts and projects are unchanged. External MSBuild targets keep working output outside the checkout and route the runner to that fresh DLL, with warnings treated as errors; the final validated bytes are explicitly copied into the shipped artifact. The supplied Steamworks assembly is available; no replacement dependency or Mono JIT workaround is needed. Metadata confirms net472 and no Harmony reference in the mod. No test dependency is shipped.
 
 ### Exact owner acceptance rerun
 
