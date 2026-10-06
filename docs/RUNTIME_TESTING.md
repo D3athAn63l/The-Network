@@ -1003,7 +1003,7 @@ they are not outstanding acceptance work.
 
 **PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED — OWNER RUNTIME VALIDATION PENDING.**
 
-The developer-triggered group slice is implemented and its committed Stage 4 checkpoint passed **204 tests / 17,817 checks / 0 failures**, with **0 compiler warnings/errors** and all **nine source gates PASS**. Stage 5 adds the scenarios below; final full-suite repeats, final harness compilation and shipped DLL provenance remain pending in the [validation record](PHASE32B_VALIDATION.md). No scenario below is claimed owner runtime validated. S26/S27 remain PARTIAL; S11 FAIL / rescue STOPPED, R-50 OPEN, S21 PARTIAL and O-20 locked remain unchanged.
+The developer-triggered group slice and scenarios below are implemented/headless validated. Two final fresh full runs against source `5b403fe` each passed **581 tests / 42,946 checks / 0 failures**, with **0 compiler warnings/errors** and all **nine source gates PASS**. The tested run 2 DLL is shipped; source stamp/hash and measured 150/300 registry/Scribe fixtures are in the [validation record](PHASE32B_VALIDATION.md). No scenario below is claimed owner runtime validated. S26/S27 remain PARTIAL; S11 FAIL / rescue STOPPED, R-50 OPEN, S21 PARTIAL and O-20 locked remain unchanged.
 
 ### 19.1 Exact menu inventory and visibility boundary
 

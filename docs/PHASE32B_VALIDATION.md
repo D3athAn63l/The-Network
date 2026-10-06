@@ -14,20 +14,24 @@ No new owner in-game result is claimed. Phase 3.2A remains **MERGED / HEADLESS V
 | 2 | `7601e9d911c4b32bd200e717f8b996aa2ad6f330` | Same M1 registry extended with temporary durable Episode ownership and load reconstruction. |
 | 3 | `99f678a572215fd8d71fd211c8af93907b7de27c` | Organization group planning/materialization, placement evidence and construction-only cohesion. |
 | 4 | `3b80ca326d136be2d52ffc16fba308fd87d64100` | Source-qualified evidence and atomic same-Pawn promotion with exact conservation. |
-| 5 | **PENDING — runtime QA and final documentation checkpoint** | Runtime scenarios, owner checklists, final documentation and validation. |
+| 5 | `5b403fe5fcc2f8e1d8e8e23d8f5c2f52264f0d8d` | Runtime scenarios, owner checklists, final documentation and validation. |
 
 | Final check | Result |
 |---|---|
-| Full headless suite, run 1 | **PENDING — final full-suite run not yet performed** |
-| Full headless suite, run 2, fresh process | **PENDING — final fresh-process repeat not yet performed** |
-| Production and test compiler | **Stage 4 focused checkpoint: 0 warnings / 0 errors; final Stage 5 compilation PENDING**; warnings treated as errors. |
-| Repository source gates | **All nine gates PASS at Stage 4; final Stage 5 gate run PENDING** |
-| Markdown links / whitespace | **PENDING — final Markdown/whitespace validation** |
+| Full headless suite, run 1 | **581 tests / 42,946 checks / 0 failures, exit 0** |
+| Full headless suite, run 2, fresh process | **581 tests / 42,946 checks / 0 failures, exit 0** |
+| Production and test compiler | **0 warnings / 0 errors**; warnings treated as errors. |
+| Repository source gates | **All nine gates PASS** |
+| Markdown links / whitespace | **760 local Markdown links checked / 0 errors; `git diff --check` PASS** |
 | Save format | **5**, unchanged. |
 | Production Harmony reference | **None**. |
 | Owner RimWorld runtime | **PENDING**; this environment has no Unity player. |
 
-The committed Stage 4 focused checkpoint passed **204 tests / 17,817 checks / 0 failures**, strict **0 compiler warnings / 0 errors**, all **nine source gates PASS**. Final whole-suite/Stage 5 results are pending and are not inferred from that focused run.
+The committed Stage 4 focused checkpoint passed **204 tests / 17,817 checks / 0 failures**, strict **0 compiler warnings / 0 errors**, all **nine source gates PASS**. The two final complete suite runs above supersede this focused checkpoint; their results were measured independently.
+
+An intermediate Stage 5 full run passed **581 tests / 42,946 checks / 0 failures**, **0 compiler warnings/errors**, all **nine source gates PASS**. The final read-only custody-verifier hardening followed that run; two final fresh full passes against committed source `5b403fe` then each passed with the same **581 / 42,946 / 0** totals. This intermediate run is not substituted for the final artifact runs.
+
+Final logs in the prepared cloud workspace: `/workspace/.onboarding/phase32b-final1.log` and `/workspace/.onboarding/phase32b-final2.log`. Each full script ran in a fresh process against committed source `5b403fe`, with strict production/test builds and all source gates. The shipped DLL is the tested **final run 2** output; separately rebuilt runs may have different time stamps. During development, a stale visibility assertion and a source-gate fixture/birth-factory assertion failed, were diagnosed and corrected before the final two passes; no flaky result was hidden.
 
 Intermediate Stage 2 evidence was **507 tests, 38,193 checks, 0 failures**, strict production/test compilation. It is a checkpoint rather than the final whole-slice count above. Full runs retain prior procurement/career soaks, authority, custody, reservation, runtime-runner and source-gate coverage.
 
@@ -36,15 +40,15 @@ Intermediate Stage 2 evidence was **507 tests, 38,193 checks, 0 failures**, stri
 | Value | Delivered artifact |
 |---|---|
 | Path | `1.6/Assemblies/TheNetwork.dll` |
-| Source commit | **PENDING — build after final Stage 5 source commit** |
-| Embedded build stamp | **PENDING — final build** |
-| Informational version | **PENDING — final build** |
-| SHA-256 | **PENDING — final artifact SHA-256** |
-| Bytes | **PENDING — final artifact** |
+| Source commit | `5b403fe5fcc2f8e1d8e8e23d8f5c2f52264f0d8d` |
+| Embedded build stamp | `built 2026-10-06T10:10Z, source commit 5b403fe` |
+| Informational version | `0.1.0+5b403fe5fcc2f8e1d8e8e23d8f5c2f52264f0d8d` |
+| SHA-256 | `c8acac8534822dfa3e55521019c1379f2acd3fd3084266ad63739cfad7270adc` |
+| Bytes | **1,235,456** |
 | Framework | .NET Framework 4.7.2 |
 | Game reference | `Assembly-CSharp 1.6.9676.17735`, SHA-256 `5cf1b5be399d5b1c9c56ca72c9d35b4ecf307feacf5859d04ac5a1aa5926356a`. |
 
-Build and working outputs stay outside the mod checkout; only the final verified DLL is copied into the shipped artifact. Compiler/project/test dependencies are not shipped.
+DLL and test outputs stay outside the mod checkout; standard ignored project intermediates are generated inside the checkout and are neither shipped nor tracked. The final run 2 DLL was copied to `1.6/Assemblies/TheNetwork.dll` and compared byte-for-byte with the tested output. Compiler/project/test dependencies are not shipped.
 
 ## Composition, operational identity and mission selection
 
@@ -119,11 +123,23 @@ First projections force new Pawns and skip vanilla initial blood/non-blood relat
 
 ## Runtime scenarios and pending owner acceptance
 
-Implemented menu families: **026** small first visit; **027** five-person continuity (three reused + two concretized, then full same-Pawn repeat); **028** company zero presence promotion; **029** one anonymous arrest/atomic promotion; **030A SAVE** released/concretized group, **030B SAVE** anonymous arrest while peers Pending, **030V VERIFY** read-only loaded newest unambiguous 030/031 checkpoint; **031** owned Medic organizational succession then SAVE/LOAD→030V; **032A/032B BUILD** approximately 150/300 retained and **032V OBSERVE** loaded coverage/lookups. Exact labels/actions are in runtime § 19. Final compilation and owner execution remain pending; no new runtime PASS is claimed. Genuine home P0 has a separate typed adapter scope API but no added home-map action/UI.
+Implemented menu families: **026** small first visit; **027** five-person continuity (three reused + two concretized, then full same-Pawn repeat); **028** company zero presence promotion; **029** one anonymous arrest/atomic promotion; **030A SAVE** released/concretized group, **030B SAVE** anonymous arrest while peers Pending, **030V VERIFY** read-only loaded newest unambiguous 030/031 checkpoint; **031** owned Medic organizational succession then SAVE/LOAD→030V; **032A/032B BUILD** approximately 150/300 retained and **032V OBSERVE** loaded coverage/lookups. Exact labels/actions are in runtime § 19. Strict compilation and full headless validation passed; owner execution remains pending, and no new runtime PASS is claimed. Genuine home P0 has a separate typed adapter scope API but no added home-map action/UI.
 
 Scenarios use existing session-only arm, dedicated tagged test map, sentinel and preserve-on-failure behavior. They are excluded from Quick smoke/Full safe regression. Existing IDs are not renumbered; save/load is owner-assisted, not automated. See [RUNTIME_TESTING § 19](RUNTIME_TESTING.md#19-phase-32b-groups-and-progressive-concretization) for exact checkpoints and commands.
 
-The focused Stage 4 retention fixtures measured **91,871 XML bytes** for 150 named bindings and **186,516 bytes** for 300 named + eight temporary Episode bindings, a **94,645-byte fixture delta**. Observed early-index rebuilds were about **0.047/0.026 ms**, pointer resolution **0.097/0.125 ms**, and 100,000 reservation lookups **7.659/7.415 ms**, respectively. These are machine-local cold/warm headless observations over the fixture, **not a complete RimWorld save or Unity TPS measurement**. Final-repeat timings are pending; the count itself is never a failure threshold.
+The final run 2 headless retention observations used actual PawnRef/registry and real Scribe fixture round-trips. No count above 150 is a failure criterion; every required identity remains intact.
+
+| Headless population | Early registry rebuild | Pointer resolution | 100,000 reservation lookups |
+|---|---:|---:|---:|
+| 150 named | 0.009 ms | 0.054 ms | 6.901 ms |
+| 300 named + 8 temporary Episode members | 0.017 ms | 0.169 ms | 7.347 ms |
+
+| Reference XML fixture | Bytes | Scribe save | Load + cross-references | Early thing-ID bridge | Resolved pointer index |
+|---|---:|---:|---:|---:|---:|
+| 150 named | 91,871 | 3.078 ms | 5.451 ms | 0.015 ms | 0.061 ms |
+| 300 named + 8 temporary | 186,516 | 4.451 ms | 10.219 ms | 0.026 ms | 0.172 ms |
+
+The XML fixture delta is **94,645 bytes**. These are observed process-local costs in the final run, including headless save/load reference resolution and coverage checks; they are **not a complete RimWorld save, Unity TPS, real game load elapsed or a mod-stack frame-time guarantee**. Runtime 032 exposes the separately pending owner registry/lookup observations; full save bytes/TPS/load timing remain manual owner evidence.
 
 Above-six strong identity is proven by headless planner/commit/lifecycle tests. The current 029/030B runtime company begins with one known leader; a separate cap-full/overflow owner fixture remains pending rather than being falsely attributed to that case.
 
@@ -139,8 +155,8 @@ The owner still needs actual first/second crew visits and same Pawn continuity, 
 |---|---|
 | 1. Branch | `codex/phase32b-groups-concretization`. |
 | 2. Base main | `e251c61efcbb7773f36e31e4862373e22930173e`. |
-| 3. Commits | Stage table above; the final delivery commit is reported with the branch/PR handoff and is discoverable with `git log` (this report does not invent its own future hash). |
-| 4. Files | Current source/tests/docs inventory: `README.md`, `Source/TheNetwork/Core/NetworkWorldComponent.cs`, `Source/TheNetwork/Diagnostics/RuntimePhysicalTests/PhysicalGroupScenarios.cs`, `Source/TheNetwork/Diagnostics/RuntimePhysicalTests/PhysicalGroupTestRules.cs`, `Source/TheNetwork/Diagnostics/RuntimePhysicalTests/PhysicalTestDevActions.cs`, `Source/TheNetwork/Diagnostics/RuntimePhysicalTests/PhysicalTestModel.cs`, `Source/TheNetwork/Diagnostics/RuntimePhysicalTests/PhysicalTestRunner.cs`, `Source/TheNetwork/Diagnostics/RuntimePhysicalTests/PhysicalTestWorld.cs`, `Source/TheNetwork/Diagnostics/RuntimeTests/FakePhysicalWorldPort.cs`, `Source/TheNetwork/Domain/Contractors/CareerService.cs`, `Source/TheNetwork/Domain/Contractors/ContractorService.cs`, `Source/TheNetwork/Domain/Contractors/FateRules.cs`, `Source/TheNetwork/Domain/Contractors/UpkeepService.cs`, `Source/TheNetwork/Domain/Physical/ConcretizationEvidence.cs`, `Source/TheNetwork/Domain/Physical/EpisodeChecks.cs`, `Source/TheNetwork/Domain/Physical/EpisodeModel.cs`, `Source/TheNetwork/Domain/Physical/ObservationRules.cs`, `Source/TheNetwork/Domain/Physical/OrganizationComposition.cs`, `Source/TheNetwork/Domain/Physical/PhysicalLifecycleService.cs`, `Source/TheNetwork/Domain/Physical/PhysicalWorldPort.cs`, `Source/TheNetwork/Domain/Physical/ReconciliationApplier.cs`, `Source/TheNetwork/Domain/Physical/ReconciliationPlan.cs`, `Source/TheNetwork/Domain/Physical/ReconciliationPlanner.cs`, `Source/TheNetwork/Integration/Physical/ConcretizationEvidenceCollector.cs`, `Source/TheNetwork/Integration/Physical/PawnProjection.cs`, `Source/TheNetwork/Integration/Physical/RetainedPawnRegistry.cs`, `Source/TheNetwork/Integration/Physical/RimWorldPhysicalWorldPort.cs`, `Tests/TheNetwork.Tests/Fakes.cs`, `Tests/TheNetwork.Tests/Phase31Tests.cs`, `Tests/TheNetwork.Tests/Phase32bBoundedEpisodeTests.cs`, `Tests/TheNetwork.Tests/Phase32bCompositionTests.cs`, `Tests/TheNetwork.Tests/Phase32bEvidenceTests.cs`, `Tests/TheNetwork.Tests/Phase32bGroupPromotionTests.cs`, `Tests/TheNetwork.Tests/Phase32bGroupTests.cs`, `Tests/TheNetwork.Tests/Phase32bPromotionTests.cs`, `Tests/TheNetwork.Tests/Phase32bReservationTests.cs`, `Tests/TheNetwork.Tests/Phase32bRetentionScaleTests.cs`, `Tests/TheNetwork.Tests/Phase32bRuntimeQaTests.cs`, `Tests/TheNetwork.Tests/TestMain.cs`, `docs/DATA_MODEL.md`, `docs/DECISIONS.md`, `docs/IMPLEMENTATION_PHASES.md`, `docs/PHASE32B_READINESS_AUDIT.md`, `docs/PHASE32B_VALIDATION.md`, `docs/PHYSICAL_LIFECYCLE.md`, `docs/RISKS.md`, `docs/RUNTIME_TESTING.md`, `docs/spikes/README.md`, `docs/spikes/S26-team-cohesion.md`, `docs/spikes/S27-progressive-concretization-evidence.md`. The final shipped DLL artifact is still pending. |
+| 3. Commits | Stage table above; the final delivery commit is reported with the branch/PR handoff and is discoverable with `git log` (its own artifact-commit hash is available from `git log` after delivery). |
+| 4. Files | `1.6/Assemblies/TheNetwork.dll`, `README.md`, `Source/TheNetwork/Core/NetworkWorldComponent.cs`, `Source/TheNetwork/Diagnostics/RuntimePhysicalTests/PhysicalGroupScenarios.cs`, `Source/TheNetwork/Diagnostics/RuntimePhysicalTests/PhysicalGroupTestRules.cs`, `Source/TheNetwork/Diagnostics/RuntimePhysicalTests/PhysicalTestDevActions.cs`, `Source/TheNetwork/Diagnostics/RuntimePhysicalTests/PhysicalTestModel.cs`, `Source/TheNetwork/Diagnostics/RuntimePhysicalTests/PhysicalTestRunner.cs`, `Source/TheNetwork/Diagnostics/RuntimePhysicalTests/PhysicalTestWorld.cs`, `Source/TheNetwork/Diagnostics/RuntimeTests/FakePhysicalWorldPort.cs`, `Source/TheNetwork/Domain/Contractors/CareerService.cs`, `Source/TheNetwork/Domain/Contractors/ContractorService.cs`, `Source/TheNetwork/Domain/Contractors/FateRules.cs`, `Source/TheNetwork/Domain/Contractors/UpkeepService.cs`, `Source/TheNetwork/Domain/Physical/ConcretizationEvidence.cs`, `Source/TheNetwork/Domain/Physical/EpisodeChecks.cs`, `Source/TheNetwork/Domain/Physical/EpisodeModel.cs`, `Source/TheNetwork/Domain/Physical/ObservationRules.cs`, `Source/TheNetwork/Domain/Physical/OrganizationComposition.cs`, `Source/TheNetwork/Domain/Physical/PhysicalLifecycleService.cs`, `Source/TheNetwork/Domain/Physical/PhysicalWorldPort.cs`, `Source/TheNetwork/Domain/Physical/ReconciliationApplier.cs`, `Source/TheNetwork/Domain/Physical/ReconciliationPlan.cs`, `Source/TheNetwork/Domain/Physical/ReconciliationPlanner.cs`, `Source/TheNetwork/Integration/Physical/ConcretizationEvidenceCollector.cs`, `Source/TheNetwork/Integration/Physical/PawnProjection.cs`, `Source/TheNetwork/Integration/Physical/RetainedPawnRegistry.cs`, `Source/TheNetwork/Integration/Physical/RimWorldPhysicalWorldPort.cs`, `Tests/TheNetwork.Tests/Fakes.cs`, `Tests/TheNetwork.Tests/Phase31Tests.cs`, `Tests/TheNetwork.Tests/Phase32bBoundedEpisodeTests.cs`, `Tests/TheNetwork.Tests/Phase32bCompositionTests.cs`, `Tests/TheNetwork.Tests/Phase32bEvidenceTests.cs`, `Tests/TheNetwork.Tests/Phase32bGroupPromotionTests.cs`, `Tests/TheNetwork.Tests/Phase32bGroupTests.cs`, `Tests/TheNetwork.Tests/Phase32bPromotionTests.cs`, `Tests/TheNetwork.Tests/Phase32bReservationTests.cs`, `Tests/TheNetwork.Tests/Phase32bRetentionScaleTests.cs`, `Tests/TheNetwork.Tests/Phase32bRuntimeQaTests.cs`, `Tests/TheNetwork.Tests/TestMain.cs`, `docs/DATA_MODEL.md`, `docs/DECISIONS.md`, `docs/IMPLEMENTATION_PHASES.md`, `docs/PHASE32B_READINESS_AUDIT.md`, `docs/PHASE32B_VALIDATION.md`, `docs/PHYSICAL_LIFECYCLE.md`, `docs/RISKS.md`, `docs/RUNTIME_TESTING.md`, `docs/spikes/README.md`, `docs/spikes/S26-team-cohesion.md`, `docs/spikes/S27-progressive-concretization-evidence.md`. |
 | 5. Architecture | Composition → role-correct mission → Episode-owned Pawns → terminal-batch same-Pawn identities. |
 | 6. Composition v1 | Immutable seed/capacity/specialties, ≤8 role weights, frozen v1 recipe. |
 | 7. Role initialization | Full immutable origin cohort; write once; stable legacy fallback; no rank/succession/reload drift. |
@@ -159,12 +175,12 @@ The owner still needs actual first/second crew visits and same Pawn continuity, 
 | 20. Faction/Lord | One temporary shell per Episode, vanilla Visit behavior. |
 | 21. Cohesion | Force-new, initial relations off, eligible request-time FixedIdeo + verification; no social rewriting. |
 | 22. Runtime scenarios | 026–032 plus 030A/B/V and 032A/B/V exact menus in runtime § 19; owner run pending. |
-| 23. Headless totals | **PENDING — final full-suite run not yet performed**. |
-| 24. Compiler totals | **Stage 4 focused checkpoint: 0 warnings / 0 errors; final Stage 5 compilation PENDING**. |
-| 25. Source gates | **All nine gates PASS at Stage 4; final Stage 5 gate run PENDING**. |
-| 26. Repeat suite | **PENDING — final fresh-process repeat not yet performed**. |
-| 27. DLL source | **PENDING — build after final Stage 5 source commit**. |
-| 28. DLL SHA-256 | **PENDING — final artifact SHA-256**. |
+| 23. Headless totals | **581 tests / 42,946 checks / 0 failures, exit 0**. |
+| 24. Compiler totals | **0 warnings / 0 errors**. |
+| 25. Source gates | **All nine gates PASS**. |
+| 26. Repeat suite | **581 tests / 42,946 checks / 0 failures, exit 0**. |
+| 27. DLL source | `5b403fe5fcc2f8e1d8e8e23d8f5c2f52264f0d8d`. |
+| 28. DLL SHA-256 | `c8acac8534822dfa3e55521019c1379f2acd3fd3084266ad63739cfad7270adc`. |
 | 29. 150/300 observations | Measured headless costs above; actual Unity/save-size observations pending. |
 | 30. S26 | **PARTIAL**; no owner-runtime PASS. |
 | 31. S27 | **PARTIAL**; production tests do not substitute for owner-runtime evidence. |
@@ -172,5 +188,45 @@ The owner still needs actual first/second crew visits and same Pawn continuity, 
 | 33. R-50 | **OPEN**, no aging fix. |
 | 34. 3.2C | Full mixed-fate matrix/partial group extraction deferred as detailed above. |
 | 35. Owner runtime | Explicit pending matrix above and runtime § 19. |
-| 36. PR | **PENDING — new PR/403 manual handoff after final validation**; do not merge. |
+| 36. PR | **No PR created:** `gh pr create` returned `Post https://api.github.com/graphql: Forbidden` (HTTP 403). Manual handoff below: title `Phase 3.2B: groups and progressive concretization`, head `codex/phase32b-groups-concretization`, base `main`. Native Git actual push status is pending; nothing was merged. Do not merge. |
 | 37. Final status | **PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED — OWNER RUNTIME VALIDATION PENDING**. |
+
+
+## Manual PR handoff after GitHub API HTTP 403
+
+The concrete PR creation attempt failed with `Post https://api.github.com/graphql: Forbidden`. This was a GitHub API failure, not an automatic approval-review rejection. **No PR was created and nothing was merged.** The native Git push dry-run succeeded; the actual implementation branch push is pending the final artifact/documentation commit.
+
+- Title: `Phase 3.2B: groups and progressive concretization`
+- Head: `codex/phase32b-groups-concretization`
+- Base: `main`
+- Open manually: [GitHub compare / new PR](https://github.com/D3athAn63l/The-Network/compare/main...codex/phase32b-groups-concretization?expand=1).
+- Exact body also available in the cloud workspace: `/workspace/.onboarding/phase32b-pr-body.md`.
+
+Replace the PR description with the complete Markdown body below, preserving the pending owner-runtime scope. Do not merge.
+
+```markdown
+NPC organizations can now materialize bounded, role-correct groups and turn encountered anonymous members into persistent identities when the whole Episode reaches its atomic terminal commit. A captured anonymous member remains protected as the same Pawn while peers are still Pending; promotion then records that Pawn's actual name, operational role and organization without restoring a second abstract human.
+
+This implements the accepted Phase 3.2B developer-triggered slice from merged PR #12, based on `main` at `e251c61efcbb7773f36e31e4862373e22930173e`.
+
+- Derive immutable Composition v1 from origin facts, initialize operational roles once, and select matching named pins before healthy anonymous seats. Missions contain at most eight members.
+- Extend the existing M1 registry with temporary ownership derived from unreleased Episode PawnRefs. Rebuild the durable thing-ID bridge before cross-reference resolution, then validate exact loaded Pawn bindings before the first world tick.
+- Latch proven placement eligibility: all roles at 2–6 living members, non-Rifleman roles at 7–12, strong evidence only at 13+. The normal six-person target includes existing leaders and lieutenants; mandatory identity obligations can exceed it.
+- Qualify bounded S1–S4 evidence and perform same-Pawn promotion inside the existing rollback-protected terminal commit. No production PlayLog scan or individual-identification producer is invented.
+- Use one temporary encounter faction and a shared vanilla Visit Lord. Initial projections force new Pawns, disable initial relation generation and use eligible request-time FixedIdeo; existing physical and social history remains authoritative.
+- Add armed disposable runtime scenarios `RT-PHYX-026–032`, including first/repeat visits, pending anonymous arrest, read-only save/load verification, Medic succession and real 150/300 retained-Pawn observation builders.
+
+Validation:
+
+- Two fresh final full-suite runs: **581 tests / 42,946 checks / 0 failures each**.
+- Production and test builds: **0 warnings / 0 errors**, with warnings treated as errors; all **nine source gates pass**.
+- Build uses the authoritative RimWorld 1.6 `Assembly-CSharp 1.6.9676.17735`. Save format remains **5**, with only additive `playerVisibleTick = -1` and `p0Eligible = false` defaults. No production Harmony reference.
+- Shipped `1.6/Assemblies/TheNetwork.dll` matches the second tested binary: source `5b403fe5fcc2f8e1d8e8e23d8f5c2f52264f0d8d`, stamp `built 2026-10-06T10:10Z, source commit 5b403fe`, SHA-256 `c8acac8534822dfa3e55521019c1379f2acd3fd3084266ad63739cfad7270adc`, **1,235,456 bytes**.
+- Real Scribe reference fixtures cover 150 named and 300 named + eight temporary bindings. XML sizes are **91,871 / 186,516 bytes**, a **94,645-byte fixture delta**. These measure NetworkState/reference-probe fixtures, not complete RimWorld save size or Unity TPS. Exact costs and delivery details are in [the validation report](docs/PHASE32B_VALIDATION.md).
+
+Owner runtime acceptance remains pending. TestSite P0 is explicitly synthetic; genuine home/player-occupied-map visibility, active/pre-RELEASE/post-RELEASE game loads, above-six capture, construction/opinion behavior and real save/load/TPS measurements still need owner evidence. The current menus expose active and completed checkpoints; they do not freeze between COMMIT and RELEASE. See [runtime instructions](docs/RUNTIME_TESTING.md#19-phase-32b-groups-and-progressive-concretization).
+
+S26/S27 and S21 remain **PARTIAL**, S11 remains **FAIL / rescue STOPPED**, R-50 remains **OPEN**, and O-20 stays locked. The full mixed-fate resolver and partial extraction remain Phase 3.2C; 3.3 and Phase 4 remain unimplemented. PR #11's accepted 3.2A runtime evidence is preserved.
+
+**PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED — OWNER RUNTIME VALIDATION PENDING**
+```

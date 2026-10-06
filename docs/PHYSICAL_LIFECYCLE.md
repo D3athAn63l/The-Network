@@ -3727,7 +3727,7 @@ physical run of `RT-PHYX-020…025` is the evidence still owed.
 | Placement truth | `EpisodeMember.playerVisibleTick` / `p0Eligible` | Latch only successful visible placement; no CharacterStore mutation at spawn. Old fields absent → −1/false. |
 | Evidence | `ConcretizationEvidence` / `ConcretizationEvidenceCollector` | Mandatory material S1; S2 exact-subject seam without invented producer; bounded exact-type player-endpoint S3 and public direct S4; no PlayLog/reflection/GC/world scan. |
 | Atomic same-Pawn promotion | `ReconciliationPlanner` / `ReconciliationApplier` | Preview new IDs/name/role/provenance/custody and committed-to-named conversion; existing snapshot transaction, CharacterStore append/index rollback and allocator rollback; exactly-once flag last. |
-| Runtime QA | `Diagnostics/RuntimePhysicalTests/` | Stable 026–032 scenarios, 030A/B/V and 032A/B/V load/observation menus, existing session arm/test-map/sentinel boundaries and measured retention diagnostics; final harness compilation/owner run pending. |
+| Runtime QA | `Diagnostics/RuntimePhysicalTests/` | Stable 026–032 scenarios, 030A/B/V and 032A/B/V load/observation menus, existing session arm/test-map/sentinel boundaries and measured retention diagnostics; strict compilation/headless tests PASS, owner run PENDING. |
 
 ### M.2 Policies implemented
 
@@ -3771,8 +3771,7 @@ retry. Actual game save/load at active, committed-before-RELEASE and released ch
 
 ### M.4 Evidence and exact scope limits
 
-Final compiler, source gates, repeated full-suite results, changed files and shipped artifact provenance are in the
-[validation record](PHASE32B_VALIDATION.md). Retention fixtures around 150/300 report measured headless registry costs;
+Two final fresh full runs against source `5b403fe` each passed **581 tests / 42,946 checks / 0 failures**, with **0 compiler warnings/errors**, warnings treated as errors and all **nine source gates PASS**. The shipped final run 2 DLL has SHA-256 `c8acac8534822dfa3e55521019c1379f2acd3fd3084266ad63739cfad7270adc`, stamp `built 2026-10-06T10:10Z, source commit 5b403fe`. Full source/artifact provenance, changed files and measured headless retention/Scribe costs are in the [validation record](PHASE32B_VALIDATION.md). Retention fixtures around 150/300 report measured headless registry costs;
 Unity TPS, actual save-size deltas and active-mod runtime safety are pending. 150 is a soft warning region, never an identity cap.
 
 Store-aware current named counts exclude dead/lost/defected/retired history from service headcount/capacity/reserve inputs without changing formulas. `firstEncounterTick` is set only from a proven `playerVisibleTick <= now`; strong evidence without dated placement leaves −1 and still creates mandatory identity. Episode RELEASE completion drops derived temporary cache ownership.
