@@ -11,6 +11,7 @@ using TheNetwork.Integration.Physical;
 using TheNetwork.Kernel;
 using TheNetwork.Persist;
 using Verse;
+using Verse.AI.Group;
 
 namespace TheNetwork.Diagnostics.RuntimePhysicalTests
 {
@@ -52,9 +53,34 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
     /// <summary>Production group Plan/Materialize plus explicit synthetic P0 on the owned TestSite only.</summary>
     public abstract class GroupRun : PhysicalRun
     {
+        private sealed class PlacementBaseline
+        {
+            public EpisodeMember member;
+            public CharacterId character;
+            public OperationalRole role;
+            public Pawn pawn;
+            public int thingId;
+            public KnownCharacter known;
+            public PawnRef knownBinding;
+            public RoleSpec creationSpec;
+            public RoleCandidate skills;
+            public List<DirectPawnRelation> relations;
+            public List<Thought_Memory> memories;
+            public List<Trait> traits;
+            public object relationTracker, recordTracker, memoryTracker;
+            public bool retained;
+        }
+
         protected OrganizationProfile org;
         protected readonly List<Pawn> groupPawns = new List<Pawn>();
         private readonly HashSet<int> namedBeforePlacement = new HashSet<int>();
+        private readonly List<PlacementBaseline> placement = new List<PlacementBaseline>();
+        private int dwellStartTick = -1, dwellCharacters, dwellProjections, dwellCreated;
+        private PhysicalEpisode dwellEpisode;
+        private Map dwellMap;
+        private Faction dwellFaction;
+        private Lord dwellLord;
+        private bool dwellActive, dwellInvalid;
         protected int humanBefore, charactersBefore, commitsBefore;
         protected int freeFrames, reservationGaps;
 
@@ -103,7 +129,37 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             episodes.Add(e);
             groupPawns.Clear();
             namedBeforePlacement.Clear();
+            placement.Clear();
+            dwellStartTick = -1;
+            dwellActive = dwellInvalid = false;
             foreach (EpisodeMember member in e.members) if (member.IsNamed) namedBeforePlacement.Add(member.character.Value);
+            // This is the actual first-projection boundary: Plan has checked out anonymous seats, Materialize has not created anyone.
+            ExperienceBand creationBand = ContractorService.Experience(a);
+            int projectionsBeforePlacement = port.counters.projections;
+            int newCandidates = 0;
+            foreach (EpisodeMember member in e.members)
+            {
+                KnownCharacter known = member.IsNamed ? ctx.characters.Get(member.character) : null;
+                Pawn priorPawn = known?.pawn?.pawn;
+                bool retained = known?.pawn?.IsBound == true && GroupQaRules.HasRetainedPawn(known.id.Value, known.pawn.thingIdNumber, priorPawn?.thingIDNumber ?? 0);
+                if (known?.pawn?.IsBound == true && !retained)
+                { v.Fail("pre-placement retained binding does not resolve exactly for " + member.character); return StepResult.Abort; }
+                PlacementBaseline baseline = new PlacementBaseline { member = member, character = member.character, role = member.seatRole,
+                    known = known, knownBinding = known?.pawn, pawn = retained ? priorPawn : null, thingId = retained ? priorPawn.thingIDNumber : 0,
+                    retained = retained, creationSpec = retained ? null : RoleRules.SpecFor(member.seatRole, creationBand) };
+                if (retained)
+                {
+                    baseline.skills = PawnRoleReader.Snapshot(priorPawn);
+                    baseline.relations = CopyReferences(priorPawn.relations?.DirectRelations);
+                    baseline.memories = CopyReferences(priorPawn.needs?.mood?.thoughts?.memories?.Memories);
+                    baseline.traits = CopyReferences(priorPawn.story?.traits?.allTraits);
+                    baseline.relationTracker = priorPawn.relations;
+                    baseline.recordTracker = priorPawn.records;
+                    baseline.memoryTracker = priorPawn.needs?.mood?.thoughts?.memories;
+                }
+                else newCandidates++;
+                placement.Add(baseline);
+            }
             int placed;
             if (synthetic)
             {
@@ -116,38 +172,185 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             v.Check(live, "production materialization placed the bounded whole group: " + placed + "/" + e.members.Count + ", " + e.state);
             if (!live) return StepResult.Abort;
             Faction shared = e.faction.Resolve();
-            v.Check(shared != null && shared.temporary && shared.def.hidden, "one valid hidden temporary encounter faction for the group");
-            foreach (EpisodeMember member in e.members)
+            bool placementValid = v.Check(shared != null && shared.temporary && shared.def.hidden, "one valid hidden temporary encounter faction for the group");
+            bool expectedProjections = port.counters.projections == projectionsBeforePlacement + newCandidates;
+            placementValid &= v.Check(expectedProjections, "only the " + newCandidates + " previously unbound candidates were projected; retained people were not regenerated");
+            foreach (PlacementBaseline baseline in placement)
             {
+                EpisodeMember member = baseline.member;
                 Pawn pawn = member.pawn?.pawn;
                 groupPawns.Add(pawn);
                 KnownCharacter known = member.IsNamed ? ctx.characters.Get(member.character) : null;
                 if (known != null) testPeople.Add(known.id.Value);
-                v.Check(pawn != null && pawn.Spawned && pawn.Map == map && pawn.Faction == shared, "seat " + member.slot + ": same shared faction and successful placement on owned map");
-                v.Check(pawn != null && port.Registry.Reserves(pawn), "seat " + member.slot + ": protected before and during placement");
-                v.Check(known == null || known.opRole == member.seatRole, "seat " + member.slot + ": persisted operational role matches mission role");
-                if (pawn != null) v.Check(RoleRules.Verify(RoleRules.SpecFor(member.seatRole, ContractorService.Experience(a)), PawnRoleReader.Snapshot(pawn)).holds,
-                    "seat " + member.slot + ": returned Pawn satisfies " + member.seatRole + " without social-history modification");
+                placementValid &= v.Check(pawn != null && pawn.Spawned && pawn.Map == map && pawn.Faction == shared, "seat " + member.slot + ": same shared faction and successful placement on owned map");
+                placementValid &= v.Check(pawn != null && port.Registry.Reserves(pawn), "seat " + member.slot + ": protected before and during placement");
+                placementValid &= v.Check(known == null || known.opRole == member.seatRole, "seat " + member.slot + ": persisted operational role matches mission role");
+                if (baseline.retained)
+                {
+                    GroupRetainedFacts facts = new GroupRetainedFacts(member.IsNamed, member.character == baseline.character && ReferenceEquals(known, baseline.known),
+                        ReferenceEquals(pawn, baseline.pawn), ReferenceEquals(known?.pawn, baseline.knownBinding)
+                            && known?.pawn?.thingIdNumber == baseline.thingId && member.pawn?.thingIdNumber == baseline.thingId,
+                        member.seatRole == baseline.role && known?.opRole == baseline.role, pawn != null && port.Registry.Reserves(pawn)
+                            && port.Registry.CharacterOf(pawn) == baseline.character,
+                        expectedProjections, SkillsUncorrected(baseline.skills, pawn), HistoryPreserved(baseline, pawn));
+                    placementValid &= v.Check(GroupQaRules.RetainedPlacementHolds(facts), "seat " + member.slot
+                        + ": retained CharacterId, same Pawn/binding and durable " + member.seatRole + "; no replacement, skill correction or social-history sanitation");
+                }
+                else
+                {
+                    placementValid &= v.Check(pawn != null && GroupQaRules.CreationPlacementHolds(baseline.creationSpec, PawnRoleReader.Snapshot(pawn)),
+                        "seat " + member.slot + ": first candidate satisfies its captured creation spec " + baseline.creationSpec.Describe());
+                    baseline.pawn = pawn;
+                    baseline.thingId = pawn?.thingIDNumber ?? 0;
+                    baseline.knownBinding = known?.pawn;
+                }
                 if (!member.IsNamed) v.Check(synthetic ? member.playerVisibleTick >= 0 : member.playerVisibleTick == -1,
                     "seat " + member.slot + ": " + (synthetic ? "synthetic visible placement is latched" : "ordinary dev-map presence is not invented as P0"));
                 if (!member.IsNamed) v.Check(port.Registry.IsTemporaryReserved(pawn), "anonymous seat " + member.slot + ": Episode temporary reservation, no dummy person");
             }
             p = groupPawns.Count > 0 ? groupPawns[0] : null;
-            v.Check(ctx.characters.characters.Count == charactersBefore, "Plan and placement create zero KnownCharacters; promotion waits for terminal commit");
-            v.Check(ContractorService.Headcount(a, ctx.characters) == humanBefore, "checkout conserves total living humans");
+            placementValid &= v.Check(ctx.characters.characters.Count == charactersBefore, "Plan and placement create zero KnownCharacters; promotion waits for terminal commit");
+            placementValid &= v.Check(ContractorService.Headcount(a, ctx.characters) == humanBefore, "checkout conserves total living humans");
             everyFrame = ObserveProtection;
-            return StepResult.Next;
+            return placementValid ? StepResult.Next : StepResult.Abort;
+        }
+
+        private static List<T> CopyReferences<T>(IList<T> values)
+        {
+            return values == null ? null : new List<T>(values);
+        }
+
+        private static bool ReferencesRemain<T>(IList<T> before, IList<T> after)
+        {
+            if (before == null) return after == null;
+            if (after == null) return false;
+            foreach (T value in before) if (!after.Contains(value)) return false;
+            return true;
+        }
+
+        private static bool SkillsUncorrected(RoleCandidate before, Pawn pawn)
+        {
+            if (before == null || pawn == null) return false;
+            RoleCandidate after = PawnRoleReader.Snapshot(pawn);
+            if (before.skills.Count != after.skills.Count) return false;
+            foreach (KeyValuePair<string, SkillFacts> skill in before.skills)
+            {
+                SkillFacts current = after.Skill(skill.Key);
+                if (current == null || current.levelBase != skill.Value.levelBase || current.passion != skill.Value.passion) return false;
+            }
+            return true;
+        }
+
+        // Compare concrete history immediately across Materialize only. Normal dwell ticks may add memories, social history and skill XP.
+        private static bool HistoryPreserved(PlacementBaseline before, Pawn pawn)
+        {
+            return pawn != null && ReferenceEquals(before.relationTracker, pawn.relations) && ReferenceEquals(before.recordTracker, pawn.records)
+                && ReferenceEquals(before.memoryTracker, pawn.needs?.mood?.thoughts?.memories)
+                && ReferencesRemain(before.relations, pawn.relations?.DirectRelations)
+                && ReferencesRemain(before.memories, pawn.needs?.mood?.thoughts?.memories?.Memories)
+                && ReferencesRemain(before.traits, pawn.story?.traits?.allTraits);
         }
 
         protected void ObserveProtection()
         {
-            if (e == null) return;
-            for (int i = 0; i < e.members.Count && i < groupPawns.Count; i++)
+            for (int i = 0; e?.members != null && i < e.members.Count && i < groupPawns.Count; i++)
             {
                 Pawn pawn = groupPawns[i];
                 if (pawn == null || pawn.Dead || pawn.Discarded) continue;
                 if (!e.releaseApplied && !port.Registry.Reserves(pawn)) reservationGaps++;
                 if (!e.releaseApplied && IsActualFree(pawn)) freeFrames++;
+            }
+            if (dwellActive && !dwellInvalid && GroupQaRules.EvaluateDwell(dwellStartTick, PhysLog.Tick, ObserveDwell()) == GroupDwellResult.Invalid)
+                FailDwell();
+        }
+
+        protected StepResult DwellGroup()
+        {
+            if (dwellStartTick < 0)
+            {
+                dwellStartTick = PhysLog.Tick;
+                dwellEpisode = e;
+                dwellMap = groupPawns.Count > 0 ? groupPawns[0]?.Map : null;
+                dwellFaction = e?.faction?.Resolve();
+                dwellLord = groupPawns.Count > 0 ? groupPawns[0]?.GetLord() : null;
+                dwellCharacters = ctx.characters.characters.Count;
+                dwellProjections = port.counters.projections;
+                dwellCreated = lc.counters.created;
+                dwellActive = true;
+                v.Note("LIVE DWELL: wait " + GroupQaRules.MaterializationDwellTicks + " ordinary game ticks on the owned TestSite; normal vanilla movement/jobs/social behavior continues.");
+            }
+            if (dwellInvalid) return StepResult.Abort;
+            GroupDwellResult result = GroupQaRules.EvaluateDwell(dwellStartTick, PhysLog.Tick, ObserveDwell());
+            if (result == GroupDwellResult.Invalid) { FailDwell(); return StepResult.Abort; }
+            if (result == GroupDwellResult.Wait) return StepResult.Wait;
+            dwellActive = false;
+            v.Check(true, "live group remained owned, on-map, under the same shared vanilla Lord and continuously reserved for "
+                + (PhysLog.Tick - dwellStartTick) + " game ticks; zero replacement projections or new identities");
+            return StepResult.Next;
+        }
+
+        private GroupDwellFacts ObserveDwell()
+        {
+            bool exact = e?.members != null && e.members.Count == placement.Count && placement.Count == groupPawns.Count && placement.Count > 0;
+            bool bindings = exact, roles = exact, healthy = exact, map = dwellMap != null && TestSite.IsTestMap(dwellMap), faction = dwellFaction != null;
+            bool lord = dwellLord?.LordJob is LordJob_VisitColony && dwellLord.Map == dwellMap && dwellLord.faction == dwellFaction
+                && dwellLord.ownedPawns.Count == placement.Count;
+            bool reserved = exact, notFree = exact;
+            for (int i = 0; i < placement.Count; i++)
+            {
+                PlacementBaseline baseline = placement[i];
+                EpisodeMember member = baseline.member;
+                Pawn pawn = baseline.pawn;
+                KnownCharacter known = baseline.character.IsValid ? ctx.characters.Get(baseline.character) : null;
+                exact &= e?.members != null && e.members.Contains(member) && member.slot == i && member.character == baseline.character;
+                bindings &= pawn != null && i < groupPawns.Count && ReferenceEquals(groupPawns[i], pawn) && ReferenceEquals(member.pawn?.pawn, pawn)
+                    && member.pawn?.thingIdNumber == baseline.thingId && pawn.thingIDNumber == baseline.thingId
+                    && (!baseline.character.IsValid || ReferenceEquals(known, baseline.known) && ReferenceEquals(known?.pawn, baseline.knownBinding)
+                        && ReferenceEquals(known?.pawn?.pawn, pawn) && known?.pawn?.thingIdNumber == baseline.thingId
+                        && e != null && known.episode == e.id && known.custody == CustodyState.Deployed && !AuthorityGate.CanSimulateAbstractly(known));
+                roles &= member.seatRole == baseline.role && (!baseline.character.IsValid || known?.opRole == baseline.role);
+                healthy &= pawn != null && !pawn.Destroyed && !pawn.Discarded && !pawn.Dead && pawn.Spawned
+                    && member.state == MemberState.Present && member.outcome == MemberOutcome.Pending;
+                map &= pawn != null && pawn.Map == dwellMap && e?.whereMapId == dwellMap?.uniqueID;
+                faction &= pawn != null && pawn.Faction == dwellFaction && pawn.HostFaction == null && !pawn.IsPrisoner && !pawn.IsSlave;
+                lord &= pawn != null && dwellLord != null && ReferenceEquals(pawn.GetLord(), dwellLord) && dwellLord.ownedPawns.Contains(pawn);
+                reserved &= pawn != null && port.Registry.Reserves(pawn) && (member.IsNamed ? port.Registry.CharacterOf(pawn) == member.character
+                    : port.Registry.IsTemporaryReserved(pawn) && !port.Registry.CharacterOf(pawn).IsValid);
+                notFree &= pawn != null && !IsActualFree(pawn);
+            }
+            return new GroupDwellFacts(e != null && ReferenceEquals(e, dwellEpisode) && PhysicalTestSession.IsActiveOwnedEpisode(e)
+                    && ReferenceEquals(ctx.episodes.Get(e.id), e), e != null && e.state == EpisodeState.Open && !e.releaseApplied && !e.consequencesApplied,
+                exact, bindings, roles, healthy, map, faction, lord, reserved, notFree, ctx.characters.characters.Count == dwellCharacters,
+                port.counters.projections == dwellProjections && lc.counters.created == dwellCreated, freeFrames == 0 && reservationGaps == 0);
+        }
+
+        private void FailDwell()
+        {
+            dwellInvalid = true;
+            dwellActive = false;
+            v.Fail("live materialization dwell lost required ownership/continuity/protection at elapsed tick " + (PhysLog.Tick - dwellStartTick)
+                + "; Episode " + e?.id + " state " + e?.state + ", releaseApplied " + e?.releaseApplied + ", active owned " + PhysicalTestSession.IsActiveOwnedEpisode(e)
+                + ", identities " + ctx.characters.characters.Count + "/" + dwellCharacters + ", projections " + port.counters.projections + "/" + dwellProjections
+                + ", Free frames " + freeFrames + ", reservation gaps " + reservationGaps + ". No Pawn was repaired; everything is preserved.");
+            GroupDwellFacts facts = ObserveDwell();
+            v.Note("DWELL invariants: owned Episode " + facts.ownedEpisode + ", active/unreleased " + facts.activeEpisode + ", exact members " + facts.exactMembers
+                + ", same bindings " + facts.sameBindings + ", same roles " + facts.sameRoles + ", healthy/spawned " + facts.healthySpawned
+                + ", expected map " + facts.expectedMap + ", encounter faction " + facts.expectedFaction + ", exact shared Lord " + facts.sharedLord
+                + ", reserved " + facts.reserved + ", not Free " + facts.notFree + ", unchanged identities " + facts.unchangedIdentities
+                + ", unchanged projections " + facts.unchangedProjections + ", protection unbroken " + facts.protectionUnbroken);
+            foreach (PlacementBaseline baseline in placement)
+            {
+                EpisodeMember member = baseline.member;
+                Pawn pawn = member.pawn?.pawn;
+                KnownCharacter known = member.IsNamed ? ctx.characters.Get(member.character) : null;
+                v.Note("DWELL seat " + member.slot + ", CharacterId " + member.character + ", ThingID " + pawn?.thingIDNumber + "/expected " + baseline.thingId
+                    + ", role " + member.seatRole + "/expected " + baseline.role + ", known role " + known?.opRole + ", same Pawn " + ReferenceEquals(pawn, baseline.pawn)
+                    + ", binding " + member.pawn?.thingIdNumber + ", spawned " + pawn?.Spawned + ", destroyed " + pawn?.Destroyed + ", discarded " + pawn?.Discarded + ", dead " + pawn?.Dead
+                    + ", map " + pawn?.Map?.uniqueID + "/expected " + dwellMap?.uniqueID + ", faction " + pawn?.Faction?.loadID + "/expected " + dwellFaction?.loadID
+                    + ", HostFaction " + pawn?.HostFaction?.loadID + ", prisoner " + pawn?.IsPrisoner + ", slave " + pawn?.IsSlave
+                    + ", reserved " + (pawn != null && port.Registry.Reserves(pawn)) + ", temporary " + (pawn != null && port.Registry.IsTemporaryReserved(pawn))
+                    + ", Free " + (pawn != null && IsActualFree(pawn)) + ", same Lord " + (pawn != null && ReferenceEquals(pawn.GetLord(), dwellLord))
+                    + ", Episode " + e?.state + ", releaseApplied " + e?.releaseApplied + ", elapsed " + (PhysLog.Tick - dwellStartTick));
             }
         }
 
@@ -222,6 +425,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             Then("create the owned five-person crew", () => CreateFixture(5, false));
             Then("place Leader, Medic and Rifleman with explicitly synthetic P0", () => PlaceGroup(GroupFixtures.SmallVisit(false), true));
             Then("the small crew's anonymous seats are P0 eligible", () => { foreach (EpisodeMember m in e.members) if (!m.IsNamed) v.Check(m.p0Eligible, "seat " + m.slot + ": small-crew P0 eligibility latched"); return StepResult.Next; });
+            Then("observe the live materialized crew for 240 ordinary game ticks", DwellGroup);
             Then("return every visitor through vanilla ExitMap", () => ExitPeers());
             Then("wait for whole-Episode reconciliation", WaitGroup, 20000);
             Then("check two new people, same Pawns and conserved humans", () => { CheckGroupReturn(2); return StepResult.Next; });
@@ -266,6 +470,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 v.Note("R-50 remains OPEN; this short ordinary return does not validate long-held aging or rescue.");
                 return StepResult.Next;
             });
+            Then("observe retained and new seats for 240 ordinary game ticks", DwellGroup);
             Then("return the crew through vanilla ExitMap", () => ExitPeers());
             Then("wait for terminal reconciliation", WaitGroup, 20000);
             Then("complete the five-person known crew without extra humans", () => { CheckGroupReturn(2); v.Check(org.knownMembers.Count == 5 && org.Healthy + org.Wounded + org.Committed == 0, "five real known people, zero abstract copies"); return StepResult.Next; });

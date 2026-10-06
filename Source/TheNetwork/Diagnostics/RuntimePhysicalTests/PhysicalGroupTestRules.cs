@@ -4,9 +4,72 @@ using TheNetwork.Domain.Physical;
 
 namespace TheNetwork.Diagnostics.RuntimePhysicalTests
 {
+    public enum GroupDwellResult { Wait, Complete, Invalid }
+
+    /// <summary>Read-only live observations; no Pawn or vanilla tick behavior is simulated by this policy.</summary>
+    public sealed class GroupDwellFacts
+    {
+        public readonly bool ownedEpisode, activeEpisode, exactMembers, sameBindings, sameRoles, healthySpawned,
+            expectedMap, expectedFaction, sharedLord, reserved, notFree, unchangedIdentities, unchangedProjections, protectionUnbroken;
+
+        public GroupDwellFacts(bool ownedEpisode, bool activeEpisode, bool exactMembers, bool sameBindings, bool sameRoles,
+            bool healthySpawned, bool expectedMap, bool expectedFaction, bool sharedLord, bool reserved, bool notFree,
+            bool unchangedIdentities, bool unchangedProjections, bool protectionUnbroken)
+        {
+            this.ownedEpisode = ownedEpisode; this.activeEpisode = activeEpisode; this.exactMembers = exactMembers;
+            this.sameBindings = sameBindings; this.sameRoles = sameRoles; this.healthySpawned = healthySpawned;
+            this.expectedMap = expectedMap; this.expectedFaction = expectedFaction; this.sharedLord = sharedLord;
+            this.reserved = reserved; this.notFree = notFree; this.unchangedIdentities = unchangedIdentities;
+            this.unchangedProjections = unchangedProjections; this.protectionUnbroken = protectionUnbroken;
+        }
+    }
+
+    /// <summary>Continuity of an already-real person. Current capability and creation RoleSpec are deliberately absent.</summary>
+    public sealed class GroupRetainedFacts
+    {
+        public readonly bool named, sameCharacter, samePawn, sameBinding, sameRole, reserved, noReprojection, skillsUncorrected, historyPreserved;
+
+        public GroupRetainedFacts(bool named, bool sameCharacter, bool samePawn, bool sameBinding, bool sameRole,
+            bool reserved, bool noReprojection, bool skillsUncorrected, bool historyPreserved)
+        {
+            this.named = named; this.sameCharacter = sameCharacter; this.samePawn = samePawn; this.sameBinding = sameBinding;
+            this.sameRole = sameRole; this.reserved = reserved; this.noReprojection = noReprojection;
+            this.skillsUncorrected = skillsUncorrected; this.historyPreserved = historyPreserved;
+        }
+    }
+
     /// <summary>Pure runtime-QA ownership and selection rules. Reads existing Episode truth; creates no identity or persisted QA state.</summary>
     public static class GroupQaRules
     {
+        public const int MaterializationDwellTicks = 240;
+
+        /// <summary>A named but never-bound origin pin is still a new candidate, not a retained Pawn.</summary>
+        public static bool HasRetainedPawn(int characterId, int boundThingId, int resolvedThingId)
+        {
+            return characterId > 0 && boundThingId > 0 && boundThingId == resolvedThingId;
+        }
+
+        public static bool CreationPlacementHolds(RoleSpec creationSpec, RoleCandidate candidate)
+        {
+            return creationSpec != null && candidate != null && RoleRules.Verify(creationSpec, candidate).holds;
+        }
+
+        public static bool RetainedPlacementHolds(GroupRetainedFacts facts)
+        {
+            return facts != null && facts.named && facts.sameCharacter && facts.samePawn && facts.sameBinding && facts.sameRole
+                && facts.reserved && facts.noReprojection && facts.skillsUncorrected && facts.historyPreserved;
+        }
+
+        /// <summary>Waiting consumes ordinary game ticks. Invalid evidence wins even at the completion boundary.</summary>
+        public static GroupDwellResult EvaluateDwell(int startTick, int nowTick, GroupDwellFacts facts)
+        {
+            if (startTick < 0 || nowTick < startTick || facts == null || !facts.ownedEpisode || !facts.activeEpisode
+                || !facts.exactMembers || !facts.sameBindings || !facts.sameRoles || !facts.healthySpawned || !facts.expectedMap
+                || !facts.expectedFaction || !facts.sharedLord || !facts.reserved || !facts.notFree || !facts.unchangedIdentities
+                || !facts.unchangedProjections || !facts.protectionUnbroken) return GroupDwellResult.Invalid;
+            return (long)nowTick - startTick >= MaterializationDwellTicks ? GroupDwellResult.Complete : GroupDwellResult.Wait;
+        }
+
         public static bool OwnedByRun(PhysicalEpisode episode, string runId, string scenarioId)
         {
             return episode?.cause != null && !string.IsNullOrEmpty(runId) && !string.IsNullOrEmpty(scenarioId)

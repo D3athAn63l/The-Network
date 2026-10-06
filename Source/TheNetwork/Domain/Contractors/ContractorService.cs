@@ -567,6 +567,11 @@ namespace TheNetwork.Domain.Contractors
                 total += org.tiers[i].healthy + org.tiers[i].wounded;
                 if (org.tiers[i].tier == Tier.Veteran) vets += org.tiers[i].healthy + org.tiers[i].wounded;
             }
+            for (int i = 0; i < org.committed.Count; i++)
+            {
+                total += org.committed[i].healthy;
+                if (org.committed[i].tier == Tier.Veteran) vets += org.committed[i].healthy;
+            }
             return total == 0 ? 0.5f : vets / (float)total;
         }
 
