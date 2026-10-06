@@ -132,7 +132,7 @@ namespace TheNetwork.Domain.Contractors
             }
 
             // 2. Morale drifts toward a baseline lowered by recent losses.
-            int headcount = ContractorService.Headcount(a);
+            int headcount = ContractorService.Headcount(a, ctx.characters);
             ActorRecordSummary summary = ctx.summaries?.Get(a.id);
             float recentLosses = summary == null ? 0f : Math.Min(1f, summary.Recent("casualties.taken", now) / headcount);
             MoraleModel.Drift(sim, days, sim.commitments.Count > 0, recentLosses);
@@ -152,7 +152,7 @@ namespace TheNetwork.Domain.Contractors
             // 4. Recruitment (organizations below capacity with the funds to pay for it).
             if (org != null)
             {
-                int total = org.Healthy + org.Wounded + org.Committed + org.knownMembers.Count;
+                int total = org.Healthy + org.Wounded + org.Committed + ContractorService.CurrentNamedCount(a, ctx.characters);
                 bool due = org.recruitment.lastRecruitTick < 0 || now - org.recruitment.lastRecruitTick >= 3 * Ticks.PerDay;
                 if (total < org.capacity && sim.funds > 250 && due)
                 {

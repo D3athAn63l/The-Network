@@ -237,7 +237,7 @@ namespace TheNetwork.Domain.Contractors
                 notability = ContractorService.Clamp(0.3f, 0.05f, 1f)
             };
             characters.Add(next);
-            if (org.knownMembers.Count < OrganizationProfile.MaxKnownMembers) org.knownMembers.Add(next.id);
+            org.knownMembers.Add(next.id);
             return next;
         }
 
@@ -254,7 +254,7 @@ namespace TheNetwork.Domain.Contractors
         {
             KnownCharacter old = characters.Get(plan.oldLeader);
             org.lieutenants.Remove(next.id);
-            if (!org.knownMembers.Contains(next.id) && org.knownMembers.Count < OrganizationProfile.MaxKnownMembers) org.knownMembers.Add(next.id);
+            if (!org.knownMembers.Contains(next.id)) org.knownMembers.Add(next.id);
             next.role = CharacterRole.Leader;
             next.notability = ContractorService.Clamp(next.notability + 0.1f, 0f, 1f);
             if (old != null && old.IsAlive) old.role = CharacterRole.Member;

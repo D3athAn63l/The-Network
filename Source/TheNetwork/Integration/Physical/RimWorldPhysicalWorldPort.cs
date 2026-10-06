@@ -38,6 +38,13 @@ namespace TheNetwork.Integration.Physical
         public int factionsCreated;
         public int factionReleases;
         public int leftMapSeen;
+        public int promotionFactReads;
+        public int evidenceBattles;
+        public int evidenceEntries;
+        public int evidenceRelations;
+        public int evidenceFailures;
+        public int evidenceTruncations;
+        public int episodeCacheDrops;
 
         public override string ToString()
         {
@@ -46,7 +53,9 @@ namespace TheNetwork.Integration.Physical
                 + ", catch-ups " + catchUps + " (" + agedTicks + " ticks), placements " + placements + " (refused " + placeRefusals + ")"
                 + ", normalized injuries " + normalizedInjuries + ", retention proofs " + retentionProofs + " (refused " + retentionRefusals + ")"
                 + ", passes " + passes + ", observations " + observations + " (" + (observations > 0 ? (observeMsTotal * 1000.0 / observations).ToString("0") : "0") + " µs avg)"
-                + ", factions " + factionsCreated + " (released " + factionReleases + "), LeftMap seen " + leftMapSeen;
+                + ", factions " + factionsCreated + " (released " + factionReleases + "), LeftMap seen " + leftMapSeen
+                + ", promotion facts " + promotionFactReads + " (evidence battles " + evidenceBattles + ", entries " + evidenceEntries + ", relations " + evidenceRelations
+                + ", failed reads " + evidenceFailures + ", truncated reads " + evidenceTruncations + "), released Episode cache entries " + episodeCacheDrops;
         }
     }
 
@@ -67,7 +76,7 @@ namespace TheNetwork.Integration.Physical
     ///
     /// The only production caller that can make it create or place anything is the session-armed physical test tier (a dev trigger).
     /// </summary>
-    public sealed class RimWorldPhysicalWorldPort : IPhysicalWorldPort, IGroupPhysicalWorldPort
+    public sealed class RimWorldPhysicalWorldPort : IPhysicalWorldPort, IGroupPhysicalWorldPort, IPhysicalPromotionPort
     {
         /// <summary>How long a 3.1 dev visit stays at its chill spot before vanilla's own exit transition (≈ 3 in-game hours).</summary>
         public const int VisitDurationTicks = 7500;
@@ -84,6 +93,9 @@ namespace TheNetwork.Integration.Physical
 
         /// <summary>The last first projection (Episode Monitor, RT-PHYX-011).</summary>
         public ProjectionResult lastProjection;
+
+        /// <summary>The last bounded optional evidence query (runtime only, for the existing diagnostics/test consumers).</summary>
+        public ConcretizationEvidenceScan lastEvidenceScan;
 
         /// <summary>
         /// RUNTIME ONLY, never saved: the physical test tier shortens a test visit (the same vanilla Lord, a shorter stay) while one of its
@@ -189,10 +201,20 @@ namespace TheNetwork.Integration.Physical
                 if (c?.pawn == null || !ReferenceEquals(c.pawn.pawn, p) || c.pawn.thingIdNumber != p.thingIDNumber)
                     throw new InvalidOperationException("the named person and Episode do not share the same durable pawn binding");
                 Registry.Note(p, member.character);
+                if (c.IsAlive) PhysicalTags.Add(p, PhysicalTags.Character(c.id));
             }
             Registry.NoteEpisode(p, episode.id, member.slot);
             if (!p.Dead && !Registry.Reserves(p))
                 throw new InvalidOperationException("durable binding is not covered by existing registry");
+        }
+
+        /// <summary>The release marker, not a physical observation, ends temporary ownership. Drop only derived runtime caches.</summary>
+        public void EpisodeReleased(PhysicalEpisode episode)
+        {
+            List<Pawn> forgotten = Registry.ForgetReleasedEpisode(episode);
+            counters.episodeCacheDrops += forgotten.Count;
+            for (int i = 0; i < forgotten.Count; i++)
+                if (!Registry.CharacterOf(forgotten[i]).IsValid) leftMap.Remove(forgotten[i]);
         }
 
         public bool Resolves(PawnRef pawn)
@@ -506,6 +528,50 @@ namespace TheNetwork.Integration.Physical
             counters.observations++;
             counters.observeMsTotal += sw.Elapsed.TotalMilliseconds;
             return o;
+        }
+
+        /// <summary>Terminal reconciliation only: capture this exact bound Pawn's existing name before any optional bounded history read.</summary>
+        public PhysicalPromotionFacts ReadPromotionFacts(PhysicalEpisode episode, EpisodeMember member)
+        {
+            if (episode == null || member == null || !ReferenceEquals(ctx.episodes?.Get(episode.id), episode)
+                || episode.members == null || !episode.members.Contains(member)) return null;
+            Pawn p = member.pawn?.pawn;
+            if (p == null || member.pawn.thingIdNumber <= 0 || member.pawn.thingIdNumber != p.thingIDNumber) return null;
+            PhysicalPromotionFacts facts = new PhysicalPromotionFacts { name = ExistingPawnName(p) };
+            counters.promotionFactReads++;
+            // Missing/pruned/unreadable optional logs cannot erase the name or suppress mandatory S1 / latched P0.
+            try
+            {
+                ConcretizationEvidenceScan scan = ConcretizationEvidenceCollector.Scan(p, episode.createdTick, ctx.Now);
+                lastEvidenceScan = scan;
+                if (scan != null)
+                {
+                    facts.evidence = scan.evidence;
+                    counters.evidenceBattles += scan.battlesExamined;
+                    counters.evidenceEntries += scan.entriesExamined;
+                    counters.evidenceRelations += scan.relationRecordsExamined;
+                    if (scan.collectionFailed) counters.evidenceFailures++;
+                    if (scan.truncatedBattles || scan.truncatedEntries || scan.truncatedRelations) counters.evidenceTruncations++;
+                }
+            }
+            catch (Exception)
+            {
+                lastEvidenceScan = new ConcretizationEvidenceScan { collectionFailed = true };
+                counters.evidenceFailures++;
+            }
+            return facts;
+        }
+
+        private static NameSnapshot ExistingPawnName(Pawn p)
+        {
+            Name actual = p?.Name;
+            string full = actual?.ToStringFull;
+            if (string.IsNullOrWhiteSpace(full)) return null;
+            NameTriple triple = actual as NameTriple;
+            if (triple != null) return new NameSnapshot { first = triple.First, nick = triple.Nick, last = triple.Last, display = full };
+            // A single name is a display fact, not a string to split or translate into a made-up first/nick/last identity.
+            if (actual is NameSingle) return new NameSnapshot { display = full };
+            return null;
         }
 
         /// <summary>SignalBridge: a bound pawn's synchronous LeftMap (runtime only; the tick it stopped ticking, for truthful aging).</summary>

@@ -105,6 +105,30 @@ namespace TheNetwork.Integration.Physical
         public int EpisodeIndexCount => episodeIndex.Count;
 
         /// <summary>
+        /// RELEASE COMPLETE cleanup only: forget derived Episode cache entries after its durable release marker is true. Named retention is
+        /// independent and untouched. The transient returned keys let the adapter drop its anonymous exit-tick cache too; no Pawn roster is saved.
+        /// </summary>
+        public List<Pawn> ForgetReleasedEpisode(PhysicalEpisode episode)
+        {
+            List<Pawn> forgotten = new List<Pawn>();
+            if (episode == null || !episode.id.IsValid || !episode.releaseApplied) return forgotten;
+            foreach (KeyValuePair<Pawn, EpisodeReservation> pair in episodeIndex)
+            {
+                PhysicalEpisode owner = pair.Value?.episode;
+                if (owner != null && (ReferenceEquals(owner, episode) || owner.id == episode.id)) forgotten.Add(pair.Key);
+            }
+            for (int i = 0; i < forgotten.Count; i++) episodeIndex.Remove(forgotten[i]);
+            List<int> thingIds = new List<int>();
+            foreach (KeyValuePair<int, EpisodeReservation> pair in episodeByThing)
+            {
+                PhysicalEpisode owner = pair.Value?.episode;
+                if (owner != null && (ReferenceEquals(owner, episode) || owner.id == episode.id)) thingIds.Add(pair.Key);
+            }
+            for (int i = 0; i < thingIds.Count; i++) episodeByThing.Remove(thingIds[i]);
+            return forgotten;
+        }
+
+        /// <summary>
         /// Durable eligibility only: a bound slot remains owned until RELEASE completes, including quarantine and interrupted release.
         /// No map/world inference and no pointer read: this rule is usable before the load resolves PawnRefs. Positive death releases the
         /// need for living-Pawn reservation; corpse ownership stays vanilla. Named slots may overlap while the post-commit handoff finishes.

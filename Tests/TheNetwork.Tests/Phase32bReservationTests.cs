@@ -25,6 +25,8 @@ namespace TheNetwork.Tests
             tests.Add(new KeyValuePair<string, Action>("GroupReserve.BadBindingsReportWithoutRepair", BadBindings));
             tests.Add(new KeyValuePair<string, Action>("GroupReserve.PromotionHandsOffSamePawnWithoutGap", Promotion));
             tests.Add(new KeyValuePair<string, Action>("GroupReserve.PromotionRollbackKeepsEpisodeProtection", Rollback));
+            tests.Add(new KeyValuePair<string, Action>("GroupReserve.CompletedReleaseForgetsOnlyDerivedEpisodeCaches", CacheCleanup));
+            tests.Add(new KeyValuePair<string, Action>("GroupReserve.ActualPromotionCallbackKeepsCharacterSignalRoute", PromotionRoute));
             tests.Add(new KeyValuePair<string, Action>("GroupReserve.RemovalInertAndRebuild", Removal));
             tests.Add(new KeyValuePair<string, Action>("GroupReserve.RealScribeBridgeBeforeCrossReferences", ScribeBridge));
             tests.Add(new KeyValuePair<string, Action>("GroupReserve.SourceOneM1AndNoWorldScanOrDummyPerson", Source));
@@ -219,6 +221,86 @@ namespace TheNetwork.Tests
             T.Eq(CharacterId.None, r.CharacterOf(p), "rolled-back named index cannot claim a deleted identity");
             T.Eq(1, r.RetainedCount(), "rollback keeps exactly one protected Pawn");
             T.Check(ReferenceEquals(p, e.members[0].pawn.pawn), "rollback never touches engine identity");
+        }
+
+        private static void CacheCleanup()
+        {
+            TestNet n = new TestNet(9940);
+            Pawn named = Pawn(33001), ordinary = Pawn(33002), peer = Pawn(33003);
+            ordinary.health = Shell<Pawn_HealthTracker>();
+            FieldInfo healthState = typeof(Pawn_HealthTracker).GetField("healthState", BindingFlags.Instance | BindingFlags.NonPublic);
+            healthState.SetValue(ordinary.health, Enum.Parse(healthState.FieldType, "Mobile"));
+            PhysicalEpisode e = Episode(n, named, ordinary), other = Episode(n, peer);
+            RetainedPawnRegistry r = new RetainedPawnRegistry(n.ctx);
+            r.Rebuild();
+            KnownCharacter c = Promote(n, e);
+            c.name = NameSnapshot.Person("Existing", "Nick", "Identity");
+            r.Note(named, c.id);
+            CharacterId id = c.id;
+            PawnRef personBinding = c.pawn;
+            string name = c.name.Display;
+            System.Collections.IDictionary bridge = (System.Collections.IDictionary)typeof(RetainedPawnRegistry)
+                .GetField("episodeByThing", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(r);
+
+            e.state = EpisodeState.Closed;
+            e.consequencesApplied = true;
+            e.members[1].outcome = MemberOutcome.Returned;
+            T.Eq(0, r.ForgetReleasedEpisode(e).Count, "release pending cannot drop a derived reservation cache");
+            T.Eq(3, r.EpisodeIndexCount, "both releasing slots and the other active Episode remain indexed");
+            T.Check(r.Reserves(ordinary) && r.Reserves(named) && r.Reserves(peer), "release pending retains every living required Pawn");
+            T.Check(bridge.Contains(ordinary.thingIDNumber), "early-load bridge entry exists until RELEASE completes");
+
+            e.releaseApplied = true;
+            e.members[1].pawn = null; // lifecycle clears ordinary slot bindings after its durable RELEASE transition
+            List<Pawn> forgotten = r.ForgetReleasedEpisode(e);
+            T.Eq(2, forgotten.Count, "the completed Episode's old cached keys can be found after its ordinary binding is cleared");
+            T.Check(forgotten.Contains(named) && forgotten.Contains(ordinary) && !forgotten.Contains(peer), "only this Episode's derived keys are forgotten");
+            T.Eq(1, r.EpisodeIndexCount, "other active Episode index remains intact");
+            T.Check(!bridge.Contains(ordinary.thingIDNumber) && !bridge.Contains(named.thingIDNumber) && bridge.Contains(peer.thingIDNumber), "thing-id cache drops only completed Episode entries");
+            T.Check(!r.Reserves(ordinary) && r.Reserves(named) && r.Reserves(peer), "ordinary Pawn is free while promoted identity and active peer remain protected");
+            T.Eq(0, r.ForgetReleasedEpisode(e).Count, "cleanup is idempotent");
+            r.pointersResolved = false;
+            T.Check(!r.Reserves(ordinary) && r.Reserves(named) && r.Reserves(peer), "early bridge cannot resurrect ordinary ownership and still covers named/active bindings");
+            r.pointersResolved = true;
+            other.releaseApplied = true;
+            other.members[0].pawn = null;
+            T.Eq(1, r.ForgetReleasedEpisode(other).Count, "the other Episode can later release its own key");
+            T.Eq(0, r.EpisodeIndexCount, "all completed temporary pointer entries are gone");
+            T.Eq(0, bridge.Count, "all completed temporary thing-id entries are gone");
+            T.Eq(1, r.IndexCount, "named identity index is untouched");
+            T.Check(r.Reserves(named) && r.CharacterOf(named) == id, "promoted named M1 survives cleanup");
+            T.Check(n.ctx.characters.Count == 1 && c.id == id && c.name.Display == name && ReferenceEquals(c.pawn, personBinding)
+                && ReferenceEquals(c.pawn.pawn, named) && c.opRole == OperationalRole.Rifleman, "cleanup creates or changes no person identity, name, role or lifetime Pawn binding");
+            T.Check(!ordinary.Discarded && !ordinary.Dead && e.members[1].pawn == null, "cleanup does not destroy a Pawn or restore its cleared ordinary binding");
+        }
+
+        private static void PromotionRoute()
+        {
+            TestNet n = new TestNet(9941);
+            Pawn p = Pawn(33101);
+            p.health = Shell<Pawn_HealthTracker>();
+            FieldInfo healthState = typeof(Pawn_HealthTracker).GetField("healthState", BindingFlags.Instance | BindingFlags.NonPublic);
+            healthState.SetValue(p.health, Enum.Parse(healthState.FieldType, "Mobile"));
+            p.Name = new NameTriple("Actual", "Nickname", "Person");
+            PhysicalEpisode e = Episode(n, p);
+            PhysicalTags.Add(p, PhysicalTags.Episode(e.id));
+            PhysicalTags.Add(p, "Vanilla.Existing.Route");
+            KnownCharacter c = Promote(n, e);
+            PawnRef binding = c.pawn;
+            string actualName = p.Name.ToStringFull;
+            RimWorldPhysicalWorldPort port = new RimWorldPhysicalWorldPort(n.ctx);
+
+            T.Check(!PhysicalTags.Has(p, PhysicalTags.Character(c.id)), "the anonymous placement initially had only its Episode route");
+            port.EpisodeBindingChanged(e, e.members[0]);
+            port.EpisodeBindingChanged(e, e.members[0]);
+            T.Check(PhysicalTags.Has(p, PhysicalTags.Character(c.id)), "the actual promotion callback installs the living person's custody signal route");
+            T.Eq(1, p.questTags.FindAll(t => t == PhysicalTags.Character(c.id)).Count, "retry is idempotent, with one Character routing tag");
+            T.Check(port.Registry.Reserves(p) && port.Registry.CharacterOf(p) == c.id, "named M1 and exact identity remain covered during the routing handoff");
+            port.StripEpisodeTag(e.members[0].pawn, e.id);
+            T.Check(!PhysicalTags.Has(p, PhysicalTags.Episode(e.id)) && PhysicalTags.Has(p, PhysicalTags.Character(c.id)), "RELEASE strips the Episode route while the held person's later signals retain their Character route");
+            T.Check(PhysicalTags.Has(p, "Vanilla.Existing.Route"), "vanilla routing tags are preserved");
+            T.Check(ReferenceEquals(binding, c.pawn) && ReferenceEquals(c.pawn.pawn, p) && p.Name.ToStringFull == actualName
+                && c.custody == CustodyState.OutOfCustody && n.ctx.characters.Count == 1, "routing changes no actual name, identity, custody or lifetime Pawn binding");
         }
 
         private static void Removal()

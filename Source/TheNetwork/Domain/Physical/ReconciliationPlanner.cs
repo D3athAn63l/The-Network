@@ -84,6 +84,13 @@ namespace TheNetwork.Domain.Physical
         /// </summary>
         public static MemberOutcome Decide(PhysicalObservation o, bool named, out bool unsupported, out HeldKind heldBy, out bool captive)
         {
+            return Decide(o, named, false, out unsupported, out heldBy, out captive);
+        }
+
+        /// <summary>Structured group slots may reach a terminal held decision; identity still waits for the entire atomic batch.</summary>
+        public static MemberOutcome Decide(PhysicalObservation o, bool named, bool anonymousPromotionSupported,
+            out bool unsupported, out HeldKind heldBy, out bool captive)
+        {
             unsupported = false;
             heldBy = HeldKind.None;
             captive = false;
@@ -108,7 +115,7 @@ namespace TheNetwork.Domain.Physical
                     break;
             }
             if (!held) return MemberOutcome.Pending;
-            if (!named)
+            if (!named && !anonymousPromotionSupported)
             {
                 unsupported = true;
                 return MemberOutcome.Pending;
@@ -131,7 +138,12 @@ namespace TheNetwork.Domain.Physical
                 now = ctx.Now,
                 closeReasonKey = closeReasonKey
             };
-            p.decisions.AddRange(decisions);
+            for (int i = 0; i < decisions.Count; i++)
+            {
+                MemberDecision d = decisions[i];
+                p.decisions.Add(new MemberDecision { member = d.member, character = d.character, outcome = d.outcome,
+                    observation = d.observation, woundDays = d.woundDays, holder = d.holder, captive = d.captive, promotionFacts = d.promotionFacts });
+            }
             if (p.actor == null) return p; // VALIDATE refuses it (ActorMissing): nothing is planned against a missing actor
             p.org = p.actor.Get<OrganizationProfile>();
             p.sim = p.actor.Get<ContractorSimulation>();
@@ -147,17 +159,34 @@ namespace TheNetwork.Domain.Physical
             MemberDecision soloReturn = null;
             bool anyRelease = false;
 
-            for (int i = 0; i < decisions.Count; i++)
+            int discretionary = DiscretionaryBudget(ctx, p);
+            for (int i = 0; i < p.decisions.Count; i++)
             {
-                MemberDecision d = decisions[i];
+                MemberDecision d = p.decisions[i];
                 EpisodeMember m = d.member;
+                if (m != null && !m.IsNamed && CanPromoteSlot(m, d))
+                {
+                    bool strong = HasStrongEvidence(d);
+                    if (strong || (HasPresence(m, p.now) && discretionary > 0))
+                    {
+                        d.character = PrepareSlotCharacter(ctx, p, d);
+                        if (!strong) discretionary--;
+                        p.promotedCharacters.Add(d.character);
+                        p.Touch(d.character);
+                        p.addsRecord = true;
+                        CommitOp promote = p.Add(CommitOpKind.SlotPromotion);
+                        promote.member = m;
+                        promote.character = d.character;
+                        promote.tier = m.tier;
+                    }
+                }
                 CommitOp done = p.Add(CommitOpKind.MemberDone);
                 done.member = m;
                 done.outcome = d.outcome;
                 done.observed = d.observation != null ? d.observation.kind : ObservedKind.None;
-                if (ReleasePolicy.ActionsFor(m.IsBound, m.IsNamed, d.outcome).Length > 0) anyRelease = true;
+                if (ReleasePolicy.ActionsFor(m.IsBound, m.IsNamed || d.character != null, d.outcome).Length > 0) anyRelease = true;
 
-                if (m.IsNamed)
+                if (m.IsNamed || d.character != null)
                 {
                     KnownCharacter c = d.character;
                     p.Touch(c);
@@ -331,14 +360,76 @@ namespace TheNetwork.Domain.Physical
             if (!p.hasReleaseActions)
             {
                 // § 8.1 rule 5: nothing physical is left to release, so COMPLETE's assignments happen here.
-                for (int i = 0; i < decisions.Count; i++)
+                for (int i = 0; i < p.decisions.Count; i++)
                 {
-                    KnownCharacter c = decisions[i].character;
+                    KnownCharacter c = p.decisions[i].character;
                     if (c != null && c.episode == e.id) p.Add(CommitOpKind.CharacterUnlink).character = c;
                 }
             }
             if (p.sim != null) p.Add(CommitOpKind.SimDirty);
             return p;
+        }
+
+        private const ConcretizationEvidence StrongMask = ConcretizationEvidence.DeliberateIdentification
+            | ConcretizationEvidence.PlayerCombat | ConcretizationEvidence.PlayerRelation | ConcretizationEvidence.FormerColonist;
+
+        /// <summary>Material custody is independent of optional evidence; a caravan or transport by itself identifies nobody.</summary>
+        public static bool HasStrongEvidence(MemberDecision d)
+        {
+            if (d == null) return false;
+            if (d.promotionFacts != null && (d.promotionFacts.evidence & StrongMask) != ConcretizationEvidence.None) return true;
+            if (!CustodyRules.IsHeldOutcome(d.outcome)) return false;
+            if (d.captive || d.outcome == MemberOutcome.JoinedPlayer || d.outcome == MemberOutcome.Kidnapped) return true;
+            PhysicalObservation o = d.observation;
+            return d.outcome == MemberOutcome.HeldByOther && o != null
+                && (o.kind == ObservedKind.HeldByOther || CustodyRules.JoinedAnotherFaction(o));
+        }
+
+        private static bool HasPresence(EpisodeMember m, int now)
+        { return m.p0Eligible && m.playerVisibleTick >= 0 && m.playerVisibleTick <= now; }
+
+        private static bool CanPromoteSlot(EpisodeMember m, MemberDecision d)
+        {
+            return m.IsBound && OrganizationCompositionV1.IsRole(m.seatRole)
+                && (d.outcome == MemberOutcome.Returned || d.outcome == MemberOutcome.Killed || d.outcome == MemberOutcome.Lost || CustodyRules.IsHeldOutcome(d.outcome));
+        }
+
+        private static bool LeavesCurrentPin(MemberDecision d)
+        { return d.outcome != MemberOutcome.Killed && d.outcome != MemberOutcome.Lost && d.outcome != MemberOutcome.JoinedPlayer; }
+
+        private static int DiscretionaryBudget(DomainContext ctx, ReconciliationPlan p)
+        {
+            if (p.org == null) return 0;
+            int current = 0;
+            HashSet<int> seen = new HashSet<int>();
+            for (int i = 0; i < p.org.knownMembers.Count; i++)
+            {
+                CharacterId id = p.org.knownMembers[i];
+                if (seen.Add(id.Value) && OrganizationSeatPolicy.IsCurrentMember(ctx.characters.Get(id), p.actor.id)) current++;
+            }
+            for (int i = 0; i < p.decisions.Count; i++)
+            {
+                MemberDecision d = p.decisions[i];
+                if (d.member != null && !d.member.IsNamed && CanPromoteSlot(d.member, d) && HasStrongEvidence(d) && LeavesCurrentPin(d)) current++;
+            }
+            return Math.Max(0, OrganizationProfile.MaxKnownMembers - current);
+        }
+
+        private static KnownCharacter PrepareSlotCharacter(DomainContext ctx, ReconciliationPlan p, MemberDecision d)
+        {
+            long next = (long)ctx.ids.PeekNextId + p.promotedCharacters.Count;
+            // NextId must remain representable too; no allocation occurs while planning.
+            if (next <= 0 || next >= int.MaxValue) throw new PlanInvalidException("IdExhausted", next.ToString());
+            EpisodeMember m = d.member;
+            NameSnapshot name = d.promotionFacts?.name;
+            if (name == null || string.IsNullOrWhiteSpace(name.Display)) throw new PlanInvalidException("PromotionNameUnknown", m.ToString());
+            return new KnownCharacter
+            {
+                id = new CharacterId((int)next), name = name.Copy(), role = CharacterRole.Member, org = p.actor.id,
+                opRole = m.seatRole, pawn = m.pawn.Copy(), episode = p.episode.id, custody = CustodyState.Deployed,
+                createdTick = p.now, statusTick = p.now,
+                firstEncounterTick = m.playerVisibleTick >= 0 && m.playerVisibleTick <= p.now ? m.playerVisibleTick : -1
+            };
         }
 
         /// <summary>
@@ -535,6 +626,7 @@ namespace TheNetwork.Domain.Physical
                 return;
             }
             if (!leaderLost) return;
+            if (p.promotedCharacters.Count != 0) throw new PlanInvalidException("MixedPromotionSuccession", "new slot identities and leader loss require Phase 3.2C");
             FateRules.SuccessionPlan s = FateRules.PlanSuccession(a, org, ctx.characters, oldLeader, eligible, healthyOf, ContractorService.Pools);
             p.succession = s;
             p.Touch(ctx.characters.Get(oldLeader));
@@ -576,6 +668,7 @@ namespace TheNetwork.Domain.Physical
                 HashSet<int> people = new HashSet<int>();
                 HashSet<int> pawns = new HashSet<int>();
                 Dictionary<Tier, int> anonymous = new Dictionary<Tier, int>();
+                HashSet<int> slots = new HashSet<int>();
                 for (int i = 0; i < p.decisions.Count; i++)
                 {
                     MemberDecision d = p.decisions[i];
@@ -598,6 +691,22 @@ namespace TheNetwork.Domain.Physical
                     }
                     else
                     {
+                        if (d.character != null)
+                        {
+                            if (!p.promotedCharacters.Contains(d.character)) throw new PlanInvalidException("ForeignPromotion", m.ToString());
+                            if (!slots.Add(m.slot)) throw new PlanInvalidException("DuplicateSlot", m.slot.ToString());
+                            ValidateSlotCharacter(ctx, p, d);
+                            if (!people.Add(d.character.id.Value)) throw new PlanInvalidException("DuplicatePerson", d.character.id.ToString());
+                        }
+                        else if (CustodyRules.IsHeldOutcome(d.outcome)) throw new PlanInvalidException("AnonymousHeldWithoutIdentity", m.ToString());
+                        int debits = 0;
+                        for (int j = 0; j < p.ops.Count; j++)
+                        {
+                            CommitOp debit = p.ops[j];
+                            if (ReferenceEquals(debit.member, m) && (debit.kind == CommitOpKind.SlotPromotion
+                                || debit.kind == CommitOpKind.AnonymousBack || debit.kind == CommitOpKind.AnonymousLost)) debits++;
+                        }
+                        if (debits != 1) throw new PlanInvalidException("AnonymousDebit", m + " " + debits);
                         int n;
                         anonymous.TryGetValue(m.tier, out n);
                         anonymous[m.tier] = n + 1;
@@ -615,6 +724,9 @@ namespace TheNetwork.Domain.Physical
                 }
             }
 
+            if (p.promotedCharacters.Count > OrganizationSeatPolicy.MaxMissionMembers) throw new PlanInvalidException("PromotionBound", p.promotedCharacters.Count.ToString());
+            int promotionOrdinal = 0;
+            HashSet<KnownCharacter> promotionPayloads = new HashSet<KnownCharacter>();
             HashSet<int> statusTargets = new HashSet<int>();
             for (int i = 0; i < p.ops.Count; i++)
             {
@@ -659,8 +771,18 @@ namespace TheNetwork.Domain.Physical
                         if (c.status != CharacterStatus.Missing && c.status != CharacterStatus.Captured) throw new PlanInvalidException("NotRecoverable", op.ToString());
                         if (!statusTargets.Add(c.id.Value)) throw new PlanInvalidException("DuplicateFate", c.id.ToString());
                         break;
+                    case CommitOpKind.SlotPromotion:
+                        if (op.member == null || op.member.IsNamed || op.tier != op.member.tier || c == null
+                            || !p.promotedCharacters.Contains(c) || !p.touchedCharacters.Contains(c) || !promotionPayloads.Add(c)
+                            || !p.decisions.Exists(d => ReferenceEquals(d.member, op.member) && ReferenceEquals(d.character, c))) throw new PlanInvalidException("PromotionPayload", op.ToString());
+                        long expected = (long)ctx.ids.PeekNextId + promotionOrdinal++;
+                        if (expected <= 0 || expected >= int.MaxValue || c.id.Value != expected) throw new PlanInvalidException("PromotionId", op.ToString());
+                        if (ctx.characters.Get(c.id) != null || ctx.actors.Get(new ActorId(c.id.Value)) != null) throw new PlanInvalidException("IdInUse", c.id.ToString());
+                        break;
                     case CommitOpKind.Promotion:
-                        if (ctx.characters.Get(new CharacterId(ctx.ids.PeekNextId)) != null || ctx.actors.Get(new ActorId(ctx.ids.PeekNextId)) != null)
+                        long abstractNext = (long)ctx.ids.PeekNextId + promotionOrdinal++;
+                        if (abstractNext <= 0 || abstractNext >= int.MaxValue) throw new PlanInvalidException("IdExhausted", abstractNext.ToString());
+                        if (ctx.characters.Get(new CharacterId((int)abstractNext)) != null || ctx.actors.Get(new ActorId((int)abstractNext)) != null)
                         {
                             throw new PlanInvalidException("IdInUse", ctx.ids.PeekNextId.ToString());
                         }
@@ -680,7 +802,57 @@ namespace TheNetwork.Domain.Physical
                         break;
                 }
             }
+            if (promotionPayloads.Count != p.promotedCharacters.Count) throw new PlanInvalidException("PromotionMissing", p.promotedCharacters.Count.ToString());
+            if (promotionOrdinal > 0 && !p.addsRecord) throw new PlanInvalidException("PromotionSnapshot", null);
             if (p.PlannedPublications > PhysicalEpisode.MaxPublications) throw new PlanInvalidException("OutboxBound", p.PlannedPublications.ToString());
+        }
+
+        private static void ValidateSlotCharacter(DomainContext ctx, ReconciliationPlan p, MemberDecision d)
+        {
+            EpisodeMember m = d.member;
+            KnownCharacter c = d.character;
+            if (p.org == null || CustodyRules.IsCustodyEpisode(p.episode) || !CanPromoteSlot(m, d)) throw new PlanInvalidException("UnsupportedSlotPromotion", m.ToString());
+            if (!HasStrongEvidence(d) && !HasPresence(m, p.now)) throw new PlanInvalidException("PromotionEvidence", m.ToString());
+            if (c.org != p.actor.id || c.role != CharacterRole.Member || c.opRole != m.seatRole || c.episode != p.episode.id
+                || c.custody != CustodyState.Deployed || c.status != CharacterStatus.Active
+                || c.createdTick != p.now || c.statusTick != p.now
+                || c.firstEncounterTick != (m.playerVisibleTick >= 0 && m.playerVisibleTick <= p.now ? m.playerVisibleTick : -1)
+                || c.pawn == null || !c.pawn.SameBinding(m.pawn) || c.pawn.thingIdNumber != m.pawn.thingIdNumber
+                || c.pawn.defName != m.pawn.defName || c.pawn.boundTick != m.pawn.boundTick || c.pawn.agedThroughTick != m.pawn.agedThroughTick) throw new PlanInvalidException("PromotionProvenance", m.ToString());
+            if (d.promotionFacts?.name == null || string.IsNullOrWhiteSpace(d.promotionFacts.name.Display)
+                || c.name == null || c.name.first != d.promotionFacts.name.first || c.name.nick != d.promotionFacts.name.nick
+                || c.name.last != d.promotionFacts.name.last || c.name.display != d.promotionFacts.name.display) throw new PlanInvalidException("PromotionNameUnknown", m.ToString());
+            for (int i = 0; i < ctx.characters.characters.Count; i++)
+            {
+                KnownCharacter existing = ctx.characters.characters[i];
+                if (existing?.pawn != null && existing.pawn.IsBound && existing.pawn.SameBinding(m.pawn)) throw new PlanInvalidException("PawnAlreadyNamed", existing.id.ToString());
+            }
+            for (int i = 0; i < p.episode.members.Count; i++)
+            {
+                EpisodeMember other = p.episode.members[i];
+                if (!ReferenceEquals(m, other) && other?.pawn != null && other.pawn.IsBound && other.pawn.SameBinding(m.pawn)) throw new PlanInvalidException("SharedPawn", m.ToString());
+            }
+            if (ctx.episodes != null)
+            {
+                for (int i = 0; i < ctx.episodes.episodes.Count; i++)
+                {
+                    PhysicalEpisode otherEpisode = ctx.episodes.episodes[i];
+                    if (otherEpisode == null || ReferenceEquals(otherEpisode, p.episode) || otherEpisode.releaseApplied) continue;
+                    for (int j = 0; j < otherEpisode.members.Count; j++)
+                    {
+                        EpisodeMember other = otherEpisode.members[j];
+                        if (other?.pawn != null && other.pawn.IsBound && other.pawn.SameBinding(m.pawn))
+                            throw new PlanInvalidException("PawnHasAnotherEpisodeOwner", otherEpisode.id.ToString());
+                    }
+                }
+            }
+            int discretionary = 0;
+            for (int i = 0; i < p.decisions.Count; i++)
+            {
+                MemberDecision other = p.decisions[i];
+                if (other.member != null && !other.member.IsNamed && other.character != null && !HasStrongEvidence(other)) discretionary++;
+            }
+            if (discretionary > DiscretionaryBudget(ctx, p)) throw new PlanInvalidException("DiscretionaryTarget", discretionary.ToString());
         }
 
         /// <summary>A tier's checked-out headcount, read without creating its entry.</summary>

@@ -16,7 +16,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests
     /// tests need. It references no RimWorld API: no pawn, thing, map, faction, Lord or WorldPawns is ever touched; nothing in it
     /// is persisted.
     /// </summary>
-    public sealed class FakePhysicalWorldPort : IPhysicalWorldPort, IGroupPhysicalWorldPort
+    public sealed class FakePhysicalWorldPort : IPhysicalWorldPort, IGroupPhysicalWorldPort, IPhysicalPromotionPort
     {
         public sealed class Token
         {
@@ -38,6 +38,8 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             /// </summary>
             public bool registryReserves = true;
             public EpisodeId temporaryEpisode;
+            public NameSnapshot name;
+            public ConcretizationEvidence evidence;
 
             /// <summary>Scripts "a quest other than the Network's also reserves this pawn".</summary>
             public bool otherQuestReserves;
@@ -107,6 +109,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests
         public int creates;
         public int places;
         public int observes;
+        public int promotionReads;
         public int catchUps;
         public long lastCatchUp = -1;
         public int passCalls;
@@ -295,6 +298,7 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             requests.Add(request);
             Fault("create", null);
             Token t = new Token { thingId = nextThing++, def = "Fake_Human", character = request.character, slot = request.slot, registryReserves = request.character.IsValid };
+            t.name = request.name?.Copy() ?? new NameSnapshot { display = "Fake Pawn " + t.thingId };
             tokens[t.thingId] = t;
             creates++;
             actions.Add("create " + t.thingId);
@@ -317,13 +321,12 @@ namespace TheNetwork.Diagnostics.RuntimeTests
             {
                 token.character = member.character;
                 token.temporaryEpisode = EpisodeId.None;
-                token.registryReserves = true;
                 actions.Add("bind-named " + token.thingId);
             }
             else if (OrganizationCompositionV1.IsRole(member.seatRole) && !episode.releaseApplied)
             {
+                if (!token.temporaryEpisode.IsValid) token.registryReserves = true;
                 token.temporaryEpisode = episode.id;
-                token.registryReserves = true;
                 actions.Add("bind-episode " + token.thingId);
             }
         }
@@ -332,6 +335,26 @@ namespace TheNetwork.Diagnostics.RuntimeTests
         {
             Token token = TokenOf(member.pawn);
             return playerVisiblePlacement && token != null && token.spawned && !token.dead && !token.gone && token.mapId == episode.whereMapId;
+        }
+
+        public void EpisodeReleased(PhysicalEpisode episode)
+        {
+            Fault("episode-release", null);
+            boundEpisodes.Remove(episode.id.Value);
+            foreach (Token token in tokens.Values)
+                if (token.temporaryEpisode == episode.id)
+                {
+                    token.temporaryEpisode = EpisodeId.None;
+                    if (!token.character.IsValid) token.registryReserves = false;
+                }
+        }
+
+        public PhysicalPromotionFacts ReadPromotionFacts(PhysicalEpisode episode, EpisodeMember member)
+        {
+            Token token = TokenOf(member.pawn);
+            Fault("promotion-facts", token);
+            promotionReads++;
+            return token == null ? null : new PhysicalPromotionFacts { name = token.name?.Copy(), evidence = token.evidence };
         }
 
         public void CatchUpAge(PawnRef pawn, long elapsedTicks)

@@ -200,6 +200,13 @@ namespace TheNetwork.Domain.Physical
     {
         void EpisodeBindingChanged(PhysicalEpisode episode, EpisodeMember member);
         bool IsPlayerVisiblePlacement(PhysicalEpisode episode, EpisodeMember member);
+        void EpisodeReleased(PhysicalEpisode episode);
+    }
+
+    /// <summary>Optional terminal-only same-Pawn identity evidence. Reading facts never creates a character.</summary>
+    public interface IPhysicalPromotionPort
+    {
+        PhysicalPromotionFacts ReadPromotionFacts(PhysicalEpisode episode, EpisodeMember member);
     }
 
     /// <summary>Thrown by the fail-closed production port: something asked Phase 3.0 production code for real physical work.</summary>

@@ -35,7 +35,11 @@ namespace TheNetwork.Domain.Physical
             s.Capture(p.actor);
             s.Capture(p.operation);
             if (p.episode == null) s.Capture(t.outbox);
-            if (p.addsRecord) s.Capture(t.ids);
+            if (p.addsRecord)
+            {
+                s.Capture(t.ids);
+                s.Capture(t.slotPromotions);
+            }
             return s;
         }
 
@@ -129,6 +133,16 @@ namespace TheNetwork.Domain.Physical
                     break;
                 case CommitOpKind.CharacterUnlink:
                     c.episode = EpisodeId.None;
+                    break;
+                case CommitOpKind.SlotPromotion:
+                    if (t.ids.PeekNextId != c.id.Value) throw new PlanInvalidException("PromotionIdChanged", c.id.ToString());
+                    t.ids.NextId();
+                    t.characters.Add(c);
+                    org.knownMembers.Add(c.id);
+                    org.TierOf(op.tier, true).healthy--;
+                    org.committed.RemoveAll(x => x.healthy <= 0);
+                    op.member.character = c.id;
+                    t.slotPromotions.Add(c);
                     break;
                 case CommitOpKind.AnonymousBack:
                     org.TierOf(op.tier, true).healthy--;
@@ -280,6 +294,15 @@ namespace TheNetwork.Domain.Physical
                     w.Add(op.character);
                     if (op.character.pawn != null) w.Add(op.character.pawn);
                     if (op.member?.pawn != null) w.Add(op.member.pawn);
+                    break;
+                case CommitOpKind.SlotPromotion:
+                    w.Add(org);
+                    w.Add(org.committed);
+                    w.Add(org.knownMembers);
+                    w.Add(op.member);
+                    w.Add(t.ids);
+                    w.Add(t.slotPromotions);
+                    w.Add(CharacterMembership);
                     break;
                 case CommitOpKind.AnonymousBack:
                     w.Add(org);

@@ -183,6 +183,26 @@ namespace TheNetwork.Domain.Contractors
             return org == null ? 1 : Math.Max(1, org.Healthy + org.Wounded + org.Committed + org.knownMembers.Count);
         }
 
+        /// <summary>Current living named seats, including mandatory overflow, without historical dead/defected/retired records.</summary>
+        public static int CurrentNamedCount(NetworkActor a, CharacterStore characters)
+        {
+            OrganizationProfile org = a?.Get<OrganizationProfile>();
+            if (org == null) return 0;
+            if (characters == null) return org.knownMembers.Count; // compatibility for legacy static read callers
+            HashSet<int> seen = new HashSet<int>();
+            int count = 0;
+            foreach (CharacterId id in org.knownMembers)
+                if (seen.Add(id.Value) && OrganizationSeatPolicy.IsCurrentMember(characters.Get(id), a.id)) count++;
+            return count;
+        }
+
+        /// <summary>The existing service formula/floor with the canonical current named-seat count.</summary>
+        public static int Headcount(NetworkActor a, CharacterStore characters)
+        {
+            OrganizationProfile org = a?.Get<OrganizationProfile>();
+            return org == null ? 1 : Math.Max(1, org.Healthy + org.Wounded + org.Committed + CurrentNamedCount(a, characters));
+        }
+
         /// <summary>
         /// Phase 3.2B write-once organization role compatibility. The immutable-origin cohort includes historical people;
         /// current rank/status never chooses the role. Validate an organization's complete plan before storing any role.
@@ -608,9 +628,14 @@ namespace TheNetwork.Domain.Contractors
         /// </summary>
         public static int JobCapacity(NetworkActor a)
         {
+            return JobCapacity(a, null);
+        }
+
+        public static int JobCapacity(NetworkActor a, CharacterStore characters)
+        {
             OrganizationProfile org = a?.Get<OrganizationProfile>();
             if (org == null) return 1;
-            int people = org.Healthy + org.Committed + org.knownMembers.Count;
+            int people = org.Healthy + org.Committed + CurrentNamedCount(a, characters);
             return Math.Max(1, Math.Min(3, people / 6));
         }
 
@@ -618,7 +643,7 @@ namespace TheNetwork.Domain.Contractors
         public bool AtCapacity(NetworkActor a)
         {
             ContractorSimulation sim = a?.Get<ContractorSimulation>();
-            return sim != null && sim.commitments.Count >= JobCapacity(a);
+            return sim != null && sim.commitments.Count >= JobCapacity(a, ctx.characters);
         }
 
         /// <summary>Checkouts that took a contractor past its job capacity (runtime diagnostic; always 0).</summary>
@@ -662,7 +687,7 @@ namespace TheNetwork.Domain.Contractors
                 if (WoundedShare(a) > 0.5f) return Availability.Recovering;
             }
             if (sim.morale.descriptor == MoraleDescriptor.Exhausted) return Availability.Exhausted;
-            if (sim.commitments.Count >= JobCapacity(a)) return Availability.Committed;
+            if (sim.commitments.Count >= JobCapacity(a, ctx.characters)) return Availability.Committed;
             return Availability.Available;
         }
 
@@ -751,10 +776,10 @@ namespace TheNetwork.Domain.Contractors
             ContractorSimulation sim = a.Get<ContractorSimulation>();
             if (sim != null && !sim.commitments.Contains(op))
             {
-                if (sim.commitments.Count >= JobCapacity(a))
+                if (sim.commitments.Count >= JobCapacity(a, ctx.characters))
                 {
                     overCapacityCheckouts++;
-                    NetLog.WarnOnce(LogCategory.Contracts, "contractor.overcapacity." + a.id.Value, a.name.Display + " was checked out beyond its job capacity (" + sim.commitments.Count + " of " + JobCapacity(a) + ").");
+                    NetLog.WarnOnce(LogCategory.Contracts, "contractor.overcapacity." + a.id.Value, a.name.Display + " was checked out beyond its job capacity (" + sim.commitments.Count + " of " + JobCapacity(a, ctx.characters) + ").");
                 }
                 sim.commitments.Add(op);
             }
@@ -766,7 +791,7 @@ namespace TheNetwork.Domain.Contractors
             }
             else
             {
-                float share = Clamp(0.45f + 0.25f * danger, 0.4f, 0.85f) / Math.Max(1, JobCapacity(a) - sim.commitments.Count + 1);
+                float share = Clamp(0.45f + 0.25f * danger, 0.4f, 0.85f) / Math.Max(1, JobCapacity(a, ctx.characters) - sim.commitments.Count + 1);
                 for (int i = 0; i < org.tiers.Count; i++)
                 {
                     TierCount t = org.tiers[i];

@@ -136,6 +136,10 @@ namespace TheNetwork.Tests
             Phase32bCompositionTests.Register(tests);
             Phase32bReservationTests.Register(tests);
             Phase32bGroupTests.Register(tests);
+            Phase32bPromotionTests.Register(tests);
+            Phase32bGroupPromotionTests.Register(tests);
+            Phase32bEvidenceTests.Register(tests);
+            Phase32bRetentionScaleTests.Register(tests);
             EnslavementCorrectionTests.Register(tests);
             StartupTests.Register(tests);
 

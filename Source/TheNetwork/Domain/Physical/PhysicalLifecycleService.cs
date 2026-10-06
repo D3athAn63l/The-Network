@@ -786,7 +786,8 @@ namespace TheNetwork.Domain.Physical
                             bool unsup;
                             HeldKind heldBy;
                             bool captive;
-                            d.outcome = ReconciliationPlanner.Decide(o, m.IsNamed, out unsup, out heldBy, out captive);
+                            bool promotionSupported = !m.IsNamed && OrganizationCompositionV1.IsRole(m.seatRole) && Port is IPhysicalPromotionPort;
+                            d.outcome = ReconciliationPlanner.Decide(o, m.IsNamed, promotionSupported, out unsup, out heldBy, out captive);
                             d.holder = heldBy;
                             d.captive = captive;
                             if (unsup && unsupported == null) unsupported = o.kind + " " + m;
@@ -841,6 +842,21 @@ namespace TheNetwork.Domain.Physical
             // whose operation marker would be written off.
             bool nobodyPlaced = decisions.Count > 0;
             for (int i = 0; i < decisions.Count; i++) if (decisions[i].outcome != MemberOutcome.NeverPlaced) nobodyPlaced = false;
+            IPhysicalPromotionPort promotion = Port as IPhysicalPromotionPort;
+            if (promotion != null && !nobodyPlaced)
+            {
+                foreach (MemberDecision decision in decisions)
+                {
+                    EpisodeMember member = decision.member;
+                    if (member.IsNamed || !member.IsBound || !OrganizationCompositionV1.IsRole(member.seatRole) || decision.outcome == MemberOutcome.NeverPlaced) continue;
+                    try { decision.promotionFacts = promotion.ReadPromotionFacts(e, member); }
+                    catch (Exception ex)
+                    {
+                        // Missing optional facts cannot invent identity. Mandatory custody/P0 still requires an actual name in VALIDATE.
+                        e.lastError = NetScribe.Truncate("Promotion facts unavailable: " + ex.Message, 300);
+                    }
+                }
+            }
             return Commit(e, decisions, nobodyPlaced ? ReconciliationPlanner.CloseNeverPlaced : ReconciliationPlanner.CloseReconciled);
         }
 
@@ -975,6 +991,7 @@ namespace TheNetwork.Domain.Physical
             try
             {
                 if (!e.releaseApplied) RunRelease(e);
+                if (e.releaseApplied) (Port as IGroupPhysicalWorldPort)?.EpisodeReleased(e);
                 if (e.releaseApplied && !e.followUpApplied) RunFollowUp(e);
                 if (publish && e.releaseApplied && e.followUpApplied && !e.PublishDone) RunPublish(e);
             }
@@ -1008,6 +1025,13 @@ namespace TheNetwork.Domain.Physical
         /// </summary>
         private void RunRelease(PhysicalEpisode e)
         {
+            // Runtime index handoff precedes every physical action and is retried on a loaded/pending RELEASE.
+            // Until it succeeds, unreleased durable Episode ownership continues to protect the same Pawn.
+            IGroupPhysicalWorldPort group = Port as IGroupPhysicalWorldPort;
+            if (group != null)
+                foreach (EpisodeMember member in e.members)
+                    if (member.IsBound && (member.IsNamed || OrganizationCompositionV1.IsRole(member.seatRole)) && Port.Resolves(member.pawn))
+                        group.EpisodeBindingChanged(e, member);
             for (int i = 0; i < e.members.Count; i++)
             {
                 EpisodeMember m = e.members[i];
