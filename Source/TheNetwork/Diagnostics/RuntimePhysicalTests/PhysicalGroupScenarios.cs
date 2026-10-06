@@ -517,31 +517,140 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         protected EpisodeMember capturedMember;
         protected Pawn captive;
         protected int arrestedTick = -1;
+        private PhysicalEpisode captureEpisode;
+        private PawnRef capturedBinding;
+        private int captiveThingId, capturedSlot;
+        private OperationalRole capturedRole;
+        private Map captureMap;
+        private bool captureGuardActive, captureFailed, capturePeersExited;
+        private PhysicalObservation captureObservation;
         protected GroupCaptureRun(string family, NetworkRuntime rt, string runId) : base(family, rt, runId) { }
 
         protected StepResult ArrestAnonymous()
         {
-            capturedMember = e.members[0];
-            captive = capturedMember.pawn?.pawn;
-            if (capturedMember.IsNamed || captive == null || !captive.Spawned || !TestSite.IsTestMap(captive.Map))
+            capturedMember = e?.members != null && e.members.Count > 0 ? e.members[0] : null;
+            captive = capturedMember?.pawn?.pawn;
+            if (!PhysicalTestSession.IsActiveOwnedEpisode(e) || capturedMember == null || capturedMember.IsNamed || captive == null
+                || !captive.Spawned || !TestSite.IsTestMap(captive.Map) || captive.guest == null)
             { v.Fail("arrest requires this run's anonymous placed member"); return StepResult.Abort; }
+            Building_Bed bed;
+            string report;
+            if (!TestCompound.TryPreparePrisoner(e, capturedMember, captive, out bed, out report))
+            { v.Fail("custody fixture preparation refused: " + report); return StepResult.Abort; }
+            v.Note(report);
+            captureEpisode = e;
+            capturedBinding = capturedMember.pawn;
+            captiveThingId = captive.thingIDNumber;
+            capturedSlot = capturedMember.slot;
+            capturedRole = capturedMember.seatRole;
+            captureMap = captive.Map;
             captive.guest.CapturedBy(Faction.OfPlayer);
             arrestedTick = PhysLog.Tick;
-            v.Check(captive.IsPrisonerOfColony, "real vanilla CapturedBy made the anonymous Pawn a colony prisoner on the owned map");
+            captureGuardActive = true;
+            everyFrame = ObserveCaptureProtection;
+            if (!TestCompound.TryClaimPrisonerBed(captive, bed, out report))
+            { CaptureFacts(); FailCapture("legitimate prisoner-bed claim refused: " + report); return StepResult.Abort; }
+            v.Note(report);
+            if (!GuardCapture(true)) return StepResult.Abort;
+            v.Check(true, "real vanilla CapturedBy made the SAME anonymous Pawn a colony prisoner in a validated TestCompound cell with its real claimed prisoner bed");
             return StepResult.Next;
         }
 
         protected StepResult CheckPendingCapture()
         {
+            if (!GuardCapture(true)) return StepResult.Abort;
             if (PhysLog.Tick - arrestedTick < 2 * PhysicalLifecycleService.WatchPeriod) return StepResult.Wait;
             lc.Reconcile(e, "owned QA pending-peer check");
-            bool peers = false;
-            foreach (EpisodeMember m in e.members) if (m != capturedMember && m.outcome == MemberOutcome.Pending && m.pawn?.pawn?.Spawned == true) peers = true;
-            v.Check(peers && !e.consequencesApplied && e.state == EpisodeState.Open, "peers remain Pending; whole-Episode terminal commit has not occurred");
-            v.Check(ctx.characters.characters.Count == charactersBefore && !capturedMember.IsNamed, "zero early CharacterStore identity/custody commit for the arrested anonymous member");
-            v.Check(ReferenceEquals(captive, capturedMember.pawn?.pawn) && !captive.Discarded && port.Registry.IsTemporaryReserved(captive), "the SAME arrested Pawn remains protected by its durable Episode slot");
-            v.Check(ContractorService.Headcount(a, ctx.characters) == humanBefore, "pending capture neither invents nor subtracts a human");
-            return peers && !e.consequencesApplied ? StepResult.Next : StepResult.Abort;
+            if (!GuardCapture(true)) return StepResult.Abort;
+            v.Check(true, "sustained real HeldByPlayer / PlayerPrisoner custody across two watches while ordinary peers remain Pending; open Episode has zero early identity/commit, exact binding, temporary reservation and conserved humans");
+            return StepResult.Next;
+        }
+
+        private void ObserveCaptureProtection()
+        {
+            ObserveProtection();
+            GuardCapture(!capturePeersExited);
+        }
+
+        private GroupPendingCaptureFacts CaptureFacts()
+        {
+            bool exact = capturedMember != null && e?.members != null && e.members.Contains(capturedMember) && capturedMember.slot == capturedSlot;
+            bool samePawn = captive != null && ReferenceEquals(capturedMember?.pawn?.pawn, captive) && groupPawns.Contains(captive);
+            bool pendingPeer = false;
+            if (e?.members != null)
+                foreach (EpisodeMember member in e.members)
+                {
+                    Pawn peer = member?.pawn?.pawn;
+                    if (!ReferenceEquals(member, capturedMember) && member?.outcome == MemberOutcome.Pending && peer != null && peer.Spawned
+                        && !peer.Dead && peer.Map == captureMap && !peer.IsPrisoner && !peer.IsSlave && peer.HostFaction == null) pendingPeer = true;
+                }
+            try { captureObservation = exact ? port.Observe(capturedMember.pawn, e.id) : null; }
+            catch (Exception ex) { captureObservation = new PhysicalObservation { kind = ObservedKind.Unknown, note = ex.Message }; }
+            return new GroupPendingCaptureFacts(e != null && ReferenceEquals(e, captureEpisode) && PhysicalTestSession.IsActiveOwnedEpisode(e)
+                    && ReferenceEquals(ctx.episodes.Get(e.id), e), exact, samePawn, ReferenceEquals(capturedMember?.pawn, capturedBinding),
+                captive != null && captive.thingIDNumber == captiveThingId && capturedMember?.pawn?.thingIdNumber == captiveThingId,
+                capturedMember?.seatRole == capturedRole, captureMap != null && TestSite.IsTestMap(captureMap) && captive?.Map == captureMap && e?.whereMapId == captureMap.uniqueID,
+                captive != null && captive.Spawned && !captive.Dead && !captive.Destroyed && !captive.Discarded,
+                captive?.IsPrisonerOfColony == true, captureObservation?.kind == ObservedKind.HeldByPlayer && captureObservation.holder == HeldKind.PlayerPrisoner,
+                captive != null && port.Registry.Reserves(captive) && reservationGaps == 0 && freeFrames == 0,
+                captive != null && port.Registry.IsTemporaryReserved(captive), capturedMember != null && !capturedMember.IsNamed,
+                ctx.characters.characters.Count == charactersBefore, e != null && e.state == EpisodeState.Open && !e.consequencesApplied && !e.releaseApplied
+                    && lc.counters.commits == commitsBefore, pendingPeer, ContractorService.Headcount(a, ctx.characters) == humanBefore);
+        }
+
+        private bool GuardCapture(bool requirePendingPeers)
+        {
+            if (!captureGuardActive) return true;
+            if (captureFailed) return false;
+            GroupPendingCaptureFacts facts = CaptureFacts();
+            bool holds = !requirePendingPeers && e?.consequencesApplied == true
+                ? GroupQaRules.CaptureCustodyHolds(facts) : GroupQaRules.PendingCaptureHolds(facts, requirePendingPeers);
+            if (GroupQaRules.CaptureFailureLatched(captureFailed, holds)) FailCapture("required invariant is false (owned=" + facts.ownedEpisode
+                + ", exact member=" + facts.exactMember + ", same role=" + facts.sameRole + ", owned map=" + facts.ownedMap
+                + ", live=" + facts.liveSpawned + ", real/observed prisoner=" + facts.actualPrisoner + "/" + facts.observedPlayerPrisoner
+                + ", reservation continuous=" + facts.reserved + ", uncommitted=" + facts.uncommitted + ", pending peer=" + facts.pendingPeer
+                + ", conserved humans=" + facts.conservedHeadcount + ")");
+            return !captureFailed;
+        }
+
+        private void FailCapture(string reason)
+        {
+            if (captureFailed) return;
+            captureFailed = GroupQaRules.CaptureFailureLatched(captureFailed, false);
+            v.Fail((info.id == "RT-PHYX-030" ? "030B" : "029") + " custody prerequisite lost " + (e?.consequencesApplied == true ? "during terminal handoff" : "before terminal batch")
+                + ": " + reason + "; prisoner=" + captive?.IsPrisonerOfColony + ", observation=" + captureObservation?.kind + "/" + captureObservation?.holder
+                + ", Pawn #" + captive?.thingIDNumber + "/expected " + captiveThingId + ", binding #" + capturedMember?.pawn?.thingIdNumber
+                + ", same Pawn=" + ReferenceEquals(captive, capturedMember?.pawn?.pawn) + ", same PawnRef=" + ReferenceEquals(capturedBinding, capturedMember?.pawn)
+                + ", slot=" + capturedMember?.slot + ", role=" + capturedMember?.seatRole + ", spawned=" + captive?.Spawned + ", map=" + captive?.Map?.uniqueID
+                + ", dead=" + captive?.Dead + ", discarded=" + captive?.Discarded + ", HostFaction=" + captive?.HostFaction?.loadID
+                + ", reserved=" + (captive != null && port.Registry.Reserves(captive)) + ", temporary=" + (captive != null && port.Registry.IsTemporaryReserved(captive))
+                + ", anonymous=" + (capturedMember != null && !capturedMember.IsNamed) + ", identities=" + ctx.characters.characters.Count + "/" + charactersBefore
+                + ", Episode=" + e?.id + "/" + e?.state + ", consequencesApplied=" + e?.consequencesApplied + ", releaseApplied=" + e?.releaseApplied
+                + ", tick=" + PhysLog.Tick + ", elapsed=" + (PhysLog.Tick - arrestedTick) + ". Run aborted; no repair or downstream promotion checks; everything is preserved.");
+        }
+
+        protected StepResult ExitCapturePeers()
+        {
+            if (!GuardCapture(true)) return StepResult.Abort;
+            StepResult result = ExitPeers(captive);
+            if (result != StepResult.Next) return result;
+            capturePeersExited = true;
+            return GuardCapture(false) ? StepResult.Next : StepResult.Abort;
+        }
+
+        protected StepResult WaitCapturedGroup()
+        {
+            return GuardCapture(false) ? WaitGroup() : StepResult.Abort;
+        }
+
+        protected bool GuardCaptureForPromotion()
+        {
+            return GuardCapture(false);
+        }
+
+        protected bool GuardPendingCapture()
+        {
+            return GuardCapture(true);
         }
 
         protected void CheckPromotion()
@@ -575,9 +684,9 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             Then("place three anonymous company Riflemen without P0", () => PlaceGroup(new[] { new RoleCapacity(OperationalRole.Rifleman, 3) }, false));
             Then("arrest one anonymous member using vanilla custody", ArrestAnonymous);
             Then("observe temporary reservation across two watches while peers remain Pending", CheckPendingCapture, 1500);
-            Then("return only ordinary peers; leave the captive untouched", () => ExitPeers(captive));
-            Then("wait for whole-Episode atomic promotion", WaitGroup, 20000);
-            Then("check exactly one same-Pawn held identity", () => { CheckPromotion(); return StepResult.Next; });
+            Then("return only ordinary peers; leave the captive untouched", ExitCapturePeers);
+            Then("wait for whole-Episode atomic promotion", WaitCapturedGroup, 20000);
+            Then("check exactly one same-Pawn held identity", () => { if (!GuardCaptureForPromotion()) return StepResult.Abort; CheckPromotion(); return StepResult.Next; });
         }
     }
 
@@ -602,6 +711,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             }
             Then("pause at the owner-assisted SAVE checkpoint", () =>
             {
+                if (pending && !GuardPendingCapture()) return StepResult.Abort;
                 Find.TickManager.Pause();
                 v.Note((pending ? "030B" : "030A") + " SAVE checkpoint: SAVE, return to main menu, LOAD, run 030V VERIFY without arming. Time may resume on load; correctness never depends on pause persisting.");
                 v.Note("The arm and runner are never saved. This production Episode's existing cause identifies the checkpoint: " + e.cause.devKey);
@@ -616,17 +726,23 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
     {
         private PhysicalEpisode selected;
         private bool follow;
+        private EpisodeMember loadedCaptive;
+        private PawnRef loadedCaptiveBinding;
+        private Pawn loadedCaptivePawn;
+        private int loadedCaptiveThingId, loadedCharacters;
+        private bool loadedCaptureGuard, loadedCaptureFailed;
         public Phyx030GroupVerify(NetworkRuntime rt, string runId) : base(PhysicalScenarioTable.Get("RT-PHYX-030"), runId, rt) { }
         protected override void Script()
         {
-            Then("verify loaded group bindings and reservation categories", () => { VerifyLoaded(); return StepResult.Next; });
+            Then("verify loaded group bindings and reservation categories", () => { VerifyLoaded(); return loadedCaptureFailed ? StepResult.Abort : StepResult.Next; });
             Then("follow a saved incomplete Episode read-only; vanilla peers leave naturally", () =>
             {
                 if (!follow || selected == null) return StepResult.Next;
+                if (!GuardLoadedCapture()) return StepResult.Abort;
                 if (selected.state == EpisodeState.Quarantined) { v.Fail("saved group quarantined: " + selected.quarantineKey); return StepResult.Abort; }
                 return selected.IsComplete ? StepResult.Next : StepResult.Wait;
             }, 60000);
-            Then("verify terminal truth and all retained group identities", () => { VerifyTerminal(); return StepResult.Next; });
+            Then("verify terminal truth and all retained group identities", () => { if (loadedCaptureFailed) return StepResult.Abort; VerifyTerminal(); return StepResult.Next; });
         }
 
         private void VerifyLoaded()
@@ -643,6 +759,19 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             if (!follow) v.Note("The saved Episode completed before the owner ran 030V; verifying durable terminal truth. This does not prove the instantaneous pre-commit load state.");
             else
             {
+                if (PhysicalTestIds.ScenarioOf(selected.cause?.devKey) == "RT-PHYX-030"
+                    && ctx.actors.Get(selected.actor)?.Get<OrganizationProfile>()?.capacity == 32)
+                {
+                    loadedCaptureGuard = true;
+                    loadedCaptive = selected.members.Find(m => m?.slot == 0);
+                    loadedCaptiveBinding = loadedCaptive?.pawn;
+                    loadedCaptivePawn = loadedCaptiveBinding?.pawn;
+                    loadedCaptiveThingId = loadedCaptiveBinding?.thingIdNumber ?? 0;
+                    loadedCharacters = ctx.characters.characters.Count;
+                    everyFrame = () => { GuardLoadedCapture(); };
+                    if (!GuardLoadedCapture()) return;
+                    v.Note("030B loaded custody: read-only proof of the exact saved slot-0 captive. Vanilla peers may leave naturally; no current-run arm, arrest, relocation, claim, reconciliation or repair occurs.");
+                }
                 foreach (EpisodeMember m in selected.members)
                 {
                     Pawn pawn = m.pawn?.pawn;
@@ -652,6 +781,42 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 }
                 v.Note("Only production and vanilla continue this Episode. Stopping the QA verifier never cancels it; an incomplete Episode still blocks destructive tests.");
             }
+        }
+
+        private bool GuardLoadedCapture()
+        {
+            if (!loadedCaptureGuard) return true;
+            if (loadedCaptureFailed) return false;
+            if (selected.IsComplete) return true;
+            NetworkActor actor = ctx.actors.Get(selected.actor);
+            bool pendingPeer = selected.members.Exists(m => !ReferenceEquals(m, loadedCaptive) && m?.outcome == MemberOutcome.Pending);
+            PhysicalObservation observed;
+            try { observed = loadedCaptiveBinding == null ? null : port.Observe(loadedCaptiveBinding, selected.id); }
+            catch (Exception ex) { observed = new PhysicalObservation { kind = ObservedKind.Unknown, note = ex.Message }; }
+            GroupPendingCaptureFacts facts = new GroupPendingCaptureFacts(ReferenceEquals(ctx.episodes.Get(selected.id), selected)
+                    && PhysicalTestIds.ScenarioOf(selected.cause?.devKey) == "RT-PHYX-030" && actor?.Get<OrganizationProfile>()?.capacity == 32,
+                loadedCaptive != null && selected.members.Contains(loadedCaptive) && loadedCaptive.slot == 0
+                    && selected.members.FindAll(m => m?.slot == 0).Count == 1,
+                loadedCaptivePawn != null && ReferenceEquals(loadedCaptive?.pawn?.pawn, loadedCaptivePawn),
+                ReferenceEquals(loadedCaptive?.pawn, loadedCaptiveBinding), loadedCaptiveThingId > 0 && loadedCaptive?.pawn?.thingIdNumber == loadedCaptiveThingId
+                    && loadedCaptivePawn?.thingIDNumber == loadedCaptiveThingId, loadedCaptive?.seatRole == OperationalRole.Rifleman,
+                loadedCaptivePawn?.Map != null && TestSite.IsTestMap(loadedCaptivePawn.Map) && loadedCaptivePawn.Map.uniqueID == selected.whereMapId,
+                loadedCaptivePawn != null && loadedCaptivePawn.Spawned && !loadedCaptivePawn.Dead && !loadedCaptivePawn.Destroyed && !loadedCaptivePawn.Discarded,
+                loadedCaptivePawn?.IsPrisonerOfColony == true, observed?.kind == ObservedKind.HeldByPlayer && observed.holder == HeldKind.PlayerPrisoner,
+                loadedCaptivePawn != null && port.Registry.Reserves(loadedCaptivePawn), loadedCaptivePawn != null && port.Registry.IsTemporaryReserved(loadedCaptivePawn),
+                loadedCaptive != null && !loadedCaptive.IsNamed, ctx.characters.characters.Count == loadedCharacters && ContractorService.CurrentNamedCount(actor, ctx.characters) == 1,
+                selected.state == EpisodeState.Open && !selected.consequencesApplied && !selected.releaseApplied, pendingPeer,
+                ContractorService.Headcount(actor, ctx.characters) == 16);
+            bool holds = selected.consequencesApplied ? GroupQaRules.CaptureCustodyHolds(facts) : GroupQaRules.PendingCaptureHolds(facts, false);
+            loadedCaptureFailed = GroupQaRules.CaptureFailureLatched(loadedCaptureFailed, holds);
+            if (!loadedCaptureFailed) return true;
+            v.Fail("030V saved 030B custody prerequisite lost before complete terminal release: prisoner=" + loadedCaptivePawn?.IsPrisonerOfColony
+                + ", observation=" + observed?.kind + "/" + observed?.holder + ", Pawn #" + loadedCaptivePawn?.thingIDNumber + "/saved " + loadedCaptiveThingId
+                + ", spawned=" + loadedCaptivePawn?.Spawned + ", map=" + loadedCaptivePawn?.Map?.uniqueID + ", anonymous=" + (loadedCaptive != null && !loadedCaptive.IsNamed)
+                + ", temporary=" + (loadedCaptivePawn != null && port.Registry.IsTemporaryReserved(loadedCaptivePawn)) + ", Episode=" + selected.state
+                + ", consequencesApplied=" + selected.consequencesApplied + ", releaseApplied=" + selected.releaseApplied + ", tick=" + PhysLog.Tick
+                + ". Read-only verifier aborted once; everything is preserved and production continues independently.");
+            return false;
         }
 
         private void VerifyTerminal()

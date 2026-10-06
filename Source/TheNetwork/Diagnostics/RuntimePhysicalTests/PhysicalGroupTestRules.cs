@@ -38,10 +38,48 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         }
     }
 
+    /// <summary>Actual custody and existing Episode truth, read without repairing the prisoner or creating an identity.</summary>
+    public sealed class GroupPendingCaptureFacts
+    {
+        public readonly bool ownedEpisode, exactMember, samePawn, samePawnRef, sameThingId, sameRole, ownedMap, liveSpawned,
+            actualPrisoner, observedPlayerPrisoner, reserved, temporaryReserved, anonymous, unchangedIdentities, uncommitted, pendingPeer, conservedHeadcount;
+
+        public GroupPendingCaptureFacts(bool ownedEpisode, bool exactMember, bool samePawn, bool samePawnRef, bool sameThingId, bool sameRole,
+            bool ownedMap, bool liveSpawned, bool actualPrisoner, bool observedPlayerPrisoner, bool reserved, bool temporaryReserved,
+            bool anonymous, bool unchangedIdentities, bool uncommitted, bool pendingPeer, bool conservedHeadcount)
+        {
+            this.ownedEpisode = ownedEpisode; this.exactMember = exactMember; this.samePawn = samePawn; this.samePawnRef = samePawnRef;
+            this.sameThingId = sameThingId; this.sameRole = sameRole; this.ownedMap = ownedMap; this.liveSpawned = liveSpawned;
+            this.actualPrisoner = actualPrisoner; this.observedPlayerPrisoner = observedPlayerPrisoner; this.reserved = reserved;
+            this.temporaryReserved = temporaryReserved; this.anonymous = anonymous; this.unchangedIdentities = unchangedIdentities;
+            this.uncommitted = uncommitted; this.pendingPeer = pendingPeer; this.conservedHeadcount = conservedHeadcount;
+        }
+    }
+
     /// <summary>Pure runtime-QA ownership and selection rules. Reads existing Episode truth; creates no identity or persisted QA state.</summary>
     public static class GroupQaRules
     {
         public const int MaterializationDwellTicks = 240;
+
+        /// <summary>The held physical person must remain genuine across the atomic batch and named-reservation handoff too.</summary>
+        public static bool CaptureCustodyHolds(GroupPendingCaptureFacts facts)
+        {
+            return facts != null && facts.ownedEpisode && facts.exactMember && facts.samePawn && facts.samePawnRef && facts.sameThingId
+                && facts.sameRole && facts.ownedMap && facts.liveSpawned && facts.actualPrisoner && facts.observedPlayerPrisoner
+                && facts.reserved && facts.conservedHeadcount;
+        }
+
+        public static bool PendingCaptureHolds(GroupPendingCaptureFacts facts, bool requirePendingPeers)
+        {
+            return CaptureCustodyHolds(facts) && facts.temporaryReserved && facts.anonymous && facts.unchangedIdentities
+                && facts.uncommitted && (!requirePendingPeers || facts.pendingPeer);
+        }
+
+        /// <summary>Later custody recovery cannot erase a failed prerequisite earlier in this runtime run.</summary>
+        public static bool CaptureFailureLatched(bool alreadyFailed, bool prerequisitesHold)
+        {
+            return alreadyFailed || !prerequisitesHold;
+        }
 
         /// <summary>A named but never-bound origin pin is still a new candidate, not a retained Pawn.</summary>
         public static bool HasRetainedPawn(int characterId, int boundThingId, int resolvedThingId)

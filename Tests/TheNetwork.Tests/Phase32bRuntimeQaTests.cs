@@ -240,9 +240,12 @@ namespace TheNetwork.Tests
             string capture = Body(scenarios, "protected StepResult ArrestAnonymous(");
             T.Check(capture.Contains("TestSite.IsTestMap(captive.Map)") && capture.Contains("capturedMember.IsNamed") && capture.Contains("captive.guest.CapturedBy(Faction.OfPlayer)"), "capture drives only this owned anonymous TestSite Pawn through real vanilla arrest");
             string pending = Body(scenarios, "protected StepResult CheckPendingCapture(");
-            T.Check(pending.Contains("MemberOutcome.Pending") && pending.Contains("!e.consequencesApplied") && pending.Contains("ctx.characters.characters.Count == charactersBefore") && pending.Contains("!capturedMember.IsNamed"), "scenario judges no early identity while peers remain Pending");
-            T.Check(pending.Contains("ReferenceEquals(captive, capturedMember.pawn?.pawn)") && pending.Contains("port.Registry.IsTemporaryReserved(captive)"), "pending window checks same Pawn and temporary Episode protection");
-            T.Check(!Regex.IsMatch(pending, @"\bnew\s+KnownCharacter\b|ctx\.characters\.Add\("), "capture QA never creates its own dummy Character");
+            string facts = Body(scenarios, "private GroupPendingCaptureFacts CaptureFacts(");
+            string guard = Body(scenarios, "private bool GuardCapture(");
+            T.Check(pending.Contains("GuardCapture(true)") && guard.Contains("GroupQaRules.PendingCaptureHolds("), "pending step delegates to the same mandatory real-custody guard used while waiting");
+            T.Check(facts.Contains("MemberOutcome.Pending") && facts.Contains("!e.consequencesApplied") && facts.Contains("ctx.characters.characters.Count == charactersBefore") && facts.Contains("!capturedMember.IsNamed"), "scenario judges no early identity while peers remain Pending");
+            T.Check(facts.Contains("ReferenceEquals(capturedMember?.pawn?.pawn, captive)") && facts.Contains("port.Registry.IsTemporaryReserved(captive)"), "pending window checks same Pawn and temporary Episode protection");
+            T.Check(!Regex.IsMatch(capture + pending + facts + guard, @"\bnew\s+KnownCharacter\b|ctx\.characters\.Add\("), "capture QA never creates its own dummy Character");
         }
 
         private static void CleanupWiring()

@@ -192,7 +192,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
     /// </summary>
     public static class TestSite
     {
-        public const int MapSize = 100;
+        public const int MapSize = 60;
 
         public static WorldObjectDef Def => DefDatabase<WorldObjectDef>.GetNamedSilentFail(PhysicalTestIds.TestMapDef);
 
@@ -240,6 +240,11 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 return null;
             }
             MapParent parent = FindParent();
+            if (parent != null && (parent.Faction != null || (parent.HasMap && parent.Map.IsPlayerHome)))
+            {
+                report = "refused: the dedicated test site has acquired faction ownership or home-map status";
+                return null;
+            }
             if (parent == null)
             {
                 PlanetTile tile = TileFinder.RandomSettlementTileFor(Faction.OfPlayer, false, t => !Find.WorldObjects.AnyWorldObjectAt(t)
@@ -260,7 +265,14 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 m.fogGrid.ClearAllFog();
                 PhysLog.Info("test map generated: map " + m.uniqueID + " (" + MapSize + "x" + MapSize + ") on world object " + parent.ID);
             }
-            report = "test map " + parent.Map.uniqueID + " on world object " + parent.ID + ", tile " + parent.Tile;
+            string compoundReport;
+            if (!TestCompound.Ensure(parent.Map, out compoundReport))
+            {
+                report = "refused: " + compoundReport;
+                return null;
+            }
+            report = "test map " + parent.Map.uniqueID + " (" + parent.Map.Size.x + "x" + parent.Map.Size.z + ") on world object " + parent.ID
+                + ", tile " + parent.Tile + "; " + compoundReport;
             return parent.Map;
         }
 
