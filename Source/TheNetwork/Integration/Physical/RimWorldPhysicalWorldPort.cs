@@ -569,9 +569,8 @@ namespace TheNetwork.Integration.Physical
             if (string.IsNullOrWhiteSpace(full)) return null;
             NameTriple triple = actual as NameTriple;
             if (triple != null) return new NameSnapshot { first = triple.First, nick = triple.Nick, last = triple.Last, display = full };
-            // A single name is a display fact, not a string to split or translate into a made-up first/nick/last identity.
-            if (actual is NameSingle) return new NameSnapshot { display = full };
-            return null;
+            // Other vanilla or modded Name types establish display truth only; never infer unsupported person fields.
+            return new NameSnapshot { display = full };
         }
 
         /// <summary>SignalBridge: a bound pawn's synchronous LeftMap (runtime only; the tick it stopped ticking, for truthful aging).</summary>

@@ -1148,7 +1148,8 @@ namespace TheNetwork.Domain.Physical
                     EpisodeMember member = e.members[i];
                     if (!member.IsNamed && OrganizationCompositionV1.IsRole(member.seatRole)
                         && (member.outcome == MemberOutcome.Returned || member.outcome == MemberOutcome.Killed
-                            || member.outcome == MemberOutcome.Lost || member.outcome == MemberOutcome.NeverPlaced)) member.pawn = null;
+                            || member.outcome == MemberOutcome.Lost || member.outcome == MemberOutcome.NeverPlaced
+                            || member.outcome == MemberOutcome.Detached)) member.pawn = null;
                 }
                 e.releaseApplied = true;
                 e.releasedTick = ctx.Now;

@@ -49,6 +49,10 @@ namespace TheNetwork.Domain.Physical
                 {
                     EpisodeMember m = e.members[k];
                     if (m == null) continue;
+                    if (e.releaseApplied && !m.IsNamed && m.pawn != null && OrganizationCompositionV1.IsRole(m.seatRole)
+                        && (m.outcome == MemberOutcome.Returned || m.outcome == MemberOutcome.Killed
+                            || m.outcome == MemberOutcome.Lost || m.outcome == MemberOutcome.NeverPlaced || m.outcome == MemberOutcome.Detached))
+                        findings.Add("Episode " + e.id + " " + m + ": released anonymous operational member still retains a PawnRef that COMPLETE must forget; reported, not cleared.");
                     bool clearedOrdinaryHistory = e.releaseApplied && !m.IsNamed && !m.IsBound && OrganizationCompositionV1.IsRole(m.seatRole) && m.releaseStep > 0;
                     int actions = ReleasePolicy.ActionsFor(m.IsBound || clearedOrdinaryHistory, m.IsNamed, m.outcome).Length;
                     if (m.releaseStep > actions) findings.Add("Episode " + e.id + " " + m + ": release cursor " + m.releaseStep + " beyond its " + actions + " actions.");

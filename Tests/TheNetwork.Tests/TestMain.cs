@@ -142,6 +142,8 @@ namespace TheNetwork.Tests
             Phase32bRetentionScaleTests.Register(tests);
             Phase32bBoundedEpisodeTests.Register(tests);
             Phase32bRuntimeQaTests.Register(tests);
+            Phase32bCustomPawnNameTests.Register(tests);
+            Phase32bDetachedCleanupTests.Register(tests);
             EnslavementCorrectionTests.Register(tests);
             StartupTests.Register(tests);
 
