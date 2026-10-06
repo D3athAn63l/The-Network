@@ -183,6 +183,34 @@ namespace TheNetwork.Domain.Contractors
             return org == null ? 1 : Math.Max(1, org.Healthy + org.Wounded + org.Committed + org.knownMembers.Count);
         }
 
+        /// <summary>
+        /// Phase 3.2B write-once organization role compatibility. The immutable-origin cohort includes historical people;
+        /// current rank/status never chooses the role. Validate an organization's complete plan before storing any role.
+        /// A malformed/bound-Unset organization fails closed without rewriting physical history. Uses the existing v5 field.
+        /// </summary>
+        public int EnsureOrganizationRoles()
+        {
+            if (ctx.actors == null || ctx.characters == null) return 0;
+            int stored = 0;
+            foreach (NetworkActor actor in ctx.actors.actors)
+            {
+                if (actor == null || actor.kind != ActorKind.Organization || !IsNpcContractor(actor)) continue;
+                List<OrganizationRoleAssignment> assignments;
+                string refusal;
+                if (!OrganizationCompositionV1.TryPlanRoleInitialization(actor, ctx.characters.characters, out assignments, out refusal))
+                {
+                    NetLog.WarnOnce(LogCategory.Physical, "organization-role:" + actor.id.Value, "Organization role initialization refused for " + actor.id + ": " + refusal);
+                    continue;
+                }
+                foreach (OrganizationRoleAssignment assignment in assignments)
+                {
+                    assignment.character.opRole = assignment.role;
+                    stored++;
+                }
+            }
+            return stored;
+        }
+
         private int SeedFor(ActorId id, string salt)
         {
             return NetHash.Combine(NetHash.Combine(ctx.networkSeed, id.Value), salt);
@@ -276,6 +304,11 @@ namespace TheNetwork.Domain.Contractors
             {
                 OrganizationProfile org = BuildRoster(t, rng, a, names, people);
                 a.Add(org);
+                List<OrganizationRoleAssignment> assignments;
+                string refusal;
+                if (!OrganizationCompositionV1.TryPlanRoleInitialization(a, people, out assignments, out refusal))
+                    throw new InvalidOperationException("Organization role initialization refused: " + refusal);
+                foreach (OrganizationRoleAssignment assignment in assignments) assignment.character.opRole = assignment.role;
                 float vetShare = VeteranShare(org);
                 sim.skill = Clamp((BandCenter(t.startingExperience) - 0.4f * vetShare) / 0.6f + rng.Range(-0.02f, 0.02f), 0.05f, 1f);
             }
