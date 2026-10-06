@@ -4,9 +4,106 @@
 
 This report describes the developer-triggered group slice delivered on `codex/phase32b-groups-concretization`, based on merged PR #12 `main` **`e251c61efcbb7773f36e31e4862373e22930173e`**. The owner accepted Composition v1, the promotion policy and the 3.2B boundary in [ADR-057](DECISIONS.md#adr-057--phase-32b-readiness-owner-decisions). The earlier [readiness audit](PHASE32B_READINESS_AUDIT.md) remains a historical design/source record.
 
-No new owner in-game result is claimed. Phase 3.2A remains **MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED**: PR #11's final `e768fef` result remains 022 **41/0/0** → clean SAVE/LOAD → 025 **11/0/0**, total **52/0/0**. S26 and S27 remain **PARTIAL**; S21 remains **PARTIAL** for the previously unrun observation paths. S11 remains **FAIL / rescue STOPPED**, R-50 remains **OPEN**, O-20 remains locked, and full 3.2C, 3.3 and Phase 4 remain unimplemented.
+The owner reported 026 PASS and 027 continuity success with four invalid current-band role assertions; corrected 026/027 and the new dwell still need an owner rerun. Phase 3.2A remains **MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED**: PR #11's final `e768fef` result remains 022 **41/0/0** → clean SAVE/LOAD → 025 **11/0/0**, total **52/0/0**. S26 and S27 remain **PARTIAL**; S21 remains **PARTIAL** for the previously unrun observation paths. S11 remains **FAIL / rescue STOPPED**, R-50 remains **OPEN**, O-20 remains locked, and full 3.2C, 3.3 and Phase 4 remain unimplemented.
 
-## PR #13 surgical correction: current review record
+## PR #13 runtime correction: current owner review record
+
+This updates the existing [PR #13](https://github.com/D3athAn63l/The-Network/pull/13) on `codex/phase32b-groups-concretization`, from pre-correction HEAD **`f204edf5488ea2c4d181cf53ad7e9b0f287fe7fb`**. The prior Detached/custom-name correction's source `809e835`, two **586 / 43,106 / 0** runs and DLL hash `8ef464…` are historical below. The original `5b403fe`/581-test delivery also remains historical. Neither artifact validates the current source changes.
+
+### Owner result and required next run
+
+- **RT-PHYX-026 — owner runtime PASS**, from the previous DLL run.
+- **RT-PHYX-027 — continuity behavior passed, but runtime scenario FAIL due to invalid retained-Pawn current-capability assertion; correction pending rerun.** Four assertions failed. The previous concretized Pawns were reused, Medic/Rifleman continuity held, only two previously abstract seats generated Pawns, and the full five-person repeat reused all Pawns with zero replacement projections. Human count stayed conserved, Episodes completed and no reservation gap or unrelated identity duplication was observed.
+- On the corrected DLL, use a **fresh disposable fixture and rerun 026 → 027 before proceeding to 028**. The changed assertions, capability calculation and new dwell have no corrected owner PASS yet. No result is invented for 028+.
+
+### Retained physical truth and anonymous tier capability
+
+The old group runtime assertion verified every placed Pawn against `RoleRules.SpecFor(member.seatRole, ContractorService.Experience(a))`. This correctly tests a first-created candidate, but a stricter current band cannot revoke an already-real person's durable `opRole`. The corrected runtime captures preexisting exact bindings and first-creation RoleSpecs before Materialize. An initially unbound known leader still requires first creation. Retained checks establish expected CharacterId, exact Pawn/durable binding, unchanged operational role, zero replacement generation and healthy reservation without reapplying skill floors or sanitizing history. First creation still uses and verifies the captured creation RoleSpec; it is not weakened. Retained skill/passions and concrete history are compared immediately across Materialize; ordinary later dwell ticks may naturally add skill XP, memories or social history.
+
+The production `VeteranShare` ratio previously counted anonymous healthy+wounded tiers and omitted `org.committed`. Checking out the fixture's remaining Regulars therefore made its generic population appear empty, triggering the existing **0.5** fallback and a transient Green→Seasoned band jump at fixture skill **0.3**. The correction includes committed tier counts in the generic denominator and Veteran numerator. Healthy ↔ committed ↔ same-tier return preserves ratio and ExperienceBand. A genuine casualty/tier-population change may still change capability, and the **0.5 genuinely-empty fallback is preserved**. No KnownCharacter tier provenance, persistence field or migration is added. Anonymous→named promotion may still alter abstract capability/strength under the accepted policy.
+
+### Bounded real-map dwell and its evidence limit
+
+`GroupQaRules.MaterializationDwellTicks = 240` defines one stable game-tick interval. `DwellGroup` captures the exact Episode, map, encounter faction and shared Visit Lord. Per-frame protection and read-only `ObserveDwell` feed immutable `GroupDwellFacts` to `EvaluateDwell(startTick, nowTick, facts)`, which returns Wait until 240 ticks, Complete only with every invariant intact, or Invalid for null/negative/regressing time or any broken fact even at the completion boundary. Only 026 and the first 027 use this existing runner step/wait path; it does not manually advance TickManager, sleep/freeze AI or teleport Pawns.
+
+026 dwells after immediate placement checks and before ExitPeers. The first 027 rematerialization dwells before exit, preserving all remembered identities and validating new candidates only at first creation; its final full-five-person no-regeneration repeat stays fast. The scope excludes 028+; 029 and 030B already exercise sustained custody/Pending state.
+
+The checkpoint reads owned live Pawns, same expected map/spawn/faction/shared Visit Lord with the exact owned member count, active unreleased Episode, correct slot/role/binding, real registry reservation, no unexpected Free state or reservation gap, no HostFaction/prisoner/slave transition, no unrelated adoption and zero new KnownCharacters/projections merely from elapsed ticks. Named registry coverage must resolve the exact CharacterId, Deployed custody and same Episode under physical authority; anonymous coverage must be temporary with no invented KnownCharacter. 027 additionally preserves remembered CharacterIds/Pawns/roles without role re-projection. Normal movement/jobs/social behavior is allowed. No busy tick loop, sleep, freeze, teleport or Pawn repair is used. Failure diagnostics retain CharacterId/anonymous slot, ThingID, role, spawn/map/faction/HostFaction/prisoner/slave state, reservation, Episode/release state and elapsed ticks; failed fixtures are preserved.
+
+Headless regressions cover wait/deadline state and failure on invalid ownership/reservation. They do **not** prove real vanilla map ticks, Lord/job/social behavior or corrected owner runtime PASS. Those remain the owner's rerun evidence.
+
+### Current validation and exact artifact
+
+| Check | Result |
+|---|---|
+| Production source SHA | `bd59bd0a57704597feefead598721151a6e42758` |
+| Focused regressions | **98 tests / 4,699 checks / 0 failures**; **16 new tests / 253 checks** (VeteranShare **6 / 122 / 0**, retained-role/dwell **10 / 131 / 0**) |
+| Full fresh-process run 1 | **602 tests / 43,431 checks / 0 failures, exit 0** |
+| Full fresh-process run 2 | **602 tests / 43,431 checks / 0 failures, exit 0** |
+| Production/test compiler | **0 warnings / 0 errors** in production and tests in each run, warnings treated as errors |
+| Repository gates | **All nine source gates PASS** in each final run |
+| Markdown/whitespace/history | **764 changed-document local links / 0 errors; `git diff --check` PASS**. Appendices H–L are raw-byte-identical to pre-correction `f204edf`; Source/tests are unchanged after `bd59bd0`. |
+| Shipped artifact | `1.6/Assemblies/TheNetwork.dll`, exact tested final run 2 output, byte-for-byte comparison **PASS**; no later rebuild |
+| Embedded build stamp | `built 2026-10-06T11:49Z, source commit bd59bd0` |
+| Informational version | `0.1.0+bd59bd0a57704597feefead598721151a6e42758` |
+| DLL SHA-256 | `758be09235ef6e879e5a02eca1d395df703aafa9d3da94fe26e8e402f749d81b` |
+| DLL bytes | **1,248,768** |
+| Save format / Harmony | **5**, no migration/new field; no production Harmony. Final gates confirm. |
+| Existing PR description | **NOT UPDATED — GitHub API HTTP 403.** `gh pr edit 13` returned `Post https://api.github.com/graphql: Forbidden`; REST PATCH with the same exact body returned `Patch https://api.github.com/repos/D3athAn63l/The-Network/pulls/13: Forbidden`. Final concrete copy body is available. |
+| Owner corrected runtime | **PENDING** fresh 026 → 027, including actual live dwell. |
+
+Focused log: `/workspace/.onboarding/pr13-runtime-focused.log`. The strict focused run passed **98 tests / 4,699 checks / 0 failures**, including **16 new tests / 253 checks**, with **0 production/test warnings/errors**, warnings treated as errors and all **nine source gates PASS**. Final committed-source full passes/artifact provenance are separate evidence below.
+
+`Phase32bVeteranShareTests` contributes **6 / 122 / 0**: `Phys32b.VeteranShare_MixedWoundedPartialAndFullCheckoutReturn`, `Phys32b.VeteranShare_AllRegularCommittedKeepsGreen`, `Phys32b.VeteranShare_AllMixedCommittedUsesActualTierRatio`, `Phys32b.VeteranShare_ServiceCheckoutReturnKeepsCapability`, `Phys32b.VeteranShare_ActualVeteranLossChangesCapability`, and `Phys32b.VeteranShare_GenuinelyEmptyKeepsExistingFallback`. They exercise available wounded stock plus committed TierCount.healthy values, real matching-tier checkout/return, the skill-0.3 all-Regular Green invariant and genuine Veteran loss changing ratio/band.
+
+`Phase32bRematerializationDwellTests` contributes **10 / 131 / 0**: `Phys32b.Dwell_RetainedClassificationNeedsExistingExactBinding`, `Phys32b.Dwell_StricterCurrentBandCannotRevokeRetainedRole`, `Phys32b.Dwell_FirstCreationStillUsesOriginalRoleSpec`, `Phys32b.Dwell_RetainedContinuityRejectsEachMissingFact`, `Phys32b.Dwell_LifecycleReloadAndStricterBandReuseSameKnownPawn`, `Phys32b.Dwell_OnlyCompletesAfter240OrdinaryGameTicks`, `Phys32b.Dwell_BrokenInvariantAbortsEvenAtCompletionBoundary`, `Phys32b.Dwell_FactsAndEvaluationAreReadOnly`, `Phys32b.Dwell_RuntimeCreationAndRetainedChecksStaySeparate`, and `Phys32b.Dwell_Only026AndFirst027WaitBeforeVanillaExit`. The lifecycle test uses the existing fake-world physical token/binding and real Scribe save/load; pure fact/time and source-wiring checks catch current-band revalidation or missing dwell. These are not actual vanilla map/Lord/social tick results.
+
+Both authoritative fresh full runs against unchanged committed source `bd59bd0` passed **602 tests / 43,431 checks / 0 failures, exit 0**. Production/test compilation in each run had **0 warnings / 0 errors** with warnings treated as errors; all **nine unchanged repository source gates PASS**. The shipped DLL is the exact tested final run 2 output, compared byte-for-byte and not rebuilt afterward. These measured full totals are not inferred from the old suite plus focused checks; existing soaks can produce different dynamic check totals. Logs: `/workspace/.onboarding/pr13-runtime-final1.log` and `/workspace/.onboarding/pr13-runtime-final2.log`.
+
+An earlier full invocation aborted in Mono's native runtime with **SIGSEGV / exit 134** while ordinary bool Scribe serialization was occurring in the existing 300-contractor soak. No assertion failed before the abort. An isolated rerun with the **same executable** passed that soak (**1 test / 40 checks / 0 failures**); fresh complete runs then passed with **no Source/test/environment change**. The observed context does not establish a root cause. The aborted invocation is **not** counted as a pass or substituted for either completed fresh full run. Retained logs: `/workspace/.onboarding/pr13-runtime-aborted-full.log` and `/workspace/.onboarding/pr13-runtime-crash-repro.log`.
+
+### Requested 30-item runtime correction report
+
+| Item | Evidence / result |
+|---|---|
+| 1. Production source SHA | `bd59bd0a57704597feefead598721151a6e42758` |
+| 2. Final PR HEAD | Read after artifact/docs delivery in the task's final response and [PR #13 commits](https://github.com/D3athAn63l/The-Network/pull/13/commits); source/artifact provenance above is explicit. No new PR or merge. |
+| 3. Changed files | **12 files** against `f204edf5488ea2c4d181cf53ad7e9b0f287fe7fb`: source/tests `Source/TheNetwork/Diagnostics/RuntimePhysicalTests/PhysicalGroupScenarios.cs`, `Source/TheNetwork/Diagnostics/RuntimePhysicalTests/PhysicalGroupTestRules.cs`, `Source/TheNetwork/Domain/Contractors/ContractorService.cs`, `Tests/TheNetwork.Tests/TestMain.cs`, `Tests/TheNetwork.Tests/Phase32bRematerializationDwellTests.cs`, `Tests/TheNetwork.Tests/Phase32bVeteranShareTests.cs`; artifact/docs `1.6/Assemblies/TheNetwork.dll`, `README.md`, `docs/PHASE32B_VALIDATION.md`, `docs/PHYSICAL_LIFECYCLE.md`, `docs/RUNTIME_TESTING.md`, `docs/PHASE32B_PR_DESCRIPTION.md`. |
+| 4. 027 false negative | Four invalid retained-Pawn current-band RoleRules assertions, compounded by omitted committed tiers temporarily triggering VeteranShare's empty fallback. Identity/rematerialization itself worked. |
+| 5. Retained role validation | Expected CharacterId, same Pawn/durable binding/opRole and reservation; no current skill-floor re-admission, replacement, re-projection or history sanitation. |
+| 6. First-generation validity | New candidates retain their actual creation RoleSpec verification; retained identities do not bypass first creation. |
+| 7. VeteranShare defect | Healthy+wounded-only population omitted committed anonymous tiers, falsely using 0.5 after checkout. |
+| 8. VeteranShare correction | Include committed count in generic population and Veteran numerator; empty anonymous population still falls back to 0.5. |
+| 9. Checkout/return invariance | **98 tests / 4,699 checks / 0 failures**; **16 new tests / 253 checks** (VeteranShare **6 / 122 / 0**, retained-role/dwell **10 / 131 / 0**); exact ratio/band assertions and true population-change negatives are in the focused evidence above. |
+| 10. No named-tier schema | No KnownCharacter tier field/provenance; accepted promotion representation semantics unchanged. |
+| 11. Dwell interval | **240 ordinary game ticks**, using existing step/wait runner; real ticks remain owner evidence. |
+| 12. 026 dwell | Before ExitPeers: exact live bound owned TestSite Pawns/map/faction/Lord, Episode/role/registry, no Free gap or new identities. |
+| 13. 027 dwell | Same first-rematerialization checkpoint plus remembered CharacterId/Pawn/opRole and zero replacement; new-seat first-generation checks preserved; final repeat stays fast. |
+| 14. Focused tests | **98 tests / 4,699 checks / 0 failures**; **16 new tests / 253 checks** (VeteranShare **6 / 122 / 0**, retained-role/dwell **10 / 131 / 0**) |
+| 15. Full suite run 1 | **602 tests / 43,431 checks / 0 failures, exit 0** |
+| 16. Full suite run 2 | **602 tests / 43,431 checks / 0 failures, exit 0** |
+| 17. Warnings/errors | **0 warnings / 0 errors** in production and tests in each run, warnings treated as errors |
+| 18. Source gates | **All nine source gates PASS** in each final run |
+| 19. Save format | **5**, no bump/migration/new persisted fields. |
+| 20. Harmony | No production dependency/reference added. |
+| 21. DLL build stamp | `built 2026-10-06T11:49Z, source commit bd59bd0` |
+| 22. Informational version | `0.1.0+bd59bd0a57704597feefead598721151a6e42758` |
+| 23. DLL SHA-256 | `758be09235ef6e879e5a02eca1d395df703aafa9d3da94fe26e8e402f749d81b` |
+| 24. DLL bytes | **1,248,768** |
+| 25. PR description | **NOT UPDATED — API HTTP 403** on both GraphQL and REST attempts. The final body is retained in [PHASE32B_PR_DESCRIPTION](PHASE32B_PR_DESCRIPTION.md) for repository review; the exact GitHub-ready body with PR-root-relative links is `/workspace/.onboarding/phase32b-pr-body.md`. No new PR or merge. |
+| 26. Owner runtime | Previous 026 **PASS**; previous 027 continuity passed but scenario **FAIL** on four invalid assertions; corrected fresh **026 → 027 rerun REQUIRED before 028**, no dwell PASS claimed. |
+| 27. R-50 | **OPEN**; O-20 stays **LOCKED** and S21/S26/S27 stay **PARTIAL**. |
+| 28. S11 | **FAIL / rescue STOPPED**. |
+| 29. Deferred phases | Full **3.2C / 3.3 / Phase 4 NOT IMPLEMENTED**. |
+| 30. Final status | **PR #13 RUNTIME CORRECTION COMPLETE — OWNER 026 → 027 RERUN REQUIRED** |
+
+**DO NOT MERGE.** Prior custom-name/Detached fixes, Composition v1, seats/6–12/P0/strong evidence, terminal atomic promotion, reservation, conservation, cohesion, encounter factions and Lord architecture remain unchanged.
+
+PR-description update logs: `/workspace/.onboarding/pr13-runtime-pr-description-update.log` and `/workspace/.onboarding/pr13-runtime-pr-description-rest-update.log`. Both requests failed through the GitHub API; this was not an automatic approval-review rejection. The description remains stale until the final copy body is applied to existing PR #13.
+
+## Prior PR #13 surgical correction (historical)
+
+> Historical headless record from the previous surgical delivery, before the owner 026/027 run. Its source, counts, artifact and pending-owner statement refer to that delivery.
 
 The owner opened [PR #13](https://github.com/D3athAn63l/The-Network/pull/13) for the delivered branch. Its pre-correction HEAD is **`83328c57d7c11d6746e4b88ffda47fa659f568e2`**. This correction updates that existing PR; no new PR is requested and nothing is to be merged. The original source `5b403fe`, two **581 / 42,946 / 0** passes and DLL hash `c8acac…` below remain historical evidence. They do not validate the changed production source.
 
@@ -209,7 +306,7 @@ First projections force new Pawns and skip vanilla initial blood/non-blood relat
 
 ## Runtime scenarios and pending owner acceptance
 
-Implemented menu families: **026** small first visit; **027** five-person continuity (three reused + two concretized, then full same-Pawn repeat); **028** company zero presence promotion; **029** one anonymous arrest/atomic promotion; **030A SAVE** released/concretized group, **030B SAVE** anonymous arrest while peers Pending, **030V VERIFY** read-only loaded newest unambiguous 030/031 checkpoint; **031** owned Medic organizational succession then SAVE/LOAD→030V; **032A/032B BUILD** approximately 150/300 retained and **032V OBSERVE** loaded coverage/lookups. Exact labels/actions are in runtime § 19. Strict compilation and full headless validation passed; owner execution remains pending, and no new runtime PASS is claimed. Genuine home P0 has a separate typed adapter scope API but no added home-map action/UI.
+Implemented menu families: **026** small first visit; **027** five-person continuity (three reused + two concretized, then full same-Pawn repeat); **028** company zero presence promotion; **029** one anonymous arrest/atomic promotion; **030A SAVE** released/concretized group, **030B SAVE** anonymous arrest while peers Pending, **030V VERIFY** read-only loaded newest unambiguous 030/031 checkpoint; **031** owned Medic organizational succession then SAVE/LOAD→030V; **032A/032B BUILD** approximately 150/300 retained and **032V OBSERVE** loaded coverage/lookups. Exact labels/actions are in runtime § 19. The original strict/headless result is historical. Owner 026 previously passed and 027 continuity worked with four invalid assertion failures; the current correction requires a fresh 026 → 027 rerun before 028. Genuine home P0 has a separate typed adapter scope API but no added home-map action/UI.
 
 Scenarios use existing session-only arm, dedicated tagged test map, sentinel and preserve-on-failure behavior. They are excluded from Quick smoke/Full safe regression. Existing IDs are not renumbered; save/load is owner-assisted, not automated. See [RUNTIME_TESTING § 19](RUNTIME_TESTING.md#19-phase-32b-groups-and-progressive-concretization) for exact checkpoints and commands.
 

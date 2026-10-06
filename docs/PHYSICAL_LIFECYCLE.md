@@ -3712,7 +3712,7 @@ physical run of `RT-PHYX-020…025` is the evidence still owed.
 > policy over merged PR #12 `main` `e251c61`. It adds bounded groups without a persistent anonymous Pawn population.
 > Final source/build, full-suite counts, fault/conservation proof and DLL provenance are recorded in
 > [PHASE32B_VALIDATION](PHASE32B_VALIDATION.md). [Runtime § 19](RUNTIME_TESTING.md#19-phase-32b-groups-and-progressive-concretization)
-> gives the owner scenarios/checkpoints; none is claimed as an owner run. S26/S27 stay PARTIAL, S21 stays PARTIAL,
+> gives the owner scenarios/checkpoints. Previous 026 passed; 027 continuity worked but four invalid current-band assertions failed; corrected fresh 026 → 027 including live dwell is required. S26/S27 stay PARTIAL, S21 stays PARTIAL,
 > S11 FAIL / rescue STOPPED, R-50 OPEN, O-20 locked. The accepted 3.1 and 3.2A owner evidence in Appendices K/L is unchanged.
 
 ### M.1 Where each piece lives
@@ -3739,6 +3739,17 @@ current capacity; their identity/history remains. CharacterRole standing can cha
 Size is actual living current membership at placement: 2–6 anonymous seats may use P0, 7–12 only non-Rifleman role-defining
 seats may use P0, 13+ needs strong evidence for every anonymous seat. The six discretionary target includes leader/lieutenants;
 strong identity obligations can overflow the same knownMembers model. Existing pins remain identities across size changes.
+
+First-created Pawns retain their creation RoleSpec verification. Bound rematerialized identities keep the exact Pawn,
+CharacterId and durable `opRole`; today's mutable capability band does not re-project/revalidate the person's current skills
+or rewrite physical/social history. `VeteranShare` includes healthy, wounded and committed anonymous tier populations, so
+matching-tier checkout/return preserves ratio and ExperienceBand. Its genuinely-empty fallback stays 0.5. Named people gain
+no source-tier field; anonymous-to-named promotion may still alter accepted abstract capability/strength representation.
+
+The owner QA for 026 and the first 027 rematerialization has a 240-ordinary-game-tick step/wait dwell before ExitMap. It checks
+same live owned map/Pawn/role/faction/Lord, active Episode and registry protection without freezing AI or repairing Pawns.
+The final 027 full-crew repeat stays fast; 028+ are unchanged. Headless wait/failure coverage does not prove real map ticks,
+Lord/job/social behavior or corrected owner PASS.
 
 While any peer remains Pending, a created anonymous held Pawn remains Episode-owned/reserved; no temporary KnownCharacter
 exists. Whole-Episode terminal reconciliation creates the same Pawn's durable person before RELEASE. Positive custody always
@@ -3782,7 +3793,9 @@ retry. Actual game save/load at active, committed-before-RELEASE and released ch
 
 ### M.4 Evidence and exact scope limits
 
-PR #13's surgical correction source `809e835` passed two fresh full runs of **586 tests / 43,106 checks / 0 failures** each, with strict **0 compiler warnings/errors** and all **nine source gates PASS**. The shipped exact tested run 2 DLL has SHA-256 `8ef464be121f0fabb26eb98a811a16071c6e57d3f9f2949a4df1560362b82ff2`, stamp `built 2026-10-06T10:59Z, source commit 809e835`. Exact focused regressions, corrected artifact provenance and the 27-item report are in the [current surgical record](PHASE32B_VALIDATION.md#pr-13-surgical-correction-current-review-record). Owner runtime remains pending.
+Current runtime correction source/provenance and the 30-item report are in [PHASE32B_VALIDATION](PHASE32B_VALIDATION.md#pr-13-runtime-correction-current-owner-review-record). Current complete-suite validation: **602 tests / 43,431 checks / 0 failures, exit 0** in each of two fresh processes; **0 warnings / 0 errors** in production and tests in each run, warnings treated as errors; **All nine source gates PASS** in each final run. Source: `bd59bd0`. Owner previous 026 PASS and 027 continuity success are recorded there; the four invalid assertions and capability checkout defect are corrected, but **fresh corrected 026 → 027 and real dwell remain owner acceptance work**.
+
+The prior surgical delivery's source `809e835` passed two fresh full runs of **586 tests / 43,106 checks / 0 failures** each, with strict **0 compiler warnings/errors** and all **nine source gates PASS**. Its shipped exact tested run 2 DLL had SHA-256 `8ef464be121f0fabb26eb98a811a16071c6e57d3f9f2949a4df1560362b82ff2`, stamp `built 2026-10-06T10:59Z, source commit 809e835`. Exact focused regressions, corrected artifact provenance and the 27-item report are in the [historical surgical record](PHASE32B_VALIDATION.md#prior-pr-13-surgical-correction-historical). Owner runtime remains pending.
 
 The original delivery's two fresh full runs against source `5b403fe` each passed **581 tests / 42,946 checks / 0 failures**, with **0 compiler warnings/errors**, warnings treated as errors and all **nine source gates PASS**. Its run 2 DLL had SHA-256 `c8acac8534822dfa3e55521019c1379f2acd3fd3084266ad63739cfad7270adc`, stamp `built 2026-10-06T10:10Z, source commit 5b403fe`. Original changed files and measured headless retention/Scribe costs remain historical evidence in the validation report. Retention fixtures around 150/300 report measured headless registry costs;
 Unity TPS, actual save-size deltas and active-mod runtime safety are pending. 150 is a soft warning region, never an identity cap.
