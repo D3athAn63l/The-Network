@@ -3712,7 +3712,7 @@ physical run of `RT-PHYX-020…025` is the evidence still owed.
 > policy over merged PR #12 `main` `e251c61`. It adds bounded groups without a persistent anonymous Pawn population.
 > Final source/build, full-suite counts, fault/conservation proof and DLL provenance are recorded in
 > [PHASE32B_VALIDATION](PHASE32B_VALIDATION.md). [Runtime § 19](RUNTIME_TESTING.md#19-phase-32b-groups-and-progressive-concretization)
-> gives the owner scenarios/checkpoints. Previous 026 passed; 027 continuity worked but four invalid current-band assertions failed; corrected fresh 026 → 027 including live dwell is required. S26/S27 stay PARTIAL, S21 stays PARTIAL,
+> gives the owner scenarios/checkpoints. The owner accepted 026 / 027 / 028 including the 240-tick dwell; previous 029 failed after wilderness escape. Corrected compound/029 custody awaits owner rerun. S26/S27 stay PARTIAL, S21 stays PARTIAL,
 > S11 FAIL / rescue STOPPED, R-50 OPEN, O-20 locked. The accepted 3.1 and 3.2A owner evidence in Appendices K/L is unchanged.
 
 ### M.1 Where each piece lives
@@ -3748,8 +3748,8 @@ no source-tier field; anonymous-to-named promotion may still alter accepted abst
 
 The owner QA for 026 and the first 027 rematerialization has a 240-ordinary-game-tick step/wait dwell before ExitMap. It checks
 same live owned map/Pawn/role/faction/Lord, active Episode and registry protection without freezing AI or repairing Pawns.
-The final 027 full-crew repeat stays fast; 028+ are unchanged. Headless wait/failure coverage does not prove real map ticks,
-Lord/job/social behavior or corrected owner PASS.
+The final 027 full-crew repeat stays fast; later scenarios do not gain that generic dwell. The owner accepted
+026 / 027 / 028, including the live dwell. Headless coverage alone does not prove real map ticks or Lord/job/social behavior.
 
 While any peer remains Pending, a created anonymous held Pawn remains Episode-owned/reserved; no temporary KnownCharacter
 exists. Whole-Episode terminal reconciliation creates the same Pawn's durable person before RELEASE. Positive custody always
@@ -3779,6 +3779,14 @@ Construction-only cohesion sets force-new and disables vanilla initial relation 
 FixedIdeo selected from established members or the first valid batch candidate and are verified. Existing social history remains
 physical truth. No opinion floors, friendship/memory/trait/relation edits or post-bind sanitization are implemented.
 
+The TestSite QA now uses a deterministic real compound on fresh 60-square maps while preserving the non-home,
+factionless/no-comp/no-incident-target parent; old 100-square sites are never resized under Pawns. Real recognized prison
+room/beds and a closed player-owned door address the audited ordinary open-route escape, without a home/warden conversion.
+Shared 029 / 030B capture QA verifies actual player-prisoner custody on each relevant Pending checkpoint, fails once on lost
+prerequisite and leaves the production terminal batch unchanged. No transient S1 historical-capture latch is added; capture→
+escape-before-batch remains separate temporal-design review, likely 3.2C. Source audit and exact compound/fixture evidence
+are in [PHASE32B_CUSTODY_QA_AUDIT](PHASE32B_CUSTODY_QA_AUDIT.md) and the current validation record. Live AI/save-load remains owner evidence.
+
 ### M.3 Save/load and compatibility
 
 Save format stays **5**. Only additive EpisodeMember placement fields are added: `playerVisibleTick` defaults **−1** and
@@ -3793,9 +3801,11 @@ retry. Actual game save/load at active, committed-before-RELEASE and released ch
 
 ### M.4 Evidence and exact scope limits
 
-Current runtime correction source/provenance and the 30-item report are in [PHASE32B_VALIDATION](PHASE32B_VALIDATION.md#pr-13-runtime-correction-current-owner-review-record). Current complete-suite validation: **602 tests / 43,431 checks / 0 failures, exit 0** in each of two fresh processes; **0 warnings / 0 errors** in production and tests in each run, warnings treated as errors; **All nine source gates PASS** in each final run. Source: `bd59bd0`. Owner previous 026 PASS and 027 continuity success are recorded there; the four invalid assertions and capability checkout defect are corrected, but **fresh corrected 026 → 027 and real dwell remain owner acceptance work**.
+Current compound/custody QA source `5548f0b` and the 34-item report are in [PHASE32B_VALIDATION](PHASE32B_VALIDATION.md#pr-13-custody-qa-correction-current-owner-review-record). Focused: **112 tests / 5,363 checks / 0 failures** (`Phys32b`); same-executable filters: Compound **5 / 552 / 0**, CaptureGuard **9 / 107 / 0**, 030B real Scribe reload **1 / 27 / 0**, Pawn-safety scan **1 / 65 / 0**; full pass 1: **616 tests / 44,269 checks / 0 failures, exit 0**; full pass 2: **616 tests / 44,269 checks / 0 failures, exit 0**; **0 warnings / 0 errors** in strict production and test builds for each accepted full run; warnings as errors; **PASS**, all 9 source gates in each accepted full run. Owner 026 / 027 / 028 are accepted PASS; previous 029 lost actual custody in wilderness before terminal batch. Corrected 029 and 030B → SAVE/LOAD → 030V remain pending. Preserve accepted **026–028 PASS**. Run corrected **029 first on a fresh TestSite/disposable fixture**, then continue to **030 if PASS**. No mandatory 026 rerun: the prison lies outside the unchanged radius-12 visitor chill area, the central courtyard retains its edge route, and adapter/Lord/chill behavior is unchanged. A real shared visitor-behavior issue would require a targeted sanity rerun; headless checks do not prove the 60-square map in Unity.
 
-The prior surgical delivery's source `809e835` passed two fresh full runs of **586 tests / 43,106 checks / 0 failures** each, with strict **0 compiler warnings/errors** and all **nine source gates PASS**. Its shipped exact tested run 2 DLL had SHA-256 `8ef464be121f0fabb26eb98a811a16071c6e57d3f9f2949a4df1560362b82ff2`, stamp `built 2026-10-06T10:59Z, source commit 809e835`. Exact focused regressions, corrected artifact provenance and the 27-item report are in the [historical surgical record](PHASE32B_VALIDATION.md#prior-pr-13-surgical-correction-historical). Owner runtime remains pending.
+The prior rematerialization/dwell correction's source `bd59bd0` passed 602 tests / 43,431 checks / 0 failures in two fresh runs, strict 0 warnings/errors and nine gates PASS, with DLL SHA `758be09235ef6e879e5a02eca1d395df703aafa9d3da94fe26e8e402f749d81b`, stamp `built 2026-10-06T11:49Z, source commit bd59bd0`. Its historical 30-item report, abort disclosure and subsequent owner acceptance remain preserved.
+
+The prior surgical delivery's source `809e835` passed two fresh full runs of **586 tests / 43,106 checks / 0 failures** each, with strict **0 compiler warnings/errors** and all **nine source gates PASS**. Its shipped exact tested run 2 DLL had SHA-256 `8ef464be121f0fabb26eb98a811a16071c6e57d3f9f2949a4df1560362b82ff2`, stamp `built 2026-10-06T10:59Z, source commit 809e835`. Exact focused regressions, corrected artifact provenance and the 27-item report are in the [historical surgical record](PHASE32B_VALIDATION.md#prior-pr-13-surgical-correction-historical). At that delivery, owner runtime remained pending.
 
 The original delivery's two fresh full runs against source `5b403fe` each passed **581 tests / 42,946 checks / 0 failures**, with **0 compiler warnings/errors**, warnings treated as errors and all **nine source gates PASS**. Its run 2 DLL had SHA-256 `c8acac8534822dfa3e55521019c1379f2acd3fd3084266ad63739cfad7270adc`, stamp `built 2026-10-06T10:10Z, source commit 5b403fe`. Original changed files and measured headless retention/Scribe costs remain historical evidence in the validation report. Retention fixtures around 150/300 report measured headless registry costs;
 Unity TPS, actual save-size deltas and active-mod runtime safety are pending. 150 is a soft warning region, never an identity cap.

@@ -4,9 +4,131 @@
 
 This report describes the developer-triggered group slice delivered on `codex/phase32b-groups-concretization`, based on merged PR #12 `main` **`e251c61efcbb7773f36e31e4862373e22930173e`**. The owner accepted Composition v1, the promotion policy and the 3.2B boundary in [ADR-057](DECISIONS.md#adr-057--phase-32b-readiness-owner-decisions). The earlier [readiness audit](PHASE32B_READINESS_AUDIT.md) remains a historical design/source record.
 
-The owner reported 026 PASS and 027 continuity success with four invalid current-band role assertions; corrected 026/027 and the new dwell still need an owner rerun. Phase 3.2A remains **MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED**: PR #11's final `e768fef` result remains 022 **41/0/0** → clean SAVE/LOAD → 025 **11/0/0**, total **52/0/0**. S26 and S27 remain **PARTIAL**; S21 remains **PARTIAL** for the previously unrun observation paths. S11 remains **FAIL / rescue STOPPED**, R-50 remains **OPEN**, O-20 remains locked, and full 3.2C, 3.3 and Phase 4 remain unimplemented.
+The owner accepted 026 / 027 / 028 on the prior corrected DLL, including 240-tick dwell; previous 029 lost real custody before batch and failed. The current compound/029 correction remains owner-rerun work. Phase 3.2A remains **MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED**: PR #11's final `e768fef` result remains 022 **41/0/0** → clean SAVE/LOAD → 025 **11/0/0**, total **52/0/0**. S26 and S27 remain **PARTIAL**; S21 remains **PARTIAL** for the previously unrun observation paths. S11 remains **FAIL / rescue STOPPED**, R-50 remains **OPEN**, O-20 remains locked, and full 3.2C, 3.3 and Phase 4 remain unimplemented.
 
-## PR #13 runtime correction: current owner review record
+## PR #13 custody QA correction: current owner review record
+
+This continues existing [PR #13](https://github.com/D3athAn63l/The-Network/pull/13) on `codex/phase32b-groups-concretization`, from **`be3088cefd496e453c9e60d67a87fea9444faac2`**. The previous validated source `bd59bd0`, two **602 / 43,431 / 0** passes and DLL hash `758be092…` now form the historical runtime-correction record below. No new PR or merge.
+
+### Accepted owner result and 029 failure
+
+The owner reports **026 PASS / 027 PASS / 028 PASS / 029 FAIL** on the previous corrected DLL, including the accepted **240 ordinary-game-tick dwell** in 026 and the first 027. These passes remain accepted; the new compound/custody fixture has no owner PASS yet.
+
+029 created three anonymous Riflemen and used real `CapturedBy(Faction.OfPlayer)`. Immediately afterward the same Pawn was a colony prisoner with its Episode binding/temporary reservation, Pending peers, no early Character and conserved humans. About three ticks later vanilla announced escape. At terminal batch around 500 ticks it was WorldFree; all three members truthfully Returned, no captured person was promoted and nine final assertions followed that single lost-custody prerequisite. This is a custody-fixture failure, not evidence that atomic promotion broke.
+
+### Actual vanilla source audit and narrow correction
+
+The [custody QA audit](PHASE32B_CUSTODY_QA_AUDIT.md) identifies the concrete supplied 1.6 assembly and separately pinned Humanlike.xml evidence. `JobGiver_PrisonerEscape` can issue an exit job for a secure player-hosted prisoner in an edge-connected district or an open-door/doorless route to an edge. `CapturedBy` changes actual guest/custody/Lord state but does not create/transport to a prison. Repository placement supplies a more specific cause: `RimWorldPhysicalWorldPort.Place` selects an edge cell and spawns each group Pawn there; the QA runner proceeds from placement to arrest without a game-tick wait. The old captive therefore remained in the edge district at arrest, directly satisfying the audited `district.TouchesMapEdge` predicate. This repository timing evidence is separate from the supplied DLL predicate; the cloud audit did not inspect the owner's saved district independently.
+
+A real proper non-huge room with actual ForPrisoners beds and a **closed player-owned door** blocks that immediate ordinary open-route escape. Factionless doors can be human-openable and are insufficient. Audited non-home wandering/food paths respect ordinary reachability/closed doors. No fundamental home-map, player parent, fake colonist or warden requirement was found; the existing factionless, no-comp/no-incident-target TestSite remains non-home. Ordinary random prison breaks remain possible and are reported truthfully, never suppressed.
+
+### TestSite / compound as built
+
+Fresh TestSites are **60×60**. Coordinates are offsets from map center: open **13×13 soil courtyard** at x/z **−6..+6**; east **9×9 granite wall ring** x **+15..+23**, z **−4..+4**, enclosing a **7×7** prison interior. One west-wall **wooden door** is at **(+15, 0)**; two real **wooden North-facing 1×2 beds** are anchored **(+18, −1)** and **(+21, −1)**. Constructed roof covers the prison. The cell is outside the visitor chill radius 12. Existing valid 100×100 TestSites are reused, never resized beneath Pawns; logs report actual size.
+
+`TestCompound.Ensure` accepts only the exact current dedicated TestSite with its narrow def, plain factionless parent and false IsPlayerHome. It validates the full bounds/Pawn/foreign-Thing footprint before bounded natural clearing, soil/roof and real structure spawning. A valid existing compound returns from read-only Validate before any write, preserving walls/doors/beds and their owners. Real prisoner designation is followed by actual region/district/room updates; require ProperRoom, !IsHuge, RoomCanBePrisonCell, IsPrisonCell, no edge-touching and the closed player-owned door. Actual NoPassClosedDoors edge reachability must hold for the courtyard and fail for the cell. Bed footprints allow vanilla PassThroughOnly; free cells must be Standable. Door autoorientation is respected; bed North orientation remains checked. No occupied bed owner is evicted.
+
+Shared `GroupCaptureRun.ArrestAnonymous` calls `TestCompound.TryPreparePrisoner(e, member, pawn, out bed, out report)` to verify the exact owned anonymous slot and cell/available bed. It performs ONE owned `Position` + `Notify_Teleported` relocation before ONE real `CapturedBy(Faction.OfPlayer)`, then `TryClaimPrisonerBed` requires actual prisoner/IsValidBedFor and uses vanilla ClaimBedIfNonMedical without evicting any other bed owner. Read-only GuardCapture checks follow immediately; there are no relocation/repair/recapture calls after arrest.
+
+The immutable 17-fact guard checks before returning Wait, on each relevant frame and after the existing reconciliation call: exact active-owned Episode/member/PawnRef/Pawn/ThingID/role/map, live spawned captive, actual IsPrisonerOfColony AND observed HeldByPlayer/PlayerPrisoner, continuous temporary reservation, anonymous member, unchanged CharacterStore/commit count and conserved headcount, Open/uncommitted Episode and an ordinary Pending peer. The first invalid fact irreversibly latches one failure with Pawn/binding/observation/role/map/reservation/Episode/tick/elapsed diagnostics. Peer-exit, wait and final steps abort instead of cascading. After deliberate ordinary peer exit only that peer condition is relaxed; after the atomic batch, physical custody checks permit the expected named handoff through RELEASE. 030B checks again before its SAVE pause. Loaded 030V uses a read-only exact saved company-slot-0 Rifleman custody/binding guard while incomplete; it requires no current armed run or artificial Pending peer and permits natural peer exits. Nothing repairs, relocates or recaptures after arrest.
+
+029 retains its existing **two WatchPeriod intervals = at least 500 game ticks** custody window; no generic 240-tick dwell is copied to it. Terminal assertions still require exactly one same-Pawn Captured/OutOfCustody/PlayerPrisoner identity, actual name/organization/opRole, real colony-prisoner status, physical authority, named M1 handoff, correct Character routing/removed Episode tag, custody watch, conserved humans, zero gaps/findings. 030B uses the same arrest/pending fixture and still pauses for owner SAVE→LOAD→read-only 030V.
+
+**Transient S1 custody before terminal batch is not currently latched as durable promotion evidence; 029 intentionally proves sustained custody through terminal batch. Capture→escape-before-batch requires separate design review, likely Phase 3.2C.** Core identity/evidence/promotion/reconciliation/observer/watch/rollback/reservation policies are unchanged. No fake held state, timer manipulation, recapture loop, prisoner-AI freeze/patch, Harmony, home conversion, colony mutation, named tier/schema or extra persistent compound registry is added.
+
+### Current validation and artifact
+
+| Check | Current result |
+|---|---|
+| Final source | `5548f0b5471614929a76a853dd53b82d8e0119a6` |
+| Focused compound/custody/030B | **112 tests / 5,363 checks / 0 failures** (`Phys32b`); same-executable filters: Compound **5 / 552 / 0**, CaptureGuard **9 / 107 / 0**, 030B real Scribe reload **1 / 27 / 0**, Pawn-safety scan **1 / 65 / 0** |
+| Full fresh-process pass 1 | **616 tests / 44,269 checks / 0 failures, exit 0** |
+| Full fresh-process pass 2 | **616 tests / 44,269 checks / 0 failures, exit 0** |
+| Compiler | **0 warnings / 0 errors** in strict production and test builds for each accepted full run; warnings as errors |
+| Source gates | **PASS**, all 9 source gates in each accepted full run |
+| Markdown/whitespace/history | **773 changed-document local links / 0 errors; `git diff --check` PASS**. Appendices H–L (**72,517 bytes**) and all prior validation bodies (**58,282 bytes**) are raw-byte-equal to pre-correction `be3088ce`; Source/tests are unchanged after `5548f0b` |
+| DLL path | `1.6/Assemblies/TheNetwork.dll`; exact final validated output, no later rebuild. |
+| Build stamp | `built 2026-10-06T13:02Z, source commit 5548f0b` |
+| Informational version | `0.1.0+5548f0b5471614929a76a853dd53b82d8e0119a6` |
+| SHA-256 | `b929ad26f82d500bc8e74924a0143e6bb1e756e961c323c07ebe22ed7257b502` |
+| Bytes | **1,279,488** |
+| Save / Harmony | **5**, no new persisted compound state/migration; no production Harmony. |
+| Remote PR description | Current remote PR-description content is **UNVERIFIED**: the current GET returned Forbidden, and the latest authorized REST PATCH with the complete body also returned Forbidden. The owner may have manually updated the body; neither failed request establishes its current content. The final local body is ready to copy |
+| Owner corrected custody | **PENDING** corrected 029, then 030B SAVE/LOAD→030V. |
+
+The 14 new geometry/custody registrations passed in the final amended-source focused filters above. These prove deterministic geometry, refusal/reuse/API wiring, immutable pending-custody policy/failure latch and the fake-lifecycle escape-before-batch boundary; they do not execute Unity room/path/escape AI or establish actual 500-tick custody.
+
+- `Phys32b.Compound_DeterministicGeometryFitsSmallMap`
+- `Phys32b.Compound_VisitorCellsStayOutsidePrison`
+- `Phys32b.Compound_RealDoorClosesWallBoundaryAndBedsStayInside`
+- `Phys32b.Compound_ConstructionRefusesOrdinaryColonyMaps`
+- `Phys32b.Compound_EnsureReusesValidStructuresAndVerifiesVanillaPrison`
+- `Phys32b.CaptureGuard_EveryPendingPrerequisiteMustHold`
+- `Phys32b.CaptureGuard_PeerExitRelaxesOnlyPeerPresence`
+- `Phys32b.CaptureGuard_ActualAndObservedCustodyMustAgree`
+- `Phys32b.CaptureGuard_NamedTerminalHandoffKeepsPhysicalCustodyRequired`
+- `Phys32b.CaptureGuard_FailureCannotBeErasedByLaterRecovery`
+- `Phys32b.CaptureGuard_FactsAndRulesNeverMutateOrRepair`
+- `Phys32b.CaptureGuard_EscapeBeforePeersResolveFailsWithoutEarlyIdentity`
+- `Phys32b.CaptureGuard_RuntimeChecksBeforeWaitAndAfterReconcile`
+- `Phys32b.CaptureGuard_029And030BShareOneLegitimateArrest`
+
+Preliminary source-text matcher failure: one new test treated “before CapturedBy” in a diagnostic as a call; requiring an invocation parenthesis fixed that matcher, without a production behavior change.
+
+The superseded candidate source `550d1cd` passed focused 112 / 5,363 / 0, but its full run was rejected at **616 tests / 44,264 checks / 1 failure**: the existing `Phys31.Scan_NoDestroyOrDiscardOfBoundPawns` blanket Destroy scan also rejected explicitly authorized natural-obstacle clearing. The existing scan was narrowed only for TestCompound’s one preflighted unowned/untagged plant/natural-rock/chunk set, retaining refusal of every Pawn, foreign Thing, footprint crossing and other/home map. No production source behavior changed for this test correction. That full run is not a pass or shipped-artifact evidence; its log is `/workspace/.onboarding/pr13-custody-final1.log`.
+
+Final amended-source focused evidence above passed at `/workspace/.onboarding/pr13-custody-focused-final.log`; an additional completed full invocation against `5548f0b` passed **616 / 44,269 / 0, exit 0** (`/workspace/.onboarding/pr13-custody-final-full1.log`). The next invocation aborted in Mono’s native runtime with **SIGSEGV / exit 134** during existing `Soak.Career_TwentyGameYearsHundredContractors` → `ReportCareerSize` → `PersistenceTests.SaveState` → `NetworkState.ExposeStores` → `DeliverObjective.ExposeData` → `Verse.Scribe_Values.Look<bool>(ref balancePaid)`; no completed totals or PASS are claimed (`/workspace/.onboarding/pr13-custody-final-full2.log`). That code/test is unchanged by this task; the observed context does not establish a root cause. The same aborted-run executable passed isolated career soak **1 test / 41 checks / 0 failures, exit 0** (`/workspace/.onboarding/pr13-custody-crash-isolation.log`). No assertion failed before the native abort; the implicated core/soak/test code is unchanged and the physical tests had not yet run. This points outside the custody QA path without identifying the exact native root cause.
+
+Both accepted fresh complete runs passed **616 tests / 44,269 checks / 0 failures, exit 0**, without a Source/test change, in `/workspace/.onboarding/pr13-custody-accepted1.log` and `pr13-custody-accepted2.log`. Each strictly built production/tests with **0 warnings / 0 errors**, warnings as errors, and all **9 source gates PASS**. The shipped DLL is the exact accepted-run-2 tested output `/workspace/.onboarding/pr13-custody-accepted2.W3exJG/TheNetwork.dll`, compared byte-for-byte with the external mod copy and tracked artifact: **PASS**. No later rebuild occurred. These measured totals are not inferred from old counts or the additional first completed invocation.
+
+**15 changed files** against pre-correction `be3088ce`: source/tests commit `5548f0b` contains eight files (949 insertions / 21 deletions): four shipped QA source files (`PhysicalGroupScenarios.cs`, `PhysicalGroupTestRules.cs`, `PhysicalTestWorld.cs`, new `TestCompound.cs`) and four test files (`Phase31Tests.cs`, new `Phase32bCompoundCustodyTests.cs`, `Phase32bRuntimeQaTests.cs`, `TestMain.cs`). The separate artifact/docs delivery contains `1.6/Assemblies/TheNetwork.dll`, `README.md`, `docs/PHASE32B_VALIDATION.md`, `docs/PHYSICAL_LIFECYCLE.md`, `docs/RUNTIME_TESTING.md`, `docs/PHASE32B_PR_DESCRIPTION.md`, and new `docs/PHASE32B_CUSTODY_QA_AUDIT.md`. Core lifecycle/observer/adapter source is unchanged.
+
+The latest authorized REST PATCH of existing PR #13 using the complete body failed: `Patch https://api.github.com/repos/D3athAn63l/The-Network/pulls/13: Forbidden` (`/workspace/.onboarding/pr13-custody-pr-update.log`). The earlier current GET also failed (`/workspace/.onboarding/pr13-custody-pr-read.log`). The remote body remains **UNVERIFIED**; possible owner updates are not disproved. Prior 403 records below describe historical attempts only. The [current local description](PHASE32B_PR_DESCRIPTION.md) and GitHub-ready `/workspace/.onboarding/pr13-custody-pr-body.md` provide complete review/copy text. This API denial was not an automatic approval-review rejection.
+
+### Requested 34-item custody QA report
+
+| Item | Evidence / result |
+|---|---|
+| 1. Immediate escape reason | Audited player-prisoner edge/open-route escape predicate; no enclosed holding area. Repository edge-cell placement and same-frame arrest directly satisfy `district.TouchesMapEdge`; owner escape followed around three ticks later. Saved owner district was not independently inspected. |
+| 2. Audited methods | Exact CapturedBy/guest/escape/room/bed/door/Map/MapParent/think-tree/wander/food/prison-break methods and evidence provenance in the audit above. |
+| 3. Home required? | **No fundamental home/colonist/warden requirement found** in audited paths; preserve existing non-home parent semantics. |
+| 4. Bed/room required? | Real proper non-huge prison room with ForPrisoners bed and closed player-owned door; verify actual room/bed predicates, not a Network flag. |
+| 5. TestSite size | New **60×60**; reuse valid old 100 maps without resizing; report actual generated/loaded size. |
+| 6. Compound geometry | Fresh TestSites are **60×60**. Coordinates are offsets from map center: open **13×13 soil courtyard** at x/z **−6..+6**; east **9×9 granite wall ring** x **+15..+23**, z **−4..+4**, enclosing a **7×7** prison interior. One west-wall **wooden door** is at **(+15, 0)**; two real **wooden North-facing 1×2 beds** are anchored **(+18, −1)** and **(+21, −1)**. Constructed roof covers the prison. The cell is outside the visitor chill radius 12. Existing valid 100×100 TestSites are reused, never resized beneath Pawns; logs report actual size. |
+| 7. Vanilla Things | Real vanilla granite walls, wooden door, two wooden North-facing prisoner beds, Soil terrain and Constructed roof; no optional colony/furniture/food/warden infrastructure. |
+| 8. Prison validation | `TestCompound.Ensure` accepts only the exact current dedicated TestSite with its narrow def, plain factionless parent and false IsPlayerHome. It validates the full bounds/Pawn/foreign-Thing footprint before bounded natural clearing, soil/roof and real structure spawning. A valid existing compound returns from read-only Validate before any write, preserving walls/doors/beds and their owners. Real prisoner designation is followed by actual region/district/room updates; require ProperRoom, !IsHuge, RoomCanBePrisonCell, IsPrisonCell, no edge-touching and the closed player-owned door. Actual NoPassClosedDoors edge reachability must hold for the courtyard and fail for the cell. Bed footprints allow vanilla PassThroughOnly; free cells must be Standable. Door autoorientation is respected; bed North orientation remains checked. No occupied bed owner is evicted. |
+| 9. Idempotence | Preserve valid existing structures and occupied beds; no duplicates or unjustified replacement. Focused evidence: **112 tests / 5,363 checks / 0 failures** (`Phys32b`); same-executable filters: Compound **5 / 552 / 0**, CaptureGuard **9 / 107 / 0**, 030B real Scribe reload **1 / 27 / 0**, Pawn-safety scan **1 / 65 / 0** |
+| 10. Target refusal | Exact current non-home TestSite only; ordinary/player-home/other maps and invalid defs refuse before construction. No colony/sentinel weakening. |
+| 11. 029 setup | Shared `GroupCaptureRun.ArrestAnonymous` calls `TestCompound.TryPreparePrisoner(e, member, pawn, out bed, out report)` to verify the exact owned anonymous slot and cell/available bed. It performs ONE owned `Position` + `Notify_Teleported` relocation before ONE real `CapturedBy(Faction.OfPlayer)`, then `TryClaimPrisonerBed` requires actual prisoner/IsValidBedFor and uses vanilla ClaimBedIfNonMedical without evicting any other bed owner. Read-only GuardCapture checks follow immediately; there are no relocation/repair/recapture calls after arrest. |
+| 12. Pending checks | The immutable 17-fact guard checks before returning Wait, on each relevant frame and after the existing reconciliation call: exact active-owned Episode/member/PawnRef/Pawn/ThingID/role/map, live spawned captive, actual IsPrisonerOfColony AND observed HeldByPlayer/PlayerPrisoner, continuous temporary reservation, anonymous member, unchanged CharacterStore/commit count and conserved headcount, Open/uncommitted Episode and an ordinary Pending peer. The first invalid fact irreversibly latches one failure with Pawn/binding/observation/role/map/reservation/Episode/tick/elapsed diagnostics. Peer-exit, wait and final steps abort instead of cascading. After deliberate ordinary peer exit only that peer condition is relaxed; after the atomic batch, physical custody checks permit the expected named handoff through RELEASE. 030B checks again before its SAVE pause. Loaded 030V uses a read-only exact saved company-slot-0 Rifleman custody/binding guard while incomplete; it requires no current armed run or artificial Pending peer and permits natural peer exits. Nothing repairs, relocates or recaptures after arrest. |
+| 13. Sustained custody proof | Headless checks prove policy/correct checkpoints and held-fact lifecycle behavior only; actual vanilla custody across 500 ticks remains owner 029 evidence. |
+| 14. No early person | Still-anonymous bound member, unchanged CharacterStore/commit count and humans through Pending; no dummy identity. |
+| 15. Atomic architecture | Terminal batch/production collector/observer/reconciliation/rollback/watch/reservation source unchanged. |
+| 16. Shared 030B | Same GroupCaptureRun / TestCompound helpers; second available bed preserves earlier 029 captive; owner SAVE→LOAD→030V remains required. |
+| 17. Transient capture | No durable early S1 latch; capture→escape-before-batch deferred for separate review, likely 3.2C. |
+| 18. Focused totals | **112 tests / 5,363 checks / 0 failures** (`Phys32b`); same-executable filters: Compound **5 / 552 / 0**, CaptureGuard **9 / 107 / 0**, 030B real Scribe reload **1 / 27 / 0**, Pawn-safety scan **1 / 65 / 0** |
+| 19. Full pass 1 | **616 tests / 44,269 checks / 0 failures, exit 0** |
+| 20. Full pass 2 | **616 tests / 44,269 checks / 0 failures, exit 0** |
+| 21. Compiler | **0 warnings / 0 errors** in strict production and test builds for each accepted full run; warnings as errors |
+| 22. Source gates | **PASS**, all 9 source gates in each accepted full run |
+| 23. Save format | **5**; vanilla Things/guest/bed state use ordinary save behavior, no Network compound state/migration. |
+| 24. Harmony | None added; no escape patch/global suppression. |
+| 25. Source SHA | `5548f0b5471614929a76a853dd53b82d8e0119a6` |
+| 26. PR HEAD | Final artifact/docs HEAD is read after commit in task delivery/[PR13 commits](https://github.com/D3athAn63l/The-Network/pull/13/commits); no self-hash invented. |
+| 27. Build stamp | `built 2026-10-06T13:02Z, source commit 5548f0b` |
+| 28. Informational version | `0.1.0+5548f0b5471614929a76a853dd53b82d8e0119a6` |
+| 29. DLL SHA-256 | `b929ad26f82d500bc8e74924a0143e6bb1e756e961c323c07ebe22ed7257b502` |
+| 30. DLL bytes | **1,279,488** |
+| 31. Owner status | **026 PASS / 027 PASS / 028 PASS; prior 029 FAIL** due unstable wilderness custody; corrected 029 **RERUN REQUIRED**, no new custody PASS. |
+| 32. Need 026 rerun? | Preserve accepted **026–028 PASS**. Run corrected **029 first on a fresh TestSite/disposable fixture**, then continue to **030 if PASS**. No mandatory 026 rerun: the prison lies outside the unchanged radius-12 visitor chill area, the central courtyard retains its edge route, and adapter/Lord/chill behavior is unchanged. A real shared visitor-behavior issue would require a targeted sanity rerun; headless checks do not prove the 60-square map in Unity. |
+| 33. Open/deferred status | S11 **FAIL / rescue STOPPED**, R-50 **OPEN**, O-20 **LOCKED**, S21/S26/S27 **PARTIAL**; full 3.2C/3.3 / Phase 4 unimplemented. |
+| 34. Final verdict | **PR #13 CUSTODY QA FIX COMPLETE — OWNER RT-PHYX-029 RERUN REQUIRED** |
+
+**DO NOT MERGE.** Preserve accepted **026–028 PASS**. Run corrected **029 first on a fresh TestSite/disposable fixture**, then continue to **030 if PASS**. No mandatory 026 rerun: the prison lies outside the unchanged radius-12 visitor chill area, the central courtyard retains its edge route, and adapter/Lord/chill behavior is unchanged. A real shared visitor-behavior issue would require a targeted sanity rerun; headless checks do not prove the 60-square map in Unity.
+
+## Prior PR #13 rematerialization/dwell correction (historical)
+
+> Historical 30-item delivery from `bd59bd0`/`be3088c`, before the owner accepted 026–028 and reported 029 escape. Its required 026 → 027 rerun was subsequently satisfied. Prior failed PR-description writes were recorded then; they do not establish the current remote body after possible owner updates.
 
 This updates the existing [PR #13](https://github.com/D3athAn63l/The-Network/pull/13) on `codex/phase32b-groups-concretization`, from pre-correction HEAD **`f204edf5488ea2c4d181cf53ad7e9b0f287fe7fb`**. The prior Detached/custom-name correction's source `809e835`, two **586 / 43,106 / 0** runs and DLL hash `8ef464…` are historical below. The original `5b403fe`/581-test delivery also remains historical. Neither artifact validates the current source changes.
 

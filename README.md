@@ -21,7 +21,7 @@ developer wrote.
 
 ## Repository status
 
-**PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED — OWNER RUNTIME VALIDATION PENDING.** The accepted [readiness audit](docs/PHASE32B_READINESS_AUDIT.md) now has an [as-built implementation and validation record](docs/PHASE32B_VALIDATION.md): immutable Composition v1, ≤8 role-correct Episode members, temporary anonymous reservation, selective same-Pawn promotion and conservative accounting. The developer-triggered runtime scenarios await the owner's RimWorld run. S26/S27 remain PARTIAL, S11 remains FAIL / rescue STOPPED and R-50 remains OPEN.
+**PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED — OWNER RUNTIME VALIDATION PENDING.** The accepted [readiness audit](docs/PHASE32B_READINESS_AUDIT.md) now has an [as-built implementation and validation record](docs/PHASE32B_VALIDATION.md): immutable Composition v1, ≤8 role-correct Episode members, temporary anonymous reservation, selective same-Pawn promotion and conservative accounting. The owner accepted 026–028; corrected 029 and the remaining runtime/save-load evidence still await owner verification. S26/S27 remain PARTIAL, S11 remains FAIL / rescue STOPPED and R-50 remains OPEN.
 
 **Phase 1 (Foundation + Intel + Fixers)** is implemented on top of the frozen Phase 0 architecture:
 the global cast in Mod Settings, the world cast snapshot, Fixers, the Comms Console gate, the item
@@ -127,7 +127,7 @@ decision on the documented alternative. Its domain half is proven headlessly. Sa
 The contract board, the player as contractor and the social layer are later phases
 ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
 
-**Test status.** [PR #13's current runtime correction report](docs/PHASE32B_VALIDATION.md#pr-13-runtime-correction-current-owner-review-record) records corrected source `bd59bd0`, validation (**602 tests / 43,431 checks / 0 failures, exit 0** in each of two fresh processes; **0 warnings / 0 errors** in production and tests in each run, warnings treated as errors; **All nine source gates PASS** in each final run) and exact DLL provenance. Prior `809e835` (**586 / 43,106 / 0** twice) and original `5b403fe` delivery evidence remain history. Owner previous **026 PASS**; **027 continuity worked, but four invalid retained-role assertions failed**. Rerun **026 → 027 on a fresh disposable fixture before 028**; corrected 027/live dwell remain pending. The full suite includes existing procurement/career soaks.
+**Test status.** The [current PR #13 compound/custody QA report](docs/PHASE32B_VALIDATION.md#pr-13-custody-qa-correction-current-owner-review-record) records source `5548f0b`, focused validation and the exact shipped DLL. Full pass 1: **616 tests / 44,269 checks / 0 failures, exit 0**; full pass 2: **616 tests / 44,269 checks / 0 failures, exit 0**. **0 warnings / 0 errors** in strict production and test builds for each accepted full run; warnings as errors; **PASS**, all 9 source gates in each accepted full run. Owner **026 / 027 / 028 PASS** remain accepted, including the 240-tick dwell. Previous **029 FAIL** followed real prisoner escape after arrest at the edge spawn. Corrected **029 requires an owner rerun**; the terminal-batch architecture remains unchanged. Prior `bd59bd0`/602-test delivery and older artifact evidence are historical.
 
 **Owner runtime evidence** ([RUNTIME_TESTING § 15](docs/RUNTIME_TESTING.md#15-owner-observed-runtime-evidence)):
 
