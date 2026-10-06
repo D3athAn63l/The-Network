@@ -271,6 +271,11 @@ namespace TheNetwork.Domain.Physical
 
         public int observedTick = -1;
 
+        /// <summary>First positively observed player-visible placement; absent old-save evidence stays unknown.</summary>
+        public int playerVisibleTick = -1;
+        /// <summary>Frozen eligibility at that placement, never inferred later from changed membership.</summary>
+        public bool p0Eligible;
+
         public bool IsNamed => character.IsValid;
         public bool IsBound => pawn != null && pawn.IsBound;
 
@@ -286,6 +291,8 @@ namespace TheNetwork.Domain.Physical
             NetScribe.LookEnum(ref outcome, "outcome", MemberOutcome.Pending);
             NetScribe.LookEnum(ref observed, "observed", ObservedKind.None);
             Scribe_Values.Look(ref observedTick, "observedTick", -1);
+            Scribe_Values.Look(ref playerVisibleTick, "playerVisibleTick", -1);
+            Scribe_Values.Look(ref p0Eligible, "p0Eligible", false);
         }
 
         public override string ToString()

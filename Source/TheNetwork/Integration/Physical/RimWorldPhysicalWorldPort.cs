@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using RimWorld;
 using RimWorld.Planet;
+using TheNetwork.Diagnostics.RuntimePhysicalTests;
 using TheNetwork.Domain;
 using TheNetwork.Domain.Actors;
 using TheNetwork.Domain.Physical;
 using TheNetwork.Kernel;
+using TheNetwork.Persist;
 using Verse;
 using Verse.AI;
 using Verse.AI.Group;
@@ -65,7 +67,7 @@ namespace TheNetwork.Integration.Physical
     ///
     /// The only production caller that can make it create or place anything is the session-armed physical test tier (a dev trigger).
     /// </summary>
-    public sealed class RimWorldPhysicalWorldPort : IPhysicalWorldPort
+    public sealed class RimWorldPhysicalWorldPort : IPhysicalWorldPort, IGroupPhysicalWorldPort
     {
         /// <summary>How long a 3.1 dev visit stays at its chill spot before vanilla's own exit transition (≈ 3 in-game hours).</summary>
         public const int VisitDurationTicks = 7500;
@@ -76,6 +78,9 @@ namespace TheNetwork.Integration.Physical
 
         /// <summary>The synchronous LeftMap tick of bound pawns seen this session (runtime only; the exit tick for truthful aging).</summary>
         private readonly Dictionary<Pawn, int> leftMap = new Dictionary<Pawn, int>(PawnReferenceComparer.Instance);
+
+        // Scoped test permissions are runtime-only and belong to one exact game, Episode and map. A load creates a new port.
+        private VisibilityScope visibilityScope;
 
         /// <summary>The last first projection (Episode Monitor, RT-PHYX-011).</summary>
         public ProjectionResult lastProjection;
@@ -99,7 +104,7 @@ namespace TheNetwork.Integration.Physical
 
         public bool Available => Current.ProgramState == ProgramState.Playing && Find.World != null && Find.WorldPawns != null && !Registry.inert;
 
-        public string Name => "RimWorld 1.6 (Phase 3.1)";
+        public string Name => "RimWorld 1.6 (Phase 3.2B)";
 
         private int Now => ctx.Now;
 
@@ -108,12 +113,12 @@ namespace TheNetwork.Integration.Physical
         public PawnRef Create(ProjectionRequest request)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
-            if (!request.character.IsValid) throw new NotSupportedException("anonymous episode slots are Phase 3.2; Phase 3.1 materializes one named Solo");
+            if (!OrganizationCompositionV1.IsRole(request.role)) throw new InvalidOperationException("a physical slot must have a valid operational role before generation");
             Faction f = request.faction?.Resolve();
             if (f == null || !f.temporary) throw new InvalidOperationException("the episode has no live temporary encounter faction");
             // M1: the registry quest exists before any pawn of ours can ever leave a map.
             Registry.EnsureQuest();
-            ProjectionResult r = PawnProjection.Project(request, f);
+            ProjectionResult r = PawnProjection.Project(request, f, SharedIdeology(request));
             lastProjection = r;
             counters.projections++;
             counters.attempts += r.attempts;
@@ -127,9 +132,67 @@ namespace TheNetwork.Integration.Physical
                 counters.projectionFailures++;
                 throw new InvalidOperationException("role-constrained creation aborted, nothing bound: " + r.failure);
             }
-            PawnProjection.ApplyNamePins(r.pawn, NamePins.From(request.name));
-            Registry.Note(r.pawn, request.character);
+            if (request.character.IsValid)
+            {
+                PawnProjection.ApplyNamePins(r.pawn, NamePins.From(request.name));
+                Registry.Note(r.pawn, request.character);
+            }
             return new PawnRef { pawn = r.pawn, thingIdNumber = r.pawn.thingIDNumber, defName = r.pawn.def?.defName };
+        }
+
+        /// <summary>Choose already-established group truth; never edit an existing pawn's ideology or relations.</summary>
+        private Ideo SharedIdeology(ProjectionRequest request)
+        {
+            if (!ModsConfig.IdeologyActive) return null;
+            OrganizationProfile org = ctx.actors?.Get(request.actor)?.Get<OrganizationProfile>();
+            if (org == null) return null;
+            KnownCharacter first = null;
+            if (org.knownMembers != null)
+            {
+                for (int i = 0; i < org.knownMembers.Count; i++)
+                {
+                    KnownCharacter c = ctx.characters?.Get(org.knownMembers[i]);
+                    Pawn p = c?.pawn?.pawn;
+                    if (!OrganizationSeatPolicy.IsCurrentMember(c, request.actor) || p == null || p.Discarded || p.Dead || p.ideo == null || p.Ideo == null
+                        || c.pawn.thingIdNumber != p.thingIDNumber) continue;
+                    if (first == null || c.id.Value < first.id.Value) first = c;
+                }
+            }
+            if (first != null) return first.pawn.pawn.Ideo;
+            // With no established member, the first vanilla-generated slot supplies the construction preference for its peers.
+            PhysicalEpisode e = ctx.episodes?.Get(request.episode);
+            EpisodeMember earliest = null;
+            if (e?.members != null)
+            {
+                for (int i = 0; i < e.members.Count && i < 8; i++)
+                {
+                    EpisodeMember m = e.members[i];
+                    Pawn p = m?.pawn?.pawn;
+                    if (p == null || p.Discarded || p.Dead || p.ideo == null || p.Ideo == null || m.pawn.thingIdNumber != p.thingIDNumber) continue;
+                    if (earliest == null || m.slot < earliest.slot) earliest = m;
+                }
+            }
+            return earliest?.pawn?.pawn?.Ideo;
+        }
+
+        /// <summary>The lifecycle invokes this only AFTER the member binding is durable and BEFORE any placement can expose its pawn.</summary>
+        public void EpisodeBindingChanged(PhysicalEpisode episode, EpisodeMember member)
+        {
+            if (episode == null || member == null || !ReferenceEquals(ctx.episodes?.Get(episode.id), episode) || episode.members == null || !episode.members.Contains(member))
+                throw new InvalidOperationException("the member does not belong to the current durable Episode");
+            Pawn p = member.pawn?.pawn;
+            if (p == null || p.Discarded || member.pawn.thingIdNumber != p.thingIDNumber)
+                throw new InvalidOperationException("the durable Episode binding does not resolve to its exact pawn");
+            if (member.character.IsValid)
+            {
+                KnownCharacter c = ctx.characters?.Get(member.character);
+                if (c?.pawn == null || !ReferenceEquals(c.pawn.pawn, p) || c.pawn.thingIdNumber != p.thingIDNumber)
+                    throw new InvalidOperationException("the named person and Episode do not share the same durable pawn binding");
+                Registry.Note(p, member.character);
+            }
+            Registry.NoteEpisode(p, episode.id, member.slot);
+            if (!p.Dead && !Registry.Reserves(p))
+                throw new InvalidOperationException("durable binding is not covered by existing registry");
         }
 
         public bool Resolves(PawnRef pawn)
@@ -179,8 +242,19 @@ namespace TheNetwork.Integration.Physical
             }
             Map map = MapById(mapId);
             Faction f = faction.Resolve();
+            PhysicalEpisode e = ctx.episodes?.Get(episode);
+            Lord shared;
+            IntVec3 sharedTarget;
+            string groupRefusal = SharedVisitLord(e, map, f, out shared, out sharedTarget);
+            if (groupRefusal != null || (shared != null && !shared.CanAddPawn(p)))
+            {
+                counters.placeRefusals++;
+                NetLog.Warn(LogCategory.Physical, "Placement of " + pawn + " for " + episode + " refused: " + (groupRefusal ?? "the shared vanilla Lord cannot accept this member") + ".");
+                return false;
+            }
             IntVec3 entry, chill;
-            if (!TryCells(map, out entry, out chill))
+            bool cells = shared == null ? TryCells(map, out entry, out chill) : TrySharedCells(map, sharedTarget, out entry, out chill);
+            if (!cells)
             {
                 counters.placeRefusals++;
                 NetLog.Warn(LogCategory.Physical, "Placement of " + pawn + " refused: no reachable edge cell on map " + mapId + ".");
@@ -204,12 +278,58 @@ namespace TheNetwork.Integration.Physical
                     + ", world pawn " + (Find.WorldPawns != null && Find.WorldPawns.Contains(p)) + ". Not reported placed; the lifecycle classifies it from observation.");
                 return false;
             }
-            LordJob_VisitColony job = new LordJob_VisitColony(f, chill, VisitTicks) { gifts = new List<Thing>() };
-            LordMaker.MakeNewLord(f, job, map, new List<Pawn> { p });
+            Lord lord = shared;
+            if (lord == null)
+            {
+                LordJob_VisitColony job = new LordJob_VisitColony(f, chill, VisitTicks) { gifts = new List<Thing>() };
+                lord = LordMaker.MakeNewLord(f, job, map, new List<Pawn> { p });
+            }
+            else lord.AddPawn(p);
+            if (lord == null || !ReferenceEquals(p.GetLord(), lord))
+            {
+                counters.placeRefusals++;
+                NetLog.Warn(LogCategory.Physical, "Vanilla did not attach " + pawn + " to the Episode's visit Lord. Not reported placed; the lifecycle classifies the spawned pawn from observation.");
+                return false;
+            }
             counters.placements++;
             NetLog.Info(LogCategory.Physical, (rematerialized ? "Rematerialized" : "Placed") + " " + p.LabelShort + " (#" + p.thingIDNumber + ") on map " + mapId + " at " + entry + " for " + episode
-                + ": visit Lord to " + chill + " for " + VisitTicks + " ticks; reserved by the registry while spawned (M1): " + Registry.Reserves(p) + ".");
+                + ": " + (shared == null ? "created" : "joined") + " the shared visit Lord to " + chill + " for " + VisitTicks + " ticks; reserved by the registry while spawned (M1): " + Registry.Reserves(p) + ".");
             return true;
+        }
+
+        /// <summary>Derive the shared vanilla Lord from the Episode's at most eight bound members; no map/world Lord scan or new roster.</summary>
+        private static string SharedVisitLord(PhysicalEpisode episode, Map map, Faction faction, out Lord shared, out IntVec3 target)
+        {
+            shared = null;
+            target = IntVec3.Invalid;
+            if (episode?.members == null || episode.members.Count > 8) return "the Episode member set is missing or exceeds eight";
+            for (int i = 0; i < episode.members.Count; i++)
+            {
+                EpisodeMember m = episode.members[i];
+                Pawn peer = m?.pawn?.pawn;
+                if (peer == null || peer.Discarded || peer.Dead || !peer.Spawned || peer.Map != map) continue;
+                if (peer.Faction != faction || m.pawn.thingIdNumber != peer.thingIDNumber) return "a spawned Episode peer disagrees with its faction or binding";
+                Lord candidate = peer.GetLord();
+                if (candidate == null) return "a spawned Episode peer has no vanilla Lord";
+                if (!(candidate.LordJob is LordJob_VisitColony) || candidate.Map != map || candidate.faction != faction)
+                    return "a spawned Episode peer belongs to a different vanilla Lord";
+                if (shared != null && !ReferenceEquals(shared, candidate)) return "the Episode peers have conflicting visit Lords";
+                shared = candidate;
+            }
+            if (shared == null) return null;
+            // Both vanilla Travel and DefendPoint expose their current destination through FlagLoc; do not read private job state.
+            target = shared.CurLordToil?.FlagLoc ?? IntVec3.Invalid;
+            if (!target.IsValid || !target.InBounds(map) || !target.Standable(map)) return "the current shared Lord has no usable destination";
+            if (shared.ownedPawns.Count > 8) return "the shared Lord exceeds the Episode member bound";
+            for (int i = 0; i < shared.ownedPawns.Count; i++)
+            {
+                Pawn owned = shared.ownedPawns[i];
+                bool belongs = false;
+                for (int j = 0; j < episode.members.Count; j++)
+                    if (ReferenceEquals(episode.members[j]?.pawn?.pawn, owned)) { belongs = true; break; }
+                if (!belongs) return "the shared Lord owns a pawn outside this Episode";
+            }
+            return null;
         }
 
         /// <summary>Why a pawn may NOT be placed now (null = it may). Checked before anything is touched.</summary>
@@ -256,12 +376,123 @@ namespace TheNetwork.Integration.Physical
             return false;
         }
 
+        private static bool TrySharedCells(Map map, IntVec3 target, out IntVec3 entry, out IntVec3 chill)
+        {
+            chill = target;
+            return CellFinder.TryFindRandomEdgeCellWith(x => x.Standable(map) && !x.Fogged(map)
+                && map.reachability.CanReach(x, target, PathEndMode.OnCell, TraverseMode.PassDoors, Danger.Deadly),
+                map, CellFinder.EdgeRoadChance_Neutral, out entry);
+        }
+
         public static Map MapById(int mapId)
         {
             List<Map> maps = Find.Maps;
             if (maps == null) return null;
             for (int i = 0; i < maps.Count; i++) if (maps[i] != null && maps[i].uniqueID == mapId) return maps[i];
             return null;
+        }
+
+        /// <summary>Presence evidence is a successful spawn on a home or player-occupied map, never an inference from map exit or load.</summary>
+        public bool IsPlayerVisiblePlacement(PhysicalEpisode episode, EpisodeMember member)
+        {
+            if (episode == null || member == null || !ReferenceEquals(ctx.episodes?.Get(episode.id), episode)
+                || episode.members == null || !episode.members.Contains(member)) return false;
+            Pawn p = member.pawn?.pawn;
+            Map map = p?.Map;
+            if (p == null || p.Discarded || p.Dead || !p.Spawned || map == null || map.uniqueID != episode.whereMapId
+                || member.pawn.thingIdNumber != p.thingIDNumber) return false;
+            bool testMap = map.Parent?.def?.defName == PhysicalTestIds.TestMapDef;
+            VisibilityScope scope = visibilityScope;
+            if (scope != null && !scope.disposed && ReferenceEquals(scope.game, Current.Game) && Prefs.DevMode && PhysicalTestSession.IsRunning
+                && ReferenceEquals(scope.ownedEpisode, episode) && scope.mapId == map.uniqueID)
+                return scope.synthetic ? testMap : !testMap && PlayerOccupied(map);
+            if (testMap || !string.IsNullOrEmpty(episode.cause?.devKey)) return false;
+            return PlayerOccupied(map);
+        }
+
+        private static bool PlayerOccupied(Map map)
+        {
+            if (map == null) return false;
+            if (map.IsPlayerHome) return true;
+            // A bounded map-local read only when placement asks for evidence; never a world-pawn scan or a per-tick watcher.
+            IReadOnlyList<Pawn> pawns = map.mapPawns?.AllPawnsSpawned;
+            if (pawns == null) return false;
+            for (int i = 0; i < pawns.Count; i++)
+                if (pawns[i]?.Faction?.IsPlayer == true || pawns[i]?.HostFaction?.IsPlayer == true) return true;
+            return false;
+        }
+
+        /// <summary>TEST ONLY: one active owned Episode on the dedicated TestSite may exercise SYNTHETIC P0 inside a using/finally scope.</summary>
+        public IDisposable OverrideTestVisibility(EpisodeId episode, int mapId)
+        {
+            PhysicalEpisode e = VisibilityEpisode(episode, mapId);
+            if (MapById(mapId)?.Parent?.def?.defName != PhysicalTestIds.TestMapDef)
+                throw new InvalidOperationException("synthetic P0 is restricted to the dedicated physical TestSite");
+            return PushVisibility(e, mapId, true);
+        }
+
+        /// <summary>A separate typed gate for an owner-driven genuine P0 run. The ordinary physical-test arm never grants this scope.</summary>
+        public static string ConfirmedHomeVisibilityPhrase(int mapId)
+        {
+            return "CONFIRM PHYSICAL P0 ON MAP " + mapId + " THIS SAVE WILL BE MODIFIED";
+        }
+
+        public IDisposable OverrideConfirmedHomeVisibility(EpisodeId episode, int mapId, string typedPhrase)
+        {
+            PhysicalEpisode e = VisibilityEpisode(episode, mapId);
+            Map map = MapById(mapId);
+            if (!string.Equals(typedPhrase, ConfirmedHomeVisibilityPhrase(mapId), StringComparison.Ordinal))
+                throw new InvalidOperationException("genuine dev P0 requires the separate exact typed map/save-modification confirmation");
+            if (map?.Parent?.def?.defName == PhysicalTestIds.TestMapDef || !PlayerOccupied(map))
+                throw new InvalidOperationException("genuine P0 requires an actual home or player-occupied map");
+            return PushVisibility(e, mapId, false);
+        }
+
+        private PhysicalEpisode VisibilityEpisode(EpisodeId id, int mapId)
+        {
+            PhysicalEpisode e = ctx.episodes?.Get(id);
+            if (!Prefs.DevMode || !PhysicalTestSession.IsRunning || e == null || !e.IsActive || e.whereMapId != mapId
+                || MapById(mapId) == null || !PhysicalTestIds.IsTestDevKey(e.cause?.devKey))
+                throw new InvalidOperationException("visibility overrides require a running dev test and its exact active owned Episode/map");
+            return e;
+        }
+
+        private IDisposable PushVisibility(PhysicalEpisode e, int mapId, bool synthetic)
+        {
+            VisibilityScope scope = new VisibilityScope(this, visibilityScope, e, mapId, synthetic);
+            visibilityScope = scope;
+            return scope;
+        }
+
+        private sealed class VisibilityScope : IDisposable
+        {
+            private readonly RimWorldPhysicalWorldPort owner;
+            public readonly VisibilityScope previous;
+            public readonly Game game;
+            public readonly PhysicalEpisode ownedEpisode;
+            public readonly int mapId;
+            public readonly bool synthetic;
+            public bool disposed;
+
+            public VisibilityScope(RimWorldPhysicalWorldPort owner, VisibilityScope previous, PhysicalEpisode episode, int mapId, bool synthetic)
+            {
+                this.owner = owner;
+                this.previous = previous;
+                game = Current.Game;
+                ownedEpisode = episode;
+                this.mapId = mapId;
+                this.synthetic = synthetic;
+            }
+
+            public void Dispose()
+            {
+                if (disposed) return;
+                disposed = true;
+                if (!ReferenceEquals(owner.visibilityScope, this)) return;
+                VisibilityScope restore = previous;
+                while (restore != null && restore.disposed) restore = restore.previous;
+                owner.visibilityScope = restore;
+            }
         }
 
         // ================================================================== observation (pure read)
@@ -365,7 +596,7 @@ namespace TheNetwork.Integration.Physical
         public RegistryLoadReport OnReferencesResolved()
         {
             RegistryLoadReport report = Registry.ResolvePointers();
-            string quest = "not needed (no living Deployed, Stored or held bound person)";
+            string quest = "not needed (no retained named or temporary Episode pawn)";
             if (report.durableRetained > 0)
             {
                 try
@@ -380,13 +611,18 @@ namespace TheNetwork.Integration.Physical
                 }
             }
             for (int i = 0; i < report.findings.Count; i++) NetLog.ErrorOnce(LogCategory.Physical, "binding." + report.findings[i].id.Value + "." + report.findings[i].kind, report.findings[i].ToString());
-            if (report.bound > 0 || report.durableRetained > 0)
+            for (int i = 0; i < report.episodeFindings.Count; i++)
+            {
+                EpisodeBindingFinding f = report.episodeFindings[i];
+                NetLog.ErrorOnce(LogCategory.Physical, "episode.binding." + f.episode.Value + "." + f.slot + "." + f.kind, f.ToString());
+            }
+            if (report.bound > 0 || report.episodeBound > 0 || report.durableRetained > 0)
             {
                 NetLog.Info(LogCategory.Physical, "Physical load, stage 2 (post-load-init, references resolved, before the first tick): " + report + "; registry " + quest + ".");
             }
             if (report.covered < report.durableRetained)
             {
-                NetLog.Error(LogCategory.Physical, "RESERVATION GAP: " + report.durableRetained + " living Deployed, Stored or held bound person(s) must be reserved but only " + report.covered
+                NetLog.Error(LogCategory.Physical, "RESERVATION GAP: " + report.durableRetained + " named or temporary Episode pawn(s) must be reserved but only " + report.covered
                     + " are covered; the rest have an unresolved, discarded or mismatching binding (see the integrity findings above).");
             }
             return report;
@@ -400,25 +636,40 @@ namespace TheNetwork.Integration.Physical
         /// </summary>
         public string OnLoaded()
         {
-            int tagged = 0, stripped = 0, bound = 0;
+            int tagged = 0, stripped = 0;
+            Dictionary<Pawn, HashSet<string>> wanted = new Dictionary<Pawn, HashSet<string>>(PawnReferenceComparer.Instance);
             List<KnownCharacter> all = ctx.characters?.characters;
             if (all != null)
             {
                 for (int i = 0; i < all.Count; i++)
                 {
                     KnownCharacter c = all[i];
-                    Pawn p = c?.pawn?.pawn;
-                    if (p == null || p.Discarded) continue;
-                    bound++;
-                    HashSet<string> keep = new HashSet<string>();
+                    HashSet<string> keep = TagsForBinding(wanted, c?.pawn);
+                    if (keep == null) continue;
                     if (c.IsAlive) keep.Add(PhysicalTags.Character(c.id));
                     PhysicalEpisode e = c.episode.IsValid ? ctx.episodes?.Get(c.episode) : null;
-                    if (e != null && e.IsActive) keep.Add(PhysicalTags.Episode(e.id));
-                    stripped += PhysicalTags.RemoveAllExcept(p, keep);
-                    foreach (string t in keep)
+                    if (e != null && !e.releaseApplied) keep.Add(PhysicalTags.Episode(e.id));
+                }
+            }
+            List<PhysicalEpisode> episodes = ctx.episodes?.episodes;
+            if (episodes != null) for (int i = 0; i < episodes.Count; i++)
+            {
+                PhysicalEpisode e = episodes[i];
+                if (e?.members == null) continue;
+                for (int k = 0; k < e.members.Count; k++)
+                {
+                    HashSet<string> keep = TagsForBinding(wanted, e.members[k]?.pawn);
+                    if (keep != null && !e.releaseApplied) keep.Add(PhysicalTags.Episode(e.id));
+                }
+            }
+            foreach (KeyValuePair<Pawn, HashSet<string>> pair in wanted)
+            {
+                stripped += PhysicalTags.RemoveAllExcept(pair.Key, pair.Value);
+                foreach (string t in pair.Value)
+                {
+                    if (!PhysicalTags.Has(pair.Key, t))
                     {
-                        if (PhysicalTags.Has(p, t)) continue;
-                        PhysicalTags.Add(p, t);
+                        PhysicalTags.Add(pair.Key, t);
                         tagged++;
                     }
                 }
@@ -438,10 +689,20 @@ namespace TheNetwork.Integration.Physical
                     NetLog.Error(LogCategory.Physical, "The retained-pawn registry quest could not be ensured at load: " + ex.Message);
                 }
             }
-            string summary = "Physical load pass: " + bound + " bound pawn(s), " + retained + " of " + durable + " durable retained covered (" + (Registry.pointersResolved ? "pointer index resolved at post-load-init" : "thing-id bridge")
+            string summary = "Physical load pass: " + wanted.Count + " bound pawn(s), " + retained + " of " + durable + " durable retained covered (named " + Registry.NamedRetainedCount()
+                + ", temporary Episode " + Registry.TemporaryRetainedCount() + "; " + (Registry.pointersResolved ? "pointer index resolved at post-load-init" : "thing-id bridge")
                 + "), " + tagged + " tag(s) restored, " + stripped + " stale tag(s) stripped, registry " + quest + ".";
-            if (bound > 0) NetLog.Info(LogCategory.Physical, summary);
+            if (wanted.Count > 0) NetLog.Info(LogCategory.Physical, summary);
             return summary;
+        }
+
+        private static HashSet<string> TagsForBinding(Dictionary<Pawn, HashSet<string>> wanted, PawnRef binding)
+        {
+            Pawn p = binding?.pawn;
+            if (p == null || p.Discarded || binding.thingIdNumber <= 0 || binding.thingIdNumber != p.thingIDNumber) return null;
+            HashSet<string> tags;
+            if (!wanted.TryGetValue(p, out tags)) wanted[p] = tags = new HashSet<string>();
+            return tags;
         }
 
         /// <summary>Prepare-for-removal (§ 20 steps 2–3): the registry reserves nobody and its quest is ended; every Network tag leaves our pawns.</summary>
@@ -449,8 +710,17 @@ namespace TheNetwork.Integration.Physical
         {
             int quests = Registry.Release();
             int tags = 0;
+            HashSet<Pawn> pawns = new HashSet<Pawn>(PawnReferenceComparer.Instance);
             List<KnownCharacter> all = ctx.characters?.characters;
-            if (all != null) for (int i = 0; i < all.Count; i++) tags += PhysicalTags.RemoveAllExcept(all[i]?.pawn?.pawn, null);
+            if (all != null) for (int i = 0; i < all.Count; i++) if (all[i]?.pawn?.pawn != null) pawns.Add(all[i].pawn.pawn);
+            List<PhysicalEpisode> episodes = ctx.episodes?.episodes;
+            if (episodes != null) for (int i = 0; i < episodes.Count; i++)
+            {
+                List<EpisodeMember> members = episodes[i]?.members;
+                if (members == null) continue;
+                for (int k = 0; k < members.Count; k++) if (members[k]?.pawn?.pawn != null) pawns.Add(members[k].pawn.pawn);
+            }
+            foreach (Pawn p in pawns) tags += PhysicalTags.RemoveAllExcept(p, null);
             return "registry released (" + quests + " quest ended), " + tags + " pawn tag(s) stripped";
         }
 
@@ -495,6 +765,7 @@ namespace TheNetwork.Integration.Physical
             f.worldPawn = wp != null && wp.Contains(p);
             f.situation = f.worldPawn ? wp.GetSituation(p).ToString() : "-";
             f.reserved = Registry.Reserves(p);
+            f.reservation = f.reserved ? (Registry.IsTemporaryReserved(p) ? "temporary Episode " + Registry.EpisodeOf(p) : "named") : "none";
             f.suspended = f.worldPawn && p.Suspended;
             f.tags = p.questTags == null ? "" : string.Join(" ", p.questTags.FindAll(PhysicalTags.IsNetworkPawnTag).ToArray());
             f.where = p.Discarded ? "discarded" : p.Dead ? "dead" + (f.mapId >= 0 ? " on map " + f.mapId : "") : f.spawned ? "spawned on map " + f.mapId : f.worldPawn ? "world pawn" : "held by " + (p.ParentHolder?.ToString() ?? "nobody");
@@ -517,13 +788,14 @@ namespace TheNetwork.Integration.Physical
         public bool worldPawn;
         public string situation = "-";
         public bool reserved;
+        public string reservation = "none";
         public bool suspended;
         public string tags = "";
 
         public override string ToString()
         {
             return "#" + thingId + (label != null ? " " + label : "") + ": " + where + (downed ? ", DOWNED" : "") + "; world pawn " + (worldPawn ? situation : "no")
-                + (suspended ? " (suspended)" : "") + "; registry " + (reserved ? "RESERVES" : "does not reserve") + "; faction " + faction + (tags.Length > 0 ? "; tags " + tags : "");
+                + (suspended ? " (suspended)" : "") + "; registry " + (reserved ? "RESERVES (" + reservation + ")" : "does not reserve") + "; faction " + faction + (tags.Length > 0 ? "; tags " + tags : "");
         }
     }
 }

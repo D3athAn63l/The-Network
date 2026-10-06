@@ -168,6 +168,13 @@ namespace TheNetwork.Integration.Physical
 
         public static ProjectionResult Project(ProjectionRequest r, Faction f)
         {
+            return Project(r, f, null);
+        }
+
+        /// <summary>BEST-EFFORT group construction: an eligible ideology is requested once, never written after generation.</summary>
+        public static ProjectionResult Project(ProjectionRequest r, Faction f, Ideo sharedIdeology)
+        {
+            if (r == null) throw new ArgumentNullException(nameof(r));
             ProjectionResult res = new ProjectionResult();
             Stopwatch sw = Stopwatch.StartNew();
             RoleSpec spec = RoleRules.SpecFor(r.role, r.capability);
@@ -201,6 +208,7 @@ namespace TheNetwork.Integration.Physical
                 // below still drives everything the Network never established (traits, backstory, appearance), never these.
                 IdentityPins pins = PawnIdentityPins.For(kind, r.identity);
                 res.pins = pins;
+                Ideo requestedIdeology = ModsConfig.IdeologyActive && !kind.preventIdeo ? sharedIdeology : null;
                 Rand.PushState(NetHash.Combine(r.seed, attempt));
                 try
                 {
@@ -209,7 +217,7 @@ namespace TheNetwork.Integration.Physical
                         mustBeCapableOfViolence: spec.NeedsViolence, colonistRelationChanceFactor: 0f, allowPregnant: false,
                         validatorPreGear: hard, prohibitedTraits: prohibited.Count > 0 ? prohibited : null,
                         fixedBiologicalAge: pins.biologicalAge, fixedChronologicalAge: pins.chronologicalAge, fixedGender: pins.gender,
-                        developmentalStages: DevelopmentalStage.Adult);
+                        fixedIdeo: requestedIdeology, developmentalStages: DevelopmentalStage.Adult);
                     c = PawnGenerator.GeneratePawn(req);
                 }
                 catch (Exception ex)
@@ -224,6 +232,14 @@ namespace TheNetwork.Integration.Physical
                 if (c == null)
                 {
                     if (res.failure == null) res.failure = "vanilla returned no pawn (" + kind.defName + ")";
+                    continue;
+                }
+                // Request constraints are an optimization. A mod may ignore them; reject rather than repair established social truth.
+                if (c.relations == null || c.relations.RelatedToAnyoneOrAnyoneRelatedToMe
+                    || (requestedIdeology != null && (c.ideo == null || !ReferenceEquals(c.Ideo, requestedIdeology))))
+                {
+                    res.rejected++;
+                    res.failure = "initial relation/ideology request was not honored by " + kind.defName;
                     continue;
                 }
                 RoleVerdict verdict = RoleRules.Verify(spec, PawnRoleReader.Snapshot(c));

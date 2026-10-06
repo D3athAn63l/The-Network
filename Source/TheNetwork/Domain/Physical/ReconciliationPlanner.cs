@@ -323,7 +323,7 @@ namespace TheNetwork.Domain.Physical
             Publications.Subjects(closed, p.actor.id.Ref, e.id.Ref);
             p.Add(CommitOpKind.Publication).spec = closed;
 
-            p.hasReleaseActions = anyRelease || p.actorEndKey != null;
+            p.hasReleaseActions = anyRelease || p.actorEndKey != null || (e.faction != null && e.faction.IsValid);
             p.Add(CommitOpKind.EpisodeClosed).key = closeReasonKey;
             CommitOp markers = p.Add(CommitOpKind.StageMarkers);
             markers.flag = !p.hasReleaseActions;

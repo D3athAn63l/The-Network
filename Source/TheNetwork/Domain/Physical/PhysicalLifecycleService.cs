@@ -192,6 +192,45 @@ namespace TheNetwork.Domain.Physical
         /// </summary>
         public CommandResult Plan(EpisodeRequest r, out PhysicalEpisode episode)
         {
+            return Plan(r, null, out episode);
+        }
+
+        /// <summary>Pure role selection followed by the existing guarded headcount checkout. No anonymous person records.</summary>
+        public CommandResult PlanGroup(EpisodeRequest request, IList<RoleCapacity> required, IList<RoleCapacity> optional, out PhysicalEpisode episode)
+        {
+            episode = null;
+            if (!PortAvailable || !(Port is IGroupPhysicalWorldPort)) return CommandResult.Fail("GroupPortUnavailable");
+            if (request == null) return CommandResult.Fail("NoRequest");
+            if (request.named == null || request.anonymous == null || request.named.Count != 0 || request.anonymous.Count != 0)
+                return CommandResult.Fail("GroupRequestHasPreselectedMembers");
+            if (request.cause == null || request.cause.operation.IsValid) return CommandResult.Fail("GroupOperationDeferred");
+            NetworkActor actor = ctx.actors.Get(request.actor);
+            for (int i = 0; i < ctx.episodes.episodes.Count; i++)
+            {
+                PhysicalEpisode active = ctx.episodes.episodes[i];
+                if (active != null && active.actor == request.actor && !active.releaseApplied && !CustodyRules.IsCustodyEpisode(active))
+                    return CommandResult.Fail("OrganizationEpisodeIncomplete", active.id.ToString());
+            }
+            OrganizationSeats seats;
+            string refusal;
+            if (!OrganizationSeatPolicy.TryApportion(actor, ctx.characters.characters, out seats, out refusal))
+                return CommandResult.Fail(refusal);
+            List<CharacterId> busyPeople = ctx.Contractors.Occupied(actor, OperationId.None);
+            OrganizationMission mission;
+            if (!OrganizationSeatPolicy.TrySelectMission(actor, seats, required, optional, null, c => !busyPeople.Contains(c.id), out mission, out refusal))
+                return CommandResult.Fail(refusal);
+            EpisodeRequest selected = new EpisodeRequest { actor = request.actor, purposeKey = request.purposeKey,
+                cause = request.cause, where = request.where, mapId = request.mapId };
+            foreach (OrganizationMissionMember member in mission.members)
+            {
+                if (member.IsNamed) selected.named.Add(member.character);
+                else selected.anonymous.Add(new TierCount(member.tier, 1));
+            }
+            return Plan(selected, mission, out episode);
+        }
+
+        private CommandResult Plan(EpisodeRequest r, OrganizationMission mission, out PhysicalEpisode episode)
+        {
             episode = null;
             CommandResult check = CheckPlan(r);
             if (!check.ok)
@@ -238,7 +277,21 @@ namespace TheNetwork.Domain.Physical
                 for (int i = 0; i < r.anonymous.Count; i++)
                 {
                     TierCount t = r.anonymous[i];
-                    for (int k = 0; k < t.healthy; k++) e.members.Add(new EpisodeMember { slot = slot++, tier = t.tier });
+                    for (int k = 0; k < t.healthy; k++)
+                    {
+                        OperationalRole role = OperationalRole.Unset;
+                        if (mission != null)
+                        {
+                            int anonymousIndex = slot - people.Count;
+                            int cursor = 0;
+                            foreach (OrganizationMissionMember chosen in mission.members)
+                            {
+                                if (chosen.IsNamed) continue;
+                                if (cursor++ == anonymousIndex) { role = chosen.role; break; }
+                            }
+                        }
+                        e.members.Add(new EpisodeMember { slot = slot++, tier = t.tier, seatRole = role });
+                    }
                     if (t.healthy <= 0) continue;
                     org.TierOf(t.tier).healthy -= t.healthy;
                     org.TierOf(t.tier, true).healthy += t.healthy;
@@ -377,14 +430,24 @@ namespace TheNetwork.Domain.Physical
                 EpisodeMember m = e.members[i];
                 try
                 {
+                    if (!CanPlaceGroupSeat(e, m)) continue;
                     if (m.state == MemberState.Planned)
                     {
                         if (!Bind(e, m, now)) continue;
                         m.state = MemberState.Created;
+                        try { (Port as IGroupPhysicalWorldPort)?.EpisodeBindingChanged(e, m); }
+                        catch (Exception ex)
+                        {
+                            counters.materializeFaults++;
+                            e.lastError = NetScribe.Truncate("Binding notification: " + ex.Message, 300);
+                            Quarantine(e, "GroupBindingUnconfirmed");
+                            return present; // never pass an unprotected binding to vanilla
+                        }
                     }
                     if (m.state == MemberState.Created && Port.Place(m.pawn, e.id, e.whereTile, e.whereMapId, e.faction))
                     {
                         m.state = MemberState.Present;
+                        LatchPlayerVisiblePlacement(e, m);
                         counters.placed++;
                     }
                 }
@@ -461,6 +524,7 @@ namespace TheNetwork.Domain.Physical
                 {
                     case PlacementVerdictKind.Present:
                         m.state = MemberState.Present;
+                        LatchPlayerVisiblePlacement(e, m);
                         became++;
                         counters.placed++;
                         counters.placementRecovered++;
@@ -558,12 +622,48 @@ namespace TheNetwork.Domain.Physical
                 counters.created++;
                 return true;
             }
-            PawnRef slot = Port.Create(new ProjectionRequest { episode = e.id, actor = e.actor, slot = m.slot, tier = m.tier, seed = NetHash.Combine(e.seed, m.slot), faction = e.faction });
+            if (m.IsBound)
+            {
+                if (!Port.Resolves(m.pawn)) { counters.unresolvedBindings++; e.lastError = "BindingUnresolved slot " + m.slot; return false; }
+                return true; // an interrupted anonymous binding is reused, never generated again
+            }
+            NetworkActor actor = ctx.actors.Get(e.actor);
+            PawnRef slot = Port.Create(new ProjectionRequest { episode = e.id, actor = e.actor, slot = m.slot, tier = m.tier,
+                role = m.seatRole, capability = ContractorService.Experience(actor), equipmentTier = actor?.Get<ContractorSimulation>()?.equipment?.tier ?? 2,
+                seed = NetHash.Combine(e.seed, m.slot), faction = e.faction });
             if (slot == null || !slot.IsBound) return false;
             slot.boundTick = now;
             slot.agedThroughTick = now;
             m.pawn = slot;
             counters.created++;
+            return true;
+        }
+
+        private void LatchPlayerVisiblePlacement(PhysicalEpisode e, EpisodeMember m)
+        {
+            if (m.IsNamed || m.playerVisibleTick >= 0 || !OrganizationCompositionV1.IsRole(m.seatRole)) return;
+            IGroupPhysicalWorldPort group = Port as IGroupPhysicalWorldPort;
+            if (group == null || !group.IsPlayerVisiblePlacement(e, m)) return;
+            OrganizationSeats seats;
+            string refusal;
+            if (!OrganizationSeatPolicy.TryApportion(ctx.actors.Get(e.actor), ctx.characters.characters, out seats, out refusal)) return;
+            int claimed = seats.pins.Count;
+            foreach (EpisodeMember prior in e.members) if (!prior.IsNamed && prior.p0Eligible) claimed++;
+            m.playerVisibleTick = ctx.Now;
+            m.p0Eligible = claimed < OrganizationProfile.MaxKnownMembers && OrganizationSeatPolicy.MayConcretizeByPresence(seats.living, m.seatRole);
+        }
+
+        private bool CanPlaceGroupSeat(PhysicalEpisode e, EpisodeMember m)
+        {
+            if (m.IsNamed || m.state == MemberState.Present || !OrganizationCompositionV1.IsRole(m.seatRole)) return true;
+            OrganizationSeats seats;
+            string refusal;
+            if (!OrganizationSeatPolicy.TryApportion(ctx.actors.Get(e.actor), ctx.characters.characters, out seats, out refusal))
+            { e.lastError = "GroupSeatsUnavailable: " + refusal; return false; }
+            int claimed = seats.pins.Count;
+            foreach (EpisodeMember prior in e.members) if (!prior.IsNamed && prior.p0Eligible) claimed++;
+            if (OrganizationSeatPolicy.MayConcretizeByPresence(seats.living, m.seatRole) && claimed >= OrganizationProfile.MaxKnownMembers)
+            { e.lastError = "DiscretionarySeatUnavailable: " + m.seatRole; return false; }
             return true;
         }
 
@@ -620,6 +720,18 @@ namespace TheNetwork.Domain.Physical
 
         private bool ReconcileCore(PhysicalEpisode e)
         {
+            if (e.quarantineKey == "GroupBindingUnconfirmed")
+            {
+                try
+                {
+                    IGroupPhysicalWorldPort group = Port as IGroupPhysicalWorldPort;
+                    if (group == null) return false;
+                    foreach (EpisodeMember member in e.members) if (member.IsBound && Port.Resolves(member.pawn)) group.EpisodeBindingChanged(e, member);
+                    e.quarantineKey = null;
+                    e.state = EpisodeState.Open;
+                }
+                catch (Exception ex) { RecordFailure(e, ex); Quarantine(e, "GroupBindingUnconfirmed"); return false; }
+            }
             // A person whose age truth is uncertain is not decided by looking at the world (§ 6.4): the episode is reported, never resolved.
             if (e.state == EpisodeState.Quarantined && IsHardQuarantine(e.quarantineKey)) return false;
             List<MemberDecision> decisions = new List<MemberDecision>();
@@ -987,6 +1099,15 @@ namespace TheNetwork.Domain.Physical
             try
             {
                 for (int i = 0; i < linked.Count; i++) linked[i].episode = EpisodeId.None;
+                // Ordinary group slots stop owning their Pawn only after every observed vanilla release action completed.
+                // The completed Episode is history, never a persistent anonymous roster or a hidden Pawn-retention source.
+                for (int i = 0; i < e.members.Count; i++)
+                {
+                    EpisodeMember member = e.members[i];
+                    if (!member.IsNamed && OrganizationCompositionV1.IsRole(member.seatRole)
+                        && (member.outcome == MemberOutcome.Returned || member.outcome == MemberOutcome.Killed
+                            || member.outcome == MemberOutcome.Lost || member.outcome == MemberOutcome.NeverPlaced)) member.pawn = null;
+                }
                 e.releaseApplied = true;
                 e.releasedTick = ctx.Now;
             }

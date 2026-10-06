@@ -293,6 +293,7 @@ namespace TheNetwork.Tests
 
         public TestNet(int seed = 424242)
         {
+            physical.episodeResolver = id => ctx?.episodes?.Get(id);
             graph = TheNetwork.Diagnostics.GridWorldGraph.Default(null, seed);
             sites.graph = graph;
             IntelDevOverrides.Clear();
