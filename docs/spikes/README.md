@@ -69,11 +69,15 @@ complete S20: its spatial scenarios run in a sandbox over a synthetic world grap
 | [S11](S11-rescue-site-holder.md) site-part pawn holder for a rescue site (Phase 3.2A; a mandatory gate on the rescue site) | **FAIL — SOURCE AUDIT.** Every vanilla step that places a pawn from `SitePart.things` forces a refugee or prisoner state and makes the pawn join the player when rescued; the item steps destroy unplaced contents; a retained world pawn cannot also be in `things`. **The rescue-site implementation is stopped**; the narrowest alternative is documented, not built |
 | [S21](S21-observation-completeness.md) observation completeness for held custody (Phase 3.2A) | **PARTIAL** — historical owner baseline 194 PASS / 0 FAIL / 0 INCONCLUSIVE; final e768fef acceptance 022 41/0/0, clean save/load, 025 11/0/0 (total 52/0/0); caravan/transport/other-faction-prisoner observation remains headless-only |
 | [R-50](R50-held-aging-bookmark-audit.md) held-pawn age bookmark audit (PR #11 correction) | **OPEN AFTER SOURCE AUDIT** — the existing `agedThroughTick` is sufficient bookkeeping, but a reliable general exact suspension boundary was not proved; production aging is unchanged |
+| [S26](S26-team-cohesion.md) first-generation group cohesion (3.2B audit) | **PARTIAL — SOURCE AUDIT**; meaningful core pre-spawn opinions, but no generated-crew frequency/runtime proof; recommend construction-only BEST-EFFORT |
+| [S27](S27-progressive-concretization-evidence.md) bounded anonymous promotion evidence (3.2B audit) | **PARTIAL — SOURCE AUDIT / ISOLATED HEADLESS EXPERIMENT**; 15 real-GetConcerns fixture assertions, bounded scan feasible; runtime/save/load/mod validation still required |
 
-## Phase 3 spikes (planned; no records yet)
+## Phase 3 spikes (planned and recorded)
 
 The Phase 3 design review revised the Phase 0 spike list and added four; the **amendment pass** extended S12 and S22 and added
-S25 to S30. Apart from **S31** (below) and, since Phase 3.2A, **S11** and **S21**, they are **defined, not run**, and have no record files yet; each gets one when its subphase starts. The questions, narrowest experiments and pass criteria are in
+S25 to S30. Apart from **S31** (below), Phase 3.2A's **S11** and **S21**, and the source/headless
+readiness records for **S26/S27**, they are **defined, not run**, and have no record files yet;
+each gets one when its subphase starts. S26/S27 are not owner-runtime passes. The questions, narrowest experiments and pass criteria are in
 [PHYSICAL_LIFECYCLE § 25](../PHYSICAL_LIFECYCLE.md#25-open-questions-and-spikes): **S9r** registry reservation (revises S9),
 S10 temporary faction, S11 site-part pawn holder, **S12** store-time normalization **and truthful aging catch-up**, S14 visit
 Lord, S17 tag hygiene, **S21** observation completeness, **S22** the physical-tier guard (a session-only arm and a dedicated test
@@ -100,7 +104,7 @@ evidence is the physical suite's, in [RUNTIME_TESTING § 17.5](../RUNTIME_TESTIN
 implemented (PASS, above), so the two statuses stay separate: **S31 / M1: owner-runtime PASS, accepted. Phase 3.1 physical
 runtime suite: owner-runtime PASS** (evidence accumulated across the S31 spike, the initial run, the corrected reduced rerun and an isolated `010B` follow-up; it is not one run). Neither is Phase 3.2.
 
-**Phase 3.2A (held custody: IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED; final e768fef acceptance 52 PASS / 0 FAIL / 0 INCONCLUSIVE with clean save/load; PR #11 MERGE-READY, open and unmerged).** Two Phase 3 spikes now have records.
+**Phase 3.2A (held custody: MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED; final e768fef acceptance 52 PASS / 0 FAIL / 0 INCONCLUSIVE with clean save/load; PR #11 MERGED).** Two Phase 3 spikes now have records.
 **S11** ([S11-rescue-site-holder.md](S11-rescue-site-holder.md)) **FAILED its source audit**: the vanilla pawn-holding site parts mutate the
 pawn (forced downing, a prison cell, *join the player if rescued*) or destroy it, and a retained world pawn cannot also sit in `SitePart.things`.
 As the 3.2A prompt requires, the rescue-site implementation stopped there, with no Harmony and no custom site lifecycle. The narrowest viable

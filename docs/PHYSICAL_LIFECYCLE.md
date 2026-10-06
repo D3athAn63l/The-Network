@@ -1,7 +1,14 @@
 # Phase 3 Design: Abstract ↔ Physical Lifecycle
 
+> **Next-slice audit (2026-10-06):** [Phase 3.2B readiness report](PHASE32B_READINESS_AUDIT.md)
+> records source findings, S26/S27 evidence, composition/promotion recommendations and the owner
+> decisions still required. **3.2B is not implemented.** In particular, the current named cap is
+> six **total**, not the older design's 1+2+6 arithmetic; promotion while teammates remain active
+> needs an explicit reservation/transaction prerequisite. Proposed simplifications below are not
+> accepted schema changes merely because they appear in the audit.
+
 > **Phase 3.1 Controlled Physical Episode — IMPLEMENTED AND OWNER RUNTIME VALIDATED (PASS).** This status applies to the Phase 3.1 scope only. Phase 3.0 is implemented
-> ([Appendix H](#appendix-h-phase-30-as-built)); **3.2B, 3.2C and 3.3 are NOT implemented; 3.2A (held custody) is implemented and headless validated only (see the next paragraph).** The history, in order ([Appendix K.9](#k9-final-sign-off-phase-31-owner-runtime-validated)): the owner's first physical run
+> ([Appendix H](#appendix-h-phase-30-as-built)); **3.2B, 3.2C and 3.3 are NOT implemented; 3.2A (held custody) is merged, headless validated and owner runtime validated (see the next paragraph).** The history, in order ([Appendix K.9](#k9-final-sign-off-phase-31-owner-runtime-validated)): the owner's first physical run
 > (build `29f31dd`) produced positive evidence and real defects (the retained registry did not survive a load; first projections used special-purpose kinds; an individual's role could stay
 > `Unset`; three harness defects), corrected in [Appendix K](#appendix-k-phase-31-runtime-qa-correction-pass-pr-10); the corrected build then passed the owner's reduced rerun; `RT-PHYX-010B` exposed a false
 > harness assumption (that a loaded save stays paused), not a production defect; isolated evidence confirmed the production load behaviour; and the harness and docs were cleaned up. Two statuses, kept apart:
@@ -9,11 +16,11 @@
 > [S31-retained-pawn-exit-reservation](spikes/S31-retained-pawn-exit-reservation.md)): the owner ran the dedicated S31 spike on a real 1.6 game before 3.1 was implemented, and reserving a retained named pawn
 > **while it is spawned** is the accepted production mechanism. **(2) The Phase 3.1 physical suite is owner-runtime validated** ([RUNTIME_TESTING § 17.5](RUNTIME_TESTING.md#175-final-phase-31-owner-runtime-evidence): evidence accumulated across
 > the S31 spike, the initial run, the corrected reduced rerun and an isolated 010B follow-up, not one run); save/load registry reconstruction is validated. Earlier: implemented and corrected after review
-> ([Appendix I](#appendix-i-phase-31-as-built), [Appendix J](#appendix-j-phase-31-post-review-correction-pass-pr-10)). **Not claimed:** Phase 3.2, held custody, rescue, groups or group extraction; arbitrary modded races; every RimWorld/mod combination.
+> ([Appendix I](#appendix-i-phase-31-as-built), [Appendix J](#appendix-j-phase-31-post-review-correction-pass-pr-10)). **The Phase 3.1 sign-off does not claim later-phase validation:** held custody is covered by the separate Phase 3.2A acceptance below; rescue, groups and group extraction remain unimplemented. Arbitrary modded races and every RimWorld/mod combination are not validated.
 > The live game holds the real physical adapter, and the only trigger that creates or places a contractor pawn is the session-armed physical test tier (Dev Mode, its own test map). The save format is still **5**; there is no Harmony.
 > The design text below is unchanged by the implementation except where Appendices H, I, J, K and L record a decision the design left open or a correction.
 >
-> **Phase 3.2A Held Custody — IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED.** Final owner acceptance on `e768fef`: 022 41/0/0 → clean SAVE/LOAD → 025 11/0/0, focused total 52/0/0; 1 bound / 1 healthy / 1-of-1 retained / 0 integrity findings. **PR #11 — MERGE-READY**, open and unmerged ([Appendix L](#appendix-l-phase-32a-as-built-held-custody), ADR-056). The prior slaveFaction, fixture LookTargets and invalid-discard issues are FIXED; S21 remains PARTIAL for headless-only observation paths.
+> **Phase 3.2A Held Custody — MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED.** Final owner acceptance on `e768fef`: 022 41/0/0 → clean SAVE/LOAD → 025 11/0/0, focused total 52/0/0; 1 bound / 1 healthy / 1-of-1 retained / 0 integrity findings. **PR #11 — MERGED** ([Appendix L](#appendix-l-phase-32a-as-built-held-custody), ADR-056). The prior slaveFaction, fixture LookTargets and invalid-discard issues are FIXED; S21 remains PARTIAL for headless-only observation paths.
 > A held named person is now a terminal outcome of an episode, watched by a bounded custody watch and returned only on positive evidence. Recruitment is recorded as `Defected`; O-20 locks permanent exit from old NPC availability and future Player Contractor participation through the real colony / `PlayerProxy` (Phase 4 is not implemented). **S11 failed its
 > source audit, so the rescue site is not built** ([S11 record](spikes/S11-rescue-site-holder.md)); the rescue's domain half is proven headlessly. **Not implemented:** the rescue site and its player-facing content, groups (3.2B), mixed-group reconciliation (3.2C), 3.3. The save format is still **5**; there is no Harmony.
 >
@@ -241,7 +248,7 @@ Audited from the merged code, not from the design documents. Everything in this 
 | `KnownCharacter` (`role`, `org`, `embodiedBy`, `status`, `custody`, `notability`, `woundedUntilTick`, `diedTick`, `deathCauseKey`, `NameSnapshot`) | `NetworkActor.cs:237` | The persisted *person* record. It has **no pawn binding, no gender, no age, no appearance, no operational role**: exactly the minimum a Phase 3 binding must add. Its existing `role` is `CharacterRole` (Leader, Lieutenant, Specialist, Member, Freelancer, Retired): *organizational standing*, **not** an operational function, and it must not be overloaded ([§ 6.6](#66-operational-roles)). |
 | `CustodyState` (Unmaterialized, Stored, Deployed, OutOfCustody, Released, Lost) | `NetworkActor.cs:222` | Persisted on every character since Phase 2 and **never written**: every saved value is `0`. Its meanings can be fixed now at zero migration cost ([§ 8](#8-lifecycle-state-machine)). |
 | `CharacterStatus` (Active, Wounded, Captured, Missing, Dead, Retired, Defected, Lost) | `NetworkActor.cs:210` | Abstract *story* status. Orthogonal to custody ("who controls the pawn"). |
-| `OrganizationProfile` (leader, ≤ 2 lieutenants, ≤ 6 `knownMembers`, `tiers` headcount, `woundedRecovery` buckets, `committed`) | `Persist/ContractorComponents.cs:537` | Named people are records; everyone else is a *count by tier*. A crew is `knownMembers` + headcounts. There is no roster of anonymous individuals, **no role composition**, and Phase 3 must not create a roster. The existing caps (1 + 2 + 6 = at most 9 named people) are the ceiling that bounds progressive concretization ([§ 4.5](#45-progressive-concretization)). |
+| `OrganizationProfile` (leader, ≤ 2 lieutenants, ≤ 6 `knownMembers`, `tiers` headcount, `woundedRecovery` buckets, `committed`) | `Persist/ContractorComponents.cs:537` | Named people are records; everyone else is a *count by tier*. A crew is `knownMembers` + headcounts. There is no roster of anonymous individuals, **no role composition**, and Phase 3 must not create a roster. The current cap is **6 total, including leader and lieutenants**, not 1+2+6. The [3.2B audit](PHASE32B_READINESS_AUDIT.md#3-o-2-size-and-cap-recommendations) recommends discretionary cap semantics with obligated promotion overflow, pending owner decision. |
 | `ContractorSimulation` (`equipment` tier/condition/specialties, `mobility`, `spatial`, `career`, `commitments`, `funds`, `skill`, runtime `cachedStrength`) | `ContractorComponents.cs:381` | Capability to *project* from. `commitments` is `List<OperationId>` and drives job capacity. |
 | `PublicReputation` (a numeric `score`; `FameBand` Unknown…Legendary **derived** from it), `ExperienceBand` (Green…Legendary), `CareerPolicy` | `NetworkActor.cs:87`, `Bands.cs`, `CareerPolicy.cs` | **Capability** is already a separate band (`ExperienceBand`). But the one `score` is built from *completed work* (`ReputationGain`) yet is exposed, displayed and used as "fame", and `RequiredFame(tier)` gates equipment advancement on it: professional record and public visibility are one number today ([§ 6.10](#610-professional-reputation-fame-and-capability)). |
 | `SpatialState` (anchor, destination, status Idle/Travelling/OnAssignment/Blocked, charter ends) | `ContractorComponents.cs:199`, `SpatialService.cs` | The one abstract geographic truth ([SPATIAL](SPATIAL.md)). Driven daily from `UpkeepService.UpkeepJob → Spatial.Upkeep(a) → CatchUp + MaybeRelocate`. |
@@ -457,7 +464,7 @@ A **seat** is a role position of the organization's composition. It is *abstract
 *concretized* when a living `KnownCharacter` with that operational role is pinned to it. Concretization is
 **monotone and bounded**: a concretized seat is never silently refilled by a different human while its *encountered* person
 lives (P3-INV-020), and the number of named seats never exceeds the organization's *existing* named-people caps
-(1 leader + ≤ 2 lieutenants + ≤ 6 known members). No new roster is created: a concretized seat *is* an existing
+(six total, leader and lieutenants included; corrected by the [3.2B source audit](PHASE32B_READINESS_AUDIT.md#3-o-2-size-and-cap-recommendations), which recommends explicit strong-promotion overflow semantics for owner decision). No new roster is created: a concretized seat *is* an existing
 `KnownCharacter` record.
 
 #### 4.5.2 The policy by organization size (a bounded policy; thresholds are tuning, the principle is frozen)
@@ -2500,7 +2507,7 @@ physical run of the 3.1 suite itself.
 No player-as-contractor board, no NPC-issued market, no full rival simulation in any of them.
 
 **Implementation status.** 3.0 is implemented (Appendix H). **3.1 is implemented on the accepted M1, corrected after review (Appendix J), and
-owner runtime validated** (Appendix K.9). **3.2A (held custody) is implemented / headless validated / owner runtime validated** (Appendix L); the historical 194-PASS baseline is preserved and final `e768fef` acceptance reported 022 41/0/0, clean save/load and 025 11/0/0 (focused total 52/0/0),
+owner runtime validated** (Appendix K.9). **3.2A (held custody) is merged / headless validated / owner runtime validated** (Appendix L); the historical 194-PASS baseline is preserved and final `e768fef` acceptance reported 022 41/0/0, clean save/load and 025 11/0/0 (focused total 52/0/0),
 and its rescue site is not built because S11 failed. 3.2B (groups) and 3.2C (mixed-group reconciliation) are not started.
 
 **Design note for 3.2: group extraction (owner requirement; not built in 3.1).** A physical Network group should normally
@@ -3575,7 +3582,7 @@ No owner rerun is required for this pass: it changes a read-only verifier, tests
 
 ## Appendix L: Phase 3.2A as built (held custody)
 
-> **Status: Phase 3.2A Held Custody — IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED. PR #11 — MERGE-READY.**
+> **Status: Phase 3.2A Held Custody — MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED. PR #11 — MERGED.**
 > The owner completed final `e768fef` acceptance: **022 41/0/0 → clean SAVE/LOAD → 025 11/0/0**, focused total **52/0/0**;
 > **1 bound / 1 healthy / 1-of-1 retained coverage / 0 integrity findings**. The same PlayerSlave / Captured pawn remains reserved and
 > excluded from old-NPC simulation; `slaveFaction = null`, and the faction-reference, warden LookTargets and invalid-discard issues are FIXED.

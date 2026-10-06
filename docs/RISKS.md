@@ -168,7 +168,7 @@
   ([PHYSICAL_LIFECYCLE § 9](PHYSICAL_LIFECYCLE.md#9-custody-model)); implementation is subphase 3.2, and 3.1 fails safe
   into `Quarantined(UnsupportedCustody)` rather than faking capture support. Vanilla recruits kidnapped pawns into the
   captor's faction with MTB ≈ 30 days; the watch expects it.
-- **Phase 3.2A (IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED; final e768fef acceptance 52/0/0 with clean save/load).** Held custody is implemented for named people
+- **Phase 3.2A (MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED; final e768fef acceptance 52/0/0 with clean save/load).** Held custody is implemented for named people
   ([Appendix L](PHYSICAL_LIFECYCLE.md#appendix-l-phase-32a-as-built-held-custody), ADR-056). One correction to the mitigation above: the
   reservation is **kept**, not released, while a person is held (M1 covers `OutOfCustody`, P3-INV-042), because a released, held pawn
   could become an ordinary `Free` world pawn. Captured and recruited people are set-once fates, committed through one episode. A recruit
@@ -533,14 +533,19 @@
 - **Failure modes.** Progressive concretization retains every placed seat of small organizations, so the retained-pawn count
   grows past the soft cap; or the cap tempts the Network to release a person the player has met and later put a *stranger* in
   that seat; or a persistent roster of company soldiers appears by accident.
-- **Mitigation.** Concretization is **bounded by the existing named-people caps** (1 leader + ≤ 2 lieutenants + ≤ 6 known
-  members); rank-and-file of large organizations stay ephemeral and are promoted only by **strong story evidence** (a
+- **Mitigation.** Discretionary concretization uses the existing named-seat target (**six total**, leader and lieutenants
+  included; the [3.2B audit](PHASE32B_READINESS_AUDIT.md#3-o-2-size-and-cap-recommendations) recommends obligated strong-promotion overflow, pending owner decision); rank-and-file of large organizations stay ephemeral and are promoted only by **strong story evidence** (a
   material outcome, being named by the Network, a narrowed battle-log signal), **never by presence alone**, so a company does
   not slowly turn into a persistent roster; the cap is a *performance* policy that releases only never-encountered people and
   those with no living seat, and is **exceeded rather than break identity**
   ([§ 4.5](PHYSICAL_LIFECYCLE.md#45-progressive-concretization)).
 - **Proven by.** `RT-PHYS-023`, `RT-PHYX-014`, the Phase 3 soak (retained-pawn growth); spike **S27** (encounter evidence,
   including the reliability of the narrowed log tests).
+- **3.2B readiness evidence, not implementation.** [S27](spikes/S27-progressive-concretization-evidence.md)
+  is PARTIAL (source/headless). The [opportunity model](PHASE32B_READINESS_AUDIT.md#8-retention-opportunity-model)
+  reaches roughly 285 retained identities for a repeatedly encountered representative 100-contractor cast;
+  150 must remain a soft target. Pending anonymous slots also need safe temporary Episode reservation until
+  atomic promotion/release; current named-only M1 does not establish that coverage.
 
 ## R-37 · The reconciliation commit crosses services and is half-applied (Phase 3)
 - **Failure modes.** The existing casualty, succession and actor-ending paths interleave durable mutation with inline
@@ -578,6 +583,10 @@
   organization's existing ideology); the Network never writes relations, opinions, thoughts, memories or traits of a bound
   pawn; a best-effort fallback the owner decides ([§ 6.9](PHYSICAL_LIFECYCLE.md#69-team-cohesion)).
 - **Proven by.** Spike **S26**; `RT-PHYS-024` (initial-only; source scan), `RT-PHYX-013`.
+- **3.2B audit recommendation.** [S26](spikes/S26-team-cohesion.md) is PARTIAL (source audit): core
+  same-faction opinions can be meaningful before spawn, but map/mod thoughts, compatibility and
+  query-cache residue limit a screen. Recommend BEST-EFFORT initial construction only, not a guaranteed
+  opinion floor. Generated-crew hostility frequency is unmeasured; bound history is never sanitized.
 
 ## R-40 · Reputation, fame and capability stay conflated (Phase 3 design; a later phase)
 - **Failure modes.** Today one numeric score is both the professional record and the "fame" band, and the equipment rung is

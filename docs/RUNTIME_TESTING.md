@@ -899,7 +899,7 @@ no Harmony, and the save format stays 5. PR #10 has since been merged.
 
 ## 18. Phase 3.2A: held custody
 
-> **Status: Phase 3.2A Held Custody — IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED. PR #11 — MERGE-READY.**
+> **Status: Phase 3.2A Held Custody — MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED. PR #11 — MERGED.**
 > Final `e768fef` acceptance: **022 41/0/0 → clean SAVE/LOAD → 025 11/0/0**, focused total **52/0/0**;
 > **1 bound / 1 healthy / 1-of-1 retained coverage / 0 integrity findings**. All slaveFaction, warden LookTargets and invalid-discard correction
 > issues are FIXED. The original 194-PASS baseline remains historical evidence. See the [acceptance record and audit](PR11_CORRECTION_VALIDATION.md#final-owner-runtime-acceptance-pass). The design is [PHYSICAL_LIFECYCLE § 9](PHYSICAL_LIFECYCLE.md#9-custody-model). What was built is
@@ -931,7 +931,7 @@ Solo-held rescue matrix). Building a caravan or a pod launch needs a colonist to
 
 ### 18.3 Final owner runtime acceptance (PASS)
 
-**Phase 3.2A Held Custody — IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED. PR #11 — MERGE-READY; open and unmerged.**
+**Phase 3.2A Held Custody — MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED. PR #11 — MERGED.**
 
 The owner completed **RT-PHYX-022 → SAVE → LOAD → RT-PHYX-025** on the accepted `e768fef` build in a fresh disposable save with
 Ideology active: **022: 41 PASS, 0 FAIL, 0 INCONCLUSIVE; save/load CLEAN; 025: 11 PASS, 0 FAIL, 0 INCONCLUSIVE**.

@@ -1103,8 +1103,9 @@
 
 
 ### ADR-056 · Held custody: the custody watch, Custody episodes and M1 for held people (Phase 3.2A)
-- **Status.** **Deviation / clarification, for owner review. Phase 3.2A (held custody) — IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED; the owner completed the 020–025 baseline and final e768fef 022/save/load/025 acceptance (52/0/0, clean save/load). PR #11 — MERGE-READY, open and unmerged.** Recorded by the Phase 3.2A implementation. It
+- **Status.** **Deviation / clarification, accepted with merged Phase 3.2A (held custody) — MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED; the owner completed the 020–025 baseline and final e768fef 022/save/load/025 acceptance (52/0/0, clean save/load). PR #11 — MERGED.** Recorded by the Phase 3.2A implementation. It
   implements [PHYSICAL_LIFECYCLE § 8.2, § 9.4 and § 15.3](PHYSICAL_LIFECYCLE.md#94-held-people-the-custody-watch) and changes no principle of ADR-048 to ADR-055. Details: [Appendix L](PHYSICAL_LIFECYCLE.md#appendix-l-phase-32a-as-built-held-custody).
+  Historical implementation milestone: **IMPLEMENTED / HEADLESS VALIDATED** at `76b3ae1`; final owner acceptance and the merge supersede that checkpoint, as recorded above.
 - **Context.** Phase 3.1 quarantined every held custody (`UnsupportedCustody`): capture *safety*, not capture *support*. The design leaves four things open for 3.2: how a transition of someone vanilla already holds is reconciled
   exactly once, whether the M1 reservation covers a held pawn, what a recruited contractor is, and what vehicle a rescue site uses (S11).
 - **Decision.**
