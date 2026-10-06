@@ -3748,6 +3748,17 @@ capture retains current membership and a held pin. Death/departure is counted on
 reservation coverage until named M1 takes over; completed ordinary anonymous return relinquishes Network ownership safely to
 vanilla. No vanilla-owned Pawn is force-discarded to meet a count target.
 
+The existing COMPLETE boundary forgets `EpisodeMember.pawn` for anonymous operational-role slots with Returned, Killed,
+Lost, NeverPlaced or Detached outcomes **only after RELEASE succeeds**. A Detached prepare-for-removal slot has already
+restored its one aggregate human through `AnonymousBack`; routing-only release and binding forgetting leave the actual
+vanilla Pawn untouched. Named history and continuing named identity/custody are preserved. Rebuild/Resume cannot use
+completed anonymous history as a temporary owner or hidden roster. Malformed retained anonymous history is reported,
+never silently repaired.
+
+Promotion name facts preserve the actual bound Pawn's exact identity: NameTriple supplies first/nick/last/display; every
+other Verse.Name subtype with nonblank `ToStringFull` supplies display only with null structured fields. Null/blank display
+is unknown. No display parsing, name generation or mutation of Pawn.Name is performed.
+
 Evidence is conservative: exact MeleeCombat/RangedFire/ExplosionImpact endpoints, guarded RangedImpact actual==original
 shape, current player faction/host endpoint and validated absolute Episode window; at most 32×128 entries/candidate and eight
 candidates, plus 128 direct relation records. Unsupported/pruned/out-of-window S3 evidence does not authorize an identity; valid S1/S4 qualify independently. S2 has a clean exact
@@ -3771,7 +3782,9 @@ retry. Actual game save/load at active, committed-before-RELEASE and released ch
 
 ### M.4 Evidence and exact scope limits
 
-Two final fresh full runs against source `5b403fe` each passed **581 tests / 42,946 checks / 0 failures**, with **0 compiler warnings/errors**, warnings treated as errors and all **nine source gates PASS**. The shipped final run 2 DLL has SHA-256 `c8acac8534822dfa3e55521019c1379f2acd3fd3084266ad63739cfad7270adc`, stamp `built 2026-10-06T10:10Z, source commit 5b403fe`. Full source/artifact provenance, changed files and measured headless retention/Scribe costs are in the [validation record](PHASE32B_VALIDATION.md). Retention fixtures around 150/300 report measured headless registry costs;
+PR #13's surgical correction source `809e835` passed two fresh full runs of **586 tests / 43,106 checks / 0 failures** each, with strict **0 compiler warnings/errors** and all **nine source gates PASS**. The shipped exact tested run 2 DLL has SHA-256 `8ef464be121f0fabb26eb98a811a16071c6e57d3f9f2949a4df1560362b82ff2`, stamp `built 2026-10-06T10:59Z, source commit 809e835`. Exact focused regressions, corrected artifact provenance and the 27-item report are in the [current surgical record](PHASE32B_VALIDATION.md#pr-13-surgical-correction-current-review-record). Owner runtime remains pending.
+
+The original delivery's two fresh full runs against source `5b403fe` each passed **581 tests / 42,946 checks / 0 failures**, with **0 compiler warnings/errors**, warnings treated as errors and all **nine source gates PASS**. Its run 2 DLL had SHA-256 `c8acac8534822dfa3e55521019c1379f2acd3fd3084266ad63739cfad7270adc`, stamp `built 2026-10-06T10:10Z, source commit 5b403fe`. Original changed files and measured headless retention/Scribe costs remain historical evidence in the validation report. Retention fixtures around 150/300 report measured headless registry costs;
 Unity TPS, actual save-size deltas and active-mod runtime safety are pending. 150 is a soft warning region, never an identity cap.
 
 Store-aware current named counts exclude dead/lost/defected/retired history from service headcount/capacity/reserve inputs without changing formulas. `firstEncounterTick` is set only from a proven `playerVisibleTick <= now`; strong evidence without dated placement leaves −1 and still creates mandatory identity. Episode RELEASE completion drops derived temporary cache ownership.

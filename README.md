@@ -127,7 +127,7 @@ decision on the documented alternative. Its domain half is proven headlessly. Sa
 The contract board, the player as contractor and the social layer are later phases
 ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
 
-**Test status.** The final Phase 3.2B complete suite passed **581 tests / 42,946 checks / 0 failures** in each of two fresh runs against source `5b403fe`, with **0 compiler warnings/errors** and all **nine source gates PASS**. The shipped run 2 DLL and measured 150/300 headless retention/Scribe fixtures are recorded in [validation and artifact provenance](docs/PHASE32B_VALIDATION.md). Owner runtime validation remains pending; the full suite includes the existing procurement/career soaks.
+**Test status.** PR #13's surgical correction passed **586 tests / 43,106 checks / 0 failures** in each of two fresh full runs against source `809e835`, with **0 compiler warnings/errors** and all **nine source gates PASS**. The exact tested run 2 DLL and Detached COMPLETE/custom-name regressions are recorded in the [current correction report](docs/PHASE32B_VALIDATION.md#pr-13-surgical-correction-current-review-record). Original `5b403fe` validation (**581 / 42,946 / 0** twice), DLL and measured 150/300 headless retention/Scribe fixtures remain history. Owner runtime validation remains pending; the full suite includes the existing procurement/career soaks.
 
 **Owner runtime evidence** ([RUNTIME_TESTING § 15](docs/RUNTIME_TESTING.md#15-owner-observed-runtime-evidence)):
 

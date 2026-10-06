@@ -1003,7 +1003,7 @@ they are not outstanding acceptance work.
 
 **PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED — OWNER RUNTIME VALIDATION PENDING.**
 
-The developer-triggered group slice and scenarios below are implemented/headless validated. Two final fresh full runs against source `5b403fe` each passed **581 tests / 42,946 checks / 0 failures**, with **0 compiler warnings/errors** and all **nine source gates PASS**. The tested run 2 DLL is shipped; source stamp/hash and measured 150/300 registry/Scribe fixtures are in the [validation record](PHASE32B_VALIDATION.md). No scenario below is claimed owner runtime validated. S26/S27 remain PARTIAL; S11 FAIL / rescue STOPPED, R-50 OPEN, S21 PARTIAL and O-20 locked remain unchanged.
+The developer-triggered group slice and scenarios below are implemented/headless validated. PR #13's Detached COMPLETE and actual custom-name corrections passed two fresh full runs against source `809e835`, each **586 tests / 43,106 checks / 0 failures**, with **0 compiler warnings/errors** and all **nine source gates PASS**. The exact tested run 2 DLL is shipped; stamp/version/hash/bytes are in the [current surgical record](PHASE32B_VALIDATION.md#pr-13-surgical-correction-current-review-record). The original `5b403fe` delivery's two **581 / 42,946 / 0** runs and 150/300 registry/Scribe fixtures remain historical evidence. The menus/checkpoints below are unchanged. No scenario below is claimed owner runtime validated. S26/S27 remain PARTIAL; S11 FAIL / rescue STOPPED, R-50 OPEN, S21 PARTIAL and O-20 locked remain unchanged.
 
 ### 19.1 Exact menu inventory and visibility boundary
 

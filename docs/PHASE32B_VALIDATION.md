@@ -6,7 +6,92 @@ This report describes the developer-triggered group slice delivered on `codex/ph
 
 No new owner in-game result is claimed. Phase 3.2A remains **MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED**: PR #11's final `e768fef` result remains 022 **41/0/0** → clean SAVE/LOAD → 025 **11/0/0**, total **52/0/0**. S26 and S27 remain **PARTIAL**; S21 remains **PARTIAL** for the previously unrun observation paths. S11 remains **FAIL / rescue STOPPED**, R-50 remains **OPEN**, O-20 remains locked, and full 3.2C, 3.3 and Phase 4 remain unimplemented.
 
-## Delivery and validation evidence
+## PR #13 surgical correction: current review record
+
+The owner opened [PR #13](https://github.com/D3athAn63l/The-Network/pull/13) for the delivered branch. Its pre-correction HEAD is **`83328c57d7c11d6746e4b88ffda47fa659f568e2`**. This correction updates that existing PR; no new PR is requested and nothing is to be merged. The original source `5b403fe`, two **581 / 42,946 / 0** passes and DLL hash `c8acac…` below remain historical evidence. They do not validate the changed production source.
+
+### The two corrections
+
+**Completed anonymous Detached history.** The existing authoritative `PhysicalLifecycleService.Complete` clearing rule is extended to include `MemberOutcome.Detached`, alongside Returned, Killed, Lost and NeverPlaced. It applies only to anonymous operational-role slots after successful RELEASE. `AnonymousBack` has already restored the aggregate human; COMPLETE forgets the slot's PawnRef after routing-only release. The real vanilla Pawn is neither destroyed nor discarded. Named historical bindings and continuing named identity/custody remain intact. No second cleanup mechanism or anonymous roster is added.
+
+The focused lifecycle regression proves exactly-once healthy/committed accounting, zero invented KnownCharacters, successful routing-only RELEASE, preservation of the actual Pawn, no early binding clear, completed `member.pawn == null`, idempotent retry and no temporary ownership reconstructed by registry rebuild/Resume. It uses a real Verse Pawn/PawnRef and actual M1 callbacks, early-ID rebuild, pointer resolution and Resume; world observation and strip/faction-release fault injection use the existing fake port. The actual Pawn's Destroyed/Discarded/dead flags and Name stay unchanged, and only the Episode routing tag is stripped. This is headless lifecycle evidence, not an owner map/world-tick result.
+
+`EpisodeChecks.Report` also reports stale released anonymous operational-role PawnRefs for those five forgettable outcomes. Its narrow finding excludes named bindings, legacy nonoperational slots, pending RELEASE and unlisted continuing outcomes. The diagnostic never clears a reference or changes Pawn, stock or identity state; malformed saves are reported without repair.
+
+**Actual custom name display.** `RimWorldPhysicalWorldPort.ExistingPawnName` retains exact `NameTriple` first/nick/last/display fields. Every other `Verse.Name` subtype with a nonblank actual `ToStringFull`, including NameSingle and a modded subtype, yields a display-only `NameSnapshot` with null first/nick/last. There is no string splitting, translated-text parsing, replacement generation or mutation of `Pawn.Name`. Null/blank display still supplies no name evidence. The focused adapter-to-commit regression proves that positive mandatory S1 custody promotes the same Pawn with the exact custom display, while evidence collection and PLAN remain free of CharacterStore/allocator mutations. Existing null/mismatched/unresolved/foreign-binding guards remain.
+
+The existing adapter regression's old `UnknownName`-returns-null assertion is replaced with exact display/null-structure assertions because this brief explicitly changes that subtype behavior. NameTriple, NameSingle, null name, thing-ID mismatch, unresolved binding and foreign Episode/member checks are retained; no intentional ownership invariant is weakened.
+
+### Focused regression evidence
+
+| Checkpoint | Result |
+|---|---|
+| `Phys32b.Name_CustomDisplaySupportsMandatorySamePawnPromotion` and `Phys32b.Name_CustomBlankProvidesNoNameEvidence` | **2 tests / 44 checks / 0 failures**; strict **0 warnings / 0 errors**, all **nine source gates PASS**. |
+| Existing `Phys32b.Promotion_ActualAdapterReadsExactExistingPawnName` | **1 test / 21 checks / 0 failures** with the requested custom-display assertion. |
+| `Phys32b.Detached_ReferenceForgottenOnlyAfterReleaseComplete`, `Phys32b.Detached_NamedAndLegacyNonOperationalReferencesRemain`, `Phys32b.Detached_ValidatorReportsStaleHistoryWithoutRepair` | **3 tests / 115 checks / 0 failures**. |
+| Combined affected `Phys32b` coverage | **82 tests / 4,446 checks / 0 failures**; strict **0 warnings / 0 errors**, all **nine source gates PASS**. |
+
+The five new regressions account for **159 checks**. Checkpoint logs: `/workspace/.onboarding/pr13-names-focused.log`, `/workspace/.onboarding/pr13-existing-name-focused.log`, `/workspace/.onboarding/pr13-detached-focused.log` and `/workspace/.onboarding/pr13-both-focused.log`. These focused results precede the final source commit; the final committed-source full-suite and artifact evidence follows.
+
+### Current source, validation and artifact
+
+The final corrected production source and tests are committed as **`809e83556981a82309786c326b2d5eedba63749d`**. Both fresh complete-suite runs passed against that unchanged source. The exact validated **final run 2** DLL is shipped, with byte-for-byte equality to its tested output; it was not rebuilt after provenance was recorded. Save format remains **5**; no new field, migration, production Harmony, runtime menu or unrelated architecture change is part of this cleanup.
+
+| Surgical check | Current result |
+|---|---|
+| Production source commit | `809e83556981a82309786c326b2d5eedba63749d`. |
+| New focused regressions | Five new tests **5 / 159 / 0**; combined affected coverage **82 / 4,446 / 0** above. |
+| Full headless suite, run 1 | **586 tests / 43,106 checks / 0 failures, exit 0**, fresh process against `809e835`. |
+| Full headless suite, run 2 | **586 tests / 43,106 checks / 0 failures, exit 0**, second fresh process against `809e835`. |
+| Production/test compiler | Each run: **0 warnings / 0 errors**, warnings treated as errors. |
+| Source gates | Each run: **all nine gates PASS**. |
+| Markdown/whitespace | **760 changed-document local links / 0 errors; `git diff --check` PASS**. Appendices H–L remain byte-identical to pre-correction HEAD. |
+| Corrected shipped DLL | `1.6/Assemblies/TheNetwork.dll`, exact tested final run 2 output, byte-for-byte comparison PASS. |
+| Embedded build stamp | `built 2026-10-06T10:59Z, source commit 809e835`. |
+| Informational version | `0.1.0+809e83556981a82309786c326b2d5eedba63749d`. |
+| SHA-256 | `8ef464be121f0fabb26eb98a811a16071c6e57d3f9f2949a4df1560362b82ff2`. |
+| DLL bytes | **1,235,968**. |
+| Owner RimWorld runtime | **PENDING**, unchanged; no owner in-game PASS claimed. |
+
+Final logs: `/workspace/.onboarding/pr13-final1.log` and `/workspace/.onboarding/pr13-final2.log`. Each script ran in a fresh process against committed source `809e835`, including strict production/test compilation and all nine unchanged repository source gates. All five new regressions passed in both complete suites. No test-invariant conflict or new test failure was encountered during this correction. Compilation uses the same RimWorld 1.6 reference and .NET Framework 4.7.2 as the original delivery.
+
+### Requested 27-item surgical report
+
+| Item | Correction evidence / result |
+|---|---|
+| 1. Final PR HEAD | The final artifact/docs HEAD is recorded in this task's delivery response and the [existing PR #13 commit list](https://github.com/D3athAn63l/The-Network/pull/13/commits), on `codex/phase32b-groups-concretization`. This report is part of that delivery; its own commit hash is read after commit. Pre-correction HEAD: `83328c57d7c11d6746e4b88ffda47fa659f568e2`. |
+| 2. DLL production source | `809e83556981a82309786c326b2d5eedba63749d`. Original `5b403fe` evidence below is historical. |
+| 3. Exact changed files | **12 files** against pre-correction HEAD. Source/tests: `Source/TheNetwork/Domain/Physical/PhysicalLifecycleService.cs`, `Source/TheNetwork/Domain/Physical/EpisodeChecks.cs`, `Source/TheNetwork/Integration/Physical/RimWorldPhysicalWorldPort.cs`, `Tests/TheNetwork.Tests/Phase32bDetachedCleanupTests.cs`, `Tests/TheNetwork.Tests/Phase32bCustomPawnNameTests.cs`, `Tests/TheNetwork.Tests/Phase32bPromotionTests.cs`, `Tests/TheNetwork.Tests/TestMain.cs`. Artifact/docs: `1.6/Assemblies/TheNetwork.dll`, `README.md`, `docs/PHASE32B_VALIDATION.md`, `docs/PHYSICAL_LIFECYCLE.md`, `docs/RUNTIME_TESTING.md`. |
+| 4. Detached correction | Include Detached in the existing COMPLETE anonymous operational-role binding clear, after successful RELEASE. |
+| 5. Actual Pawn untouched | Real Pawn remains not Destroyed/Discarded/dead, same Name and external PawnRef; only Episode routing is stripped. No normalize/pass/named-retain action. Focused Detached **3 / 115 / 0**. |
+| 6. Exactly-once stock | One checkout takes healthy **4→3**, committed **0→1**; `AnonymousBack` restores **4/0** once. Failure/retry/repeated completion adds no second restoration, identity, commit or successful routing strip. |
+| 7. Completed history | Strip/faction-release faults retain the PawnRef and temporary protection. Successful COMPLETE sets `member.pawn = null`; this completed anonymous operational Detached slot has no PawnRef. Named/legacy historical bindings remain preserved. |
+| 8. No ownership resurrection | Actual temporary index becomes empty, RebuildEarly returns zero, ResolvePointers/Resume do not reserve the former Pawn. |
+| 9. Custom Verse.Name | Any nonblank non-NameTriple display becomes display-only actual name facts; NameTriple remains structured. |
+| 10. No name fabrication | Preserve exact `ToStringFull`, null first/nick/last; no parsing, renaming or Pawn/Name/PawnRef replacement. |
+| 11. Focused regressions | New custom-name **2 / 44 / 0**, Detached COMPLETE/registry/exclusion/report-only **3 / 115 / 0**; retained adapter guard **1 / 21 / 0**; combined affected **82 / 4,446 / 0**. Exact IDs above. |
+| 12. Full suite run 1 | **586 tests / 43,106 checks / 0 failures, exit 0**, fresh process against `809e835`. |
+| 13. Full suite run 2 | **586 tests / 43,106 checks / 0 failures, exit 0**, same source in a fresh process. |
+| 14. Compiler | Each run: production/test **0 warnings / 0 errors**, warnings treated as errors. |
+| 15. Nine source gates | **All nine PASS** in both runs. |
+| 16. Save format | **5**, no bump, new field or migration. |
+| 17. Production Harmony | **None**, confirmed by unchanged source gate in both final runs. |
+| 18. DLL build stamp | `built 2026-10-06T10:59Z, source commit 809e835`. |
+| 19. Informational version | `0.1.0+809e83556981a82309786c326b2d5eedba63749d`. |
+| 20. DLL SHA-256 | `8ef464be121f0fabb26eb98a811a16071c6e57d3f9f2949a4df1560362b82ff2`. |
+| 21. DLL bytes | **1,235,968**. |
+| 22. R-50 | **OPEN**, unchanged. |
+| 23. O-20 | **LOCKED**, unchanged. |
+| 24. S11 | **FAIL / rescue STOPPED**, unchanged. |
+| 25. Later phases | Full **3.2C / 3.3 / Phase 4 NOT IMPLEMENTED**. |
+| 26. Owner runtime | **PENDING**. S21/S26/S27 remain PARTIAL; original PR #11 owner acceptance is preserved. |
+| 27. Final verdict | **PR #13 SURGICAL CORRECTION COMPLETE — READY FOR REVIEW / OWNER RUNTIME QA.** |
+
+**PR #13 SURGICAL CORRECTION COMPLETE — READY FOR REVIEW / OWNER RUNTIME QA.**
+
+**DO NOT MERGE.** The overall Phase 3.2B owner-runtime status remains pending; none of these results claims owner in-game acceptance.
+
+## Original delivery and validation evidence (historical)
 
 | Stage | Commit | Scope |
 |---|---|---|
@@ -36,7 +121,7 @@ Final logs in the prepared cloud workspace: `/workspace/.onboarding/phase32b-fin
 
 Intermediate Stage 2 evidence was **507 tests, 38,193 checks, 0 failures**, strict production/test compilation. It is a checkpoint rather than the final whole-slice count above. Full runs retain prior procurement/career soaks, authority, custody, reservation, runtime-runner and source-gate coverage.
 
-### Shipped DLL provenance
+### Original shipped DLL provenance (historical)
 
 | Value | Delivered artifact |
 |---|---|
@@ -128,7 +213,7 @@ Implemented menu families: **026** small first visit; **027** five-person contin
 
 Scenarios use existing session-only arm, dedicated tagged test map, sentinel and preserve-on-failure behavior. They are excluded from Quick smoke/Full safe regression. Existing IDs are not renumbered; save/load is owner-assisted, not automated. See [RUNTIME_TESTING § 19](RUNTIME_TESTING.md#19-phase-32b-groups-and-progressive-concretization) for exact checkpoints and commands.
 
-The final run 2 headless retention observations used actual PawnRef/registry and real Scribe fixture round-trips. No count above 150 is a failure criterion; every required identity remains intact.
+The original delivery's final run 2 headless retention observations used actual PawnRef/registry and real Scribe fixture round-trips. The measurements below retain that original evidence, rather than claiming new owner-runtime observations from this surgical cleanup. No count above 150 is a failure criterion; every required identity remains intact.
 
 | Headless population | Early registry rebuild | Pointer resolution | 100,000 reservation lookups |
 |---|---:|---:|---:|
@@ -140,7 +225,7 @@ The final run 2 headless retention observations used actual PawnRef/registry and
 | 150 named | 91,871 | 3.078 ms | 5.451 ms | 0.015 ms | 0.061 ms |
 | 300 named + 8 temporary | 186,516 | 4.451 ms | 10.219 ms | 0.026 ms | 0.172 ms |
 
-The XML fixture delta is **94,645 bytes**. These are observed process-local costs in the final run, including headless save/load reference resolution and coverage checks; they are **not a complete RimWorld save, Unity TPS, real game load elapsed or a mod-stack frame-time guarantee**. Runtime 032 exposes the separately pending owner registry/lookup observations; full save bytes/TPS/load timing remain manual owner evidence.
+The XML fixture delta is **94,645 bytes**. These are observed process-local costs in the original delivery's final run, including headless save/load reference resolution and coverage checks; they are **not a complete RimWorld save, Unity TPS, real game load elapsed or a mod-stack frame-time guarantee**. Runtime 032 exposes the separately pending owner registry/lookup observations; full save bytes/TPS/load timing remain manual owner evidence.
 
 Above-six strong identity is proven by headless planner/commit/lifecycle tests. The current 029/030B runtime company begins with one known leader; a separate cap-full/overflow owner fixture remains pending rather than being falsely attributed to that case.
 
@@ -150,7 +235,7 @@ The owner still needs actual first/second crew visits and same Pawn continuity, 
 
 3.2B covers bounded group return, P0/strong identity promotion and the minimal one-held-plus-ordinary-return terminal batch. It does not intentionally build/validate the full A-returned/B-wounded/C-dead/D-captured/E-recruited/F-missing/G-combat-promoted/H-ephemeral matrix, its casualty/morale/succession/operation combinations or partial group extraction. Unknown combinations fail closed with references/reservations preserved. Independent early per-member identity/custody commit is also outside this slice. Ordinary Stored repeat visits do not resolve R-50 long-held suspension boundaries.
 
-## Requested delivery checklist
+## Original 37-item delivery checklist (historical)
 
 | Item | Delivered result / reference |
 |---|---|
@@ -193,7 +278,9 @@ The owner still needs actual first/second crew visits and same Pawn continuity, 
 | 37. Final status | **PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED — OWNER RUNTIME VALIDATION PENDING**. |
 
 
-## Manual PR handoff after GitHub API HTTP 403
+## Original manual PR handoff after GitHub API HTTP 403 (historical)
+
+This records the original delivery attempt before the owner opened [PR #13](https://github.com/D3athAn63l/The-Network/pull/13). The no-PR result and complete body below describe that earlier handoff; the current correction continues the existing PR.
 
 The concrete PR creation attempt failed with `Post https://api.github.com/graphql: Forbidden`. This was a GitHub API failure, not an automatic approval-review rejection. **No PR was created and nothing was merged.** Native Git successfully pushed `codex/phase32b-groups-concretization`, including artifact commit `0186390abae9c5d12cb258c88fa9562b4e7c6215`, and configured its upstream. A final documentation-only delivery commit records this handoff; the shipped DLL source remains `5b403fe`.
 
@@ -203,7 +290,7 @@ The concrete PR creation attempt failed with `Post https://api.github.com/graphq
 - Open manually: [GitHub compare / new PR](https://github.com/D3athAn63l/The-Network/compare/main...codex/phase32b-groups-concretization?expand=1).
 - Exact body also available in the cloud workspace: `/workspace/.onboarding/phase32b-pr-body.md`.
 
-Replace the PR description with the complete Markdown body below, preserving the pending owner-runtime scope. Do not merge.
+The following is the original complete handoff body, retained as history. Its source/counts/DLL identify the original delivery; use the current surgical record above for corrected provenance. Do not merge.
 
 ```markdown
 NPC organizations can now materialize bounded, role-correct groups and turn encountered anonymous members into persistent identities when the whole Episode reaches its atomic terminal commit. A captured anonymous member remains protected as the same Pawn while peers are still Pending; promotion then records that Pawn's actual name, operational role and organization without restoring a second abstract human.
