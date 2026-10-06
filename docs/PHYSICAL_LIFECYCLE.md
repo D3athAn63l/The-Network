@@ -682,8 +682,8 @@ schema still needs Episode placement evidence and safe old-save defaults; no sch
 (`found` / `writtenOff`) in the same commit; the operation's own resolution then runs afterwards through its
 existing guarded entry points ([§ 15.5](#155-reuse-of-the-existing-services-no-parallel-rules)).
 
-Estimated cost: ≈ 0.5 KB per episode plus 60 B per member plus ≈ 50 B per bound character (+ 8 B per composition
-entry, ≤ 8 per organization): negligible beside the pawns, which vanilla saves in whatever holder owns them. The full minimum-new-persisted-truth list and the
+Estimated cost: ≈ 0.5 KB per episode plus 60 B per member plus ≈ 50 B per bound character:
+negligible beside the pawns, which vanilla saves in whatever holder owns them. The full minimum-new-persisted-truth list and the
 migration implications are in [§ 16](#16-saveload-semantics).
 
 ### 5.4 Placement mechanisms (by anchor)

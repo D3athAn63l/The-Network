@@ -470,7 +470,9 @@ OrganizationProfile : ActorComponent   // NPC Organization only
   roster: Roster
     leader: CharacterId?
     lieutenants: CharacterId[]       // ≤ 2
-    knownMembers: CharacterId[]      // capped (default 6, leader and lieutenants included)
+    knownMembers: CharacterId[]      // current construction target: 6 total, leader/lieutenants included
+                                    // accepted 3.2B (not implemented): six discretionary living seats; strong identity may overflow
+                                    // held identities never denied for a full target; no hard CharacterStore identity cap
     tiers: TierCount[]               // { tier: Veteran|Regular|Recruit, healthy: int, wounded: int }
     woundedRecovery: RecoveryBucket[]// { tier, count, dueTick } — aggregated, ≤ 8 buckets
     committed: TierCount[]           // headcount checked out to operations and deployments
