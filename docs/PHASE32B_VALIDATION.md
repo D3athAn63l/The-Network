@@ -15,6 +15,7 @@ No new owner in-game result is claimed. Phase 3.2A remains **MERGED / HEADLESS V
 | 3 | `99f678a572215fd8d71fd211c8af93907b7de27c` | Organization group planning/materialization, placement evidence and construction-only cohesion. |
 | 4 | `3b80ca326d136be2d52ffc16fba308fd87d64100` | Source-qualified evidence and atomic same-Pawn promotion with exact conservation. |
 | 5 | `5b403fe5fcc2f8e1d8e8e23d8f5c2f52264f0d8d` | Runtime scenarios, owner checklists, final documentation and validation. |
+| 6 | `0186390abae9c5d12cb258c88fa9562b4e7c6215` | Ship the exact final run 2 DLL and acceptance evidence. |
 
 | Final check | Result |
 |---|---|
@@ -188,13 +189,13 @@ The owner still needs actual first/second crew visits and same Pawn continuity, 
 | 33. R-50 | **OPEN**, no aging fix. |
 | 34. 3.2C | Full mixed-fate matrix/partial group extraction deferred as detailed above. |
 | 35. Owner runtime | Explicit pending matrix above and runtime § 19. |
-| 36. PR | **No PR created:** `gh pr create` returned `Post https://api.github.com/graphql: Forbidden` (HTTP 403). Manual handoff below: title `Phase 3.2B: groups and progressive concretization`, head `codex/phase32b-groups-concretization`, base `main`. Native Git actual push status is pending; nothing was merged. Do not merge. |
+| 36. PR | **Branch pushed; no PR created:** `gh pr create` returned `Post https://api.github.com/graphql: Forbidden` (HTTP 403). Manual handoff below: title `Phase 3.2B: groups and progressive concretization`, head `codex/phase32b-groups-concretization`, base `main`. Native Git push succeeded, including artifact commit `0186390`; nothing was merged. Do not merge. |
 | 37. Final status | **PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED — OWNER RUNTIME VALIDATION PENDING**. |
 
 
 ## Manual PR handoff after GitHub API HTTP 403
 
-The concrete PR creation attempt failed with `Post https://api.github.com/graphql: Forbidden`. This was a GitHub API failure, not an automatic approval-review rejection. **No PR was created and nothing was merged.** The native Git push dry-run succeeded; the actual implementation branch push is pending the final artifact/documentation commit.
+The concrete PR creation attempt failed with `Post https://api.github.com/graphql: Forbidden`. This was a GitHub API failure, not an automatic approval-review rejection. **No PR was created and nothing was merged.** Native Git successfully pushed `codex/phase32b-groups-concretization`, including artifact commit `0186390abae9c5d12cb258c88fa9562b4e7c6215`, and configured its upstream. A final documentation-only delivery commit records this handoff; the shipped DLL source remains `5b403fe`.
 
 - Title: `Phase 3.2B: groups and progressive concretization`
 - Head: `codex/phase32b-groups-concretization`
