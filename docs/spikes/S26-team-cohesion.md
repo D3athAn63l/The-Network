@@ -1,8 +1,8 @@
 # S26 — Team cohesion before first binding (Phase 3.2B readiness audit)
 
-**Verdict: PARTIAL — RimWorld 1.6 source audited; pre-bind opinion has useful vanilla meaning, but generated-crew frequency, modded thought safety and after-spawn equivalence are not runtime-proven. Recommended 3.2B policy: BEST-EFFORT prevention by construction.**
+**Verdict: PARTIAL — RimWorld 1.6 source audited; pre-bind opinion has useful vanilla meaning, but generated-crew frequency, modded thought safety and after-spawn equivalence are not runtime-proven. Owner-approved 3.2B policy: BEST-EFFORT prevention by construction.**
 
-This is an audit recommendation, not cohesion implementation. No production code, game DLL, test scenario, persisted field or relation was changed. There was no owner-runtime crew generation run, and no claim that randomly generated crews passed an opinion screen.
+This is an accepted design direction, not cohesion implementation. No production code, game DLL, test scenario, persisted field or relation was changed. There was no owner-runtime crew generation run, and no claim that randomly generated crews passed an opinion screen.
 
 ## Evidence baseline
 
@@ -42,18 +42,18 @@ Core same-faction opinion screening is meaningful before spawn. It is **not** a 
 
 An opinion query also mutates **transient caches**, although it does not author social history. `SituationalThoughtHandler.AppendSocialThoughts` (lines 90–100) stores the target Pawn as a dictionary key and records the query tick. State refresh is cached for 100 ticks; `SituationalThoughtInterval` prunes expired target caches after 300 ticks or for discarded targets. A retained/suspended existing teammate need not tick immediately, so asking its opinion of a rejected candidate can keep a temporary candidate reference alive until normal invalidation/pruning or load. `ThoughtHandler.ExposeData` saves memories only (lines 30–33): the situational cache is not a new durable roster. A future mutual screen must still test rejected-candidate residue, and should not “clean up” real members' social history to alter opinions.
 
-## Recommended 3.2B cohesion policy
+## Owner-approved 3.2B cohesion policy
 
-Adopt **BEST-EFFORT prevention by construction** as the baseline implementation contract:
+The owner accepted **BEST-EFFORT prevention by construction** as the baseline implementation contract:
 
 1. Every first projection uses `ForceGenerateNewPawn = true` and `CanGeneratePawnRelations = false`.
 2. Newly generated eligible adults share the selected existing organization member ideology through `FixedIdeo`, with an authoritative returned-Pawn check. Existing members keep their actual ideology and social history.
 3. Read returned traits/relations/ideology for generation consistency; contain generation failures with the existing bounded attempts and a diagnostic. Do not broaden retries solely to produce a guaranteed socially harmonious crew.
-4. Do not enforce the previously illustrative multi-band opinion floors or a broad mod-dependent trait blacklist in 3.2B. Numeric floors and high-band trait prohibitions are still tuning choices, not source-proven guarantees. A future owner may approve a narrowly defined Abrasive prohibition for newly generated high-cohesion candidates; it must reject contradictory forced-trait candidates, never remove the trait.
+4. Do not enforce the previously illustrative multi-band opinion floors or a broad mod-dependent trait blacklist in 3.2B. Numeric floors and high-band trait prohibitions are not source-proven guarantees. Any future stronger construction policy, such as a narrowly defined Abrasive prohibition, requires a separate explicit design decision; it is not part of the accepted 3.2B scope and must never remove an existing trait.
 5. Keep pairwise opinion collection in the disposable cohesion runtime probe. Record before-spawn and after-spawn opinions in both directions, active opinion thought causes, faction, ideology, compatibility, rejection counts, generation time and log errors. This distinguishes meaningful initial reads from claims that every active mod's workers are safe or every future crew will remain friendly.
 6. Once bound, never change relations, opinions, thoughts, memories, traits or ideology to maintain team cohesion. Later insults, fights, conversions and deaths are physical history.
 
-This resolves the technical uncertainty conservatively without blocking ordinary group generation. It requires owner acceptance if the intended story promise remains “an established professional crew cannot arrive with clear dislike.” The source cannot establish that stronger promise for every map-dependent or modded thought. If a stronger pre-bind screen is selected, specify its exact numeric threshold and eligible bands and run the disposable runtime probe before calling that policy validated.
+This resolves the technical uncertainty conservatively without blocking ordinary group generation. Owner acceptance is recorded; 3.2B does not promise that an established professional crew cannot arrive with clear dislike. The source cannot establish that stronger promise for every map-dependent or modded thought. Any future stronger pre-bind screen requires a separate design decision defining its exact numeric threshold and eligible bands, followed by the disposable runtime probe before calling that policy validated.
 
 ## Frequency and validation still required
 
@@ -61,4 +61,4 @@ This resolves the technical uncertainty conservatively without blocking ordinary
 
 The future disposable runtime probe should use a fixed recorded seed set, maximum eight eligible members, the actual role kinds and active mod list, and a bounded sample count (for example 32 crews per supported construction policy, explicitly a sample choice). Run an unscreened construction baseline and the elected policy, record all candidate attempts, and report the fraction of crews with at least one ordered pair meeting the predeclared hostility threshold. Recheck after spawn and a normal thought refresh; do not force relations, memories, traits or artificial opinion changes. A result on one mod list is not a guarantee for others. Verify existing teammates' history and the retained registry before/after rejected candidates, and verify cleanup/save/load is clean.
 
-S26 therefore remains **PARTIAL (source audit)** until that runtime evidence is attached. BEST-EFFORT cohesion is feasible without claiming a runtime PASS; stronger enforcement remains an owner decision and a future implementation acceptance gate.
+S26 therefore remains **PARTIAL (source audit)** until that runtime evidence is attached. BEST-EFFORT cohesion is owner-approved without claiming a runtime PASS; stronger enforcement is outside 3.2B and requires a separate future design decision.

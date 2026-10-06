@@ -2,6 +2,8 @@
 
 **Verdict: PARTIAL — source audit and isolated headless experiment.** Source-qualified bounded evidence is feasible; actual game, save/load and mod compatibility remain future owner runtime gates. This report does not implement promotion, groups, runtime scenarios or Harmony in the mod.
 
+The owner accepted the conservative S1–S4 evidence matrix and supporting-only, optional PlayLog policy below. Promotion remains part of whole-Episode terminal reconciliation: an eligible anonymous Pawn stays temporarily Episode-owned/reserved while other members remain Pending, then the same Pawn is promoted through PLAN → VALIDATE → atomic COMMIT before RELEASE. No early per-member identity/custody commit is authorized for 3.2B.
+
 Audit base: The Network `main` merge `a472766ff26a8af975d2a15c18d690cc13f8aa13`. Actual RimWorld 1.6 `Assembly-CSharp.dll` identity `1.6.9676.17735`, SHA-256 `5cf1b5be399d5b1c9c56ca72c9d35b4ecf307feacf5859d04ac5a1aa5926356a`. Selected loose reference source lacks these classes; findings below are ILSpy 9.1 decompilation of that supplied binary. No 1.4/1.5 inference. Decompiled files are outside both repositories at `/workspace/.onboarding/phase32b-s27/`.
 
 ## Public API and source evidence
@@ -35,7 +37,7 @@ Even generic same-entry co-occurrence needs narrowing:
 - `BattleLogEntry_RangedImpact.GetConcerns()` yields nonnull **initiator**, **actual recipient**, then **original target** (`:112–126`). Three different Pawns can co-occur although the candidate and player never fought one another. Worse, a turret/non-Pawn initiator may leave exactly two distinct Pawn concerns: candidate actual recipient plus player original target. Therefore **two distinct concerns alone is not sufficient for RangedImpact**.
 - `BattleLogEntry_Event`, `AbilityUsed` and `ItemUsed` can involve beneficial or neutral actions. `DamageTaken` and `StateTransition` do not expose enough public causal semantics for a generic strong-evidence classification. Omit them initially.
 
-**Recommended exact-type allowlist** (not `is` or an unknown mod subclass):
+**Owner-approved exact-type allowlist** (not `is` or an unknown mod subclass):
 
 1. MeleeCombat, RangedFire, ExplosionImpact: exactly two nonnull, distinct Pawn concerns, exactly the candidate and another Pawn satisfying the current player-side predicate.
 2. Optional RangedImpact safe case: the ordered concerns sequence contains **exactly three nonnull Pawn items**, the first differs from the second, and `ReferenceEquals(items[1],items[2])`. For this exact vanilla type, that proves a Pawn initiator and an actual recipient equal to the original target. These two distinct endpoints must be candidate plus player-side. All other RangedImpact patterns remain insufficient.
@@ -43,7 +45,7 @@ Even generic same-entry co-occurrence needs narrowing:
 
 Read at most four yielded concerns, rejecting a fourth, null/non-Pawn or unsupported shape. Do not build an unbounded list from `GetConcerns()`.
 
-The rule establishes combat contact with the player's side; it does **not** establish hostility, injury severity or a hostile historical faction relationship. Friendly fire and social-fight punches are meaningful contact under this recommended policy. Current faction checks cannot reconstruct faction/host state when an old entry was created. If the owner instead requires *hostile combat only*, that is an additional policy/API problem; current log public members do not supply that history.
+The rule establishes combat contact with the player's side; it does **not** establish hostility, injury severity or a hostile historical faction relationship. Friendly fire and social-fight punches are meaningful contact under this accepted policy. Current faction checks cannot reconstruct faction/host state when an old entry was created. Any future requirement for *hostile combat only* needs a separate policy/API decision; current log public members do not supply that history.
 
 A guarded current player-side predicate is: `other != candidate && playerFaction != null && (other.Faction == playerFaction || other.HostFaction == playerFaction)`, with missing/invalid prerequisites yielding no evidence. Compare actual faction instances; do not use labels or Network organization IDs. A player-hosted prisoner/lodger is included as requested. Do not treat every ally as player-side. The isolated experiment below uses explicit Pawn identity for its player argument and does not prove the real game's ownership transitions.
 
@@ -51,13 +53,13 @@ A guarded current player-side predicate is: `other != candidate && playerFaction
 
 Only collect during reconciliation, for at most eight Episode members. Evaluate material custody/ownership first; a cap or missing log must never suppress tracking of a durably held created Pawn.
 
-Recommended initial bounds:
+Owner-approved initial bounds:
 
 - first **32** entries of `BattleLog.Battles`;
 - first **128** entries of each selected battle;
 - at most **4,096 log entries per candidate**, at most **32,768 entry checks for eight candidates**;
 - at most four concern yields per relevant exact-type entry;
-- first **150** PlayLog entries for supporting diagnostics;
+- first **150** PlayLog entries for supporting diagnostics, only if the optional collector is included;
 - first **128** candidate direct-relation records for the initial narrow S4 relationship rule.
 
 These are policy constants, not persisted rosters or watchers. Iterate by index without copying complete logs. A single shared scan matching a small candidate set can later reduce work, but is unnecessary to establish the bound. Do not scan all world Pawns, run `AccumulatePawnGCDataImmediate`, use `RelatedPawns.Take(128)` (its graph traversal before each yield is not bounded), or scan every tick.
@@ -82,15 +84,15 @@ Both logs have `Notify_PawnDiscarded`; they remove affected entries and warn unl
 
 No actual in-game or save/load test was run in this spike. The binary's persistence methods support the proposed design; they do not prove that the owner’s loaded save/mod stack preserves every reference.
 
-## Final strong-evidence matrix recommendation
+## Owner-approved strong-evidence matrix
 
 | Evidence | Promotion decision | Exact qualification / exclusions |
 | --- | --- | --- |
-| S1 material custody/ownership | **Strong; mandatory** | Positive validated observation that a created anonymous Pawn is arrested/captured/enslaved/recruited, kidnapped, or otherwise durably held by vanilla. Promote same Pawn before Episode release, even at normal named capacity. Include durable third-party custody to satisfy trackability invariant. A spawned Pawn, any caravan membership, or lack of an owner lookup by itself is insufficient. |
+| S1 material custody/ownership | **Strong; mandatory** | Positive validated observation that a created anonymous Pawn is arrested/captured/enslaved/recruited, kidnapped, or otherwise durably held by vanilla. Reserve the same Pawn while other Episode members remain Pending; promote it in the atomic whole-Episode terminal commit before release, even at normal named capacity. Include durable third-party custody to satisfy trackability invariant. A spawned Pawn, any caravan membership, or lack of an owner lookup by itself is insufficient. |
 | S1 rescue | Future strong signal | Only a verified actual rescued person/outcome; no rescue implementation or site in 3.2B. S11 remains FAIL. |
 | S2 explicit Network identification | **Strong** | Authoritative planned event/letter deliberately identifies this exact Episode Pawn/slot as an individual. The promotion intention must enter DECIDE/PLAN before atomic commit; subsequent PUBLISH cannot discover it after release. Mere vanilla personal name, translated text matching, a generic faction letter or being mentioned incidentally is insufficient. |
 | S3 player-side combat | **Strong within window** | Exact-type allowlist, endpoint shapes above, same entry, current candidate plus player-side identity, Episode absolute time scope, bounded query. Generic `AnyEntryConcerns`, whole-battle membership, third-party combat, turret false pair and unsupported events do not promote. |
-| S4 former player colony stake | **Strong** | Public `PawnUtility.EverBeenColonistOrTameAnimal` true for this humanlike candidate, from positive recorded time. Current recruitment promotes immediately via S1; do not wait for the record to increment. |
+| S4 former player colony stake | **Strong** | Public `PawnUtility.EverBeenColonistOrTameAnimal` true for this humanlike candidate, from positive recorded time. Current recruitment supplies S1 eligibility without waiting for the record to increment; promotion still commits with the terminal whole-Episode batch. |
 | S4 direct relationship | **Strong within window** | First 128 actual `candidate.relations.DirectRelations` records; nonnull valid relation and nonnull other Pawn currently player-faction/player-hosted. No guessed opinion threshold or arbitrary acquaintance. Direct-only qualification intentionally misses inverse-only/implied/virtual family relationships; broad graph expansion is deferred pending a separate bounded policy. Never force-discard Pawns retained by vanilla for such missed relations. |
 | Other vanilla GC reasons | **Insufficient** | `Generating`, `Spawned`, `CorpseExists`, `FactionLeader`, `ForceKept`, `ReservedByQuest`, `ForSale`, `TransportPod`, raw `InPlayLog`/`InBattleLog`, `InActiveTale`, random retention and Network's own reservation are not individually strong evidence. Kidnapping/holding belongs to validated S1, not a GC string probe. |
 | Narrowed PlayLog interaction | **Supporting only** | Candidate plus player-side in a relevant saved entry within bounded/time window, but does not independently promote and does not turn another weak flag into strong evidence. |
@@ -98,7 +100,7 @@ No actual in-game or save/load test was run in this spike. The binary's persiste
 
 ## PlayLog decision
 
-Keep **supporting only**, optionally omit entirely from the first production collector if there is no user-facing diagnostic consumer. `PlayLogEntry_Interaction` exposes identities through concerns but not its `InteractionDef`; `InteractionWithMany` is not proof of a consequential individual interaction and can include many recipients. `InteractionSinglePawn` cannot provide a two-Pawn pair. Public `LogEntry.def` is a log rendering definition, not a substitute for protected interaction semantics; translated game strings and `ToString` are not stable classification APIs. No reflection or Harmony merely to recover `intDef`.
+The owner accepted **supporting only** and permits omission entirely from the first production collector unless a concrete diagnostic consumer needs it. `PlayLogEntry_Interaction` exposes identities through concerns but not its `InteractionDef`; `InteractionWithMany` is not proof of a consequential individual interaction and can include many recipients. `InteractionSinglePawn` cannot provide a two-Pawn pair. Public `LogEntry.def` is a log rendering definition, not a substitute for protected interaction semantics; translated game strings and `ToString` are not stable classification APIs. No reflection or Harmony merely to recover `intDef`.
 
 If collected, at most 150 entry inspections/candidate and four yielded concerns; an incomplete many-recipient entry is supporting evidence missing, not a promotion fallback. Do not sum two weak observations into S1–S4.
 

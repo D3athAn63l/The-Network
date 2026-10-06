@@ -21,9 +21,11 @@ developer wrote.
 
 ## Repository status
 
-The next slice has a [Phase 3.2B readiness audit](docs/PHASE32B_READINESS_AUDIT.md): **READY WITH
-OWNER DECISIONS REQUIRED**. Groups/concretization are not implemented. The report proposes the
-composition, cap policy, bounded promotion evidence, transaction prerequisite and future runtime checks.
+The next slice has a [Phase 3.2B readiness audit](docs/PHASE32B_READINESS_AUDIT.md): **READY FOR 3.2B IMPLEMENTATION**.
+The owner accepted the composition and 6/12 threshold policy, six-person discretionary
+cap with strong-identity overflow, terminal-batch promotion with temporary Episode reservation, and
+150 as a soft retention target. BEST-EFFORT cohesion and conservative evidence are approved design;
+groups/concretization and their runtime validation remain future work.
 
 **Phase 1 (Foundation + Intel + Fixers)** is implemented on top of the frozen Phase 0 architecture:
 the global cast in Mod Settings, the world cast snapshot, Fixers, the Comms Console gate, the item

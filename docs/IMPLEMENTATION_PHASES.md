@@ -507,9 +507,13 @@ runtime ids: safe `RT-PHYS-031…033`, physical `RT-PHYX-020…025` (`009` retir
 compositions, concretization and cohesion (3.2B), mixed-group reconciliation (3.2C), 3.3.
 
 **Next slice — 3.2B readiness audit, not implementation.** The [readiness report](PHASE32B_READINESS_AUDIT.md)
-is **READY WITH OWNER DECISIONS REQUIRED**: named-cap overflow, pending-group promotion timing/protection,
-and retention above the soft 150 target. S26/S27 now have source/headless records; neither is an owner
-runtime spike PASS. The report defines the recommended composition, conservation, future tests and 3.2C boundary.
+is **READY FOR 3.2B IMPLEMENTATION**. The owner accepted six discretionary living seats with strong-promotion
+overflow, terminal-batch promotion plus temporary active-Episode reservation, and identity continuity
+above the soft 150 retained-Pawn target. Composition v1, 6/12 thresholds, BEST-EFFORT cohesion and
+conservative evidence are accepted directions ([ADR-057](DECISIONS.md#adr-057--phase-32b-readiness-owner-decisions)).
+S26/S27 remain PARTIAL source/headless records; neither is an owner runtime spike PASS. **3.2B is
+not implemented.** Its future test plan includes operational-role stability through standing/succession
+and reload, plus performance/save-load around 150 and 300 retained Pawns. 3.2C remains separate.
 
 Historical 3.2A milestone: **IMPLEMENTED / HEADLESS VALIDATED** at `76b3ae1`; the current merged
 owner-validated status above supersedes that implementation-only checkpoint without changing its evidence.

@@ -1136,3 +1136,58 @@
 - **Consequences.** Save format 5; no Harmony; the new commit ops and planned fate are not persisted (the plan is recomputed from observation). New event keys: `KnownCharacter.CapturedByPlayer`, `KnownCharacter.Defected`, `KnownCharacter.Freed`. They are published only
   (not fed to History, letters or relations): physical truth stays separate from what the world comes to know. A Solo whose rescue ends with the person held by another faction is written off, and the existing rule ends the actor `LostContact` while the person stays
   held and watched. That is an existing rule, recorded for the owner's review.
+
+### ADR-057 · Phase 3.2B readiness owner decisions
+
+- **Status. Accepted — DESIGN/READINESS ONLY (2026-10-06).** The owner reviewed audit HEAD
+  `7d5e4ebc9308a12d4a1416c08e1a3db1c14b8bac` and accepted the
+  [readiness report](PHASE32B_READINESS_AUDIT.md). **READY FOR 3.2B IMPLEMENTATION**;
+  Phase 3.2B remains **NOT IMPLEMENTED**. PR #11 / Phase 3.2A is already merged and owner validated.
+- **Decisions.**
+  1. `MaxKnownMembers == 6` is the normal **living discretionary seat-concretization target**, with
+     leader/lieutenants included. Accepted strong identity obligations may overflow; a held person
+     must never be denied a record for the same Pawn. Use the existing CharacterStore/organization
+     membership model, without a second registry or provenance-only shadow membership.
+  2. Use **whole-Episode terminal-batch promotion + temporary active-Episode reservation**. Pending
+     anonymous Pawns remain owned/reserved through durable Episode PawnRefs, with fail-safe load
+     reconstruction before the first world tick. PLAN/VALIDATE/atomic COMMIT establishes the same
+     Pawn's record, binding, role, provenance, custody and conservative headcount before RELEASE;
+     named M1 takes over where applicable and custody watch acts after RELEASE. No dummy character
+     for reservation, literal-arrest-frame promotion or independent early per-member commit in 3.2B.
+  3. Approximately **150 retained Pawns is a soft performance target/warning region**. Living
+     encountered/held identity wins; roughly 285+ is architecturally acceptable. Observe performance,
+     save size and save/load around 150 and 300 in implementation runtime acceptance. Resolve measured
+     problems later without cloning/replacing people or abstracting their living encountered seats.
+  4. Initial size constants are **6 and 12**, using actual living current membership at placement:
+     Solo stays named; 2–6 visible seats may concretize; 7–12 role-defining seats use P0 while ordinary
+     Riflemen need strong evidence; 13+ anonymous members require strong evidence. Existing pins
+     remain identities across size changes. These are policy constants, not user-facing classes/settings.
+  5. **Composition v1** uses immutable actor seed, origin-capacity proxy and original profile
+     specialties; its accepted recipe/role assignment is in report § 2.1. Current morale, fame,
+     equipment, skill, headcount, doctrine and leader rank do not define the origin recipe. Freeze
+     the algorithm under v1 when implemented; future semantic changes need explicit v2/migration/design.
+     Pure derivation does not itself require composition persistence; the whole-slice schema still
+     needs the correct old-save defaults/migration check.
+  6. **BEST-EFFORT cohesion by construction:** force-new generation, initial relations off,
+     eligible request-time FixedIdeo and authoritative returned-Pawn verification. No guaranteed
+     opinion floors, fabricated friendships/memories, trait removal, broad friction blacklist or
+     post-bind social sanitization. Physical social history stays truth.
+  7. Conservative **S1–S4** promotion matrix and bounded source-qualified combat/direct-relation
+     reads are accepted (report § 5). Unknown/unsupported evidence means remain anonymous. PlayLog
+     is supporting-only and may be omitted unless a concrete diagnostic consumer needs it; no
+     reflection/Harmony to recover protected interaction semantics.
+  8. `CharacterRole` standing and `OperationalRole` identity are separate. Old/new-save tests must
+     prove deterministic initialization/migration and no role drift through leader/lieutenant/
+     successor changes or reload. A persistent Medic successor remains the same operational Medic.
+  9. Full mixed-fate reconciliation remains **3.2C**. No independent early identity/custody commit,
+     rescue implementation, 3.3 or Phase 4 is authorized by readiness acceptance.
+- **Evidence/limits.** S26 remains **PARTIAL — source audit**; S27 remains **PARTIAL — source
+  audit / isolated headless experiment**. No future runtime scenario is claimed passed. S11 FAIL /
+  rescue STOPPED, R-50 OPEN, S21 PARTIAL and O-20's locked direction remain unchanged. Save format
+  remains 5, no production Harmony; this follow-up changes documentation only and does not rebuild
+  the accepted DLL. No technical blocker remains for the accepted implementation path; its code
+  and owner runtime validation are future work.
+- **Supersedes.** The audit's pending owner choices and readiness verdict at `7d5e4eb`, older
+  discretionary-cap arithmetic, mandatory persisted-composition direction and initial opinion-floor
+  screening direction. Historical records retain the earlier statements as history. It does not
+  supersede the identity, authority, exactly-once reconciliation or vanilla ownership invariants.

@@ -1,6 +1,10 @@
 # Phase 3.2B — Groups and progressive concretization readiness audit
 
-**2026-10-06 · design/source audit only · recommendations require the decisions in § 12.**
+**2026-10-06 · design/source audit only · owner decisions ACCEPTED in § 12 (ADR-057).**
+
+The owner reviewed audit HEAD **`7d5e4ebc9308a12d4a1416c08e1a3db1c14b8bac`** and accepted
+the recommended path. The current verdict is **READY FOR 3.2B IMPLEMENTATION**. The accepted
+design remains future work: **Phase 3.2B is NOT IMPLEMENTED**, and S26/S27 remain PARTIAL.
 
 Audited `main`: **`a472766ff26a8af975d2a15c18d690cc13f8aa13`**. Its subject is
 `Merge pull request #11 from D3athAn63l/claude/new-session-nhng3f`; its second parent is
@@ -14,7 +18,8 @@ or extend that owner evidence.
 The attached readiness brief authorizes an audit, expressly **not production implementation**.
 The shipped DLL, production source, ordinary tests, runtime scenarios and save fields are unchanged.
 Save format remains **5**, with no production Harmony reference. Proposed behavior below is not
-as-built behavior. The reviewed Phase 3 identity/authority model remains intact.
+as-built behavior. The reviewed Phase 3 identity/authority model remains intact. Owner acceptance
+freezes implementation direction, not evidence that groups or future runtime scenarios already work.
 
 ## 1. Evidence and corrected status
 
@@ -51,16 +56,16 @@ and the CharacterStore. `EpisodeMember.seatRole` already exists and is persisted
 projection does not yet use it; the real adapter refuses anonymous creation. There is **no
 organization composition implementation**. There is no second person registry to introduce.
 
-### 2.1 Deterministic recipe recommended for the coding prompt
+### 2.1 Owner-accepted Composition v1 direction for the coding prompt
 
-Use a pure, permanently frozen **Composition v1** from `{actor.seed, org.capacity,
+Use the owner-accepted pure **Composition v1** from `{actor.seed, org.capacity,
 ContractorProfile.specialties}`. `capacity` is the retained origin-form proxy: 3/7/14/32 for
 Duo/Crew/Team/Company in `ContractorService.BuildRoster`. Unknown/nonstandard origin capacities
 refuse with a diagnostic rather than invent a form class. The original ContractorForm is not
 uniformly stored: world-generated newcomers discard their template. Current doctrine, skill,
 equipment, fame, morale, headcount and current leadership rank are excluded from the origin recipe.
 
-The proposed v1 recipe is explicit:
+The accepted v1 recipe is explicit and becomes compatibility-sensitive when implemented:
 
 1. Reserve one Leader weight entry. Solos use the existing Solo role derivation instead.
 2. Take the distinct non-Leader/non-Unset roles from the existing
@@ -100,6 +105,10 @@ give them a fixed hash pick from that immutable slot list using CharacterId and 
 then persist it once. Newly promoted physical people take their actual slot role in the plan.
 Persisted non-Unset roles always win.
 The role assignment must be idempotent and refuse conflicts, rather than rewrite a bound person.
+**Owner-required implementation tests:** old/new-save fixtures must exercise initial role assignment,
+leader/lieutenant standing, successor selection and reload. A persistent Medic who succeeds as
+organizational leader retains the same Medic operational role and Pawn. No rank change may silently
+rewrite physical role identity; explicit future role evolution is a separate design.
 Organizational `CharacterRole` and operational `opRole` remain different axes: a succession does
 not silently change a Medic Pawn into an operational Leader. A mission requiring an unavailable
 qualified Leader shrinks/refuses; leadership/role evolution is a later explicit design.
@@ -140,8 +149,8 @@ abstract loss when the abstract layer never knew that.
 ### 2.3 Persistence and migration
 
 **Composition itself needs no persisted field or migration** if v1 remains a pure immutable recipe.
-This is a proposed simplification of the earlier persisted-template design, not a change in this
-audit. Reserve future explicit composition-version storage for a later v2/evolution feature; do not
+This is the owner-accepted simplification of the earlier persisted-template design; no schema is
+implemented in this audit. Reserve future explicit composition-version storage for a later v2/evolution feature; do not
 change v1 outputs under the same identifier. Pins use existing KnownCharacters and roles, not a seat registry.
 
 The complete 3.2B slice nevertheless needs new **Episode-local truth**, at least a successful
@@ -157,7 +166,7 @@ allows additive fields with correct defaults without a bump. If coding requires 
 records or changing commitment meaning, a versioned migration is required. Therefore **composition
 does not force a bump; the final whole-slice schema must still be checked**. This audit adds no field.
 
-## 3. O-2 size and cap recommendations
+## 3. O-2 size and cap decisions — ACCEPTED
 
 | Actual living membership at placement | Presence policy |
 |---|---|
@@ -179,8 +188,8 @@ not recomputed from a smaller post-casualty headcount.
 leader and lieutenants included (`ContractorComponents.cs:539–546`, BuildRoster:431–443).
 The old design's “1 leader + 2 lieutenants + 6 members” does not match the code.
 
-Recommend **B: the cap limits discretionary creation/seat concretization, never durable identity
-storage**. Every accepted strong-evidence promotion may exceed it; held promotions must exceed it
+**Owner accepted B: the cap limits discretionary living seat creation/concretization, never durable
+identity storage**. Every accepted strong-evidence promotion may exceed it; held promotions must exceed it
 when necessary. Keep such people in the existing CharacterStore and org membership list, preserving
 the same Pawn. A provenance-only record outside knownMembers would be missed by current strength,
 checkout and availability loops. Audit those consumers to count current eligible membership,
@@ -188,7 +197,7 @@ not the list's length, and never truncate overflow on load. Historical records d
 living discretionary seat capacity. Strong-evidence promotions are identity obligations, not an
 excuse to discard a memorable person. There is no hard global CharacterStore cap.
 
-## 4. S26 findings and recommended cohesion policy
+## 4. S26 findings and accepted cohesion policy
 
 The [S26 record](spikes/S26-team-cohesion.md) is **PARTIAL — SOURCE AUDIT**. Important core social
 thoughts support despawned Pawns, and same-faction Pawns can know one another without spawning.
@@ -201,7 +210,7 @@ in a suspended teammate's cache. A pre-spawn zero is not a cohesion guarantee.
 Eligible `FixedIdeo` chooses ideology during generation, not a license to rewrite existing members.
 ProhibitedTraits is not authoritative when kinds force traits. Returned candidates must be verified.
 
-Recommend outcome **C: BEST-EFFORT construction only** for initial 3.2B: force new first-generation
+The owner accepted outcome **C: BEST-EFFORT construction only** for initial 3.2B: force new first-generation
 candidates, relations off, shared existing ideology where valid, verify applicability and returned
 ideology within the existing bounded generation process. Do not add a mutual-opinion rejection
 floor, trait blacklist, fabricated relations or candidate-to-retained-teammate screening yet.
@@ -285,9 +294,9 @@ Anonymous held outcomes currently quarantine as UnsupportedCustody. Existing `Co
 supports abstract succession, not physical slot promotion. Calling that applier on one captured member while
 the other members remain spawned would falsely finish the entire Episode.
 
-### 6.1 Recommended narrow prerequisite
+### 6.1 Accepted terminal-batch prerequisite
 
-Prefer **terminal-batch promotion** for 3.2B, with a bounded **active-Episode reservation** covering
+Use owner-approved **terminal-batch promotion** for 3.2B, with a bounded **active-Episode reservation** covering
 anonymous slot Pawns until that batch commits and releases. Extend the existing runtime reservation
 mechanism from already-durable Episode PawnRefs; do not create anonymous KnownCharacters just for
 reservation, a persistent company roster, a second person registry, or a per-Pawn watcher. Derive
@@ -309,11 +318,10 @@ may act only after RELEASE clears the episode link, as the existing watch alread
 and release, not a promise of promotion on the arrest frame while the rest of the group is active.
 Future scenario D must make its ordinary peers return before testing this completion.
 
-If the owner requires promotion/watch handoff **while peers are still Pending**, the next prompt
-must instead specify an independent, idempotent identity/custody transaction with its own durable
-member marker, conservative commitment transfer and rollback coverage. It must not set the
-whole-Episode completion flag. That is a separate design choice, not hidden inside this report's
-recommended terminal path. The full mixed-fate resolver still belongs to 3.2C.
+**No early per-member identity/custody commit is authorized for 3.2B.** Do not promote on the arrest
+frame while peers remain Pending or set the whole-Episode completion flag from one member's outcome.
+A future requirement for independent early promotion needs a separate architecture decision;
+it is outside this accepted path. The full mixed-fate resolver still belongs to 3.2C.
 
 ### 6.2 Terminal promotion plan and touched set
 
@@ -381,14 +389,16 @@ once as anonymous and again as named. Retries, save/load and interrupted RELEASE
 the same deltas. These identities are the future conservation tests, not code added here.
 
 Headcount conservation does not imply unchanged abstract strength: `ContractorService.Strength`
-uses anonymous tier weights 1/2/3.5 and ordinary named weight 3 (leader 4). Recommend retaining that
+uses anonymous tier weights 1/2/3.5 and ordinary named weight 3 (leader 4). The owner accepted retaining that
 existing named-person abstraction in this slice, explicitly measuring the resulting capability
 change rather than promising neutral promotion. Preserving exact source-tier strength would require
 another provenance policy/schema decision; it is not established by the current person model.
 
 ## 8. Retention opportunity model
 
-The **150 target cannot be a ceiling** while preserving all encountered living identities. A simple
+The owner accepted **150 as a soft performance target / warning region**, never an identity ceiling.
+Identity continuity wins; do not replace a living encountered person, regenerate a lookalike, discard
+a held person or return an encountered seat to abstraction to reduce retained count. A simple
 deterministic model uses the actual default generator's form weights (`CastGenerator:97`): 40
 Solo/Specialist, 10 Duo, 20 Crew, 15 Team, 15 Company. Representative living sizes are 1, 2,
 ten 4-person + ten 5-person crews, five each of 8/10/12-person teams, and 20-person companies.
@@ -422,7 +432,10 @@ can exceed it without a giant anonymous roster. It is not valid to claim “3.2B
 budget.” Keep bounded Episode size, no company presence promotion, no background Pawn generation,
 and one budgeted diagnostic when exceeding the soft target. Never clone/replace an encountered
 living person to reduce it. In-game TPS/save-size soak at 150/300+ retained Pawns is acceptance
-work for the implementation, not evidence supplied by this model. Infinite strong-evidence stories,
+work for the implementation, not evidence supplied by this model. The accepted future runtime plan
+requires performance/save-size/save-load observation around **150 and 300 retained Pawns**. Solve
+unacceptable measured costs in a later lifecycle/performance pass; do not preemptively break identity.
+Infinite strong-evidence stories,
 turnover or cast growth can grow identity history; no finite hard cap is compatible with the held
 identity invariant without a separate owner-approved lifecycle policy.
 
@@ -442,6 +455,8 @@ Also run a separately approved home/player-occupied-map verification of the actu
 | E — SAVE/LOAD | Checkpoint an active group including an anonymous held slot; after terminal promotion checkpoint before RELEASE and after RELEASE. Load preserves bindings, pins, reservations before first world tick, counts and publication cursor; same named people on a later visit. |
 | S27 evidence negatives/positives | Real melee/ranged endpoints vs third parties, turret and three-party impact, chatter, internal logs, old timestamps, pruning/bounds, unresolved references; no conservative miss promotes. Measure within budget on owner mod list. |
 | S26 construction | Relations generation off; applicable FixedIdeo verified for newly generated eligible members; existing Pawns' traits/relations/memories/ideology preserved across visits. No claim of guaranteed friendly opinions. |
+| Organization role identity | Old/new-save fixtures prove deterministic initialization and migration, then leader/lieutenant/successor changes plus reload preserve each person's operational role and Pawn. A Medic successor remains a Medic. |
+| Retention performance | Observe runtime cost, save size and clean save/load at approximately 150 and 300 retained Pawns; preserve every encountered living/held identity regardless of the warning target. |
 
 Headless coding acceptance needs deterministic composition/role assignment across old/new actors
 and load, boundary sizes 6/7/12/13, unavailable pins, source-tier/role constraints, cap-full held
@@ -464,8 +479,8 @@ return and combat promotion together; its casualty/morale/succession/operation m
 group extraction policy. D's one-held-plus-ordinary-return path and batch-safe reservation are the
 small unavoidable 3.2B prerequisite; they do not authorize the entire matrix. Do not claim other
 mixed combinations supported until their phase proves them. Unknown combinations fail closed with
-all Pawn references/reservations preserved. Identity-only promotion while peers remain active is
-an alternate prerequisite requiring the explicit owner choice below, not implicit authorization.
+all Pawn references/reservations preserved. Independent early identity/custody promotion while peers
+remain active is **excluded from 3.2B** and needs a separate future architecture decision.
 
 **S11 remains FAIL; rescue STOPPED.** No rescue site/world object/custom GenStep/retained site holder
 or Harmony. Composition could help a future proven rescue alternative but does not prove a holder.
@@ -492,7 +507,7 @@ Newly exposed risks, to track in the implementation:
 - A fully encountered default-sized cast can retain roughly 285+ people, requiring owner runtime performance evidence beyond the soft 150 target.
 - New temporary reservations change WorldFree classification and load ordering; failing to distinguish them could strand Episodes indefinitely.
 
-## 11. Changes and validation of this audit
+## 11. Changes and validation of the original audit (7d5e4eb)
 
 Changed existing documentation: README.md; docs/DECISIONS.md; IMPLEMENTATION_PHASES.md;
 PHYSICAL_LIFECYCLE.md; PR11_CORRECTION_VALIDATION.md; RISKS.md; RUNTIME_TESTING.md;
@@ -513,23 +528,38 @@ the external retention arithmetic model is described in § 8.
 No production build, full headless suite, runtime scenario or in-game acceptance was run for these
 documentation changes. Existing PR11 full-suite/owner results above remain historical evidence.
 
-## 12. Smallest owner decisions before a coding prompt
+## 12. Owner decisions — ACCEPTED (ADR-057)
 
-1. **Approve cap semantics:** six living discretionary named seats total, with all accepted strong
-   promotions retained in existing membership even above it; held identities always override the cap.
-   This corrects the older 1+2+6 prose without inventing another person store.
-2. **Approve timing/prerequisite:** terminal-batch promotion, temporary active-Episode reservation,
-   and custody watch after RELEASE. If “immediately” must include peers still active, request the
-   independent identity/custody transaction instead; do not use the terminal applier for that.
-3. **Accept the retention tradeoff:** 150 is a warning target, identity wins, and runtime performance
-   must be measured around 300 retained Pawns. If a hard 150 ceiling is desired, the scope/policy needs
-   redesign before implementation because the encounter and held-identity requirements cannot obey it.
+The owner accepted the following on 2026-10-06, reviewing audit HEAD `7d5e4eb`:
 
-The recommended 6/12 thresholds, pure v1 composition, construction-only BEST-EFFORT cohesion,
-bounded combat evidence and supporting-only PlayLog are sufficiently specified for the recommended
-path. S26/S27 retain PARTIAL evidence classifications, with runtime criteria in § 9. No impossible
-public-API dependency was found for that path, but its reservation and promotion extensions still
-must be implemented and validated. These choices are owner recommendations, not silently closed O-2
-or a claim that Phase 3.2B already works.
+1. **Cap semantics ACCEPTED:** six living discretionary named/concretized seats total, including
+   leader/lieutenants, with all accepted strong promotions retained in the existing CharacterStore/
+   organization membership model even above six. Held identity always overrides the cap. No second
+   registry or provenance-only shadow membership.
+2. **Timing/prerequisite ACCEPTED:** whole-Episode terminal-batch promotion plus temporary anonymous
+   active-Episode reservation derived from durable PawnRefs, safe before the first post-load world
+   tick. No dummy person for reservation and no independent early commit. Named M1 takes over where
+   applicable; custody watch proceeds after RELEASE under the existing ownership rule.
+3. **Retention policy ACCEPTED:** approximately 150 is a soft target/warning region. Identity takes
+   priority; roughly 285+ retained people from repeated default-cast engagement is architecturally
+   acceptable. Implementation acceptance observes performance/save-load around 150 and 300.
 
-# READY WITH OWNER DECISIONS REQUIRED
+The owner also accepted the 6/12 actual-living-membership thresholds as initial policy constants,
+pure immutable Composition v1 direction, BEST-EFFORT construction-only cohesion, conservative S1–S4
+promotion rules, supporting-only/optional PlayLog, and the 3.2B/3.2C boundary. Composition v1 must
+freeze its implemented algorithm; a future semantic change requires explicit v2/migration/design
+approval. Operational role initialization/migration and succession/reload safety receive the
+additional old/new-save tests in § 9. These decisions are recorded in
+[ADR-057](DECISIONS.md#adr-057--phase-32b-readiness-owner-decisions).
+
+**No technical blocker remains for this accepted path.** Its group generation, reservation,
+promotion and conservation behavior still must be implemented and validated. S26 remains
+**PARTIAL — source audit**; S27 remains **PARTIAL — source audit / isolated headless experiment**.
+Future group runtime scenarios have not passed. S11 remains FAIL / rescue STOPPED, R-50 OPEN and
+S21 PARTIAL where runtime coverage is incomplete; Phase 3.2B, 3.2C, 3.3 and Phase 4 remain
+**NOT IMPLEMENTED**. Save format is still 5 and production has no Harmony.
+
+Historical audit verdict at `7d5e4eb`: “READY WITH OWNER DECISIONS REQUIRED.” This owner-decision
+follow-up supersedes that verdict without changing the audit's source/headless evidence.
+
+# READY FOR 3.2B IMPLEMENTATION
