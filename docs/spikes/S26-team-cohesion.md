@@ -1,5 +1,7 @@
 # S26 — Team cohesion before first binding (Phase 3.2B readiness audit)
 
+> **Historical readiness/source record; verdict remains PARTIAL.** The accepted policy now has a Phase 3.2B production implementation and headless tests ([as built](../PHYSICAL_LIFECYCLE.md#appendix-m-phase-32b-as-built-groups-and-progressive-concretization), [validation](../PHASE32B_VALIDATION.md)). The audit below preserves its original source/experiment evidence; it does not establish owner runtime PASS. Actual game/mod/save-load validation remains pending.
+
 **Verdict: PARTIAL — RimWorld 1.6 source audited; pre-bind opinion has useful vanilla meaning, but generated-crew frequency, modded thought safety and after-spawn equivalence are not runtime-proven. Owner-approved 3.2B policy: BEST-EFFORT prevention by construction.**
 
 This is an accepted design direction, not cohesion implementation. No production code, game DLL, test scenario, persisted field or relation was changed. There was no owner-runtime crew generation run, and no claim that randomly generated crews passed an opinion screen.

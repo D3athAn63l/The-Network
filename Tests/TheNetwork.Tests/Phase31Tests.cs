@@ -114,21 +114,25 @@ namespace TheNetwork.Tests
 
         private static void ScenarioLabels()
         {
-            // Phase 3.2A added the custody ids 020–025 (S21) and retired 009 (kept, never reused); the 3.1 ids are unchanged and in order.
+            // 3.2A appended custody 020–025; 3.2B appends groups 026–032. All earlier implemented IDs retain their order and meaning.
             string[] expected = { "RT-PHYX-001", "RT-PHYX-002", "RT-PHYX-003", "RT-PHYX-004", "RT-PHYX-005", "RT-PHYX-006", "RT-PHYX-007", "RT-PHYX-008", "RT-PHYX-009", "RT-PHYX-010", "RT-PHYX-011", "RT-PHYX-012", "RT-PHYX-015", "RT-PHYX-016",
-                "RT-PHYX-020", "RT-PHYX-021", "RT-PHYX-022", "RT-PHYX-023", "RT-PHYX-024", "RT-PHYX-025" };
-            T.Eq(expected.Length, PhysicalScenarioTable.All.Count, "the scenario table has exactly the 3.1 and 3.2A ids");
+                "RT-PHYX-020", "RT-PHYX-021", "RT-PHYX-022", "RT-PHYX-023", "RT-PHYX-024", "RT-PHYX-025",
+                "RT-PHYX-026", "RT-PHYX-027", "RT-PHYX-028", "RT-PHYX-029", "RT-PHYX-030", "RT-PHYX-031", "RT-PHYX-032" };
+            T.Eq(expected.Length, PhysicalScenarioTable.All.Count, "the scenario table has exactly the existing and appended group ids");
             for (int i = 0; i < expected.Length; i++) T.Eq(expected[i], PhysicalScenarioTable.All[i].id, "scenario " + (i + 1));
-            T.Check(PhysicalScenarioTable.Get("RT-PHYX-013") == null && PhysicalScenarioTable.Get("RT-PHYX-014") == null, "no 3.2 group scenario (013/014) is invented");
+            T.Check(PhysicalScenarioTable.Get("RT-PHYX-013") == null && PhysicalScenarioTable.Get("RT-PHYX-014") == null, "the old suggested gaps are not reused; new implementations append after 025");
             string actions = Src("Diagnostics/RuntimePhysicalTests/PhysicalTestDevActions.cs");
             foreach (PhysicalScenarioInfo s in PhysicalScenarioTable.All)
             {
-                if (s.id == "RT-PHYX-010")
+                if (s.id == "RT-PHYX-010" || s.id == "RT-PHYX-030" || s.id == "RT-PHYX-032")
                 {
                     // The runtime-QA correction: RimWorld truncates long debug labels and the three save-matrix items were nearly identical, so they
                     // start with their UNIQUE part (010A / 010B / 010V). The scenario family id is unchanged everywhere else.
-                    foreach (string l in new[] { PhysicalTestIds.Label010A, PhysicalTestIds.Label010B, PhysicalTestIds.Label010V })
-                        T.Check(actions.Contains("\"" + l + "\""), "the menu shows \"" + l + "\" (RT-PHYX-010, front-loaded)");
+                    string[] familyLabels = s.id == "RT-PHYX-010" ? new[] { PhysicalTestIds.Label010A, PhysicalTestIds.Label010B, PhysicalTestIds.Label010V }
+                        : s.id == "RT-PHYX-030" ? new[] { PhysicalTestIds.Label030A, PhysicalTestIds.Label030B, PhysicalTestIds.Label030V }
+                        : new[] { PhysicalTestIds.Label032A, PhysicalTestIds.Label032B, PhysicalTestIds.Label032V };
+                    foreach (string l in familyLabels)
+                        T.Check(actions.Contains("\"" + l + "\""), "the menu shows \"" + l + "\" (" + s.id + ", front-loaded)");
                 }
                 else T.Check(actions.Contains("\"" + s.Label), "the menu shows \"" + s.Label + "\" first");
                 T.Check(actions.Contains("PhysicalScenarioTable.Get(\"" + s.id + "\")"), s.id + " is reachable from the menu");
@@ -139,12 +143,16 @@ namespace TheNetwork.Tests
             {
                 string label = m.Groups[1].Value;
                 bool is010 = label == PhysicalTestIds.Label010A || label == PhysicalTestIds.Label010B || label == PhysicalTestIds.Label010V;
-                T.Check(label.StartsWith("RT-PHYX-", StringComparison.Ordinal) || label.StartsWith("PHYX — ", StringComparison.Ordinal) || is010, "every label starts with its id (" + label + ")");
+                bool isGroupFamily = label == PhysicalTestIds.Label030A || label == PhysicalTestIds.Label030B || label == PhysicalTestIds.Label030V
+                    || label == PhysicalTestIds.Label032A || label == PhysicalTestIds.Label032B || label == PhysicalTestIds.Label032V;
+                T.Check(label.StartsWith("RT-PHYX-", StringComparison.Ordinal) || label.StartsWith("PHYX — ", StringComparison.Ordinal) || is010 || isGroupFamily, "every label starts with its stable id or unique family part (" + label + ")");
                 bool readOnly = label.Contains("(read-only)") || label.Contains("Arm physical tests") || label.Contains("Stop current run") || label == PhysicalTestIds.Label010V;
                 T.Check(readOnly || label.EndsWith("[armed]", StringComparison.Ordinal), "a destructive item says it needs the arm (" + label + ")");
             }
-            T.Check(Regex.Matches(actions, @"StartReadOnly\(").Count == 2 && actions.Contains("\"" + PhysicalTestIds.Label010V + "\"") && actions.Contains("\"RT-PHYX-025 — Held people after save/load (read-only)\""),
-                "only the two after-load verifications (010V, 025) run without the arm");
+            T.Check(Regex.Matches(actions, @"StartReadOnly\(").Count == 4 && actions.Contains("\"" + PhysicalTestIds.Label010V + "\"")
+                && actions.Contains("\"RT-PHYX-025 — Held people after save/load (read-only)\"")
+                && actions.Contains("\"" + PhysicalTestIds.Label030V + "\"") && actions.Contains("\"" + PhysicalTestIds.Label032V + "\""),
+                "only the four after-load verifications/observations (010V, 025, 030V, 032V) run without the arm");
             T.Check(PhysicalTestIds.Category != "The Network" && Src("Diagnostics/RuntimePhysicalTests/PhysicalTestDevActions.cs").Contains("private const string Cat = PhysicalTestIds.Category;"), "a separate category");
             T.Check(PhysicalTestIds.Category.Contains("PHYSICAL TESTS") && PhysicalTestIds.Category.Contains("disposable"), "the category warns in plain words");
         }

@@ -340,9 +340,11 @@ When a generic member becomes a Known Character, and how custody works, is defin
 > origin facts (`seed`, the form class from `capacity`, `ContractorProfile.specialties`, `CharacterId` for
 > people). Storing a role later never changes its identity or depends on when the player first looked
 > ([PHYSICAL_LIFECYCLE § 6.6.5](PHYSICAL_LIFECYCLE.md#665-identity-comes-from-immutable-origin-facts-never-from-when-the-player-first-looks)).
-> Groups/concretization remain **NOT IMPLEMENTED**. Future old/new-save fixtures must prove no operational
-> role drift through organizational leader/lieutenant/successor changes and reload. New Episode-local
-> placement evidence still requires correct defaults/schema review; this decision adds no save field.
+> Groups/concretization are **IMPLEMENTED / HEADLESS VALIDATED — OWNER RUNTIME VALIDATION PENDING**
+> ([Appendix M](PHYSICAL_LIFECYCLE.md#appendix-m-phase-32b-as-built-groups-and-progressive-concretization)).
+> Old/new-save tests verify operational-role stability through leader/lieutenant/succession changes and reload.
+> New EpisodeMember `playerVisibleTick = -1` and `p0Eligible = false` are additive placement truth; absent old fields
+> mean unknown/ineligible. Composition and reservation indexes remain derived; save format stays **5**.
 
 ---
 
@@ -471,7 +473,7 @@ OrganizationProfile : ActorComponent   // NPC Organization only
     leader: CharacterId?
     lieutenants: CharacterId[]       // ≤ 2
     knownMembers: CharacterId[]      // current construction target: 6 total, leader/lieutenants included
-                                    // accepted 3.2B (not implemented): six discretionary living seats; strong identity may overflow
+                                    // 3.2B: six discretionary living seats; strong identity may overflow
                                     // held identities never denied for a full target; no hard CharacterStore identity cap
     tiers: TierCount[]               // { tier: Veteran|Regular|Recruit, healthy: int, wounded: int }
     woundedRecovery: RecoveryBucket[]// { tier, count, dueTick } — aggregated, ≤ 8 buckets
@@ -843,6 +845,8 @@ Nothing in this section is a schema to implement; [PHYSICAL_LIFECYCLE](PHYSICAL_
 
 Where other sections of this document still say `LeaseId` (the `SponsorProfile` and `EquipmentProfile` lines), read them as the
 **Lease** seam only, and as reserved: nothing writes them.
+
+**Phase 3.2B additions (save format 5).** `EpisodeMember.playerVisibleTick: int = -1` records successful player-visible placement and `p0Eligible: bool = false` freezes discretionary policy eligibility. Missing fields do not invent old encounters. Anonymous temporary reservation derives from durable `EpisodeMember.pawn` until RELEASE completes; the same retained registry indexes it without persisted anonymous people or a second ownership store. Composition v1 is pure derived capacity, with no persisted `OrganizationProfile.composition`. Promotion adds ordinary KnownCharacters in the existing terminal snapshot transaction; the same Pawn supplies its name/binding, and source-tier commitment is transferred to named accounting exactly once. [As-built schema/behavior](PHYSICAL_LIFECYCLE.md#appendix-m-phase-32b-as-built-groups-and-progressive-concretization), [validation](PHASE32B_VALIDATION.md).
 
 The lifecycle rules are in [PHYSICAL_LIFECYCLE](PHYSICAL_LIFECYCLE.md) (normative);
 [ABSTRACT_PHYSICAL_LIFECYCLE](ABSTRACT_PHYSICAL_LIFECYCLE.md) is the superseded Phase 0 text.

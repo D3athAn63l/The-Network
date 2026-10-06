@@ -408,6 +408,7 @@ namespace TheNetwork.Domain.Physical
         public int Materialize(PhysicalEpisode e)
         {
             if (e == null || e.state != EpisodeState.Planned || !PortAvailable) return 0;
+            if (!CheckEpisodeBound(e)) return 0;
             int now = ctx.Now;
             int present = 0;
             // S10 (§ 13.2): the episode's own temporary encounter faction, created before anyone is bound or placed and recorded on the
@@ -718,8 +719,17 @@ namespace TheNetwork.Domain.Physical
             return committed;
         }
 
+        private bool CheckEpisodeBound(PhysicalEpisode e)
+        {
+            if (e.members != null && e.members.Count > 0 && e.members.Count <= MaxMembers) return true;
+            counters.invalidPlans++;
+            Quarantine(e, "EpisodeMemberCount");
+            return false;
+        }
+
         private bool ReconcileCore(PhysicalEpisode e)
         {
+            if (!CheckEpisodeBound(e)) return false; // before observing or querying optional history
             if (e.quarantineKey == "GroupBindingUnconfirmed")
             {
                 try
@@ -947,6 +957,7 @@ namespace TheNetwork.Domain.Physical
         public void ResolvePlanned(PhysicalEpisode e)
         {
             if (e == null || e.state != EpisodeState.Planned || !PortAvailable || busy) return;
+            if (!CheckEpisodeBound(e)) return;
             int present = 0;
             bool unresolved = false;
             for (int i = 0; i < e.members.Count; i++)
@@ -1025,6 +1036,13 @@ namespace TheNetwork.Domain.Physical
         /// </summary>
         private void RunRelease(PhysicalEpisode e)
         {
+            // A loaded Closed batch retains its committed markers and bindings when malformed.
+            // Legacy empty Closed batches may still finish their episode-level publication.
+            if (e.members == null || e.members.Count > MaxMembers)
+            {
+                counters.invalidPlans++;
+                throw new InvalidOperationException("EpisodeMemberCount");
+            }
             // Runtime index handoff precedes every physical action and is retried on a loaded/pending RELEASE.
             // Until it succeeds, unreleased durable Episode ownership continues to protect the same Pawn.
             IGroupPhysicalWorldPort group = Port as IGroupPhysicalWorldPort;
@@ -1469,6 +1487,7 @@ namespace TheNetwork.Domain.Physical
             {
                 PhysicalEpisode e = open[i];
                 if (e.state == EpisodeState.Closed) continue;
+                if (!CheckEpisodeBound(e)) continue;
                 List<MemberDecision> decisions = new List<MemberDecision>();
                 for (int k = 0; k < e.members.Count; k++)
                 {

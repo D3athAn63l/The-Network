@@ -1139,10 +1139,10 @@
 
 ### ADR-057 · Phase 3.2B readiness owner decisions
 
-- **Status. Accepted — DESIGN/READINESS ONLY (2026-10-06).** The owner reviewed audit HEAD
+- **Status. Accepted (design/readiness 2026-10-06); PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED — OWNER RUNTIME VALIDATION PENDING.** The owner reviewed audit HEAD
   `7d5e4ebc9308a12d4a1416c08e1a3db1c14b8bac` and accepted the
-  [readiness report](PHASE32B_READINESS_AUDIT.md). **READY FOR 3.2B IMPLEMENTATION**;
-  Phase 3.2B remains **NOT IMPLEMENTED**. PR #11 / Phase 3.2A is already merged and owner validated.
+  [readiness report](PHASE32B_READINESS_AUDIT.md). Its pre-implementation verdict was **READY FOR 3.2B IMPLEMENTATION**.
+  The implementation now follows this accepted direction ([Appendix M](PHYSICAL_LIFECYCLE.md#appendix-m-phase-32b-as-built-groups-and-progressive-concretization), [validation](PHASE32B_VALIDATION.md)). PR #11 / Phase 3.2A is already merged and owner validated.
 - **Decisions.**
   1. `MaxKnownMembers == 6` is the normal **living discretionary seat-concretization target**, with
      leader/lieutenants included. Accepted strong identity obligations may overflow; a held person
@@ -1184,9 +1184,9 @@
 - **Evidence/limits.** S26 remains **PARTIAL — source audit**; S27 remains **PARTIAL — source
   audit / isolated headless experiment**. No future runtime scenario is claimed passed. S11 FAIL /
   rescue STOPPED, R-50 OPEN, S21 PARTIAL and O-20's locked direction remain unchanged. Save format
-  remains 5, no production Harmony; this follow-up changes documentation only and does not rebuild
-  the accepted DLL. No technical blocker remains for the accepted implementation path; its code
-  and owner runtime validation are future work.
+  remains 5 with additive EpisodeMember placement defaults, no production Harmony. Production implementation
+  and headless verification are recorded in [PHASE32B_VALIDATION](PHASE32B_VALIDATION.md); real group
+  generation, visibility, active/pre-RELEASE/post-RELEASE load and 150/300 runtime acceptance remain owner work.
 - **Supersedes.** The audit's pending owner choices and readiness verdict at `7d5e4eb`, older
   discretionary-cap arithmetic, mandatory persisted-composition direction and initial opinion-floor
   screening direction. Historical records retain the earlier statements as history. It does not

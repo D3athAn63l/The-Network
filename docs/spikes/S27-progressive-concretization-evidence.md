@@ -1,5 +1,7 @@
 # S27 — Progressive concretization evidence audit
 
+> **Historical readiness/source record; verdict remains PARTIAL.** The accepted policy now has a Phase 3.2B production implementation and headless tests ([as built](../PHYSICAL_LIFECYCLE.md#appendix-m-phase-32b-as-built-groups-and-progressive-concretization), [validation](../PHASE32B_VALIDATION.md)). The audit below preserves its original source/experiment evidence; it does not establish owner runtime PASS. Actual game/mod/save-load validation remains pending.
+
 **Verdict: PARTIAL — source audit and isolated headless experiment.** Source-qualified bounded evidence is feasible; actual game, save/load and mod compatibility remain future owner runtime gates. This report does not implement promotion, groups, runtime scenarios or Harmony in the mod.
 
 The owner accepted the conservative S1–S4 evidence matrix and supporting-only, optional PlayLog policy below. Promotion remains part of whole-Episode terminal reconciliation: an eligible anonymous Pawn stays temporarily Episode-owned/reserved while other members remain Pending, then the same Pawn is promoted through PLAN → VALIDATE → atomic COMMIT before RELEASE. No early per-member identity/custody commit is authorized for 3.2B.

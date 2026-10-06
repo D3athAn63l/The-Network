@@ -55,6 +55,11 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         public string StepName => index < steps.Count ? steps[index].name : "finished";
         public readonly int startTick;
 
+        public bool OwnsEpisode(PhysicalEpisode episode)
+        {
+            return episode != null && episodes.Contains(episode);
+        }
+
         protected LogMark logMark;
         protected PhysicalSentinel before;
         protected readonly HashSet<int> testPeople = new HashSet<int>();
@@ -349,7 +354,9 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         public const string ArmWarning = "The physical tests create and change REAL game state in this save: a dedicated test map on an empty tile (never your "
             + "colony map), temporary hidden encounter and fixture factions, real pawns for Network Solo contractors (who become retained, stored people of "
             + "this save for good), disposable test pawns, a hidden registry quest, and deliberate dev damage, dev arrests, a dev recruitment, enslavement "
-            + "and kidnapping (3.2A custody: those people stay held by vanilla) and test-map removals. They never touch your colonists or maps. Use a DISPOSABLE save. One arm authorises exactly ONE action; it is never saved and is cleared on load and on quit.";
+            + "and kidnapping (3.2A custody: those people stay held by vanilla) and test-map removals. Group tests also create owned organizations and selectively retained identities; "
+            + "the 032 builders deliberately retain approximately 150 or 300 REAL Pawns permanently in this disposable save. Synthetic P0 is labelled and scoped to the owned test map. "
+            + "They never touch your colonists or maps. Use a DISPOSABLE save. One arm authorises exactly ONE action; it is never saved and is cleared on load and on quit.";
 
         /// <summary>A new game object (load, new game) clears the arm and forgets the old run. Called by FinalizeInit and every frame.</summary>
         public static void ResetForNewGame()
@@ -377,6 +384,14 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         }
 
         public static bool IsRunning => active != null;
+
+        /// <summary>The exact active run owns this Episode; a prior run's provenance alone grants no visibility override.</summary>
+        public static bool IsActiveOwnedEpisode(PhysicalEpisode episode)
+        {
+            PhysicalRun run = active;
+            return run != null && ReferenceEquals(run.game, Current.Game) && run.OwnsEpisode(episode)
+                && GroupQaRules.OwnedByRun(episode, run.runId, run.info.id);
+        }
 
         private static void EnsureGame()
         {

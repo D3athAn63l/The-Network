@@ -570,6 +570,8 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             if (p.questTags == null || !p.questTags.Contains(PhysicalTestIds.RunTag(runId))) return "not tagged by this run";
             if (p.Spawned || p.SpawnedOrAnyParentSpawned) return "spawned";
             if (Find.WorldPawns.Contains(p)) return "a world pawn";
+            if (RetainedPawnRegistry.Active != null && RetainedPawnRegistry.Active.Reserves(p)) return "reserved by a named person or an active Episode";
+            if (GroupQaRules.HasUnreleasedBinding(ctx?.episodes?.episodes, p.thingIDNumber)) return "bound to an unreleased Episode member";
             if (RetainedPawnRegistry.Active != null && RetainedPawnRegistry.Active.CharacterOf(p).IsValid) return "bound to a Network person (registry)";
             if (ctx?.characters != null) foreach (KnownCharacter c in ctx.characters.characters) if (c.pawn != null && ReferenceEquals(c.pawn.pawn, p)) return "bound to Network person " + c.id;
             return null;

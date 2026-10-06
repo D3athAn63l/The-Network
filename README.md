@@ -1,6 +1,6 @@
 # The Network
 
-**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; the formal in-game S20 checklist has not been run); Phase 2.75 merged (the contractor career foundation); Phase 2.9 merged and owner-runtime-tested (in-game runtime regression test infrastructure, developer-only); Phase 3 (abstract ↔ physical lifecycle): design reviewed; Phase 3.0 (authority + Physical Episode foundation) implemented; Phase 3.1 (one controlled physical episode, dev-triggered on a separate, session-armed test tier) implemented and owner runtime validated (PASS, Phase 3.1 scope only); Phase 3.2A (held custody) MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED (final e768fef acceptance: 022 41/0/0, clean save/load, 025 11/0/0; PR #11 MERGED; the rescue site is not built: S11 failed its source audit)**
+**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; the formal in-game S20 checklist has not been run); Phase 2.75 merged (the contractor career foundation); Phase 2.9 merged and owner-runtime-tested (in-game runtime regression test infrastructure, developer-only); Phase 3 (abstract ↔ physical lifecycle): design reviewed; Phase 3.0 (authority + Physical Episode foundation) implemented; Phase 3.1 (one controlled physical episode, dev-triggered on a separate, session-armed test tier) implemented and owner runtime validated (PASS, Phase 3.1 scope only); Phase 3.2A (held custody) MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED (final e768fef acceptance: 022 41/0/0, clean save/load, 025 11/0/0; PR #11 MERGED); Phase 3.2B (groups + progressive concretization) IMPLEMENTED / HEADLESS VALIDATED — OWNER RUNTIME VALIDATION PENDING (the rescue site is not built: S11 failed its source audit)**
 
 The Network is a persistent, procedural contractor ecosystem that runs behind the normal RimWorld
 game. The player hires outsiders to find and fetch things they cannot easily get themselves. The
@@ -21,11 +21,7 @@ developer wrote.
 
 ## Repository status
 
-The next slice has a [Phase 3.2B readiness audit](docs/PHASE32B_READINESS_AUDIT.md): **READY FOR 3.2B IMPLEMENTATION**.
-The owner accepted the composition and 6/12 threshold policy, six-person discretionary
-cap with strong-identity overflow, terminal-batch promotion with temporary Episode reservation, and
-150 as a soft retention target. BEST-EFFORT cohesion and conservative evidence are approved design;
-groups/concretization and their runtime validation remain future work.
+**PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED — OWNER RUNTIME VALIDATION PENDING.** The accepted [readiness audit](docs/PHASE32B_READINESS_AUDIT.md) now has an [as-built implementation and validation record](docs/PHASE32B_VALIDATION.md): immutable Composition v1, ≤8 role-correct Episode members, temporary anonymous reservation, selective same-Pawn promotion and conservative accounting. The developer-triggered runtime scenarios await the owner's RimWorld run. S26/S27 remain PARTIAL, S11 remains FAIL / rescue STOPPED and R-50 remains OPEN.
 
 **Phase 1 (Foundation + Intel + Fixers)** is implemented on top of the frozen Phase 0 architecture:
 the global cast in Mod Settings, the world cast snapshot, Fixers, the Comms Console gate, the item
@@ -126,15 +122,12 @@ reserves) brings them back. A recruited contractor is recorded as `Defected` and
 ([docs/spikes/S11-rescue-site-holder.md](docs/spikes/S11-rescue-site-holder.md)). Vanilla's pawn-holding site parts force a refugee or prisoner
 state (and make the pawn join the player when rescued) or destroy what they hold, so the rescue's player-facing half waits for an owner
 decision on the documented alternative. Its domain half is proven headlessly. Save format **5**, no Harmony, no new persisted field
-([Appendix L](docs/PHYSICAL_LIFECYCLE.md#appendix-l-phase-32a-as-built-held-custody), ADR-056). Groups (3.2B) and mixed-group
-reconciliation (3.2C) are not started. Rescue is distinct from recruitment: a freed contractor returns to the original organization, possibly Wounded, and may resume work after recovery. R-50 remains open after the [source audit](docs/spikes/R50-held-aging-bookmark-audit.md): `agedThroughTick` already exists, but no reliable general suspension boundary was proved.
+([Appendix L](docs/PHYSICAL_LIFECYCLE.md#appendix-l-phase-32a-as-built-held-custody), ADR-056). Groups and progressive concretization (3.2B) are now implemented and headless validated ([Appendix M](docs/PHYSICAL_LIFECYCLE.md#appendix-m-phase-32b-as-built-groups-and-progressive-concretization)); owner runtime validation is pending. Full mixed-group reconciliation (3.2C) remains unimplemented. Rescue is distinct from recruitment: a freed contractor returns to the original organization, possibly Wounded, and may resume work after recovery. R-50 remains open after the [source audit](docs/spikes/R50-held-aging-bookmark-audit.md): `agedThroughTick` already exists, but no reliable general suspension boundary was proved.
 
 The contract board, the player as contractor and the social layer are later phases
 ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
 
-**Test status.** The headless tests pass (481 tests, 35,084 checks, 0 failures in each of two final PR #11 runs, including an 18-in-game-year
-procurement soak, three 20-in-game-year career soaks with daily money, capacity, spatial and career invariant
-checks, and the runtime-runner tests).
+**Test status.** The committed Phase 3.2B Stage 4 focused checkpoint passed **204 tests / 17,817 checks / 0 failures**, with **0 compiler warnings/errors** and all **nine source gates PASS**. Final full-suite repeats and the Stage 5 artifact are pending ([validation](docs/PHASE32B_VALIDATION.md)). The prior PR #11 full-suite evidence remains **481 tests / 35,084 checks / 0 failures ×2**, including procurement/career soaks.
 
 **Owner runtime evidence** ([RUNTIME_TESTING § 15](docs/RUNTIME_TESTING.md#15-owner-observed-runtime-evidence)):
 
@@ -205,7 +198,7 @@ same change.
 | [docs/EVENTS_AND_HISTORY.md](docs/EVENTS_AND_HISTORY.md) | Network events, history ledger, summaries, reputation, awareness, gossip, legends |
 | [docs/STATE_MACHINES.md](docs/STATE_MACHINES.md) | Intel, opportunity, contract, procurement, offer, operation, custody, actor lifecycles |
 | [docs/SIMULATION.md](docs/SIMULATION.md) | Scheduler, abstract resolver, willingness/refusal, morale, determinism and RNG |
-| [docs/PHYSICAL_LIFECYCLE.md](docs/PHYSICAL_LIFECYCLE.md) | **Phase 3 design (normative; 3.0 implemented, Appendix H; 3.1 Appendices I–K; 3.2A held custody, Appendix L):** authority, identity and progressive concretization, Episodes, provenance, Operational Roles and role composition, team cohesion, truthful aging, custody, atomic reconciliation, save/load, the equipment seams, the Phase 3.3 handoff direction, RimWorld API audit, invariants, subphases |
+| [docs/PHYSICAL_LIFECYCLE.md](docs/PHYSICAL_LIFECYCLE.md) | **Phase 3 design (normative; 3.0 implemented, Appendix H; 3.1 Appendices I–K; 3.2A held custody, Appendix L; 3.2B groups/concretization, Appendix M):** authority, identity and progressive concretization, Episodes, provenance, Operational Roles and role composition, team cohesion, truthful aging, custody, atomic reconciliation, save/load, the equipment seams, the Phase 3.3 handoff direction, RimWorld API audit, invariants, subphases |
 | [docs/ABSTRACT_PHYSICAL_LIFECYCLE.md](docs/ABSTRACT_PHYSICAL_LIFECYCLE.md) | The Phase 0 lifecycle design (confirmed in its core; superseded in part by PHYSICAL_LIFECYCLE) |
 | [docs/RIMWORLD_INTEGRATION.md](docs/RIMWORLD_INTEGRATION.md) | What vanilla 1.6 APIs we reuse, avoid or wrap; Harmony policy; runtime spikes |
 | [docs/SAVE_AND_MIGRATION.md](docs/SAVE_AND_MIGRATION.md) | Save layout, `NetworkSaveVersion`, migrations, mod add/remove behaviour |

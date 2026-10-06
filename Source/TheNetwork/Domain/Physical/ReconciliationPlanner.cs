@@ -661,6 +661,8 @@ namespace TheNetwork.Domain.Physical
             if (p.actor == null) throw new PlanInvalidException("ActorMissing", e != null ? e.actor.ToString() : null);
             if (e != null)
             {
+                if (e.members == null || e.members.Count == 0 || e.members.Count > PhysicalLifecycleService.MaxMembers)
+                    throw new PlanInvalidException("EpisodeMemberCount", e.id.ToString());
                 if (e.state == EpisodeState.Closed || e.consequencesApplied) throw new PlanInvalidException("AlreadyApplied", e.ToString());
                 if (e.publications.Count != 0 || e.publishCursor != 0 || e.publishedTick >= 0) throw new PlanInvalidException("OutboxNotEmpty", e.ToString());
                 if (p.decisions.Count != e.members.Count) throw new PlanInvalidException("MemberMissing", p.decisions.Count + " of " + e.members.Count);

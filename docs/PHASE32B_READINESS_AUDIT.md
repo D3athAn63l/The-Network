@@ -1,5 +1,7 @@
 # Phase 3.2B — Groups and progressive concretization readiness audit
 
+> **Historical readiness record.** The accepted design/source audit below records the pre-implementation state. Phase 3.2B is now implemented/headless validated, with owner runtime validation pending: [as built](PHYSICAL_LIFECYCLE.md#appendix-m-phase-32b-as-built-groups-and-progressive-concretization), [validation](PHASE32B_VALIDATION.md). Its original NOT IMPLEMENTED/future statements and source/spike evidence are preserved as chronology; S26/S27 remain PARTIAL.
+
 **2026-10-06 · design/source audit only · owner decisions ACCEPTED in § 12 (ADR-057).**
 
 The owner reviewed audit HEAD **`7d5e4ebc9308a12d4a1416c08e1a3db1c14b8bac`** and accepted

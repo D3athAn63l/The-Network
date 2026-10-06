@@ -425,7 +425,7 @@ namespace TheNetwork.Integration.Physical
                 || member.pawn.thingIdNumber != p.thingIDNumber) return false;
             bool testMap = map.Parent?.def?.defName == PhysicalTestIds.TestMapDef;
             VisibilityScope scope = visibilityScope;
-            if (scope != null && !scope.disposed && ReferenceEquals(scope.game, Current.Game) && Prefs.DevMode && PhysicalTestSession.IsRunning
+            if (scope != null && !scope.disposed && ReferenceEquals(scope.game, Current.Game) && Prefs.DevMode && PhysicalTestSession.IsActiveOwnedEpisode(episode)
                 && ReferenceEquals(scope.ownedEpisode, episode) && scope.mapId == map.uniqueID)
                 return scope.synthetic ? testMap : !testMap && PlayerOccupied(map);
             if (testMap || !string.IsNullOrEmpty(episode.cause?.devKey)) return false;
@@ -473,8 +473,8 @@ namespace TheNetwork.Integration.Physical
         private PhysicalEpisode VisibilityEpisode(EpisodeId id, int mapId)
         {
             PhysicalEpisode e = ctx.episodes?.Get(id);
-            if (!Prefs.DevMode || !PhysicalTestSession.IsRunning || e == null || !e.IsActive || e.whereMapId != mapId
-                || MapById(mapId) == null || !PhysicalTestIds.IsTestDevKey(e.cause?.devKey))
+            if (!Prefs.DevMode || e == null || !e.IsActive || e.whereMapId != mapId
+                || MapById(mapId) == null || !PhysicalTestSession.IsActiveOwnedEpisode(e))
                 throw new InvalidOperationException("visibility overrides require a running dev test and its exact active owned Episode/map");
             return e;
         }

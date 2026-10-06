@@ -296,9 +296,7 @@ namespace TheNetwork.Domain.Contractors
             a.reputation.SetBand(t.startingFame);
             NetRng rng = new NetRng(a.seed, "contractor.create");
 
-            ContractorProfile profile = new ContractorProfile { capability = CapabilitySource.NpcSimulation, registeredTick = ctx.Now };
-            profile.kinds.Add(ContractKinds.Procurement);
-            profile.specialties.AddRange(t.specialties ?? new List<string>());
+            ContractorProfile profile = CreateOriginProfile(t.specialties, ctx.Now);
             a.Add(profile);
 
             ContractorSimulation sim = BuildSimulation(t, rng, solo);
@@ -343,6 +341,15 @@ namespace TheNetwork.Domain.Contractors
             ctx.Spatial?.EnsureInitialized(a);
             StateVersion.Bump();
             return a;
+        }
+
+        /// <summary>Birth-time NPC contractor origin facts, shared by production Instantiate and owned developer fixtures.</summary>
+        internal static ContractorProfile CreateOriginProfile(IList<string> specialties, int registeredTick)
+        {
+            ContractorProfile profile = new ContractorProfile { capability = CapabilitySource.NpcSimulation, registeredTick = registeredTick };
+            profile.kinds.Add(ContractKinds.Procurement);
+            profile.specialties.AddRange(specialties ?? new List<string>());
+            return profile;
         }
 
         private ContractorSimulation BuildSimulation(ContractorTemplate t, NetRng rng, bool solo)

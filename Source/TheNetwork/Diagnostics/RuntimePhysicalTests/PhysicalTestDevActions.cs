@@ -187,5 +187,73 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         {
             PhysicalTestSession.StartReadOnly((rt, id) => new Phyx025HeldVerify(rt, id), PhysicalScenarioTable.Get("RT-PHYX-025"));
         }
+
+        // Phase 3.2B: owned group fixtures. TestSite visibility is explicitly synthetic; these actions never use a home map.
+
+        [DebugAction(Cat, "RT-PHYX-026 — Small crew first visit [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        public static void Phyx026()
+        {
+            PhysicalTestSession.Start((rt, id) => new Phyx026SmallFirst(rt, id), PhysicalScenarioTable.Get("RT-PHYX-026"));
+        }
+
+        [DebugAction(Cat, "RT-PHYX-027 — Small crew same-pawn second visit [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        public static void Phyx027()
+        {
+            PhysicalTestSession.Start((rt, id) => new Phyx027SmallSecond(rt, id), PhysicalScenarioTable.Get("RT-PHYX-027"));
+        }
+
+        [DebugAction(Cat, "RT-PHYX-028 — Large company ordinary presence [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        public static void Phyx028()
+        {
+            PhysicalTestSession.Start((rt, id) => new Phyx028LargePresence(rt, id), PhysicalScenarioTable.Get("RT-PHYX-028"));
+        }
+
+        [DebugAction(Cat, "RT-PHYX-029 — Anonymous arrest and atomic promotion [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        public static void Phyx029()
+        {
+            PhysicalTestSession.Start((rt, id) => new Phyx029LargeCapture(rt, id), PhysicalScenarioTable.Get("RT-PHYX-029"));
+        }
+
+        [DebugAction(Cat, "030A SAVE — concretized group [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        public static void Phyx030A()
+        {
+            PhysicalTestSession.Start((rt, id) => new Phyx030GroupSave(rt, id, false), PhysicalScenarioTable.Get("RT-PHYX-030"));
+        }
+
+        [DebugAction(Cat, "030B SAVE — anonymous arrest Pending [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        public static void Phyx030B()
+        {
+            PhysicalTestSession.Start((rt, id) => new Phyx030GroupSave(rt, id, true), PhysicalScenarioTable.Get("RT-PHYX-030"));
+        }
+
+        [DebugAction(Cat, "030V VERIFY — loaded group (read-only)", allowedGameStates = AllowedGameStates.Playing)]
+        public static void Phyx030V()
+        {
+            PhysicalTestSession.StartReadOnly((rt, id) => new Phyx030GroupVerify(rt, id), PhysicalScenarioTable.Get("RT-PHYX-030"));
+        }
+
+        [DebugAction(Cat, "RT-PHYX-031 — Medic organizational succession [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        public static void Phyx031()
+        {
+            PhysicalTestSession.Start((rt, id) => new Phyx031RoleSuccession(rt, id), PhysicalScenarioTable.Get("RT-PHYX-031"));
+        }
+
+        [DebugAction(Cat, "032A BUILD — 150 retained [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        public static void Phyx032A()
+        {
+            PhysicalTestSession.Start((rt, id) => new Phyx032RetentionBuild(rt, id, 150), PhysicalScenarioTable.Get("RT-PHYX-032"));
+        }
+
+        [DebugAction(Cat, "032B BUILD — 300 retained [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        public static void Phyx032B()
+        {
+            PhysicalTestSession.Start((rt, id) => new Phyx032RetentionBuild(rt, id, 300), PhysicalScenarioTable.Get("RT-PHYX-032"));
+        }
+
+        [DebugAction(Cat, "032V OBSERVE — retained load (read-only)", allowedGameStates = AllowedGameStates.Playing)]
+        public static void Phyx032V()
+        {
+            PhysicalTestSession.StartReadOnly((rt, id) => new Phyx032RetentionVerify(rt, id), PhysicalScenarioTable.Get("RT-PHYX-032"));
+        }
     }
 }

@@ -113,3 +113,6 @@ owner decision. **S21** ([S21-observation-completeness.md](S21-observation-compl
 apart from positive vanilla state, and the headless suite proves the pass criteria; the owner baseline reported 194 PASS / 0 FAIL / 0 INCONCLUSIVE with clean retained bindings, but synthetic 022 cached a removed temporary
 slaveFaction. The final `e768fef` 022 → SAVE → LOAD → 025 acceptance passed with 52/0/0, healthy 1-of-1 retained coverage and no slaveFaction, warden LookTargets or invalid-discard errors. Caravan, transport and another faction's prisoner remain headless only;
 S21 stays PARTIAL. S11 remains FAIL / rescue STOPPED.
+
+
+**Phase 3.2B implementation evidence.** Composition v1, temporary Episode reservation, groups and atomic progressive concretization are implemented/headless validated; owner runtime acceptance is pending ([as built](../PHYSICAL_LIFECYCLE.md#appendix-m-phase-32b-as-built-groups-and-progressive-concretization), [validation](../PHASE32B_VALIDATION.md), [runtime § 19](../RUNTIME_TESTING.md#19-phase-32b-groups-and-progressive-concretization)). S26/S27 remain PARTIAL source/headless records. Production tests do not measure generated-crew hostility or establish owner game/save-load/mod timing PASS. S11 remains FAIL / rescue STOPPED, R-50 OPEN, S21 PARTIAL; no future mixed 3.2C/rescue result is claimed.
