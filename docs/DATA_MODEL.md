@@ -334,12 +334,15 @@ When a generic member becomes a Known Character, and how custody works, is defin
 > `deploymentId` or `boundTick`: **the pawn is the truth for all of them** and they are not adopted
 > ([PHYSICAL_LIFECYCLE § 4.3](PHYSICAL_LIFECYCLE.md#43-the-questions-answered)). Phase 3 adds only `pawn` (a `PawnRef`, with
 > `agedThroughTick`), `episode`, `heldBy` + `heldSinceTick`, **`opRole`** (an *operational* role, distinct from the
-> organizational `role` above) and `firstEncounterTick`; an organization gains a small **role composition** template.
-> `opRole` and `composition` may be *stored* lazily (old saves carry none), but each is a pure, versioned function of
-> **immutable origin facts** (`seed`, the form class from `capacity`, `ContractorProfile.specialties`, `CharacterId`): storing
-> one later never changes what it is, and it never depends on when the player first looked
+> organizational `role` above) and `firstEncounterTick`. The owner accepted a small pure **Composition v1**
+> recipe without mandatory persisted composition storage ([ADR-057](DECISIONS.md#adr-057--phase-32b-readiness-owner-decisions)).
+> Operational roles may be stored eagerly/lazily; both role assignment and composition use immutable
+> origin facts (`seed`, the form class from `capacity`, `ContractorProfile.specialties`, `CharacterId` for
+> people). Storing a role later never changes its identity or depends on when the player first looked
 > ([PHYSICAL_LIFECYCLE § 6.6.5](PHYSICAL_LIFECYCLE.md#665-identity-comes-from-immutable-origin-facts-never-from-when-the-player-first-looks)).
-> Nothing is implemented.
+> Groups/concretization remain **NOT IMPLEMENTED**. Future old/new-save fixtures must prove no operational
+> role drift through organizational leader/lieutenant/successor changes and reload. New Episode-local
+> placement evidence still requires correct defaults/schema review; this decision adds no save field.
 
 ---
 
@@ -467,7 +470,9 @@ OrganizationProfile : ActorComponent   // NPC Organization only
   roster: Roster
     leader: CharacterId?
     lieutenants: CharacterId[]       // ≤ 2
-    knownMembers: CharacterId[]      // capped (default 6, leader and lieutenants included)
+    knownMembers: CharacterId[]      // current construction target: 6 total, leader/lieutenants included
+                                    // accepted 3.2B (not implemented): six discretionary living seats; strong identity may overflow
+                                    // held identities never denied for a full target; no hard CharacterStore identity cap
     tiers: TierCount[]               // { tier: Veteran|Regular|Recruit, healthy: int, wounded: int }
     woundedRecovery: RecoveryBucket[]// { tier, count, dueTick } — aggregated, ≤ 8 buckets
     committed: TierCount[]           // headcount checked out to operations and deployments

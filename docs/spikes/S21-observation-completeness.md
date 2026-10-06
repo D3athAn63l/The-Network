@@ -2,7 +2,7 @@
 
 **Verdict: PARTIAL — HEADLESS PASS; owner baseline 194 PASS, 0 FAIL, 0 INCONCLUSIVE; final RT-PHYX-022/save/load/025 acceptance PASS (52 PASS, 0 FAIL, 0 INCONCLUSIVE); caravan/transport/other-faction-prisoner observations remain headless-only**
 
-**Phase 3.2A status: IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED. PR #11 — MERGE-READY.** The owner ran `RT-PHYX-020…025` and save/load in a fresh Dev Quicktest at
+**Phase 3.2A status: MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED. PR #11 — MERGED.** The owner ran `RT-PHYX-020…025` and save/load in a fresh Dev Quicktest at
 source `76b3ae1`. All scenarios reported PASS; post-load registry state was 5 bound / 5 healthy, 4/4 retained covered, 0 integrity findings.
 The save/load nevertheless reported a removed Network encounter faction through `slaveFaction` in synthetic 022. Other scenario passes
 remain evidence. The owner then reran `db0f795`: **022: 40 PASS / 0 FAIL / 0 INCONCLUSIVE**, save/load,
@@ -97,6 +97,6 @@ earlier 020, 021, 023 and 024 baseline passes remain accepted. The reproduction 
 [RUNTIME_TESTING § 18](../RUNTIME_TESTING.md#18-phase-32a-held-custody).
 
 Caravan, transport and other-faction-prisoner observation still have **headless proof only**. Captor recruitment proves that specific
-OtherFaction allegiance case, not every other-faction-prisoner transition. This limits S21 to **PARTIAL** despite PR #11 being merge-ready.
+OtherFaction allegiance case, not every other-faction-prisoner transition. This limits S21 to **PARTIAL** after PR #11 merged.
 R-50 truthful aging remains OPEN, O-20 direction remains locked, S11 remains FAIL / rescue STOPPED, and 3.2B, 3.2C, 3.3 and Phase 4 are
 not implemented. The acceptance update changes documentation only; validated source/artifact provenance remains `e768fef`.

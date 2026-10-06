@@ -42,7 +42,7 @@
 | R-33 | Pawn creation on a heavily modded list fails, is slow, spams relations or yields a wrong race | Medium | High | Phase 3.1 (S23) |
 | R-34 | An unprepared removal strands reserved, suspended pawns (only if the vanilla-only registry is chosen) | Medium | Low | Phase 3.1 (S9r, S6) |
 | R-35 | A first projection contradicts established truth (a role), the role machinery over-constrains generation, or a role / composition depends on when it was first observed | High | Medium | Phase 3.1 (S25) |
-| R-36 | Identity vs retention: progressive concretization outgrows the retained-pawn cap, a company is promoted by mere presence, or the cap replaces a person the player met | Medium | Medium | Phase 3.2 (S27) |
+| R-36 | Identity vs retention: progressive concretization outgrows the retained-pawn target, a company is promoted by mere presence, or budget pressure replaces a person the player met | Medium | Medium | Phase 3.2 (S27) |
 | R-37 | The reconciliation commit crosses services and is half-applied, or a post-commit stage is inferred complete from its side effects | Critical | Medium | Phase 3.0 (`RT-PHYS-026/027/028/029`) |
 | R-38 | Truthful aging has side effects (chronic conditions, an unfit person, an unsafe catch-up API) | Medium | Medium | Phase 3.1 (S12) |
 | R-39 | Team cohesion is infeasible, over-trusted, or drifts into sanitizing real social history | Low | Medium | Phase 3.2 (S26) |
@@ -143,8 +143,10 @@
 
 ## R-09 · Unbounded history and save growth
 - **Failure modes.** Multi-megabyte saves after long play. Slow loads.
-- **Mitigation.** Tiered retention with caps, tombstones, compaction of terminal entities, a
-  bounded journal, capped bound pawns ([EVENTS_AND_HISTORY § 4, § 11](EVENTS_AND_HISTORY.md#4-retention-pruning-and-aggregation)).
+- **Mitigation.** Tiered history retention with caps, tombstones, compaction of terminal entities and a
+  bounded journal ([EVENTS_AND_HISTORY § 4, § 11](EVENTS_AND_HISTORY.md#4-retention-pruning-and-aggregation)).
+  For physical people, the owner-approved 3.2B policy treats approximately 150 retained Pawns as a soft
+  performance target; identity continuity takes priority over that target.
 - **Proven by.** S18 (Phase 1). 20-year fast-forward soak (Phase 2). 30-year soak with the
   lifecycle features (Phase 6).
 
@@ -168,7 +170,7 @@
   ([PHYSICAL_LIFECYCLE § 9](PHYSICAL_LIFECYCLE.md#9-custody-model)); implementation is subphase 3.2, and 3.1 fails safe
   into `Quarantined(UnsupportedCustody)` rather than faking capture support. Vanilla recruits kidnapped pawns into the
   captor's faction with MTB ≈ 30 days; the watch expects it.
-- **Phase 3.2A (IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED; final e768fef acceptance 52/0/0 with clean save/load).** Held custody is implemented for named people
+- **Phase 3.2A (MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED; final e768fef acceptance 52/0/0 with clean save/load).** Held custody is implemented for named people
   ([Appendix L](PHYSICAL_LIFECYCLE.md#appendix-l-phase-32a-as-built-held-custody), ADR-056). One correction to the mitigation above: the
   reservation is **kept**, not released, while a person is held (M1 covers `OutOfCustody`, P3-INV-042), because a released, held pawn
   could become an ordinary `Free` world pawn. Captured and recruited people are set-once fates, committed through one episode. A recruit
@@ -195,11 +197,13 @@
 
 ## R-14 · Performance of large, long-running contractor populations
 - **Failure modes.** TPS degradation from many orgs, pawns or events over decades.
-- **Mitigation.** Abstract orgs (headcounts). Suspended reserved pawns with a cap. Daily
+- **Mitigation.** Abstract orgs (headcounts). Suspended reserved pawns with a soft performance target. Daily
   staggered upkeep. O(1) summaries. Budgeted scheduler. The banned-pattern list
   ([PERFORMANCE § 4](PERFORMANCE.md#4-banned-patterns-and-what-replaces-them)).
 - **Proven by.** Phase 2 soak (the default ~100 contractor identities and a 300-identity stress
-  run × 20 years). Phase 3 soak (150 stored pawns + 5 deployments), with an A/B TPS comparison.
+  run × 20 years). Future 3.2B runtime acceptance must observe performance and save/load around 150 and
+  300 retained Pawns, with an A/B TPS comparison; measured problems require a later lifecycle/performance
+  pass rather than discarding or replacing encountered people.
 
 ## R-15 · Registry-quest custody unworkable at runtime
 - **Failure modes.** Suspension causes oddities: pawns frozen in bad states, or vanilla code
@@ -526,21 +530,36 @@
   by a frozen pure function, never from the moment of first observation (P3-INV-030); a bounded attempt count then
   an abort that persists nothing; roles map to *existing* kinds only (`Pawn.kindDef` is saved by def name)
   ([§ 6.8](PHYSICAL_LIFECYCLE.md#68-role-constrained-creation-validate-then-the-smallest-correction), ADR-050).
+  Owner-approved Composition v1 uses actor seed, origin-capacity proxy and original ContractorProfile
+  specialties; implementation must freeze that version. Old/new save fixtures must prove deterministic
+  operational role initialization/migration and no drift through succession or reload: organizational
+  `CharacterRole` changes must not rewrite `OperationalRole` (a Medic successor remains operationally a Medic).
 - **Proven by.** Spike **S25**; `RT-PHYS-020/021` (pure verdict and correction), `RT-PHYS-030` (time-independent identity),
   `RT-PHYX-011` on real pawns.
 
 ## R-36 · Identity versus retention (Phase 3)
 - **Failure modes.** Progressive concretization retains every placed seat of small organizations, so the retained-pawn count
-  grows past the soft cap; or the cap tempts the Network to release a person the player has met and later put a *stranger* in
+  grows past the soft target; or budget pressure tempts the Network to release a person the player has met and later put a *stranger* in
   that seat; or a persistent roster of company soldiers appears by accident.
-- **Mitigation.** Concretization is **bounded by the existing named-people caps** (1 leader + ≤ 2 lieutenants + ≤ 6 known
-  members); rank-and-file of large organizations stay ephemeral and are promoted only by **strong story evidence** (a
+- **Mitigation.** Discretionary living concretization uses the owner-approved existing named-seat target (**six total**, leader and lieutenants
+  included; [accepted cap semantics](PHASE32B_READINESS_AUDIT.md#3-o-2-size-and-cap-decisions--accepted)); strong identity obligations
+  override that target, retaining the same Pawn through the existing CharacterStore/membership model with no shadow registry.
+  Rank-and-file of large organizations stay ephemeral and are promoted only by **strong story evidence** (a
   material outcome, being named by the Network, a narrowed battle-log signal), **never by presence alone**, so a company does
-  not slowly turn into a persistent roster; the cap is a *performance* policy that releases only never-encountered people and
-  those with no living seat, and is **exceeded rather than break identity**
+  not slowly turn into a persistent roster; six limits discretionary concretization, while approximately 150 retained Pawns
+  is a soft performance target, **exceeded rather than break identity**. No held person is discarded, no encountered seat
+  becomes abstract and no lookalike replaces an encountered living person to satisfy either target
   ([§ 4.5](PHYSICAL_LIFECYCLE.md#45-progressive-concretization)).
 - **Proven by.** `RT-PHYS-023`, `RT-PHYX-014`, the Phase 3 soak (retained-pawn growth); spike **S27** (encounter evidence,
   including the reliability of the narrowed log tests).
+- **3.2B readiness evidence, not implementation.** [S27](spikes/S27-progressive-concretization-evidence.md)
+  is PARTIAL (source/headless). The [opportunity model](PHASE32B_READINESS_AUDIT.md#8-retention-opportunity-model)
+  reaches roughly 285 retained identities for a repeatedly encountered representative 100-contractor cast;
+  the owner accepted this architectural outcome and 150 as a soft target, with future observation around 150/300 Pawns.
+  The accepted timing is terminal-batch promotion plus temporary active-Episode reservation: anonymous eligible Pawns
+  remain Episode-owned/reserved while others are Pending, then promote in the atomic whole-Episode commit before RELEASE.
+  Temporary reservation must derive from durable Episode PawnRefs and survive load before the first world tick;
+  current named-only M1 does not establish that coverage. No dummy KnownCharacter or early per-member commit is authorized.
 
 ## R-37 · The reconciliation commit crosses services and is half-applied (Phase 3)
 - **Failure modes.** The existing casualty, succession and actor-ending paths interleave durable mutation with inline
@@ -574,10 +593,16 @@
 - **Failure modes.** The opinion of an *unspawned candidate* is not meaningful; friction traits and ideologies are mod-
   dependent; the screen over-rejects and spikes generation; or, worse, the Network starts "fixing" real pawns' relationships
   after binding, which would erase organic history.
-- **Mitigation.** A derived band; screening only at first generation; prevention by construction (relations off, the
-  organization's existing ideology); the Network never writes relations, opinions, thoughts, memories or traits of a bound
-  pawn; a best-effort fallback the owner decides ([§ 6.9](PHYSICAL_LIFECYCLE.md#69-team-cohesion)).
+- **Mitigation.** Owner-approved BEST-EFFORT prevention by construction for 3.2B: force new candidates, skip vanilla
+  initial blood/non-blood relation generation, request the eligible existing ideology through `FixedIdeo`, and verify
+  returned Pawns. The Network never writes relations, opinions, thoughts, memories, traits or ideology of a bound
+  pawn to manufacture cohesion ([§ 6.9](PHYSICAL_LIFECYCLE.md#69-team-cohesion)).
 - **Proven by.** Spike **S26**; `RT-PHYS-024` (initial-only; source scan), `RT-PHYX-013`.
+- **3.2B accepted design; not implementation.** [S26](spikes/S26-team-cohesion.md) is PARTIAL (source audit): core
+  same-faction opinions can be meaningful before spawn, but map/mod thoughts, compatibility and
+  query-cache residue limit a screen. BEST-EFFORT initial construction is accepted; guaranteed opinion floors,
+  fabricated friendships, positive memories, relation writing, trait removal and broad friction blacklists are outside
+  3.2B. Generated-crew hostility frequency is unmeasured; bound history is never sanitized.
 
 ## R-40 · Reputation, fame and capability stay conflated (Phase 3 design; a later phase)
 - **Failure modes.** Today one numeric score is both the professional record and the "fame" band, and the equipment rung is

@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Standalone audit executable only. Never import into the production mod or gameplay suite. -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>ScanSpike</AssemblyName>
+    <RimWorldManaged Condition="'$(RimWorldManaged)' == ''">$(RIMWORLD_MANAGED)</RimWorldManaged>
+    <HarmonyDll Condition="'$(HarmonyDll)' == ''">$(HARMONY_DLL)</HarmonyDll>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ScanSpike.cs" />
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(RimWorldManaged)/Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(RimWorldManaged)/UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(HarmonyDll)</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

@@ -1,6 +1,6 @@
 # The Network
 
-**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; the formal in-game S20 checklist has not been run); Phase 2.75 merged (the contractor career foundation); Phase 2.9 merged and owner-runtime-tested (in-game runtime regression test infrastructure, developer-only); Phase 3 (abstract ↔ physical lifecycle): design reviewed; Phase 3.0 (authority + Physical Episode foundation) implemented; Phase 3.1 (one controlled physical episode, dev-triggered on a separate, session-armed test tier) implemented and owner runtime validated (PASS, Phase 3.1 scope only); Phase 3.2A (held custody) IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED (final e768fef acceptance: 022 41/0/0, clean save/load, 025 11/0/0; PR #11 MERGE-READY, open and unmerged; the rescue site is not built: S11 failed its source audit)**
+**RimWorld 1.6 · standalone · status: Phase 2 merged and owner-tested; Phase 2.5 merged (hidden spatial continuity and the Field Log; the formal in-game S20 checklist has not been run); Phase 2.75 merged (the contractor career foundation); Phase 2.9 merged and owner-runtime-tested (in-game runtime regression test infrastructure, developer-only); Phase 3 (abstract ↔ physical lifecycle): design reviewed; Phase 3.0 (authority + Physical Episode foundation) implemented; Phase 3.1 (one controlled physical episode, dev-triggered on a separate, session-armed test tier) implemented and owner runtime validated (PASS, Phase 3.1 scope only); Phase 3.2A (held custody) MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED (final e768fef acceptance: 022 41/0/0, clean save/load, 025 11/0/0; PR #11 MERGED; the rescue site is not built: S11 failed its source audit)**
 
 The Network is a persistent, procedural contractor ecosystem that runs behind the normal RimWorld
 game. The player hires outsiders to find and fetch things they cannot easily get themselves. The
@@ -20,6 +20,12 @@ developer wrote.
 ---
 
 ## Repository status
+
+The next slice has a [Phase 3.2B readiness audit](docs/PHASE32B_READINESS_AUDIT.md): **READY FOR 3.2B IMPLEMENTATION**.
+The owner accepted the composition and 6/12 threshold policy, six-person discretionary
+cap with strong-identity overflow, terminal-batch promotion with temporary Episode reservation, and
+150 as a soft retention target. BEST-EFFORT cohesion and conservative evidence are approved design;
+groups/concretization and their runtime validation remain future work.
 
 **Phase 1 (Foundation + Intel + Fixers)** is implemented on top of the frozen Phase 0 architecture:
 the global cast in Mod Settings, the world cast snapshot, Fixers, the Comms Console gate, the item
@@ -107,9 +113,10 @@ tier on its own test map), 3.2 custody, rescue and groups (first player-visible 
 handoff (**design direction only**). **3.0 began once the design was accepted. The mandatory runtime spike S31 (the retained-pawn exit-reservation window) was run by the owner and PASSED: M1 (reserve a retained named pawn while it is spawned) is accepted (ADR-053; the original record is [docs/spikes/S31-retained-pawn-exit-reservation.md](docs/spikes/S31-retained-pawn-exit-reservation.md)). The owner then validated the Phase 3.1 physical suite in RimWorld (a first run found six issues, corrected; a reduced rerun passed; the save/load cases were closed by an isolated follow-up): Phase 3.1 is IMPLEMENTED AND OWNER RUNTIME VALIDATED. S31/M1 accepted. Full Phase 3.1 physical QA passed. Save/load registry reconstruction validated. PR #10 has since been merged. That sign-off was not Phase 3.2: held custody, rescue, groups and group extraction did not exist, arbitrary modded races are not validated, and no claim is made for every RimWorld/mod combination.** Full Safe Regression stays safe on a real colony. Open questions and the spikes that settle
 them are listed, not hidden; apart from S31, the Phase 3.1 suite above and the Phase 3.2A evidence below, other spikes have not been run by the owner.
 
-**Phase 3.2A (held custody): IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED.** The original owner baseline
+**Phase 3.2A (held custody): MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED.** The earlier
+**IMPLEMENTED / HEADLESS VALIDATED** milestone preceded the owner acceptance recorded here. The original owner baseline
 covered `RT-PHYX-020…025`; final `e768fef` acceptance completed 022 → SAVE → LOAD → 025 with **52 PASS / 0 FAIL / 0 INCONCLUSIVE**,
-clean save/load and healthy 1-of-1 retained coverage. PR #11 is **MERGE-READY**, open and unmerged
+clean save/load and healthy 1-of-1 retained coverage. PR #11 is **MERGED**
 ([RUNTIME_TESTING § 18](docs/RUNTIME_TESTING.md#18-phase-32a-held-custody)). S21 remains PARTIAL for headless-only caravan, transport
 and other-faction-prisoner observation. When vanilla holds a named contractor's
 pawn (the player arrests, enslaves or recruits them, a raider kidnaps them, another faction holds them, a caravan carries them), the episode ends
