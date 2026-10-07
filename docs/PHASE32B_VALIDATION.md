@@ -6,6 +6,57 @@ This report describes the developer-triggered group slice delivered on `codex/ph
 
 Previous owner 026–028 PASS remains historical evidence; generated Encounter debris then blocked automatic compound provisioning before Plan. The current explicit Create/Reset lab and corrected 029 require owner runtime continuation. Phase 3.2A remains **MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED**: PR #11's final `e768fef` result remains 022 **41/0/0** → clean SAVE/LOAD → 025 **11/0/0**, total **52/0/0**. S26 and S27 remain **PARTIAL**; S21 remains **PARTIAL** for the previously unrun observation paths. S11 remains **FAIL / rescue STOPPED**, R-50 remains **OPEN**, O-20 remains locked, and full 3.2C, 3.3 and Phase 4 remain unimplemented.
 
+## PR #13 QA lab wildlife reset: current owner review record
+
+The previous Reset refused initialization of a freshly generated disposable lab whenever ordinary wildlife existed. Source correction **`98ddc71f77920592b81845eb23c63f291f18843e`** permits only non-humanlike, non-Network-owned Pawns to be removed during the explicit destructive armed Reset. Humanlike or Network-owned/bound Pawns, including corpse/holder contents, still refuse before any map write. This continues existing PR #13 on `codex/phase32b-groups-concretization` from remote HEAD `c2c6e494d57866d54fa7b89d22f241214b3e26fb`; no new PR or merge.
+
+### Owner policy, audit and implemented boundary
+
+Incidental animals, insects and mechs are unnecessary for these tests. After the initial source-audit stop for an off-map mechanitor, the owner explicitly authorized deleting them with ordinary vanilla linked-entity cleanup in this disposable save. The [actual supplied-assembly audit](PHASE32B_CUSTODY_QA_AUDIT.md#disposable-non-humanlike-pawn-removal-audit) records why standalone Destroy can retain Pawns, why direct Discard is insufficient, and why detached explicit Discard mode avoids world retention. No off-map Pawn is directly selected or removed.
+
+The read-only complete preflight retains exact unique TestSite/non-home/factionless/size/arm/run/physical-obligation guards and recursive corpse/holder traversal. `PawnBlocksReset` applies Humanlike OR Network-owned independently. `NetworkOwnsPawn` reads existing registry indexes, all KnownCharacter bindings and incomplete Episode bindings by actual pointer or durable ThingID; unresolved/inert ownership refuses. Approved Pawns are rechecked immediately before detachment, then passed through vanilla explicit Discard mode; success requires Discarded and absent from WorldPawns. Empty corpse/holder wrappers remain ordinary disposable content. Success reports removed disposable Pawns and zero protected Pawns; protected refusal reports counts. Existing non-Pawn callback/quest/assignment/explosion guards remain.
+
+Only `QaLab.InitializeOrReset` gains this narrow disposal operation. 026–032 remain prepared-lab consumers and cannot remove wildlife. Create semantics, deterministic geometry, ordinary/prison rooms, 029/030B one-arrest/17-fact guard, terminal batch, M1, production observer/lifecycle/reservations and save format are unchanged. An unexpected callback failure can leave a partially reset map and stops for inspection; no transactional rollback is claimed.
+
+### Validation and exact shipped artifact
+
+| Check | Result |
+|---|---|
+| Final source commit | `98ddc71f77920592b81845eb23c63f291f18843e` |
+| Git/API source proof | Published source tree `b7b3b3db0e63c9bc4f821a77bb36cc35bc0438b5` exactly equals the previously reviewed source/test tree; local HEAD is the byte-identical published Git commit. |
+| Focused QA lab / Pawn policy | **17 tests / 809 checks / 0 failures** |
+| Focused physical wiring/safety | **88 tests / 9,863 checks / 0 failures** (`Phys31`) |
+| Focused Phase 3.2B | **112 tests / 5,371 checks / 0 failures** (`Phys32b`) |
+| Focused 029/030B guards | **9 tests / 107 checks / 0 failures** (`CaptureGuard`); pending capture across wakes/real Scribe reload **1 / 27 / 0** |
+| Full fresh-process pass 1 | **633 tests / 45,174 checks / 0 failures**, exit 0 |
+| Full fresh-process pass 2 | **633 tests / 45,174 checks / 0 failures**, exit 0 |
+| Strict production/test compilers | **0 warnings / 0 errors**, warnings as errors |
+| Source gates / whitespace | **All nine shell gates PASS**; focused narrow Pawn-destruction gates PASS; `git diff --check` PASS |
+| DLL path | `1.6/Assemblies/TheNetwork.dll`; same bytes as the test runner copy, no rebuild after provenance capture |
+| Build stamp | `built 2026-10-07T10:38Z, source commit 98ddc71` |
+| Informational version | `0.1.0+98ddc71f77920592b81845eb23c63f291f18843e` |
+| SHA-256 | `610cb8feadef228e746bb43254ee78a87ff8071d69f2d4d756b91632894ca580` |
+| Bytes | **1,291,776** |
+| Save / production Harmony | **5**, no persistence/migration or production Harmony |
+| Publication | Source `98ddc71` published on the existing PR #13 branch; this reviewed artifact/docs delivery is owner-authorized. PR remains draft/open/unmerged. |
+| Owner runtime | **PENDING**; setup/disposal and corrected 029 have no owner PASS |
+
+Focused filters overlap and are not summed. Full runs use fresh Mono 6.8 processes with the previously successful explicit environment AND command options: `MONO_ENV_OPTIONS=--optimize=-inline mono --optimize=-inline TheNetwork.Tests.exe`. Both published-source executions and their completion/exit evidence are recorded in `wildlife-published-full-results.json`. The same executable and DLL are used without a later rebuild. Only an exit-0 invocation with a complete test summary is accepted. Headless proof covers policy, actual RaceProperties/registry/bindings, real corpse census/detachment, source/write boundaries and fake lifecycle/real Scribe continuity; it does not execute Unity map reset, the full vanilla discard callbacks, real rooms/AI ticks or sustained live custody.
+
+An earlier invocation using only the command-line inlining option exited 0 at the existing procurement soak, after `Compaction.TerminalContractsArchived`, without a completion summary or an assertion failure. It is **excluded** from pass totals; no root cause is claimed. Its log is `wildlife-final-full-1-incomplete.log`. The earlier local-source runs are recorded in `wildlife-final-full-1.log` and `wildlife-final-full-2.log`; fresh published-source runs are `wildlife-published-full-1.log` and `wildlife-published-full-2.log`. Both compilers use SDK 8.0.130 Roslyn, C# 7.3, optimized deterministic net472 and warnings as errors against the supplied game references; the repository build scripts are unchanged. Reflection confirms the actual build stamp, informational version, .NET 4.7.2 target and absence of Harmony assembly references. No test dependency is shipped.
+
+Changed-document validation checked **84 local links** with **zero new link/anchor errors**. Two existing historical PR-description links already used repository-root `docs/` paths inside this docs file; they remain unchanged in the preserved historical record. Earlier validation from the dedicated-lab heading onward and all of PHYSICAL_LIFECYCLE are byte-for-byte unchanged from `c2c6e49`.
+
+The source correction changes exactly two developer QA source files and three test files; production lifecycle files are byte-for-byte unchanged from `c2c6e49`. Seven new Pawn-policy tests complement the existing reset tests and narrow destruction-boundary gates. The source gates authorize only the approved explicit Reset disposal loop, not arbitrary QA Pawn destruction.
+
+### Owner workflow and remaining evidence
+
+Fresh disposable save → ARM → **PHYX — Create 60×60 Test Map** → ARM → **PHYX — Initialize / Reset QA Lab [DESTRUCTIVE]** → ARM → **RT-PHYX-029**. Generated animals/mechs no longer block initialization unless protected by Network ownership. If 029 passes, continue **030B SAVE → LOAD → 030V**; one 026 sanity run remains recommended before any merge. Previously accepted 026–028 PASS, old 029 escape/FAIL, failed automatic provisioning and all earlier validation/provenance remain historical below.
+
+R-50 stays **OPEN**, O-20 **LOCKED**, S11 **FAIL / rescue STOPPED**, S21/S26/S27 **PARTIAL**. Transient capture→escape and full 3.2C remain deferred; 3.3 and Phase 4 remain unimplemented. **DO NOT MERGE.**
+
+> The following dedicated-lab record is the **historical delivery** of source `6162748` / artifact HEAD `c2c6e49`. Its former ANY-Pawn refusal and no-linked-Pawn-mutation statements are superseded by the owner-authorized policy above. Its prior tests, artifact and owner findings remain intact.
+
 ## PR #13 dedicated QA lab: current owner review record
 
 This dedicated-lab update continues [PR #13](https://github.com/D3athAn63l/The-Network/pull/13) on `codex/phase32b-groups-concretization`,
