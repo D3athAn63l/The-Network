@@ -1139,7 +1139,7 @@
 
 ### ADR-057 · Phase 3.2B readiness owner decisions
 
-- **Status. Accepted (design/readiness 2026-10-06); PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED — OWNER RUNTIME VALIDATION PENDING.** The owner reviewed audit HEAD
+- **Status. Accepted (design/readiness 2026-10-06); PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED FOR THE CURRENT CREATE/RESET AND 026–032 SLICE; INDEPENDENT FINAL AUDIT PENDING.** The owner reviewed audit HEAD
   `7d5e4ebc9308a12d4a1416c08e1a3db1c14b8bac` and accepted the
   [readiness report](PHASE32B_READINESS_AUDIT.md). Its pre-implementation verdict was **READY FOR 3.2B IMPLEMENTATION**.
   The implementation now follows this accepted direction ([Appendix M](PHYSICAL_LIFECYCLE.md#appendix-m-phase-32b-as-built-groups-and-progressive-concretization), [validation](PHASE32B_VALIDATION.md)). PR #11 / Phase 3.2A is already merged and owner validated.
@@ -1185,8 +1185,7 @@
   audit / isolated headless experiment**. No future runtime scenario is claimed passed. S11 FAIL /
   rescue STOPPED, R-50 OPEN, S21 PARTIAL and O-20's locked direction remain unchanged. Save format
   remains 5 with additive EpisodeMember placement defaults, no production Harmony. Production implementation
-  and headless verification are recorded in [PHASE32B_VALIDATION](PHASE32B_VALIDATION.md); real group
-  generation, visibility, active/pre-RELEASE/post-RELEASE load and 150/300 runtime acceptance remain owner work.
+  and headless verification plus [final owner runtime acceptance](PHASE32B_VALIDATION.md#pr-13-final-owner-runtime-acceptance) are recorded separately: Create/Reset, 026–032, terminal 030A, active Pending 030B and ~150/~300 retained 032 loads now pass. Genuine player-visible-map eligibility, committed-before-RELEASE saves and broader S26/S27 probes remain separate. PR #13 stays draft/open/unmerged for independent final audit; no source/tests/DLL change or rebuild.
 - **Supersedes.** The audit's pending owner choices and readiness verdict at `7d5e4eb`, older
   discretionary-cap arithmetic, mandatory persisted-composition direction and initial opinion-floor
   screening direction. Historical records retain the earlier statements as history. It does not

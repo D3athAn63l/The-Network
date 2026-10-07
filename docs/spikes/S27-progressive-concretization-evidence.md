@@ -1,6 +1,6 @@
 # S27 — Progressive concretization evidence audit
 
-> **Historical readiness/source record; verdict remains PARTIAL.** The accepted policy now has a Phase 3.2B production implementation and headless tests ([as built](../PHYSICAL_LIFECYCLE.md#appendix-m-phase-32b-as-built-groups-and-progressive-concretization), [validation](../PHASE32B_VALIDATION.md)). The audit below preserves its original source/experiment evidence; it does not establish owner runtime PASS. Actual game/mod/save-load validation remains pending.
+> **Historical readiness/source record; verdict remains PARTIAL.** The accepted policy now has a Phase 3.2B production implementation and headless tests ([as built](../PHYSICAL_LIFECYCLE.md#appendix-m-phase-32b-as-built-groups-and-progressive-concretization), [validation](../PHASE32B_VALIDATION.md)). The audit below preserves its original source/experiment evidence; it does not establish owner runtime PASS. The later [current Create/Reset and 026–032 owner runtime acceptance](../PHASE32B_VALIDATION.md#pr-13-final-owner-runtime-acceptance), including 030/032 loads, does not close S27's broader combat endpoint, direct-relation and mod-timing probes. Independent final audit remains pending.
 
 **Verdict: PARTIAL — source audit and isolated headless experiment.** Source-qualified bounded evidence is feasible; actual game, save/load and mod compatibility remain future owner runtime gates. This report does not implement promotion, groups, runtime scenarios or Harmony in the mod.
 

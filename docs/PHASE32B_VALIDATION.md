@@ -1,10 +1,97 @@
 # Phase 3.2B implementation and validation
 
-**PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED — OWNER RUNTIME VALIDATION PENDING.**
+**PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATION COMPLETE FOR THE CURRENT CREATE/RESET AND 026–032 SCENARIO SET. INDEPENDENT FINAL AUDIT PENDING.**
 
 This report describes the developer-triggered group slice delivered on `codex/phase32b-groups-concretization`, based on merged PR #12 `main` **`e251c61efcbb7773f36e31e4862373e22930173e`**. The owner accepted Composition v1, the promotion policy and the 3.2B boundary in [ADR-057](DECISIONS.md#adr-057--phase-32b-readiness-owner-decisions). The earlier [readiness audit](PHASE32B_READINESS_AUDIT.md) remains a historical design/source record.
 
-Previous owner 026–028 PASS remains historical evidence; generated Encounter debris then blocked automatic compound provisioning before Plan. The current explicit Create/Reset lab and corrected 029 require owner runtime continuation. Phase 3.2A remains **MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED**: PR #11's final `e768fef` result remains 022 **41/0/0** → clean SAVE/LOAD → 025 **11/0/0**, total **52/0/0**. S26 and S27 remain **PARTIAL**; S21 remains **PARTIAL** for the previously unrun observation paths. S11 remains **FAIL / rescue STOPPED**, R-50 remains **OPEN**, O-20 remains locked, and full 3.2C, 3.3 and Phase 4 remain unimplemented.
+Phase 3.2A remains **MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED**: PR #11's final `e768fef` result remains 022 **41/0/0** → clean SAVE/LOAD → 025 **11/0/0**, total **52/0/0**. S26 and S27 remain **PARTIAL**; S21 remains **PARTIAL** for the previously unrun observation paths. S11 remains **FAIL / rescue STOPPED**, R-50 remains **OPEN**, O-20 remains **LOCKED**. Transient capture→escape-before-terminal and full 3.2C remain deferred; 3.3 and Phase 4 remain unimplemented.
+
+## PR #13 final owner runtime acceptance
+
+**2026-10-07 · owner-reported in-game evidence · documentation/PR metadata update only.** The owner's final runtime validation record covers the dedicated QA lab and the frozen wildlife-reset build below. **Phase 3.2B implemented runtime slice: owner runtime validation complete for the current Create/Reset, 026–032 scenario set, including 030 and 032 save/load. Owner runtime gate complete; independent final audit pending.** Existing [PR #13](https://github.com/D3athAn63l/The-Network/pull/13) remains **OPEN / DRAFT / UNMERGED** on `codex/phase32b-groups-concretization`.
+
+### Frozen source and artifact
+
+| Value | Validated build, unchanged by this documentation update |
+|---|---|
+| Validated source commit | `98ddc71f77920592b81845eb23c63f291f18843e` |
+| Artifact/docs HEAD before this update | `4d6ca01dfaf0e0d491072307065063e484618fcf` |
+| DLL | `1.6/Assemblies/TheNetwork.dll` |
+| Build stamp | `built 2026-10-07T10:38Z, source commit 98ddc71` |
+| Informational version | `0.1.0+98ddc71f77920592b81845eb23c63f291f18843e` |
+| SHA-256 | `610cb8feadef228e746bb43254ee78a87ff8071d69f2d4d756b91632894ca580` |
+| Bytes | **1,291,776** |
+| Save format / production Harmony | **5 / none** |
+
+A documentation-only commit advances PR HEAD without replacing the validated source SHA or artifact provenance. No production source, QA source, tests or DLL change; no compilation or rebuild. The existing two complete fresh-process headless passes remain **633 tests / 45,174 checks / 0 failures**, exit 0 each, with zero strict compiler warnings/errors and all nine source gates PASS. These are prior validated-build results, not new runs for this update. Detailed source/audit/build evidence is preserved in the historical wildlife-reset delivery below.
+
+Documentation verification: `git diff --check` PASS; **732 local Markdown links checked / zero new link or anchor errors**. Two pre-existing repository-root links remain unchanged inside the preserved historical PR handoff. All prior validation delivery bodies, custody/removal audit bodies, readiness/spike audit bodies and Phase 3.1/3.2A acceptance appendices are preserved byte-for-byte. The diff from `4d6ca01` contains **13 Markdown documentation files only**; source/tests and DLL bytes, hash, stamp and informational version remain unchanged. No current-status contradiction or new runtime blocker was found.
+
+### Final owner runtime matrix
+
+Counts below are **PASS / FAIL / GAP** as reported by the owner. Checkpoint and verifier counts are separate reports and are not combined into a fabricated suite total. Each save/load case used an actual RimWorld SAVE → main menu → LOAD; read-only 030V and 032V ran **WITHOUT ARMING**.
+
+| Scenario / checkpoint | Owner result | Proven scope |
+|---|---|---|
+| QA Lab Create | **PASS** | Explicit 60×60 dedicated TestSite creation. |
+| QA Lab Reset / non-humanlike disposal | **PASS** | All 3,600 cells Concrete; 505 generated Things and 4 disposable non-humanlike Pawns removed; 0 protected Pawns removed; deterministic lab validated. Wildlife no longer blocked initialization. |
+| 026 final-lab sanity | **54 / 0 / 0** | Ordinary small-crew visitor path on the final lab. |
+| 027 | **128 / 0 / 0** | Same-Pawn crew continuity and role persistence. |
+| 028 | **75 / 0 / 0** | Large-company ordinary presence without discretionary promotion. |
+| 029 corrected custody/promote | **46 / 0 / 0** | Sustained real prisoner custody, then terminal same-Pawn promotion. |
+| 030A SAVE checkpoint | **54 / 0 / 0** | Released/concretized group checkpoint. |
+| 030A SAVE/LOAD → 030V | **42 / 0 / 0** | Durable **terminal** save/load truth; Episode already complete before verification. |
+| 030B Pending-arrest SAVE checkpoint | **36 / 0 / 0** | Active anonymous-arrest checkpoint with Pending peers. |
+| 030B SAVE/LOAD → 030V | **38 / 0 / 0** | Actual loaded active Pending state; 3 named + 3 anonymous subjects, **6/6** covered; continued into truthful same-Pawn promotion. |
+| Later terminal 030V | **29 / 0 / 0** | Additional terminal confirmation after 030B continuation; **not another independent save/load case**. |
+| 031 | **71 / 0 / 0** | Existing simple organizational succession scenario only. |
+| 032A ~150 retained build/run | **1,936 / 0 / 0** | Retained identities around 150 in the owner's running game. |
+| 032A SAVE/LOAD → 032V | **10 / 0 / 0** | 150 bound/healthy named subjects; **150/150** retained coverage; 0 anonymous Episode subjects; 0 physical findings; arm cleared. |
+| 032B ~300 retained build/run | **1,936 / 0 / 0** | Retained identities around 300 in the owner's running game. |
+| 032B SAVE/LOAD → 032V | **10 / 0 / 0** | 300 bound/healthy named subjects; **300/300** retained coverage; 0 anonymous Episode subjects; 0 physical findings; arm cleared. |
+
+There is **no pending formal 032V rerun**. Humanlike/Network-bound reset protection remains unchanged; the successful live reset reported zero protected Pawns removed. Existing headless protected-refusal coverage remains part of the frozen validation, rather than being reclassified as a new adversarial live reset test.
+
+### Custody, load and retention interpretation
+
+**029:** the exact anonymous Rifleman was the same owned Pawn relocated once into the validated real prison, arrested once through vanilla `CapturedBy(Faction.OfPlayer)` and assigned a legitimate real prisoner bed. Actual prisoner custody survived both normal WatchPeriod intervals, approximately **500+ ordinary game ticks**, while peers remained Pending. No KnownCharacter was created early; the temporary Episode reservation remained continuous. Terminal batch promoted the exact same Pawn and ThingID, preserving mission role, organization/provenance and truthful custody. There was no duplicate human representation, reservation gap, binding integrity finding or Episode integrity finding.
+
+**030A:** the loaded Episode was already complete before 030V began. The verifier confirmed arm clearing, durable Pawn ThingIDs, Character identities, roles, live bindings, Returned/Stored terminal state and retained coverage, with no phantom abstract or WorldPawn duplicates and zero binding/Episode findings. This proves **durable terminal save/load truth**, not an instantaneous active/pre-commit load frame or a committed-before-RELEASE checkpoint.
+
+**030B:** the real loaded save still contained an incomplete Pending Episode: **3 named bound + 3 anonymous Episode-bound = 6/6 durable physical subjects covered**, zero binding/Episode findings. While incomplete, anonymous PawnRefs resolved to the same Pawns, temporary reservations persisted, anonymous peers had no dummy KnownCharacters and the captured identity bridge survived load. Ordinary production/vanilla continuation promoted the exact captured Pawn to retained named identity, preserving ThingID/live Pawn/role/organization/provenance, vanilla prisoner truth and custody/authority. Ordinary anonymous peers returned to abstract stock exactly once, without phantom Pawn copies or duplicate identity. The later **29/0/0** terminal verifier confirms that same continuation. This closes the current **active Pending load gate represented by 030B**.
+
+**031:** **71/0/0** accepts the implemented simple leader-death/Medic-return succession path. It does not establish the full mixed-fate, morale, operation or long-held-aging matrix, nor supply an additional independent 031 save/load result.
+
+**032:** fresh Test 6 supplied both actual retention loads and fully passing unarmed 032V reports. These timings are **owner-environment observations**, not universal benchmarks, Unity TPS measurements, full save sizes or load elapsed times:
+
+| Owner probe | Observed time |
+|---|---|
+| 150 retained, after LOAD: 15,000 reservation lookups | approximately **0.542 ms** |
+| 300 retained, before SAVE: registry rebuild | approximately **0.118 ms** |
+| 300 retained, before SAVE: 30,000 reservation lookups | approximately **1.216 ms** |
+| 300 retained, after LOAD: 30,000 reservation lookups | approximately **1.030 ms** |
+
+### Chronology, superseded attempts and incidental observations
+
+The earlier wilderness-edge **029 escape/FAIL** and later automatic-provisioning/debris refusal **before Plan/materialization** remain historical below. The final dedicated-lab **029 46/0/0** supersedes their outstanding custody/setup gates without rewriting those failures. Earlier 026–028 passes remain historical; the final-lab runs above are the current accepted results.
+
+Historical **Test 4** read-only verifier attempts were **030V 37/1/0** and **032V 9/1/0**. In each, the sole failure was the physical-arm-cleared assertion because the owner manually pressed ARM after LOAD and before the read-only verifier. These are **owner workflow/protocol errors**, not persistence, lifecycle, registry, binding, save-corruption or production defects. Fresh **Test 5** supersedes the 030V failure; fresh **Test 6** supersedes the 032V failure. The historical attempts remain recorded here.
+
+During Test 6 heavy-retention loads, general Kernel validation reported approximately **25 validation findings (25 repaired)** alongside Spatial contractor anchoring. Afterwards, retained coverage was complete (**150/150** or **300/300**), physical integrity findings were zero and 032V passed. The runtime record does not establish the exact category or root cause of those general Kernel repairs; adjacent Spatial messages do not establish attribution. No source correction or physical identity/registry defect is inferred.
+
+Test 4 also contained one isolated **`InvalidOperationException: Stack empty`**, with frames involving `ThingOwnerUtility.GetAllThingsRecursively`, Gravship utility, `Map.IsPlayerHome`, `ForbidUtility` and path-grid/Unity job execution. No The Network frame appeared; subsequent Network validation remained healthy. Record this as an **isolated vanilla/Odyssey-side anomaly observed; not attributable to PR #13 on current evidence and not reproduced in the fresh validation runs**. No root cause is claimed and it is not a current Phase 3.2B blocker on this evidence.
+
+### Remaining scope and independent audit
+
+The implemented runtime slice now has owner evidence for dedicated disposable setup, bounded role-correct group materialization, same-Pawn visit continuity, anonymous sustained custody and terminal promotion, active Pending and terminal save/load, simple succession and retained coverage around 150/300. **S11 FAIL / rescue STOPPED; R-50 OPEN; O-20 LOCKED; S21/S26/S27 PARTIAL** remain. Transient capture→escape-before-terminal and full 3.2C are deferred; 3.3 and Phase 4 remain unimplemented. Genuine separately gated player-visible-map eligibility, cap-full/above-six runtime demonstration, committed-before-RELEASE saves, broader S26/S27 probes and full game-save/TPS/load measurements are not closed by this suite. No future physical procurement/handoff or player-contractor phase is claimed complete.
+
+No blocker is established by the supplied final owner runtime record before starting the independent final audit. That audit is **pending**; this documentation update does not assume merge readiness or change PR draft state.
+
+**PR #13 PHASE 3.2B OWNER RUNTIME VALIDATION COMPLETE — CREATE / RESET / 026–032 INCLUDING 030 AND 032 SAVE-LOAD PASS — INDEPENDENT FINAL AUDIT NEXT**
+
+**DO NOT MERGE YET.**
+
+> **Historical deliveries follow.** Every delivery body below is preserved from pre-update HEAD `4d6ca01`. Former “current owner review” headings, pending/rerun instructions, API-denial observations and superseded artifact hashes describe their delivery dates. Current runtime acceptance is the section above; the wildlife-reset source/DLL remain the frozen validated build.
 
 ## PR #13 QA lab wildlife reset: current owner review record
 

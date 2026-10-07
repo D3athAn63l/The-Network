@@ -1,6 +1,6 @@
 # Phase 3.2B custody QA: actual RimWorld 1.6 audit
 
-The prison audit below supported the earlier TestCompound. The current dedicated-lab reset audit extends it using the same supplied 1.6 assembly. Previous 026–028 owner PASS and the 029 escape/FAIL remain historical; generated Encounter debris later blocked automatic setup before Plan. New explicit Create/Reset/029 requires owner runtime. Neither audit changes promotion policy or claims live reset/custody success.
+The prison audit below supported the earlier TestCompound; the dedicated-lab reset and wildlife-removal audits extend it using the same supplied 1.6 assembly. These source audits remain distinct from the later [final owner runtime acceptance](PHASE32B_VALIDATION.md#pr-13-final-owner-runtime-acceptance) on source `98ddc71`: explicit Create/Reset, four disposable non-humanlike removals with zero protected removals, corrected 029 **46/0/0**, and the current 026–032/save-load suite now have owner PASS. The earlier 029 wilderness escape/FAIL and subsequent automatic-provisioning/debris refusal remain historical below. No audit-body evidence or promotion policy is rewritten; independent final audit is pending and PR #13 remains draft/open/unmerged.
 
 ## Evidence provenance
 

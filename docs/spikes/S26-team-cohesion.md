@@ -1,6 +1,6 @@
 # S26 — Team cohesion before first binding (Phase 3.2B readiness audit)
 
-> **Historical readiness/source record; verdict remains PARTIAL.** The accepted policy now has a Phase 3.2B production implementation and headless tests ([as built](../PHYSICAL_LIFECYCLE.md#appendix-m-phase-32b-as-built-groups-and-progressive-concretization), [validation](../PHASE32B_VALIDATION.md)). The audit below preserves its original source/experiment evidence; it does not establish owner runtime PASS. Actual game/mod/save-load validation remains pending.
+> **Historical readiness/source record; verdict remains PARTIAL.** The accepted policy now has a Phase 3.2B production implementation and headless tests ([as built](../PHYSICAL_LIFECYCLE.md#appendix-m-phase-32b-as-built-groups-and-progressive-concretization), [validation](../PHASE32B_VALIDATION.md)). The audit below preserves its original source/experiment evidence; it does not establish owner runtime PASS. The later [current Create/Reset and 026–032 owner runtime acceptance](../PHASE32B_VALIDATION.md#pr-13-final-owner-runtime-acceptance), including 030/032 loads, does not close S26's separate generated-crew frequency, opinion/construction and active-mod safety probes. Independent final audit remains pending.
 
 **Verdict: PARTIAL — RimWorld 1.6 source audited; pre-bind opinion has useful vanilla meaning, but generated-crew frequency, modded thought safety and after-spawn equivalence are not runtime-proven. Owner-approved 3.2B policy: BEST-EFFORT prevention by construction.**
 
