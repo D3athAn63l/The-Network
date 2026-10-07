@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using RimWorld;
 using TheNetwork.Diagnostics.RuntimePhysicalTests;
 using TheNetwork.Domain.Actors;
 using TheNetwork.Domain.Physical;
+using TheNetwork.Integration.Physical;
 using TheNetwork.Kernel;
 using Verse;
 
@@ -16,7 +18,14 @@ namespace TheNetwork.Tests
         public static void Register(List<KeyValuePair<string, Action>> tests)
         {
             tests.Add(new KeyValuePair<string, Action>("QaLab.Scope_RejectsEveryUnsafeTarget", Scope));
-            tests.Add(new KeyValuePair<string, Action>("QaLab.Reset_AnyPawnAndActiveRunRefuse", ResetState));
+            tests.Add(new KeyValuePair<string, Action>("QaLab.Reset_ProtectedCountsAndActiveRunRefuse", ResetState));
+            tests.Add(new KeyValuePair<string, Action>("QaLab.PawnPolicy_HumanlikeRegardlessOfOwnership", Humanlike));
+            tests.Add(new KeyValuePair<string, Action>("QaLab.PawnPolicy_DisposableWildlifeAndMechFacts", Disposable));
+            tests.Add(new KeyValuePair<string, Action>("QaLab.PawnPolicy_RealRecursiveCorpseCensusAndDetach", Corpses));
+            tests.Add(new KeyValuePair<string, Action>("QaLab.PawnPolicy_NonHumanlikeActiveAndIncompleteEpisodeBindings", BoundEpisode));
+            tests.Add(new KeyValuePair<string, Action>("QaLab.PawnPolicy_NonHumanlikeRetainedKnownCharacterBinding", BoundCharacter));
+            tests.Add(new KeyValuePair<string, Action>("QaLab.PawnPolicy_RegistryCoverageAndReadOnlyDiagnostics", Registry));
+            tests.Add(new KeyValuePair<string, Action>("QaLab.PawnPolicy_UnresolvedOwnershipAndBindingMismatchFailClosed", Unresolved));
             tests.Add(new KeyValuePair<string, Action>("QaLab.Reset_IncompleteMissingPawnAndUnreleasedBindingsBlock", Episodes));
             tests.Add(new KeyValuePair<string, Action>("QaLab.Reset_CompletedHistoryAndOtherMapsDoNotBlock", History));
             tests.Add(new KeyValuePair<string, Action>("QaLab.Reset_RetainedPhysicalObligationsBlock", Retained));
@@ -59,11 +68,129 @@ namespace TheNetwork.Tests
 
         private static void ResetState()
         {
-            T.Eq(null, QaLabRules.ResetStateRefusal(false, true, 0), "only proven zero Pawns permits reset");
-            foreach (int count in new[] { -1, 1, 2, 100, int.MaxValue })
-                T.Check(QaLabRules.ResetStateRefusal(false, true, count) != null, "every positive or unknown Pawn census refuses: " + count);
-            T.Check(QaLabRules.ResetStateRefusal(true, true, 0) != null, "executing physical run blocks reset");
-            T.Check(QaLabRules.ResetStateRefusal(false, false, 0) != null, "unresolved ownership cannot authorize a reset");
+            T.Eq(null, QaLabRules.ResetStateRefusal(false, true, 0, 0, 0), "empty map permits reset");
+            foreach (int count in new[] { 1, 2, 100, int.MaxValue })
+            {
+                T.Check(QaLabRules.ResetStateRefusal(false, true, count, 0, 4) != null, "humanlike count refuses even with disposable Pawns: " + count);
+                T.Check(QaLabRules.ResetStateRefusal(false, true, 0, count, 4) != null, "Network-bound count refuses regardless of race: " + count);
+                T.Eq(null, QaLabRules.ResetStateRefusal(false, true, 0, 0, count), "disposable count alone permits reset: " + count);
+            }
+            T.Check(QaLabRules.ResetStateRefusal(false, true, -1, 0, 0) != null
+                && QaLabRules.ResetStateRefusal(false, true, 0, -1, 0) != null
+                && QaLabRules.ResetStateRefusal(false, true, 0, 0, -1) != null, "unknown census fails closed");
+            T.Check(QaLabRules.ResetStateRefusal(true, true, 0, 0, 4) != null, "executing physical run blocks even disposable reset");
+            T.Check(QaLabRules.ResetStateRefusal(false, false, 0, 0, 4) != null, "unresolved ownership cannot authorize a reset");
+        }
+
+        private static Pawn Pawn(bool humanlike, int id = 47001)
+        {
+            ThingDef def = Phase32bReservationTests.Shell<ThingDef>();
+            def.defName = humanlike ? "Human" : "DisposableAnimal";
+            def.stackLimit = 1;
+            def.race = new RaceProperties { intelligence = humanlike ? Intelligence.Humanlike : Intelligence.Animal };
+            return new Pawn { def = def, thingIDNumber = id };
+        }
+
+        private static void Humanlike()
+        {
+            Pawn human = Pawn(true);
+            T.Check(human.RaceProps.Humanlike && QaLabRules.PawnBlocksReset(human.RaceProps.Humanlike, false), "actual vanilla Humanlike classification protects an unbound human");
+            T.Check(QaLabRules.PawnBlocksReset(true, true), "a bound human remains protected");
+            T.Check(QaLabRules.ResetStateRefusal(false, true, 2, 0, 3).Contains("2 Humanlike Pawn(s)"), "multiple humanlike Pawns are reported before destructive reset");
+        }
+
+        private static void Disposable()
+        {
+            Pawn animal = Pawn(false);
+            T.Check(!animal.RaceProps.Humanlike && !QaLabRules.PawnBlocksReset(animal.RaceProps.Humanlike, false), "vanilla wildlife-style facts permit disposal");
+            foreach (string kind in new[] { "deer", "rat", "insect", "ordinary mechanoid", "tame animal" })
+            {
+                T.Check(!QaLabRules.PawnBlocksReset(false, false), kind + ": no unnecessary kind/faction/assignment policy");
+                T.Check(QaLabRules.PawnBlocksReset(false, true), kind + ": Network ownership overrides non-humanlike race");
+            }
+            TestNet n = new TestNet(9971);
+            RetainedPawnRegistry registry = new RetainedPawnRegistry(n.ctx); registry.Rebuild();
+            T.Check(!QaLabRules.NetworkOwnsPawn(n.ctx, registry, animal), "unrelated animal has no durable/registry owner");
+            T.Eq(null, QaLabRules.ResetStateRefusal(false, true, 0, 0, 5), "several disposable Pawns allow reset");
+        }
+
+        private static void Corpses()
+        {
+            foreach (bool humanlike in new[] { true, false })
+            {
+                Pawn pawn = Pawn(humanlike);
+                Corpse corpse = new Corpse(); corpse.InnerPawn = pawn;
+                List<Thing> things = new List<Thing>();
+                ThingOwnerUtility.GetAllThingsRecursively(corpse, things, allowUnreal: true);
+                T.Check(things.Contains(pawn), "real recursive holder census includes corpse-contained Pawn");
+                T.Eq(humanlike, QaLabRules.PawnBlocksReset(pawn.RaceProps.Humanlike, false), "corpse cannot hide protected race");
+                T.Check(ReferenceEquals(corpse, pawn.ParentHolder), "read-only census preserves corpse holder");
+                if (!humanlike)
+                {
+                    T.Check(pawn.holdingOwner.Remove(pawn), "vanilla holder detaches disposable corpse Pawn before explicit discard");
+                    T.Check(corpse.InnerPawn == null && pawn.ParentHolder == null, "wrapper and Pawn no longer retain each other");
+                }
+            }
+        }
+
+        private static void BoundEpisode()
+        {
+            TestNet n = new TestNet(9972); Pawn pawn = Pawn(false);
+            PhysicalEpisode e = Episode(); e.members[0].pawn = new PawnRef { pawn = pawn, thingIdNumber = pawn.thingIDNumber };
+            n.ctx.episodes.Add(e);
+            RetainedPawnRegistry registry = new RetainedPawnRegistry(n.ctx) { pointersResolved = true }; // Deliberately empty derived indexes.
+            foreach (EpisodeState state in new[] { EpisodeState.Open, EpisodeState.Quarantined, EpisodeState.Closed })
+            {
+                e.state = state;
+                T.Check(QaLabRules.NetworkOwnsPawn(n.ctx, registry, pawn), state + ": durable incomplete Episode protects even without registry coverage");
+            }
+            e.releaseApplied = true; e.followUpApplied = true; e.publishedTick = 10;
+            T.Check(e.IsComplete && !QaLabRules.NetworkOwnsPawn(n.ctx, registry, pawn), "fully complete history alone imposes no physical obligation");
+        }
+
+        private static void BoundCharacter()
+        {
+            TestNet n = new TestNet(9973); Pawn pawn = Pawn(false);
+            KnownCharacter person = new KnownCharacter { id = new CharacterId(8), custody = CustodyState.Stored,
+                pawn = new PawnRef { pawn = pawn, thingIdNumber = pawn.thingIDNumber } };
+            n.ctx.characters.Add(person);
+            RetainedPawnRegistry registry = new RetainedPawnRegistry(n.ctx) { pointersResolved = true };
+            foreach (CustodyState custody in new[] { CustodyState.Stored, CustodyState.Deployed, CustodyState.OutOfCustody })
+            {
+                person.custody = custody;
+                T.Check(QaLabRules.NetworkOwnsPawn(n.ctx, registry, pawn) && QaLabRules.PawnBlocksReset(false, true), custody + ": retained binding protects non-humanlike Pawn independent of registry cache");
+            }
+            T.Check(ReferenceEquals(pawn, person.pawn.pawn) && person.pawn.thingIdNumber == pawn.thingIDNumber, "read-only protection preserves binding");
+        }
+
+        private static void Registry()
+        {
+            TestNet n = new TestNet(9974); Pawn pawn = Pawn(false);
+            PhysicalEpisode e = Episode(); e.members[0].pawn = new PawnRef { pawn = pawn, thingIdNumber = pawn.thingIDNumber };
+            n.ctx.episodes.Add(e);
+            RetainedPawnRegistry registry = new RetainedPawnRegistry(n.ctx); registry.Rebuild();
+            T.Eq(e.id, registry.EpisodeOf(pawn), "real M1 index reserves non-humanlike Episode Pawn");
+            long queries = registry.queries, hits = registry.hits; int rebuilds = registry.rebuilds, resolves = registry.resolves;
+            T.Check(QaLabRules.NetworkOwnsPawn(n.ctx, registry, pawn), "existing positive registry helper protects Pawn");
+            T.Check(registry.queries == queries && registry.hits == hits && registry.rebuilds == rebuilds && registry.resolves == resolves, "preflight helper never changes registry diagnostics or rebuilds");
+            T.Check(e.members[0].pawn.pawn == pawn && !e.releaseApplied && n.ctx.characters.Count == 0, "no reconciliation, release or identity creation");
+        }
+
+        private static void Unresolved()
+        {
+            TestNet n = new TestNet(9975); Pawn pawn = Pawn(false);
+            RetainedPawnRegistry registry = new RetainedPawnRegistry(n.ctx) { pointersResolved = true };
+            T.Check(QaLabRules.NetworkOwnsPawn(null, registry, pawn) && QaLabRules.NetworkOwnsPawn(n.ctx, null, pawn), "unknown stores/registry protect rather than authorize disposal");
+            registry.pointersResolved = false;
+            T.Check(QaLabRules.NetworkOwnsPawn(n.ctx, registry, pawn), "unresolved registry blocks");
+            registry.pointersResolved = true; registry.inert = true;
+            T.Check(QaLabRules.NetworkOwnsPawn(n.ctx, registry, pawn), "inert registry blocks");
+            registry.inert = false;
+            KnownCharacter person = new KnownCharacter { id = new CharacterId(8), pawn = new PawnRef { thingIdNumber = pawn.thingIDNumber } };
+            n.ctx.characters.Add(person);
+            T.Check(QaLabRules.NetworkOwnsPawn(n.ctx, registry, pawn), "durable id protects even when pointer missing");
+            person.pawn.thingIdNumber++; person.pawn.pawn = pawn;
+            T.Check(QaLabRules.NetworkOwnsPawn(n.ctx, registry, pawn), "actual pointer protects even when durable id disagrees");
         }
 
         private static PhysicalEpisode Episode(EpisodeState state = EpisodeState.Open)
@@ -149,15 +276,29 @@ namespace TheNetwork.Tests
         {
             string reset = Body(code, "public static bool InitializeOrReset("), preflight = Body(code, "private static string ResetPreflight(");
             T.Eq(1, Regex.Matches(reset, @"\.Destroy\(").Count, "sole Destroy resides inside explicit reset");
-            T.Check(reset.IndexOf("ResetPreflight(map, out contents)", StringComparison.Ordinal) < reset.IndexOf("map.roofGrid.SetRoof(", StringComparison.Ordinal)
+            T.Check(reset.Contains("ResetPreflight(map, out contents, out disposablePawns)")
+                && reset.IndexOf("ResetPreflight(map, out contents, out disposablePawns)", StringComparison.Ordinal) < reset.IndexOf("map.roofGrid.SetRoof(", StringComparison.Ordinal)
                 && reset.IndexOf("if (refusal != null)", StringComparison.Ordinal) < reset.IndexOf("map.roofGrid.SetRoof(", StringComparison.Ordinal), "all hard guards before first write");
             T.Check(reset.Contains("foreach (Thing thing in contents)") && reset.Contains("if (thing is Pawn || thing.Map != map) throw")
                 && reset.Contains("thing.Destroy(DestroyMode.Vanish);"), "only snapshotted non-Pawn exact-map Things reach Vanish");
             T.Check(preflight.Contains("ThingOwnerUtility.GetAllThingsRecursively") && preflight.Contains("allowUnreal: true")
-                && preflight.Contains("foreach (Pawn pawn in map.mapPawns.AllPawns)") && preflight.Contains("if (thing is Pawn) pawns++")
-                && preflight.Contains("ResetStateRefusal(false, true, pawns)"), "whole-map, held, corpse and directly spawned Pawn census precedes mutation");
+                && preflight.Contains("foreach (Pawn pawn in map.mapPawns.AllPawns)") && preflight.Contains("pawn.RaceProps.Humanlike")
+                && preflight.Contains("QaLabRules.NetworkOwnsPawn(runtime.Ctx, runtime.PhysicalWorld.Registry, pawn)")
+                && preflight.Contains("if (!QaLabRules.PawnBlocksReset(humanlike, networkOwned)) disposablePawns.Add(pawn);")
+                && preflight.Contains("ResetStateRefusal(false, true, humanlikeCount, networkOwnedCount, disposablePawns.Count)"),
+                "whole-map, held, corpse and directly spawned Pawn census protects race AND Network ownership before writes");
             T.Check(code.Contains("ReferenceEquals(map, TestSite.Map)") && code.Contains("TestSite.Count == 1") && code.Contains("map?.IsPlayerHome"), "exact unique non-home TestSite scope");
-            T.Check(!Regex.IsMatch(code, @"\.Discard\(|\.Kill\(|PassToWorld\(|NaturalObstacle|Filth_RubbleRock|AncientShipBeacon"), "no Pawn deletion/transfer or growing debris whitelist");
+            T.Eq(1, Regex.Matches(code, @"WorldPawns\.PassToWorld\(").Count, "sole QA lab disposal call");
+            T.Eq(1, Regex.Matches(reset, @"WorldPawns\.PassToWorld\(").Count, "Pawn disposal resides only inside explicit reset");
+            T.Eq(1, Regex.Matches(code, @"\.DeSpawn\(").Count, "no other lab Pawn movement path");
+            T.Check(reset.Contains("foreach (Pawn pawn in disposablePawns)") && reset.Contains("ScopeRefusal(map) != null || pawn.MapHeld != map")
+                && reset.Contains("QaLabRules.PawnBlocksReset(pawn.RaceProps.Humanlike, QaLabRules.NetworkOwnsPawn(runtime?.Ctx, runtime?.PhysicalWorld?.Registry, pawn))")
+                && reset.Contains("throw new InvalidOperationException(\"disposable Pawn protection/scope changed after preflight\")"),
+                "disposal rechecks exact map, vanilla race and durable/registry ownership before detaching any approved Pawn");
+            T.Check(Regex.IsMatch(reset, @"if \(pawn.Spawned\) pawn.DeSpawn\(DestroyMode.Vanish\);\s*else if \(pawn.holdingOwner == null \|\| !pawn.holdingOwner.Remove\(pawn\)\)")
+                && reset.Contains("Find.WorldPawns.PassToWorld(pawn, PawnDiscardDecideMode.Discard);")
+                && reset.Contains("if (!pawn.Discarded || Find.WorldPawns.Contains(pawn))"), "detachment then explicit Discard only, with no-world-retention postcondition");
+            T.Check(!Regex.IsMatch(code, @"\.Discard\(|\.Kill\(|NaturalObstacle|Filth_RubbleRock|AncientShipBeacon"), "no direct Pawn discard/kill or growing debris whitelist");
         }
 
         private static void Preflight()
@@ -175,11 +316,14 @@ namespace TheNetwork.Tests
                 "connected-Pawn and dryad destruction callbacks refuse before writes even when their Pawns are off map");
             T.Check(preflight.Contains("thing.TryGetComp<CompObelisk_Abductor>() != null"),
                 "linked labyrinth removal callbacks refuse before writes without removing another map");
-            T.Check(!Regex.IsMatch(preflight, @"\.Destroy\(|\.Spawn\(|SetTerrain\(|SetRoof\(|SetFaction\("), "entire preflight is read-only");
+            T.Check(!Regex.IsMatch(preflight, @"\.Destroy\(|\.Spawn\(|\.DeSpawn\(|\.Remove\(|PassToWorld\(|SetTerrain\(|SetRoof\(|SetFaction\("), "entire preflight is read-only");
+            string rules = Source("QaLabRules.cs");
+            T.Check(!Regex.IsMatch(Body(rules, "public static bool NetworkOwnsPawn("), @"\.Reserves\(|\.Rebuild\(|\.ResolvePointers\(|\.Note\(|\.Reconcile\(|\.Destroy\(|PassToWorld\("), "ownership helper only reads existing state, without diagnostic mutations");
             string reset = Body(lab, "public static bool InitializeOrReset(");
             T.Check(reset.Contains("foreach (IntVec3 cell in map.AllCells) map.terrainGrid.SetTerrain(cell, Floor)")
                 && reset.Contains("foreach (IntVec3 cell in map.AllCells) map.roofGrid.SetRoof(cell, null)"), "reset normalizes every cell of only the approved map");
             T.Check(reset.Contains("Arm.Spend(Current.Game") && reset.Contains("ProvisioningRefusal()"), "every reset including repeated empty reset requires a new arm");
+            T.Check(reset.Contains("disposable non-humanlike Pawns removed; 0 protected Pawns"), "success reports useful approved Pawn counts");
         }
 
         private static void ReadOnly()

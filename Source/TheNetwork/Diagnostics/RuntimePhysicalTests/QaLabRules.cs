@@ -1,7 +1,9 @@
 using TheNetwork.Domain.Physical;
 using TheNetwork.Domain.Actors;
+using TheNetwork.Domain;
 using TheNetwork.Integration.Physical;
 using TheNetwork.Kernel;
+using Verse;
 
 namespace TheNetwork.Diagnostics.RuntimePhysicalTests
 {
@@ -20,13 +22,35 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             return null;
         }
 
-        public static string ResetStateRefusal(bool activeRun, bool ownershipReady, int pawnCount)
+        public static bool PawnBlocksReset(bool humanlike, bool networkOwned) => humanlike || networkOwned;
+
+        public static string ResetStateRefusal(bool activeRun, bool ownershipReady, int humanlikeCount, int networkOwnedCount, int disposableCount)
         {
             if (activeRun) return "a physical runtime test is executing";
             if (!ownershipReady) return "Network physical ownership is unavailable or unresolved";
-            if (pawnCount < 0) return "map Pawn census is unavailable";
-            if (pawnCount > 0) return "contains " + pawnCount + " Pawn(s). Resolve/remove test subjects before destructive reset.";
+            if (humanlikeCount < 0 || networkOwnedCount < 0 || disposableCount < 0) return "map Pawn census is unavailable";
+            if (humanlikeCount > 0 || networkOwnedCount > 0)
+                return humanlikeCount + " Humanlike Pawn(s), " + networkOwnedCount + " Network-owned Pawn(s) present. Resolve/remove protected test subjects before destructive reset.";
             return null;
+        }
+
+        /// <summary>Read-only, race-independent protection. Check both the registry and durable bindings, including mismatched pointers/ids.</summary>
+        public static bool NetworkOwnsPawn(DomainContext ctx, RetainedPawnRegistry registry, Pawn pawn)
+        {
+            if (pawn == null || ctx?.characters == null || ctx.episodes == null || registry == null || registry.inert || !registry.pointersResolved) return true;
+            if (registry.CharacterOf(pawn).IsValid || registry.EpisodeOf(pawn).IsValid) return true;
+            foreach (KnownCharacter person in ctx.characters.characters)
+                if (BindingMatches(person?.pawn, pawn)) return true;
+            foreach (PhysicalEpisode episode in ctx.episodes.episodes)
+                if (episode != null && !episode.IsComplete && episode.members != null)
+                    foreach (EpisodeMember member in episode.members)
+                        if (BindingMatches(member?.pawn, pawn)) return true;
+            return false;
+        }
+
+        private static bool BindingMatches(PawnRef binding, Pawn pawn)
+        {
+            return binding != null && (ReferenceEquals(binding.pawn, pawn) || (binding.thingIdNumber > 0 && binding.thingIdNumber == pawn.thingIDNumber));
         }
 
         public static bool RetainedBlocksReset(KnownCharacter person, int mapId, bool pawnOnMap, PhysicalEpisode linked)

@@ -164,34 +164,54 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             return null;
         }
 
-        /// <summary>Complete read-only preflight. Every spawned/contained Pawn blocks reset, including corpses and holder contents.</summary>
-        private static string ResetPreflight(Map map, out List<Thing> contents)
+        /// <summary>Complete read-only preflight. Humanlike or Network-bound Pawns block, including corpses and holder contents.</summary>
+        private static string ResetPreflight(Map map, out List<Thing> contents, out List<Pawn> disposablePawns)
         {
             contents = null;
+            disposablePawns = new List<Pawn>();
             string refusal = ScopeRefusal(map);
             if (refusal != null) return refusal;
             NetworkRuntime runtime = NetworkRuntime.Current;
             refusal = QaLabRules.ResetStateRefusal(PhysicalTestSession.IsRunning,
-                runtime != null && !runtime.Inert && runtime.Session.IsRunning && runtime.PhysicalWorld?.Registry?.pointersResolved == true, 0);
+                runtime != null && !runtime.Inert && runtime.Session.IsRunning && runtime.PhysicalWorld?.Registry?.pointersResolved == true
+                    && !runtime.PhysicalWorld.Registry.inert && Find.WorldPawns != null, 0, 0, 0);
             if (refusal != null) return refusal;
-            refusal = PlanRefusal(map) ?? ObligationRefusal(NetworkRuntime.Current.Ctx, map);
+            refusal = PlanRefusal(map);
             if (refusal != null) return refusal;
             List<Thing> all = new List<Thing>();
             ThingOwnerUtility.GetAllThingsRecursively(map, ThingRequest.ForGroup(ThingRequestGroup.Everything), all, allowUnreal: true);
-            // Include the entire cell grid too, so a Thing omitted from a lister cannot evade the zero-Pawn/scope proof.
+            // Include the entire cell grid too, so a Thing omitted from a lister cannot evade Pawn protection or scope.
             HashSet<Thing> unique = new HashSet<Thing>(all);
             foreach (IntVec3 cell in map.AllCells)
                 foreach (Thing thing in map.thingGrid.ThingsListAt(cell)) unique.Add(thing);
             foreach (Pawn pawn in map.mapPawns.AllPawns) unique.Add(pawn);
-            int pawns = 0;
-            foreach (Thing thing in unique) if (thing is Pawn) pawns++;
-            refusal = QaLabRules.ResetStateRefusal(false, true, pawns);
+            int humanlikeCount = 0, networkOwnedCount = 0;
+            foreach (Thing thing in unique)
+                if (thing is Pawn pawn)
+                {
+                    if (pawn.MapHeld != map || pawn.RaceProps == null) return "a Pawn has unresolved/outside-map ownership or race";
+                    bool humanlike = pawn.RaceProps.Humanlike;
+                    bool networkOwned = QaLabRules.NetworkOwnsPawn(runtime.Ctx, runtime.PhysicalWorld.Registry, pawn);
+                    if (humanlike) humanlikeCount++;
+                    if (networkOwned) networkOwnedCount++;
+                    if (!QaLabRules.PawnBlocksReset(humanlike, networkOwned)) disposablePawns.Add(pawn);
+                }
+            refusal = QaLabRules.ResetStateRefusal(false, true, humanlikeCount, networkOwnedCount, disposablePawns.Count);
             if (refusal != null) return "TestSite map " + map.uniqueID + " " + refusal;
+            refusal = ObligationRefusal(runtime.Ctx, map);
+            if (refusal != null) return refusal;
             contents = new List<Thing>();
             foreach (Thing thing in unique)
             {
                 if (thing == null || thing.Destroyed || thing.MapHeld != map) return "a map Thing has unresolved/outside-map ownership";
                 if (!thing.def.destroyable) return "STOP: vanilla cannot safely destroy " + thing.def.defName;
+                if (thing is Pawn pawn)
+                {
+                    if (pawn.Discarded || Find.WorldPawns.Contains(pawn) || (!pawn.Spawned && pawn.holdingOwner == null))
+                        return "STOP: disposable Pawn has inconsistent map/holder/world state";
+                    // Owner-authorized disposable save: ordinary Pawn relation, quest and assignment cleanup may affect linked entities.
+                    continue;
+                }
                 if (thing.questTags != null && thing.questTags.Count > 0) return "STOP: " + thing.def.defName + " has quest links outside disposable lab ownership";
                 if (thing is Building_Bed bed && bed.OwnersForReading.Count != 0)
                     return "a bed still has Pawn owners; reset must not change any off-map Pawn's ownership";
@@ -210,14 +230,15 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             return null;
         }
 
-        /// <summary>Only the explicit armed destructive Dev action calls this. No Pawn is ever a destruction target.</summary>
+        /// <summary>Only the explicit armed destructive Dev action calls this. Only preflight-approved non-humanlike, unbound Pawns may be discarded.</summary>
         public static bool InitializeOrReset(Map map, out string report)
         {
             string refusal = PhysicalTestSession.ProvisioningRefusal();
             List<Thing> contents = null;
+            List<Pawn> disposablePawns = null;
             try
             {
-                if (refusal == null) refusal = ResetPreflight(map, out contents);
+                if (refusal == null) refusal = ResetPreflight(map, out contents, out disposablePawns);
             }
             catch (Exception ex)
             {
@@ -231,6 +252,24 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             {
                 // Roofs first: removing supports must not cause roof collapse. All hard guards completed before this first write.
                 foreach (IntVec3 cell in map.AllCells) map.roofGrid.SetRoof(cell, null);
+                int removedPawns = 0;
+                foreach (Pawn pawn in disposablePawns)
+                {
+                    NetworkRuntime runtime = NetworkRuntime.Current;
+                    if (ScopeRefusal(map) != null || pawn.MapHeld != map || pawn.RaceProps == null
+                        || QaLabRules.PawnBlocksReset(pawn.RaceProps.Humanlike, QaLabRules.NetworkOwnsPawn(runtime?.Ctx, runtime?.PhysicalWorld?.Registry, pawn))
+                        || pawn.Discarded || Find.WorldPawns.Contains(pawn))
+                        throw new InvalidOperationException("disposable Pawn protection/scope changed after preflight");
+                    if (pawn.Spawned) pawn.DeSpawn(DestroyMode.Vanish);
+                    else if (pawn.holdingOwner == null || !pawn.holdingOwner.Remove(pawn))
+                        throw new InvalidOperationException("disposable Pawn could not be detached from its TestSite holder");
+                    // Vanilla explicit Discard guards Destroy against re-entering WorldPawns, then establishes Destroyed before Discarded.
+                    // Empty corpse/holder wrappers remain in the original non-Pawn snapshot and are vanished below, without spawning a corpse.
+                    Find.WorldPawns.PassToWorld(pawn, PawnDiscardDecideMode.Discard);
+                    if (!pawn.Discarded || Find.WorldPawns.Contains(pawn))
+                        throw new InvalidOperationException("vanilla did not discard the disposable Pawn without world retention");
+                    removedPawns++;
+                }
                 foreach (Thing thing in contents)
                 {
                     if (thing.Destroyed || !thing.Spawned) continue; // a vanilla attachment may have been removed with its parent
@@ -261,6 +300,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 if (!Validate(map, out report)) { report = "QA Lab reset did not validate: " + report; return false; }
                 report = "QA Lab initialized: world object " + map.Parent.ID + ", map " + map.uniqueID + ", " + map.Size.x + "x" + map.Size.z
                     + "; " + (map.Size.x * map.Size.z) + " Concrete cells normalized; " + contents.Count + " spawned Things selected for removal; "
+                    + removedPawns + " disposable non-humanlike Pawns removed; 0 protected Pawns; "
                     + report + "; IsPlayerHome=false, parent faction=null, 0 Pawns. Initialization is not custody runtime proof.";
                 return true;
             }

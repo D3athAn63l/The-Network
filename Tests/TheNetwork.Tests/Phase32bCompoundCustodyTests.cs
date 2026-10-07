@@ -139,7 +139,7 @@ namespace TheNetwork.Tests
             foreach (string token in new[] { "Building_Bed", "ForPrisoners", "IsPrisonCell", "ProperRoom", "TouchesMapEdge", "RoomCanBePrisonCell", "regionAndRoomUpdater" })
                 T.Check(compound.Contains(token), "compound checks audited real vanilla prison fact: " + token);
             string ensure = Body(compound, "public static bool InitializeOrReset(");
-            T.Check(ensure.Contains("ResetPreflight(map, out contents)") && ensure.Contains("PhysicalTestSession.Arm.Spend(")
+            T.Check(ensure.Contains("ResetPreflight(map, out contents, out disposablePawns)") && ensure.Contains("PhysicalTestSession.Arm.Spend(")
                 && ensure.IndexOf("ResetPreflight(", StringComparison.Ordinal) < ensure.IndexOf("map.roofGrid.SetRoof(", StringComparison.Ordinal),
                 "explicit reset proves every hard guard before its first map write");
             T.Check(ensure.Contains("foreach (Piece piece in Plan(map.Center))") && compound.Contains("ThingDefOf.Wall") && compound.Contains("ThingDefOf.Door"),
@@ -155,10 +155,13 @@ namespace TheNetwork.Tests
                 "verified real bed footprints allow vanilla PassThroughOnly walkability; free prison cells remain standable");
             T.Check(validate.Contains("!planned.Contains(cell) && cell.Standable(map)"), "only unobstructed ordinary staging cells count toward visitor capacity");
             T.Check(compound.Contains("CellRect") && compound.Contains("Pawn") && compound.Contains("Refusal("), "bounded footprint validates occupied cells before changing them");
-            T.Check(!Regex.IsMatch(compound, @"\b(?:escapeInterval|prisonBreakMtbDays|nextPrisonBreak|SetFactionDirect|DeinitAndRemoveMap|Discard)\b"), "fixture uses no escape timer, ownership spoof, world-map removal or Pawn discard to force custody");
+            T.Check(!Regex.IsMatch(compound, @"\b(?:escapeInterval|prisonBreakMtbDays|nextPrisonBreak|SetFactionDirect|DeinitAndRemoveMap)\b"), "fixture uses no escape timer, ownership spoof or world-map removal to force custody");
+            QaLabTests.AssertDestructionBoundary(compound);
             string prepare = Body(compound, "public static bool TryPreparePrisoner(");
             string claim = Body(compound, "public static bool TryClaimPrisonerBed(");
             string anonymous = Body(compound, "private static string OwnedAnonymousRefusal(");
+            T.Check(!Regex.IsMatch(validate + prepare + claim + anonymous, @"\b(?:PassToWorld|Discard|Destroy|DeSpawn)\s*\("),
+                "infrastructure validation and custody helpers gain no Pawn deletion/transfer path");
             T.Check(prepare.Contains("OwnedAnonymousRefusal(") && anonymous.Contains("PhysicalTestSession.IsActiveOwnedEpisode(") && anonymous.Contains("member.IsNamed"), "bed preparation restricts the exact active anonymous Episode visitor");
             T.Check(claim.Contains("IsPrisonerOfColony") && claim.Contains("ClaimBedIfNonMedical"), "after real capture the legitimate prisoner claims an actual prisoner bed");
             T.Check(prepare.Contains("candidate.OwnersForReading.Count != 0") && claim.IndexOf("foreach (Pawn owner in bed.OwnersForReading)", StringComparison.Ordinal) >= 0

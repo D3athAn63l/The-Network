@@ -303,9 +303,11 @@ namespace TheNetwork.Tests
                 string code = Code(File.ReadAllText(f));
                 if (Regex.IsMatch(code, @"WorldPawns\.PassToWorld\(")) callers.Add(Rel(f));
             }
-            T.Eq(2, callers.Count, "only the production adapter and 022's owned-warden discard call PassToWorld (" + string.Join(", ", callers.ToArray()) + ")");
+            T.Eq(3, callers.Count, "only the production adapter, 022's owned warden and explicit guarded QA lab reset call PassToWorld (" + string.Join(", ", callers.ToArray()) + ")");
             T.Check(callers.Exists(x => x.EndsWith("Integration/Physical/RimWorldPhysicalWorldPort.cs", StringComparison.Ordinal)) &&
-                callers.Exists(x => x.EndsWith("RuntimePhysicalTests/PhysicalCustodyScenarios.cs", StringComparison.Ordinal)), "exactly the adapter and the bounded custody test scenario");
+                callers.Exists(x => x.EndsWith("RuntimePhysicalTests/PhysicalCustodyScenarios.cs", StringComparison.Ordinal)) &&
+                callers.Exists(x => x.EndsWith("RuntimePhysicalTests/QaLab.cs", StringComparison.Ordinal)), "exactly three bounded callers; no generic scenario removal path");
+            QaLabTests.AssertDestructionBoundary(Code(Src("Diagnostics/RuntimePhysicalTests/QaLab.cs")));
             string custody = Code(Src("Diagnostics/RuntimePhysicalTests/PhysicalCustodyScenarios.cs"));
             T.Eq(1, Regex.Matches(custody, @"WorldPawns\.PassToWorld\(").Count, "the scenario has one additional call only");
             T.Check(custody.Contains("Find.WorldPawns.PassToWorld(warden, PawnDiscardDecideMode.Discard)") &&
@@ -335,7 +337,7 @@ namespace TheNetwork.Tests
                 }
                 else if (rel.EndsWith("RuntimePhysicalTests/QaLab.cs", StringComparison.Ordinal))
                 {
-                    T.Eq(0, discards.Count, "QA lab reset never discards a Pawn");
+                    T.Eq(0, discards.Count, "QA lab reset never calls Pawn.Discard directly");
                     T.Eq(1, destroys.Count, "one explicit dedicated-map reset destruction call only");
                     QaLabTests.AssertDestructionBoundary(code);
                 }
