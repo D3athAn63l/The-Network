@@ -116,7 +116,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         protected StepResult PlaceGroup(IList<RoleCapacity> required, bool synthetic)
         {
             string report;
-            Map map = TestSite.Ensure(out report);
+            Map map = TestSite.GetPrepared(out report);
             if (map == null) { v.Fail(report); return StepResult.Abort; }
             charactersBefore = ctx.characters.characters.Count;
             commitsBefore = lc.counters.commits;
@@ -535,7 +535,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             { v.Fail("arrest requires this run's anonymous placed member"); return StepResult.Abort; }
             Building_Bed bed;
             string report;
-            if (!TestCompound.TryPreparePrisoner(e, capturedMember, captive, out bed, out report))
+            if (!QaLab.TryPreparePrisoner(e, capturedMember, captive, out bed, out report))
             { v.Fail("custody fixture preparation refused: " + report); return StepResult.Abort; }
             v.Note(report);
             captureEpisode = e;
@@ -548,11 +548,11 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             arrestedTick = PhysLog.Tick;
             captureGuardActive = true;
             everyFrame = ObserveCaptureProtection;
-            if (!TestCompound.TryClaimPrisonerBed(captive, bed, out report))
+            if (!QaLab.TryClaimPrisonerBed(captive, bed, out report))
             { CaptureFacts(); FailCapture("legitimate prisoner-bed claim refused: " + report); return StepResult.Abort; }
             v.Note(report);
             if (!GuardCapture(true)) return StepResult.Abort;
-            v.Check(true, "real vanilla CapturedBy made the SAME anonymous Pawn a colony prisoner in a validated TestCompound cell with its real claimed prisoner bed");
+            v.Check(true, "real vanilla CapturedBy made the SAME anonymous Pawn a colony prisoner in a validated QaLab cell with its real claimed prisoner bed");
             return StepResult.Next;
         }
 

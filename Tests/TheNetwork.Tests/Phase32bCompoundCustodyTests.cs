@@ -24,7 +24,7 @@ namespace TheNetwork.Tests
             tests.Add(new KeyValuePair<string, Action>("Phys32b.Compound_VisitorCellsStayOutsidePrison", Visitors));
             tests.Add(new KeyValuePair<string, Action>("Phys32b.Compound_RealDoorClosesWallBoundaryAndBedsStayInside", PrisonGeometry));
             tests.Add(new KeyValuePair<string, Action>("Phys32b.Compound_ConstructionRefusesOrdinaryColonyMaps", OwnershipWiring));
-            tests.Add(new KeyValuePair<string, Action>("Phys32b.Compound_EnsureReusesValidStructuresAndVerifiesVanillaPrison", StructureWiring));
+            tests.Add(new KeyValuePair<string, Action>("Phys32b.Compound_ExplicitResetAndValidationPreserveVanillaPrison", StructureWiring));
             tests.Add(new KeyValuePair<string, Action>("Phys32b.CaptureGuard_EveryPendingPrerequisiteMustHold", PendingFacts));
             tests.Add(new KeyValuePair<string, Action>("Phys32b.CaptureGuard_PeerExitRelaxesOnlyPeerPresence", PeerBoundary));
             tests.Add(new KeyValuePair<string, Action>("Phys32b.CaptureGuard_ActualAndObservedCustodyMustAgree", CustodyAgreement));
@@ -74,44 +74,44 @@ namespace TheNetwork.Tests
         {
             T.Eq(60, TestSite.MapSize, "bounded dedicated QA map size");
             IntVec3 center = Center;
-            List<IntVec3> walls = TestCompound.WallCells(center).ToList();
-            List<IntVec3> beds = TestCompound.PrisonBedCells(center).ToList();
-            List<IntVec3> visitors = TestCompound.VisitorCells(center).ToList();
-            T.Check(walls.SequenceEqual(TestCompound.WallCells(center)) && beds.SequenceEqual(TestCompound.PrisonBedCells(center))
-                && visitors.SequenceEqual(TestCompound.VisitorCells(center)), "repeat geometry requests preserve exact coordinates and order");
+            List<IntVec3> walls = QaLab.WallCells(center).ToList();
+            List<IntVec3> beds = QaLab.PrisonBedCells(center).ToList();
+            List<IntVec3> visitors = QaLab.VisitorCells(center).ToList();
+            T.Check(walls.SequenceEqual(QaLab.WallCells(center)) && beds.SequenceEqual(QaLab.PrisonBedCells(center))
+                && visitors.SequenceEqual(QaLab.VisitorCells(center)), "repeat geometry requests preserve exact coordinates and order");
             T.Eq(walls.Count, walls.Distinct().Count(), "wall geometry contains no duplicate Thing cell");
             T.Eq(beds.Count, beds.Distinct().Count(), "bed geometry contains no duplicate Thing cell");
-            foreach (IntVec3 cell in TestCompound.PrisonFootprint(center).Concat(visitors))
+            foreach (IntVec3 cell in QaLab.PrisonFootprint(center).Concat(visitors))
                 T.Check(cell.x >= 5 && cell.z >= 5 && cell.x < TestSite.MapSize - 5 && cell.z < TestSite.MapSize - 5,
                     "compound stays inside safe map-edge margin: " + cell);
             IntVec3 shifted = center + new IntVec3(-3, 0, 2);
-            T.Check(TestCompound.WallCells(shifted).SequenceEqual(walls.Select(c => c + new IntVec3(-3, 0, 2))), "deterministic walls are relative to map center");
-            T.Check(TestCompound.PrisonBedCells(shifted).SequenceEqual(beds.Select(c => c + new IntVec3(-3, 0, 2))), "deterministic beds are relative to map center");
+            T.Check(QaLab.WallCells(shifted).SequenceEqual(walls.Select(c => c + new IntVec3(-3, 0, 2))), "deterministic walls are relative to map center");
+            T.Check(QaLab.PrisonBedCells(shifted).SequenceEqual(beds.Select(c => c + new IntVec3(-3, 0, 2))), "deterministic beds are relative to map center");
             IntVec3 olderCenter = new IntVec3(50, 0, 50);
-            foreach (IntVec3 cell in TestCompound.PrisonFootprint(olderCenter).Concat(TestCompound.VisitorCells(olderCenter)))
+            foreach (IntVec3 cell in QaLab.PrisonFootprint(olderCenter).Concat(QaLab.VisitorCells(olderCenter)))
                 T.Check(cell.x >= 5 && cell.z >= 5 && cell.x < 95 && cell.z < 95, "existing loaded 100-map geometry stays bounded without resizing: " + cell);
         }
 
         private static void Visitors()
         {
-            HashSet<IntVec3> visitors = new HashSet<IntVec3>(TestCompound.VisitorCells(Center));
-            CellRect prison = TestCompound.PrisonInterior(Center);
+            HashSet<IntVec3> visitors = new HashSet<IntVec3>(QaLab.VisitorCells(Center));
+            CellRect prison = QaLab.PrisonInterior(Center);
             T.Check(visitors.Count >= PhysicalLifecycleService.MaxMembers, "visitor area can host the full bounded eight-Pawn Episode");
             T.Check(!visitors.Any(c => prison.Contains(c)), "ordinary visitors never spawn inside prisoner interior");
-            T.Check(!visitors.Overlaps(TestCompound.WallCells(Center)) && !visitors.Contains(TestCompound.PrisonDoorCell(Center)), "visitor area is separate from prison walls and real doorway");
+            T.Check(!visitors.Overlaps(QaLab.WallCells(Center)) && !visitors.Contains(QaLab.PrisonDoorCell(Center)), "visitor area is separate from prison walls and real doorway");
             T.Check(visitors.Contains(Center), "existing center-based visitor placement has an open compound area");
         }
 
         private static void PrisonGeometry()
         {
-            IntVec3 center = Center, door = TestCompound.PrisonDoorCell(center);
-            CellRect footprint = TestCompound.PrisonFootprint(center), interior = TestCompound.PrisonInterior(center);
-            HashSet<IntVec3> walls = new HashSet<IntVec3>(TestCompound.WallCells(center));
+            IntVec3 center = Center, door = QaLab.PrisonDoorCell(center);
+            CellRect footprint = QaLab.PrisonFootprint(center), interior = QaLab.PrisonInterior(center);
+            HashSet<IntVec3> walls = new HashSet<IntVec3>(QaLab.WallCells(center));
             HashSet<IntVec3> boundary = new HashSet<IntVec3>(footprint.Where(c => !interior.Contains(c)));
             T.Check(boundary.Contains(door) && !walls.Contains(door), "one real door replaces one perimeter wall cell");
             walls.Add(door);
             T.Check(walls.SetEquals(boundary), "walls plus door exactly enclose the full deterministic prison perimeter");
-            List<IntVec3> beds = TestCompound.PrisonBedCells(center).ToList();
+            List<IntVec3> beds = QaLab.PrisonBedCells(center).ToList();
             T.Eq(2, beds.Count, "two legitimate beds support a second bounded custody fixture without evicting a captive");
             foreach (IntVec3 bed in beds)
                 T.Check(interior.Contains(bed) && interior.Contains(bed + IntVec3.North), "whole north-facing real bed fits within prison interior: " + bed);
@@ -120,34 +120,30 @@ namespace TheNetwork.Tests
 
         private static void OwnershipWiring()
         {
-            string compound = Source("Diagnostics/RuntimePhysicalTests/TestCompound.cs");
+            string compound = Source("Diagnostics/RuntimePhysicalTests/QaLab.cs");
             T.Check(compound.Contains("TestSite.IsTestMap(") && compound.Contains("TestSite.DefRefusal("), "construction accepts only the current narrow dedicated TestSite");
             T.Check(compound.Contains("IsPlayerHome") && compound.Contains("parent.Faction") && compound.Contains("typeof(MapParent)"), "compound refuses home, owned or widened parent semantics");
             string refusal;
-            T.Check(!TestCompound.Ensure(null, out refusal) && !string.IsNullOrEmpty(refusal), "unknown construction target refuses without reading or changing a game map");
-            T.Check(!TestCompound.Validate(null, out refusal) && !string.IsNullOrEmpty(refusal), "unknown validation target never invents compound validity");
-            string ensure = Body(compound, "public static bool Ensure(");
+            T.Check(!QaLab.Validate(null, out refusal) && !string.IsNullOrEmpty(refusal), "unknown validation target never invents compound validity");
+            string ensure = Body(compound, "public static bool InitializeOrReset(");
             T.Check(ensure.IndexOf("Refusal(", StringComparison.Ordinal) >= 0 && ensure.IndexOf("Refusal(", StringComparison.Ordinal) < ensure.IndexOf("GenSpawn.Spawn(", StringComparison.Ordinal), "compound checks owned scope before construction");
             T.Check(!Regex.IsMatch(compound, @"\b(?:GameComponent|WorldComponent|ExposeData|MakeWorldObject|AddHediff|PawnGenerator|NextId|CapturedBy)\s*\("), "compound introduces no parallel persistent world object or generated warden and cannot arrest by itself");
             string world = Source("Diagnostics/RuntimePhysicalTests/PhysicalTestWorld.cs");
-            string site = Body(world, "public static Map Ensure(");
-            T.Check(site.Contains("TestCompound.Ensure(") && site.Contains("new IntVec3(MapSize, 1, MapSize)"), "ordinary TestSite creation uses the bounded map and shared compound");
+            string site = Body(world, "public static Map Create(");
+            T.Check(!site.Contains("QaLab.InitializeOrReset(") && site.Contains("new IntVec3(MapSize, 1, MapSize)"), "TestSite creation makes only the bounded raw map");
         }
 
         private static void StructureWiring()
         {
-            string compound = Source("Diagnostics/RuntimePhysicalTests/TestCompound.cs");
+            string compound = Source("Diagnostics/RuntimePhysicalTests/QaLab.cs");
             foreach (string token in new[] { "Building_Bed", "ForPrisoners", "IsPrisonCell", "ProperRoom", "TouchesMapEdge", "RoomCanBePrisonCell", "regionAndRoomUpdater" })
                 T.Check(compound.Contains(token), "compound checks audited real vanilla prison fact: " + token);
-            string ensure = Body(compound, "public static bool Ensure(");
-            T.Check(ensure.Contains("Thing existing = Existing(map, piece)") && compound.Contains("ThingDefOf.Wall") && compound.Contains("ThingDefOf.Door"), "existing walls and doors are identified before creating ordinary Things");
-            T.Check(ensure.IndexOf("if (Validate(map, out report)) return true;", StringComparison.Ordinal) >= 0
-                && ensure.IndexOf("if (Validate(map, out report)) return true;", StringComparison.Ordinal) < ensure.IndexOf("foreach (IntVec3 cell in ConstructionCells(map.Center))", StringComparison.Ordinal),
-                "valid existing compound returns before clearing, spawning or changing bed owners");
-            int preflight = ensure.IndexOf("if (thing is Pawn)", StringComparison.Ordinal), write = ensure.IndexOf("map.roofGrid.SetRoof(", StringComparison.Ordinal);
-            T.Check(preflight >= 0 && write > preflight && ensure.IndexOf("if (!NaturalObstacle(thing))", StringComparison.Ordinal) < write,
-                "whole bounded footprint refuses Pawns and foreign Things before the first terrain, roof or destruction write");
-            T.Check(ensure.Contains("if (thing == null)") && ensure.Contains("Thing thing = Existing(map, piece);"), "valid existing structures are reused instead of duplicated or replaced");
+            string ensure = Body(compound, "public static bool InitializeOrReset(");
+            T.Check(ensure.Contains("ResetPreflight(map, out contents)") && ensure.Contains("PhysicalTestSession.Arm.Spend(")
+                && ensure.IndexOf("ResetPreflight(", StringComparison.Ordinal) < ensure.IndexOf("map.roofGrid.SetRoof(", StringComparison.Ordinal),
+                "explicit reset proves every hard guard before its first map write");
+            T.Check(ensure.Contains("foreach (Piece piece in Plan(map.Center))") && compound.Contains("ThingDefOf.Wall") && compound.Contains("ThingDefOf.Door"),
+                "only explicit reset builds deterministic real walls and doors");
             string matches = Body(compound, "private static bool Matches(");
             T.Check(matches.Contains("(thing is Building_Door || thing.Rotation == Rot4.North)")
                 && matches.Contains("thing.def == piece.def") && matches.Contains("thing.Stuff == piece.stuff")
@@ -157,8 +153,7 @@ namespace TheNetwork.Tests
             T.Check(validate.Contains("IsPlannedBedCell(map.Center, cell) ? cell.Walkable(map) : cell.Standable(map)")
                 && validate.IndexOf("if (Existing(map, piece) == null)", StringComparison.Ordinal) < validate.IndexOf("IsPlannedBedCell(", StringComparison.Ordinal),
                 "verified real bed footprints allow vanilla PassThroughOnly walkability; free prison cells remain standable");
-            string courtyard = Body(validate, "foreach (IntVec3 cell in VisitorCells(map.Center))");
-            T.Check(courtyard.Contains("!cell.Standable(map)"), "bed passability exception never weakens ordinary visitor cells");
+            T.Check(validate.Contains("!planned.Contains(cell) && cell.Standable(map)"), "only unobstructed ordinary staging cells count toward visitor capacity");
             T.Check(compound.Contains("CellRect") && compound.Contains("Pawn") && compound.Contains("Refusal("), "bounded footprint validates occupied cells before changing them");
             T.Check(!Regex.IsMatch(compound, @"\b(?:escapeInterval|prisonBreakMtbDays|nextPrisonBreak|SetFactionDirect|DeinitAndRemoveMap|Discard)\b"), "fixture uses no escape timer, ownership spoof, world-map removal or Pawn discard to force custody");
             string prepare = Body(compound, "public static bool TryPreparePrisoner(");

@@ -333,23 +333,11 @@ namespace TheNetwork.Tests
                     T.Eq(1, destroys.Count, "the tier destroys one thing: its own test-site world object");
                     T.Check(code.Contains("parent.Destroy();"), "the test site");
                 }
-                else if (rel.EndsWith("RuntimePhysicalTests/TestCompound.cs", StringComparison.Ordinal))
+                else if (rel.EndsWith("RuntimePhysicalTests/QaLab.cs", StringComparison.Ordinal))
                 {
-                    T.Eq(0, discards.Count, "compound never discards a Pawn");
-                    T.Eq(1, destroys.Count, "compound clears natural obstacles in one bounded place only");
-                    T.Check(code.Contains("foreach (Thing thing in natural) thing.Destroy(DestroyMode.Vanish);"), "only the preflighted natural-obstacle set is destroyed");
-                    T.Eq(1, Regex.Matches(code, @"natural\.Add\(").Count, "the obstacle set has one guarded admission point");
-                    T.Check(Regex.IsMatch(code, @"if \(thing is Pawn\)\s*\{[^}]*return false;")
-                        && Regex.IsMatch(code, @"if \(!NaturalObstacle\(thing\)\)\s*\{[^}]*return false;")
-                        && Regex.IsMatch(code, @"if \(!IsConstructionCell\(map.Center, occupied\)\)\s*\{[^}]*return false;[^}]*\}\s*natural.Add\(thing\);"),
-                        "every Pawn, foreign Thing and footprint-crossing obstacle is refused before set admission");
-                    T.Check(code.Contains("thing == null || thing is Pawn || thing.Faction != null")
-                        && code.Contains("thing.questTags.Count > 0") && code.Contains("ThingCategory.Plant")
-                        && code.Contains("thing.def.building?.isNaturalRock == true") && code.Contains("ThingCategoryDefOf.StoneChunks"),
-                        "eligible obstacles are unowned, untagged plants, natural rocks and chunks, never Pawns");
-                    T.Check(code.IndexOf("natural.Add(thing);", StringComparison.Ordinal) < code.IndexOf("thing.Destroy(DestroyMode.Vanish)", StringComparison.Ordinal)
-                        && code.Contains("!TestSite.IsTestMap(map)") && code.Contains("!ReferenceEquals(map, TestSite.Map)")
-                        && code.Contains("map.IsPlayerHome"), "complete preflight precedes clearing and other maps/home maps are refused");
+                    T.Eq(0, discards.Count, "QA lab reset never discards a Pawn");
+                    T.Eq(1, destroys.Count, "one explicit dedicated-map reset destruction call only");
+                    QaLabTests.AssertDestructionBoundary(code);
                 }
                 else
                 {

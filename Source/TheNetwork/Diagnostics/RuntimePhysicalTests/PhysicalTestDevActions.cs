@@ -22,6 +22,18 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             Find.WindowStack.Add(new Dialog_ArmPhysicalTests());
         }
 
+        [DebugAction(Cat, "PHYX — Create 60×60 Test Map [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        public static void CreateTestMap()
+        {
+            PhysicalTestSession.CreateTestMap();
+        }
+
+        [DebugAction(Cat, "PHYX — Initialize / Reset QA Lab [DESTRUCTIVE] [armed]", allowedGameStates = AllowedGameStates.Playing)]
+        public static void ResetQaLab()
+        {
+            PhysicalTestSession.ResetQaLab();
+        }
+
         [DebugAction(Cat, "PHYX — Show status (read-only)", allowedGameStates = AllowedGameStates.Playing)]
         public static void Status()
         {
