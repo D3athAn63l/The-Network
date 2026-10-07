@@ -195,6 +195,20 @@ namespace TheNetwork.Domain.Physical
         void StripEpisodeTag(PawnRef pawn, EpisodeId episode);
     }
 
+    /// <summary>Optional group adapter boundary. Durable Episode bindings precede reservation and placement.</summary>
+    public interface IGroupPhysicalWorldPort
+    {
+        void EpisodeBindingChanged(PhysicalEpisode episode, EpisodeMember member);
+        bool IsPlayerVisiblePlacement(PhysicalEpisode episode, EpisodeMember member);
+        void EpisodeReleased(PhysicalEpisode episode);
+    }
+
+    /// <summary>Optional terminal-only same-Pawn identity evidence. Reading facts never creates a character.</summary>
+    public interface IPhysicalPromotionPort
+    {
+        PhysicalPromotionFacts ReadPromotionFacts(PhysicalEpisode episode, EpisodeMember member);
+    }
+
     /// <summary>Thrown by the fail-closed production port: something asked Phase 3.0 production code for real physical work.</summary>
     public sealed class PhysicalWorldUnavailableException : InvalidOperationException
     {

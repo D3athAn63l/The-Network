@@ -133,6 +133,21 @@ namespace TheNetwork.Tests
             Phase31QaPolicyTests.Register(tests);
             Phase31FinalTests.Register(tests);
             Phase32aCustodyTests.Register(tests);
+            Phase32bCompositionTests.Register(tests);
+            Phase32bReservationTests.Register(tests);
+            Phase32bGroupTests.Register(tests);
+            Phase32bPromotionTests.Register(tests);
+            Phase32bGroupPromotionTests.Register(tests);
+            Phase32bEvidenceTests.Register(tests);
+            Phase32bRetentionScaleTests.Register(tests);
+            Phase32bBoundedEpisodeTests.Register(tests);
+            Phase32bRuntimeQaTests.Register(tests);
+            Phase32bCustomPawnNameTests.Register(tests);
+            Phase32bDetachedCleanupTests.Register(tests);
+            Phase32bVeteranShareTests.Register(tests);
+            Phase32bRematerializationDwellTests.Register(tests);
+            Phase32bCompoundCustodyTests.Register(tests);
+            QaLabTests.Register(tests);
             EnslavementCorrectionTests.Register(tests);
             StartupTests.Register(tests);
 

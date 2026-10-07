@@ -106,7 +106,8 @@ namespace TheNetwork
                 }
             }
             // LOAD STAGE 2 of the retained-pawn registry. PostLoadInit runs inside Scribe.loader.FinalizeLoading, AFTER every cross-reference
-            // (every PawnRef.pawn) is resolved and BEFORE the first tick; FinalizeInit (stage 1) runs before either, when no pointer exists.
+            // (every named and active-Episode PawnRef.pawn) is resolved and BEFORE the first tick; FinalizeInit (stage 1) runs before either,
+            // when no pointer exists. Temporary anonymous protection uses this same M1 bridge and quest, never a separate person store.
             if (Scribe.mode == LoadSaveMode.PostLoadInit) ResolveRetentionAfterLoad();
         }
 
@@ -241,6 +242,7 @@ namespace TheNetwork
             int contractors = ctx.Contractors.InstantiateFromSnapshot();
             // Every embodied individual's operational role is stored from its origin facts at creation (a Fixer has no ContractorProfile).
             ctx.Contractors.EnsureSoloRoles();
+            ctx.Contractors.EnsureOrganizationRoles();
             ctx.Spatial.InitializeAll();
 
             ScheduleSweeps();
@@ -283,6 +285,8 @@ namespace TheNetwork
             // now, from origin facts only, so no first materialization ever starts with it unknown (idempotent; no save version).
             int roles = ctx.Contractors.EnsureSoloRoles();
             if (roles > 0) NetLog.Info(LogCategory.Actors, "Stored " + roles + " operational role(s) for individuals created before the role was populated (derived from origin facts only).");
+            int organizationRoles = ctx.Contractors.EnsureOrganizationRoles();
+            if (organizationRoles > 0) NetLog.Info(LogCategory.Actors, "Stored " + organizationRoles + " organization operational role(s) from immutable origin facts (existing roles unchanged).");
             // A save from before Phase 2.5 (or a contractor made before world data existed): anchor them now.
             int anchored = ctx.Spatial.InitializeAll();
             if (anchored > 0) NetLog.Info(LogCategory.Spatial, "Anchored " + anchored + " contractors in the world (hidden spatial state).");

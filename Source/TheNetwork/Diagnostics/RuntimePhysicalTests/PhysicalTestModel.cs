@@ -24,6 +24,12 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         public const string Label010A = "010A SAVE — visitor spawned [armed]";
         public const string Label010B = "010B SAVE — post-map [armed]";
         public const string Label010V = "010V VERIFY — loaded save";
+        public const string Label030A = "030A SAVE — concretized group [armed]";
+        public const string Label030B = "030B SAVE — anonymous arrest Pending [armed]";
+        public const string Label030V = "030V VERIFY — loaded group (read-only)";
+        public const string Label032A = "032A BUILD — 150 retained [armed]";
+        public const string Label032B = "032B BUILD — 300 retained [armed]";
+        public const string Label032V = "032V OBSERVE — retained load (read-only)";
 
         /// <summary>Every entity the suite itself creates (disposable pawns, fixture factions) carries this tag plus the run id.</summary>
         public const string TestTagPrefix = "TheNetwork.Test.";
@@ -105,8 +111,8 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
     }
 
     /// <summary>
-    /// The scenario table (§ 21.2): the 3.1 ids, and the Phase 3.2A custody ids (RT-PHYX-020 … 025, S21). RT-PHYX-013/014 are 3.2B (groups) and
-    /// are deliberately absent. RT-PHYX-009 is RETIRED: Phase 3.2A supports an arrest as held custody, so "an arrest quarantines" is no longer
+    /// The scenario table (§ 21.2): 3.1, 3.2A custody (020–025), and 3.2B groups (026–032). The old suggested 013/014 remain absent;
+    /// implemented stable IDs are appended. RT-PHYX-009 is RETIRED: Phase 3.2A supports an arrest as held custody, so "an arrest quarantines" is no longer
     /// production behaviour; the arrest is RT-PHYX-020.
     /// </summary>
     public static class PhysicalScenarioTable
@@ -133,7 +139,14 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             new PhysicalScenarioInfo { id = "RT-PHYX-022", name = "Enslavement: held as a slave", solo = SoloNeed.Fresh, slice = "3.2A (S21)" },
             new PhysicalScenarioInfo { id = "RT-PHYX-023", name = "Kidnapped, then recruited by the captor", solo = SoloNeed.Fresh, slice = "3.2A (S21)" },
             new PhysicalScenarioInfo { id = "RT-PHYX-024", name = "Death while held", solo = SoloNeed.Fresh, slice = "3.2A (S21)" },
-            new PhysicalScenarioInfo { id = "RT-PHYX-025", name = "Held people after save/load", solo = SoloNeed.None, armed = false, slice = "3.2A (S21, S24)" }
+            new PhysicalScenarioInfo { id = "RT-PHYX-025", name = "Held people after save/load", solo = SoloNeed.None, armed = false, slice = "3.2A (S21, S24)" },
+            new PhysicalScenarioInfo { id = "RT-PHYX-026", name = "Small crew first visit", solo = SoloNeed.None, slice = "3.2B (synthetic P0)" },
+            new PhysicalScenarioInfo { id = "RT-PHYX-027", name = "Small crew same-pawn second visit", solo = SoloNeed.None, slice = "3.2B (identity)" },
+            new PhysicalScenarioInfo { id = "RT-PHYX-028", name = "Large company ordinary presence", solo = SoloNeed.None, slice = "3.2B (synthetic P0)" },
+            new PhysicalScenarioInfo { id = "RT-PHYX-029", name = "Anonymous arrest and atomic promotion", solo = SoloNeed.None, slice = "3.2B (S1)" },
+            new PhysicalScenarioInfo { id = "RT-PHYX-030", name = "Group save/load checkpoints", solo = SoloNeed.None, slice = "3.2B (S24)" },
+            new PhysicalScenarioInfo { id = "RT-PHYX-031", name = "Medic organizational succession", solo = SoloNeed.None, slice = "3.2B (role identity)" },
+            new PhysicalScenarioInfo { id = "RT-PHYX-032", name = "Retention observation", solo = SoloNeed.None, slice = "3.2B (150/300)" }
         };
 
         public static PhysicalScenarioInfo Get(string id)

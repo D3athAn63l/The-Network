@@ -407,11 +407,16 @@ namespace TheNetwork.Domain.Contractors
             return CareerPolicy.OperatingReserve(a != null && a.Has<OrganizationProfile>(), ContractorService.Headcount(a));
         }
 
+        public static int OperatingReserve(NetworkActor a, CharacterStore characters)
+        {
+            return CareerPolicy.OperatingReserve(a != null && a.Has<OrganizationProfile>(), ContractorService.Headcount(a, characters));
+        }
+
         private float RecentLossShare(NetworkActor a)
         {
             ActorRecordSummary summary = ctx.summaries?.Get(a.id);
             if (summary == null) return 0f;
-            return Math.Min(1f, summary.Recent("casualties.taken", ctx.Now) / Math.Max(1, ContractorService.Headcount(a)));
+            return Math.Min(1f, summary.Recent("casualties.taken", ctx.Now) / Math.Max(1, ContractorService.Headcount(a, ctx.characters)));
         }
 
         /// <summary>
@@ -432,10 +437,10 @@ namespace TheNetwork.Domain.Contractors
             {
                 return CareerNeed.Recovery;
             }
-            if (sim.funds < OperatingReserve(a)) return CareerNeed.Capital;
+            if (sim.funds < OperatingReserve(a, ctx.characters)) return CareerNeed.Capital;
             int supported = Math.Max(CareerPolicy.TierSupportedByFame(fame), CareerPolicy.TierSupportedByExperience(exp));
             if (sim.equipment.tier < supported) return CareerNeed.Equipment;
-            if (org != null && ContractorService.Headcount(a) < org.capacity * CareerPolicy.ExpansionBelowCapacityShare && d.ambition + d.professionalism >= CareerPolicy.ExpansionDrive) return CareerNeed.Expansion;
+            if (org != null && ContractorService.Headcount(a, ctx.characters) < org.capacity * CareerPolicy.ExpansionBelowCapacityShare && d.ambition + d.professionalism >= CareerPolicy.ExpansionDrive) return CareerNeed.Expansion;
             if (fame >= FameBand.Established && d.ambition >= CareerPolicy.AmbitionForMobility && sim.mobility.rangeBand < Band.High) return CareerNeed.Mobility;
             if ((int)exp < (int)fame) return CareerNeed.Mastery;
             if (fame >= FameBand.Famous && d.ambition >= CareerPolicy.AmbitionForPrestige) return CareerNeed.Prestige;
@@ -453,7 +458,7 @@ namespace TheNetwork.Domain.Contractors
             if (sim == null || !ContractorService.IsNpcContractor(a)) return tags;
             ExperienceBand exp = ContractorService.Experience(a);
             if (sim.equipment.tier >= CareerPolicy.WellEquippedTier) tags.Add(CareerTags.WellEquipped);
-            if (sim.funds >= OperatingReserve(a) * CareerPolicy.WealthyReserveMultiple) tags.Add(CareerTags.Wealthy);
+            if (sim.funds >= OperatingReserve(a, ctx.characters) * CareerPolicy.WealthyReserveMultiple) tags.Add(CareerTags.Wealthy);
             if (exp >= ExperienceBand.Elite && sim.equipment.tier >= CareerPolicy.EliteCombatMinTier && sim.equipment.condition >= CareerPolicy.EliteCombatMinCondition) tags.Add(CareerTags.EliteCombat);
             if (sim.career.Resolved >= CareerPolicy.BattleTestedJobs) tags.Add(CareerTags.BattleTested);
             if (sim.mobility.rangeBand >= Band.High) tags.Add(CareerTags.LongRange);
@@ -489,7 +494,7 @@ namespace TheNetwork.Domain.Contractors
             int last = sim.career.lastAdvancementTick;
             if (last >= 0 && ctx.Now - last < CareerPolicy.AdvancementCooldownTicks) return AdvancementBlock.Cooldown;
             if (a.reputation.fame < CareerPolicy.RequiredFame(tier + 1)) return AdvancementBlock.NeedsReputation;
-            reserve = OperatingReserve(a);
+            reserve = OperatingReserve(a, ctx.characters);
             if ((long)sim.funds < (long)cost + reserve) return AdvancementBlock.NeedsFunds;
             // A contractor that is hurt, or whose kit is wrecked, mends first: no luxury purchase while recovering.
             if (CurrentNeed(a) == CareerNeed.Recovery) return AdvancementBlock.Recovering;
@@ -627,7 +632,7 @@ namespace TheNetwork.Domain.Contractors
             sb.AppendLine("  fame " + a.reputation.fame + " (score " + a.reputation.score + ", next band at " + (CareerPolicy.NextBandAt(a.reputation.fame) == int.MaxValue ? "-" : CareerPolicy.NextBandAt(a.reputation.fame).ToString()) + "), experience " + ContractorService.Experience(a) + ", stage " + sim.careerStage);
             sb.AppendLine("  jobs: " + sim.opsCompleted + " resolved (" + r.legacyResolved + " before records; " + r.Classified + " classified: " + r.triumphs + " triumph, " + r.successes + " success, " + r.partials + " partial, " + r.failures + " failure, " + r.disasters + " disaster)");
             sb.AppendLine("  record: highest danger " + (r.highestDanger / 1000f).ToString("0.00") + ", earnings " + r.careerEarnings + ", casualties " + r.casualtiesTaken + " (lost " + r.peopleLost + ", captured " + r.captured + ", missing " + r.missing + "), reputation earned " + r.reputationEarned + ", last outcome tick " + r.lastOutcomeTick);
-            sb.AppendLine("  funds " + sim.funds + ", operating reserve " + OperatingReserve(a) + ", equipment tier " + sim.equipment.tier + " condition " + sim.equipment.condition.ToString("0.00"));
+            sb.AppendLine("  funds " + sim.funds + ", operating reserve " + OperatingReserve(a, ctx.characters) + ", equipment tier " + sim.equipment.tier + " condition " + sim.equipment.condition.ToString("0.00"));
             sb.AppendLine("  need " + CurrentNeed(a) + ", tags [" + string.Join(", ", Tags(a).ToArray()) + "]");
             sb.AppendLine("  advancement: " + r.advancementCount + " so far, last at tick " + r.lastAdvancementTick + "; now " + (block == AdvancementBlock.None ? "possible (cost " + cost + ")" : "blocked: " + block + (cost > 0 ? " (cost " + cost + ", reserve " + reserve + ")" : "")));
             return sb.ToString();

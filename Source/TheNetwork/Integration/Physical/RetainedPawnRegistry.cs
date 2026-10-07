@@ -33,7 +33,9 @@ namespace TheNetwork.Integration.Physical
     ///
     /// WHO IS RESERVED is derived, never stored: a pawn is reserved iff it is the bound pawn (reference equality with the character's own
     /// <see cref="PawnRef"/>) of a living named person whose custody is <see cref="CustodyState.Deployed"/>, <see cref="CustodyState.Stored"/> or
-    /// (Phase 3.2A, ADR-056) <see cref="CustodyState.OutOfCustody"/>.
+    /// (Phase 3.2A, ADR-056) <see cref="CustodyState.OutOfCustody"/>, or a living bound member of an Episode whose RELEASE is not complete.
+    /// Phase 3.2B's temporary coverage comes from Episode PawnRefs, not temporary people or another ownership store. The same quest serves
+    /// both categories. Named coverage takes precedence; an indexed Episode member bridges promotion until named coverage is installed.
     /// The binding is written BEFORE the pawn is spawned, so the reservation already covers a retained pawn while it is spawned (where it
     /// changes nothing: every vanilla consumer is gated on WorldPawns.Contains) and is in force at the instant vanilla passes it into
     /// WorldPawns, by a normal exit or a map removal. No Free window, no callback, no patch.
@@ -64,7 +66,16 @@ namespace TheNetwork.Integration.Physical
 
         /// <summary>The LOAD-TIME BRIDGE: persisted thingIDNumber → character, built from durable bindings alone (no pointer needed).</summary>
         private readonly Dictionary<int, CharacterId> byThing = new Dictionary<int, CharacterId>();
+        // Rebuildable indexes inside the SAME M1 registry. They persist nothing: the Episode remains the owner.
+        private readonly Dictionary<Pawn, EpisodeReservation> episodeIndex = new Dictionary<Pawn, EpisodeReservation>(PawnReferenceComparer.Instance);
+        private readonly Dictionary<int, EpisodeReservation> episodeByThing = new Dictionary<int, EpisodeReservation>();
         private Quest cachedQuest;
+
+        private sealed class EpisodeReservation
+        {
+            public PhysicalEpisode episode;
+            public EpisodeMember member;
+        }
 
         /// <summary>Prepared for removal: the registry reserves nobody (§ 20 step 2).</summary>
         public bool inert;
@@ -91,6 +102,42 @@ namespace TheNetwork.Integration.Physical
         public static RetainedPawnRegistry Active => NetworkRuntime.Current?.PhysicalWorld?.Registry;
 
         public int IndexCount => index.Count;
+        public int EpisodeIndexCount => episodeIndex.Count;
+
+        /// <summary>
+        /// RELEASE COMPLETE cleanup only: forget derived Episode cache entries after its durable release marker is true. Named retention is
+        /// independent and untouched. The transient returned keys let the adapter drop its anonymous exit-tick cache too; no Pawn roster is saved.
+        /// </summary>
+        public List<Pawn> ForgetReleasedEpisode(PhysicalEpisode episode)
+        {
+            List<Pawn> forgotten = new List<Pawn>();
+            if (episode == null || !episode.id.IsValid || !episode.releaseApplied) return forgotten;
+            foreach (KeyValuePair<Pawn, EpisodeReservation> pair in episodeIndex)
+            {
+                PhysicalEpisode owner = pair.Value?.episode;
+                if (owner != null && (ReferenceEquals(owner, episode) || owner.id == episode.id)) forgotten.Add(pair.Key);
+            }
+            for (int i = 0; i < forgotten.Count; i++) episodeIndex.Remove(forgotten[i]);
+            List<int> thingIds = new List<int>();
+            foreach (KeyValuePair<int, EpisodeReservation> pair in episodeByThing)
+            {
+                PhysicalEpisode owner = pair.Value?.episode;
+                if (owner != null && (ReferenceEquals(owner, episode) || owner.id == episode.id)) thingIds.Add(pair.Key);
+            }
+            for (int i = 0; i < thingIds.Count; i++) episodeByThing.Remove(thingIds[i]);
+            return forgotten;
+        }
+
+        /// <summary>
+        /// Durable eligibility only: a bound slot remains owned until RELEASE completes, including quarantine and interrupted release.
+        /// No map/world inference and no pointer read: this rule is usable before the load resolves PawnRefs. Positive death releases the
+        /// need for living-Pawn reservation; corpse ownership stays vanilla. Named slots may overlap while the post-commit handoff finishes.
+        /// </summary>
+        public static bool RequiresEpisodeReservation(PhysicalEpisode e, EpisodeMember m)
+        {
+            return e != null && e.id.IsValid && !e.releaseApplied && m?.pawn != null && m.pawn.thingIdNumber > 0
+                && m.outcome != MemberOutcome.Killed && m.observed != ObservedKind.Dead;
+        }
 
         /// <summary>
         /// The persisted custody that keeps a bound pawn reserved: alive, and Deployed, Stored or (Phase 3.2A) OutOfCustody. M1 reserves a retained
@@ -113,17 +160,32 @@ namespace TheNetwork.Integration.Physical
         {
             index.Clear();
             byThing.Clear();
+            episodeIndex.Clear();
+            episodeByThing.Clear();
             pointersResolved = false;
             rebuilds++;
-            if (ctx.characters == null) return 0;
-            List<KnownCharacter> all = ctx.characters.characters;
-            for (int i = 0; i < all.Count; i++)
+            List<KnownCharacter> all = ctx.characters?.characters;
+            if (all != null) for (int i = 0; i < all.Count; i++)
             {
                 KnownCharacter c = all[i];
                 PawnRef r = c?.pawn;
                 if (r != null && r.thingIdNumber > 0) byThing[r.thingIdNumber] = c.id;
             }
-            return byThing.Count;
+            List<PhysicalEpisode> episodes = ctx.episodes?.episodes;
+            if (episodes != null) for (int i = 0; i < episodes.Count; i++)
+            {
+                PhysicalEpisode e = episodes[i];
+                if (e?.members == null) continue;
+                for (int k = 0; k < e.members.Count; k++)
+                {
+                    EpisodeMember m = e.members[k];
+                    if (RequiresEpisodeReservation(e, m) && m.pawn.thingIdNumber > 0)
+                        episodeByThing[m.pawn.thingIdNumber] = new EpisodeReservation { episode = e, member = m };
+                }
+            }
+            HashSet<int> ids = new HashSet<int>(byThing.Keys);
+            ids.UnionWith(episodeByThing.Keys);
+            return ids.Count;
         }
 
         /// <summary>
@@ -136,6 +198,7 @@ namespace TheNetwork.Integration.Physical
         {
             RegistryLoadReport report = new RegistryLoadReport();
             index.Clear();
+            episodeIndex.Clear();
             resolves++;
             List<KnownCharacter> all = ctx.characters?.characters;
             if (all != null)
@@ -158,11 +221,38 @@ namespace TheNetwork.Integration.Physical
                     {
                         report.findings.Add(Finding(c, v, p));
                     }
-                    if (RetainedCustody(c)) report.durableRetained++;
+                    if (RetainedCustody(c)) report.namedRetained++;
+                }
+            }
+            List<PhysicalEpisode> episodes = ctx.episodes?.episodes;
+            if (episodes != null) for (int i = 0; i < episodes.Count; i++)
+            {
+                PhysicalEpisode e = episodes[i];
+                if (e?.members == null) continue;
+                for (int k = 0; k < e.members.Count; k++)
+                {
+                    EpisodeMember m = e.members[k];
+                    if (!NeedsEpisodeBindingAudit(e, m)) continue;
+                    report.episodeBound++;
+                    PawnRef r = m.pawn;
+                    Pawn p = r.pawn;
+                    BindingIntegrity v = BindingRules.Judge(true, r.thingIdNumber, p != null, p != null ? p.thingIDNumber : 0, p != null && p.Discarded);
+                    if (v == BindingIntegrity.Healthy)
+                    {
+                        EpisodeReservation owner = new EpisodeReservation { episode = e, member = m };
+                        episodeIndex[p] = owner;
+                        episodeByThing[r.thingIdNumber] = owner;
+                        report.episodeHealthy++;
+                    }
+                    else report.episodeFindings.Add(EpisodeFinding(e, m, v, p));
                 }
             }
             pointersResolved = true;
+            report.durableRetained = DurableRetainedCount();
+            report.temporaryRequired = DurableTemporaryCount();
             report.covered = RetainedCount();
+            report.namedCovered = NamedRetainedCount();
+            report.temporaryCovered = TemporaryRetainedCount();
             return report;
         }
 
@@ -182,6 +272,27 @@ namespace TheNetwork.Integration.Physical
         }
 
         /// <summary>
+        /// Registers an already-durably-bound Episode slot before Place. It changes only derived indexes; no person is created and no
+        /// ownership fact is invented. Queries recheck the current Episode/member/PawnRef, so rollback or release cannot leave a stale claim.
+        /// </summary>
+        public void NoteEpisode(Pawn p, EpisodeId episode, int slot)
+        {
+            if (p == null || !episode.IsValid) return;
+            PhysicalEpisode e = ctx.episodes?.Get(episode);
+            if (e?.members == null) return;
+            for (int i = 0; i < e.members.Count; i++)
+            {
+                EpisodeMember m = e.members[i];
+                if (m == null || m.slot != slot || !RequiresEpisodeReservation(e, m) || !ReferenceEquals(m.pawn.pawn, p)) continue;
+                if (BindingRules.Judge(true, m.pawn.thingIdNumber, true, p.thingIDNumber, p.Discarded) != BindingIntegrity.Healthy) return;
+                EpisodeReservation owner = new EpisodeReservation { episode = e, member = m };
+                episodeIndex[p] = owner;
+                episodeByThing[m.pawn.thingIdNumber] = owner;
+                return;
+            }
+        }
+
+        /// <summary>
         /// THE predicate (O(1)): is this pawn a retained named Network pawn right now? Pure read of durable truth. Once the pointer index is
         /// built (and for any binding made this session) it is reference equality plus retained custody; BEFORE it is built (a load between
         /// FinalizeInit and PostLoadInit) the durable thing id answers through <see cref="BindingRules.BridgeCovers"/>.
@@ -190,28 +301,80 @@ namespace TheNetwork.Integration.Physical
         {
             queries++;
             if (inert || p == null) return false;
+            if (!NamedCovers(p) && !EpisodeCovers(p, out _)) return false;
+            hits++;
+            return true;
+        }
+
+        private bool NamedCovers(Pawn p)
+        {
+            if (p == null || p.Discarded) return false;
             CharacterId id;
             if (index.TryGetValue(p, out id))
             {
                 KnownCharacter c = ctx.characters?.Get(id);
-                if (c?.pawn == null || !ReferenceEquals(c.pawn.pawn, p) || !RetainedCustody(c)) return false;
-                hits++;
-                return true;
+                if (c?.pawn != null && ReferenceEquals(c.pawn.pawn, p) && c.pawn.thingIdNumber == p.thingIDNumber && RetainedCustody(c)) return true;
             }
             if (pointersResolved || p.thingIDNumber <= 0 || !byThing.TryGetValue(p.thingIDNumber, out id)) return false;
             KnownCharacter bound = ctx.characters?.Get(id);
             PawnRef r = bound?.pawn;
             if (r == null || !RetainedCustody(bound)) return false;
+            return BindingRules.BridgeCovers(p.thingIDNumber, r.thingIdNumber, r.pawn != null, ReferenceEquals(r.pawn, p));
+        }
+
+        private bool EpisodeCovers(Pawn p, out EpisodeReservation owner)
+        {
+            owner = null;
+            if (p == null || p.Discarded || p.Destroyed || (p.health != null && p.Dead)) return false;
+            EpisodeReservation found;
+            if (episodeIndex.TryGetValue(p, out found) && CurrentOwner(found)
+                && ReferenceEquals(found.member.pawn.pawn, p) && found.member.pawn.thingIdNumber == p.thingIDNumber)
+            {
+                owner = found;
+                return true;
+            }
+            if (pointersResolved || p.thingIDNumber <= 0 || !episodeByThing.TryGetValue(p.thingIDNumber, out found) || !CurrentOwner(found)) return false;
+            PawnRef r = found.member.pawn;
             if (!BindingRules.BridgeCovers(p.thingIDNumber, r.thingIdNumber, r.pawn != null, ReferenceEquals(r.pawn, p))) return false;
-            hits++;
+            owner = found;
             return true;
+        }
+
+        private bool CurrentOwner(EpisodeReservation owner)
+        {
+            PhysicalEpisode e = owner?.episode;
+            EpisodeMember m = owner?.member;
+            return RequiresEpisodeReservation(e, m) && ReferenceEquals(ctx.episodes?.Get(e.id), e) && e.members.Contains(m);
+        }
+
+        private static bool NeedsEpisodeBindingAudit(PhysicalEpisode e, EpisodeMember m)
+        {
+            return e != null && e.id.IsValid && !e.releaseApplied && m != null && m.IsBound
+                && m.outcome != MemberOutcome.Killed && m.observed != ObservedKind.Dead;
+        }
+
+        /// <summary>Effective category: named M1 takes precedence over its Episode handoff bridge.</summary>
+        public bool IsTemporaryReserved(Pawn p)
+        {
+            return !inert && !NamedCovers(p) && EpisodeCovers(p, out _);
+        }
+
+        /// <summary>The Episode that still owns this bound Pawn, or None. No lookup scans Pawns or the Episode store.</summary>
+        public EpisodeId EpisodeOf(Pawn p)
+        {
+            EpisodeReservation owner;
+            return !inert && EpisodeCovers(p, out owner) ? owner.episode.id : EpisodeId.None;
         }
 
         public CharacterId CharacterOf(Pawn p)
         {
             CharacterId id;
             if (p == null) return CharacterId.None;
-            if (index.TryGetValue(p, out id)) return id;
+            if (index.TryGetValue(p, out id))
+            {
+                PawnRef binding = ctx.characters?.Get(id)?.pawn;
+                if (binding != null && ReferenceEquals(binding.pawn, p) && binding.thingIdNumber == p.thingIDNumber) return id;
+            }
             if (!pointersResolved && p.thingIDNumber > 0 && byThing.TryGetValue(p.thingIDNumber, out id))
             {
                 PawnRef r = ctx.characters?.Get(id)?.pawn;
@@ -226,27 +389,89 @@ namespace TheNetwork.Integration.Physical
         /// </summary>
         public int RetainedCount()
         {
+            if (inert) return 0;
             if (!pointersResolved) return DurableRetainedCount();
+            HashSet<Pawn> covered = new HashSet<Pawn>(PawnReferenceComparer.Instance);
+            foreach (KeyValuePair<Pawn, CharacterId> kv in index) if (Reserves(kv.Key)) covered.Add(kv.Key);
+            foreach (KeyValuePair<Pawn, EpisodeReservation> kv in episodeIndex) if (Reserves(kv.Key)) covered.Add(kv.Key);
+            return covered.Count;
+        }
+
+        public int NamedRetainedCount()
+        {
+            if (inert) return 0;
+            if (!pointersResolved) return DurableNamedCount();
             int n = 0;
-            foreach (KeyValuePair<Pawn, CharacterId> kv in index) if (Reserves(kv.Key)) n++;
+            foreach (KeyValuePair<Pawn, CharacterId> kv in index) if (!inert && NamedCovers(kv.Key)) n++;
+            return n;
+        }
+
+        public int TemporaryRetainedCount()
+        {
+            if (inert) return 0;
+            if (!pointersResolved) return DurableTemporaryCount();
+            int n = 0;
+            foreach (KeyValuePair<Pawn, EpisodeReservation> kv in episodeIndex) if (IsTemporaryReserved(kv.Key)) n++;
             return n;
         }
 
         /// <summary>
-        /// The people the durable state says MUST be reserved: living, bound, custody Deployed, Stored or OutOfCustody. Read from persisted values only
-        /// (no pointer), so it is right at every stage of a load. A covered count below this is a reservation gap.
+        /// Distinct named bindings plus unreleased Episode bindings that need living-Pawn protection. Missing pointers never mean no
+        /// reservation is required; an already resolved, positively dead Episode Pawn is excluded. Named/slot overlap counts one binding.
+        /// This reads only Network-owned bindings, never a world Pawn population.
         /// </summary>
         public int DurableRetainedCount()
         {
+            HashSet<int> ids = DurableNamedIds();
+            AddEpisodeIds(ids);
+            return ids.Count;
+        }
+
+        public int DurableNamedCount()
+        {
+            return DurableNamedIds().Count;
+        }
+
+        /// <summary>Distinct Episode bindings that are not already represented by a durable named-retention binding.</summary>
+        public int DurableTemporaryCount()
+        {
+            HashSet<int> named = DurableNamedIds();
+            HashSet<int> episode = new HashSet<int>();
+            AddEpisodeIds(episode);
+            episode.ExceptWith(named);
+            return episode.Count;
+        }
+
+        private HashSet<int> DurableNamedIds()
+        {
+            HashSet<int> ids = new HashSet<int>();
             List<KnownCharacter> all = ctx.characters?.characters;
-            int n = 0;
-            if (all == null) return 0;
+            if (all == null) return ids;
             for (int i = 0; i < all.Count; i++)
             {
                 KnownCharacter c = all[i];
-                if (RetainedCustody(c) && c.pawn != null && c.pawn.IsBound) n++;
+                if (RetainedCustody(c) && c.pawn != null && c.pawn.IsBound) ids.Add(c.pawn.thingIdNumber);
             }
-            return n;
+            return ids;
+        }
+
+        private void AddEpisodeIds(HashSet<int> ids)
+        {
+            List<PhysicalEpisode> episodes = ctx.episodes?.episodes;
+            if (episodes == null) return;
+            for (int i = 0; i < episodes.Count; i++)
+            {
+                PhysicalEpisode e = episodes[i];
+                if (e?.members == null) continue;
+                for (int k = 0; k < e.members.Count; k++)
+                {
+                    EpisodeMember m = e.members[k];
+                    if (!NeedsEpisodeBindingAudit(e, m)) continue;
+                    Pawn p = m.pawn.pawn;
+                    if (p != null && (p.Destroyed || (p.health != null && p.Dead))) continue;
+                    ids.Add(m.pawn.thingIdNumber);
+                }
+            }
         }
 
         /// <summary>
@@ -269,6 +494,37 @@ namespace TheNetwork.Integration.Physical
                 if (v != BindingIntegrity.Healthy) findings.Add(Finding(c, v, p));
             }
             return findings;
+        }
+
+        /// <summary>Read-only integrity findings for unreleased Episode bindings, separately identified from named people.</summary>
+        public List<EpisodeBindingFinding> AuditTemporary()
+        {
+            List<EpisodeBindingFinding> findings = new List<EpisodeBindingFinding>();
+            List<PhysicalEpisode> episodes = ctx.episodes?.episodes;
+            if (episodes == null) return findings;
+            for (int i = 0; i < episodes.Count; i++)
+            {
+                PhysicalEpisode e = episodes[i];
+                if (e?.members == null) continue;
+                for (int k = 0; k < e.members.Count; k++)
+                {
+                    EpisodeMember m = e.members[k];
+                    if (!NeedsEpisodeBindingAudit(e, m)) continue;
+                    Pawn p = m.pawn.pawn;
+                    BindingIntegrity v = BindingRules.Judge(true, m.pawn.thingIdNumber, p != null, p != null ? p.thingIDNumber : 0, p != null && p.Discarded);
+                    if (v != BindingIntegrity.Healthy) findings.Add(EpisodeFinding(e, m, v, p));
+                }
+            }
+            return findings;
+        }
+
+        private static EpisodeBindingFinding EpisodeFinding(PhysicalEpisode e, EpisodeMember m, BindingIntegrity v, Pawn p)
+        {
+            return new EpisodeBindingFinding
+            {
+                episode = e.id, slot = m.slot, kind = v, persistedThingId = m.pawn.thingIdNumber,
+                pointerThingId = p != null ? p.thingIDNumber : 0
+            };
         }
 
         private static BindingFinding Finding(KnownCharacter c, BindingIntegrity v, Pawn p)
@@ -356,7 +612,14 @@ namespace TheNetwork.Integration.Physical
         public void OnPawnEvent(Pawn p, string what)
         {
             CharacterId id = CharacterOf(p);
-            if (!id.IsValid) return;
+            if (!id.IsValid)
+            {
+                // A killed Pawn no longer satisfies the living reservation predicate, but its indexed Episode must still wake.
+                EpisodeReservation owner;
+                if (p != null && episodeIndex.TryGetValue(p, out owner) && CurrentOwner(owner)
+                    && ReferenceEquals(owner.member.pawn.pawn, p)) ctx.Lifecycle?.Wake(owner.episode, what);
+                return;
+            }
             KnownCharacter c = ctx.characters?.Get(id);
             if (c == null || c.pawn == null || !ReferenceEquals(c.pawn.pawn, p)) return;
             if (!c.IsAlive) return; // a dead person's corpse going away (a removed map) changes nothing the Network holds
@@ -390,6 +653,7 @@ namespace TheNetwork.Integration.Physical
             Quest q = FindQuest();
             return "registry: " + (inert ? "INERT (prepared for removal)" : "active") + ", " + (pointersResolved ? "pointer index" : "thing-id bridge (pointers not yet resolved)")
                 + " " + (pointersResolved ? index.Count : byThing.Count) + ", retained " + RetainedCount() + " of " + DurableRetainedCount() + " durable"
+                + " (named " + NamedRetainedCount() + ", temporary Episode " + TemporaryRetainedCount() + ")"
                 + ", quest " + (q == null ? "none" : q.id + " " + q.State) + ", queries " + queries + " (hits " + hits + ")";
         }
     }
@@ -409,12 +673,39 @@ namespace TheNetwork.Integration.Physical
         /// <summary>People the registry actually covers now. Below <see cref="durableRetained"/> is a reservation gap.</summary>
         public int covered;
 
+        public int namedRetained;
+        public int namedCovered;
+        public int episodeBound;
+        public int episodeHealthy;
+        public int temporaryRequired;
+        public int temporaryCovered;
+
         /// <summary>Living people with an unresolved, discarded or mismatching binding. Reported loudly, never repaired.</summary>
         public readonly List<BindingFinding> findings = new List<BindingFinding>();
+        public readonly List<EpisodeBindingFinding> episodeFindings = new List<EpisodeBindingFinding>();
+        public int FindingCount => findings.Count + episodeFindings.Count;
 
         public override string ToString()
         {
-            return bound + " bound, " + healthy + " healthy, " + covered + " of " + durableRetained + " retained covered, " + findings.Count + " integrity finding(s)";
+            return bound + " named bound, " + healthy + " named healthy, " + episodeBound + " Episode bound, " + episodeHealthy + " Episode healthy, "
+                + covered + " of " + durableRetained + " retained covered (named " + namedCovered + ", temporary " + temporaryCovered + "), " + FindingCount + " integrity finding(s)";
+        }
+    }
+
+    /// <summary>A durable Episode slot with a bad binding; never represented as a dummy person and never repaired.</summary>
+    public sealed class EpisodeBindingFinding
+    {
+        public EpisodeId episode;
+        public int slot;
+        public BindingIntegrity kind;
+        public int persistedThingId;
+        public int pointerThingId;
+
+        public override string ToString()
+        {
+            return "PHYSICAL INTEGRITY: Episode " + episode + " slot " + slot + " is bound to pawn #" + persistedThingId + ": " + BindingRules.Describe(kind)
+                + (kind == BindingIntegrity.IdMismatch ? " (persisted #" + persistedThingId + ", resolved #" + pointerThingId + ")" : "")
+                + ". Nothing was regenerated, cleared or marked healthy.";
         }
     }
 

@@ -1,15 +1,10 @@
 # Phase 3 Design: Abstract ↔ Physical Lifecycle
 
-> **Next-slice audit (2026-10-06):** [Phase 3.2B readiness report](PHASE32B_READINESS_AUDIT.md)
-> is **READY FOR 3.2B IMPLEMENTATION**: the owner accepted its decisions in
-> [ADR-057](DECISIONS.md#adr-057--phase-32b-readiness-owner-decisions). **3.2B is not implemented.**
-> Six living discretionary seats may overflow for strong identity obligations; terminal-batch
-> promotion uses temporary active-Episode reservation until permanent named retention/release.
-> Composition v1, 6/12 thresholds, BEST-EFFORT construction and conservative evidence are accepted;
-> 150 is a soft target and identity wins. S26/S27 remain PARTIAL; no future runtime pass is claimed.
+> **PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED FOR THE CURRENT CREATE/RESET AND 026–032 SLICE; INDEPENDENT FINAL AUDIT PENDING.**
+> The accepted [ADR-057](DECISIONS.md#adr-057--phase-32b-readiness-owner-decisions) slice is as built in [Appendix M](#appendix-m-phase-32b-as-built-groups-and-progressive-concretization); [validation and artifact provenance](PHASE32B_VALIDATION.md) distinguish prior headless results from completed scoped owner runtime acceptance and pending independent final audit. Composition v1, temporary active-Episode reservation and atomic same-Pawn promotion are implemented; S26/S27 stay PARTIAL. Six is the discretionary living-seat target with strong overflow; 150 is a soft retention region and identity wins.
 
 > **Phase 3.1 Controlled Physical Episode — IMPLEMENTED AND OWNER RUNTIME VALIDATED (PASS).** This status applies to the Phase 3.1 scope only. Phase 3.0 is implemented
-> ([Appendix H](#appendix-h-phase-30-as-built)); **3.2B, 3.2C and 3.3 are NOT implemented; 3.2A (held custody) is merged, headless validated and owner runtime validated (see the next paragraph).** The history, in order ([Appendix K.9](#k9-final-sign-off-phase-31-owner-runtime-validated)): the owner's first physical run
+> ([Appendix H](#appendix-h-phase-30-as-built)); **3.2B is implemented/headless validated and owner runtime validated for the current Create/Reset and 026–032 slice; independent final audit pending; 3.2C and 3.3 are NOT implemented; 3.2A (held custody) is merged, headless validated and owner runtime validated (see the next paragraph).** The history, in order ([Appendix K.9](#k9-final-sign-off-phase-31-owner-runtime-validated)): the owner's first physical run
 > (build `29f31dd`) produced positive evidence and real defects (the retained registry did not survive a load; first projections used special-purpose kinds; an individual's role could stay
 > `Unset`; three harness defects), corrected in [Appendix K](#appendix-k-phase-31-runtime-qa-correction-pass-pr-10); the corrected build then passed the owner's reduced rerun; `RT-PHYX-010B` exposed a false
 > harness assumption (that a loaded save stays paused), not a production defect; isolated evidence confirmed the production load behaviour; and the harness and docs were cleaned up. Two statuses, kept apart:
@@ -17,13 +12,13 @@
 > [S31-retained-pawn-exit-reservation](spikes/S31-retained-pawn-exit-reservation.md)): the owner ran the dedicated S31 spike on a real 1.6 game before 3.1 was implemented, and reserving a retained named pawn
 > **while it is spawned** is the accepted production mechanism. **(2) The Phase 3.1 physical suite is owner-runtime validated** ([RUNTIME_TESTING § 17.5](RUNTIME_TESTING.md#175-final-phase-31-owner-runtime-evidence): evidence accumulated across
 > the S31 spike, the initial run, the corrected reduced rerun and an isolated 010B follow-up, not one run); save/load registry reconstruction is validated. Earlier: implemented and corrected after review
-> ([Appendix I](#appendix-i-phase-31-as-built), [Appendix J](#appendix-j-phase-31-post-review-correction-pass-pr-10)). **The Phase 3.1 sign-off does not claim later-phase validation:** held custody is covered by the separate Phase 3.2A acceptance below; rescue, groups and group extraction remain unimplemented. Arbitrary modded races and every RimWorld/mod combination are not validated.
+> ([Appendix I](#appendix-i-phase-31-as-built), [Appendix J](#appendix-j-phase-31-post-review-correction-pass-pr-10)). **The Phase 3.1 sign-off does not claim later-phase validation:** held custody is covered by the separate Phase 3.2A acceptance below; rescue and full mixed-group extraction remain unimplemented; 3.2B group identity has separate headless and scoped owner runtime evidence. Arbitrary modded races and every RimWorld/mod combination are not validated.
 > The live game holds the real physical adapter, and the only trigger that creates or places a contractor pawn is the session-armed physical test tier (Dev Mode, its own test map). The save format is still **5**; there is no Harmony.
-> The design text below is unchanged by the implementation except where Appendices H, I, J, K and L record a decision the design left open or a correction.
+> The design text below incorporates accepted decisions and corrections; Appendices H–L preserve their phase histories, and Appendix M records the 3.2B implementation.
 >
 > **Phase 3.2A Held Custody — MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED.** Final owner acceptance on `e768fef`: 022 41/0/0 → clean SAVE/LOAD → 025 11/0/0, focused total 52/0/0; 1 bound / 1 healthy / 1-of-1 retained / 0 integrity findings. **PR #11 — MERGED** ([Appendix L](#appendix-l-phase-32a-as-built-held-custody), ADR-056). The prior slaveFaction, fixture LookTargets and invalid-discard issues are FIXED; S21 remains PARTIAL for headless-only observation paths.
 > A held named person is now a terminal outcome of an episode, watched by a bounded custody watch and returned only on positive evidence. Recruitment is recorded as `Defected`; O-20 locks permanent exit from old NPC availability and future Player Contractor participation through the real colony / `PlayerProxy` (Phase 4 is not implemented). **S11 failed its
-> source audit, so the rescue site is not built** ([S11 record](spikes/S11-rescue-site-holder.md)); the rescue's domain half is proven headlessly. **Not implemented:** the rescue site and its player-facing content, groups (3.2B), mixed-group reconciliation (3.2C), 3.3. The save format is still **5**; there is no Harmony.
+> source audit, so the rescue site is not built** ([S11 record](spikes/S11-rescue-site-holder.md)); the rescue's domain half is proven headlessly. **Not implemented:** the rescue site and its player-facing content, full mixed-group reconciliation (3.2C), 3.3. The save format is still **5**; there is no Harmony.
 >
 > *Original design status:* **DESIGN REVIEW.** Written against `main` `6d0352d`
 > (Phase 2.9 merged and owner-runtime-validated; save format stays **4**). Every RimWorld fact below was read
@@ -251,7 +246,7 @@ Audited from the merged code, not from the design documents. Everything in this 
 | `KnownCharacter` (`role`, `org`, `embodiedBy`, `status`, `custody`, `notability`, `woundedUntilTick`, `diedTick`, `deathCauseKey`, `NameSnapshot`) | `NetworkActor.cs:237` | The persisted *person* record. It has **no pawn binding, no gender, no age, no appearance, no operational role**: exactly the minimum a Phase 3 binding must add. Its existing `role` is `CharacterRole` (Leader, Lieutenant, Specialist, Member, Freelancer, Retired): *organizational standing*, **not** an operational function, and it must not be overloaded ([§ 6.6](#66-operational-roles)). |
 | `CustodyState` (Unmaterialized, Stored, Deployed, OutOfCustody, Released, Lost) | `NetworkActor.cs:222` | Persisted on every character since Phase 2 and **never written**: every saved value is `0`. Its meanings can be fixed now at zero migration cost ([§ 8](#8-lifecycle-state-machine)). |
 | `CharacterStatus` (Active, Wounded, Captured, Missing, Dead, Retired, Defected, Lost) | `NetworkActor.cs:210` | Abstract *story* status. Orthogonal to custody ("who controls the pawn"). |
-| `OrganizationProfile` (leader, ≤ 2 lieutenants, ≤ 6 `knownMembers`, `tiers` headcount, `woundedRecovery` buckets, `committed`) | `Persist/ContractorComponents.cs:537` | Named people are records; everyone else is a *count by tier*. There is no anonymous roster or implemented composition. Current construction uses **6 total including leader/lieutenants**, not 1+2+6; accepted 3.2B design treats it as the discretionary living-seat target with strong-promotion overflow ([audit](PHASE32B_READINESS_AUDIT.md#3-o-2-size-and-cap-decisions--accepted), ADR-057). |
+| `OrganizationProfile` (leader, ≤ 2 lieutenants, ≤ 6 `knownMembers`, `tiers` headcount, `woundedRecovery` buckets, `committed`) | `Persist/ContractorComponents.cs:537` | Named people are records; everyone else is a *count by tier*. There is no anonymous roster; pure Composition v1 now derives role capacity (Appendix M). Current construction uses **6 total including leader/lieutenants**, not 1+2+6; implemented 3.2B treats it as the discretionary living-seat target with strong-promotion overflow ([audit](PHASE32B_READINESS_AUDIT.md#3-o-2-size-and-cap-decisions--accepted), ADR-057). |
 | `ContractorSimulation` (`equipment` tier/condition/specialties, `mobility`, `spatial`, `career`, `commitments`, `funds`, `skill`, runtime `cachedStrength`) | `ContractorComponents.cs:381` | Capability to *project* from. `commitments` is `List<OperationId>` and drives job capacity. |
 | `PublicReputation` (a numeric `score`; `FameBand` Unknown…Legendary **derived** from it), `ExperienceBand` (Green…Legendary), `CareerPolicy` | `NetworkActor.cs:87`, `Bands.cs`, `CareerPolicy.cs` | **Capability** is already a separate band (`ExperienceBand`). But the one `score` is built from *completed work* (`ReputationGain`) yet is exposed, displayed and used as "fame", and `RequiredFame(tier)` gates equipment advancement on it: professional record and public visibility are one number today ([§ 6.10](#610-professional-reputation-fame-and-capability)). |
 | `SpatialState` (anchor, destination, status Idle/Travelling/OnAssignment/Blocked, charter ends) | `ContractorComponents.cs:199`, `SpatialService.cs` | The one abstract geographic truth ([SPATIAL](SPATIAL.md)). Driven daily from `UpkeepService.UpkeepJob → Spatial.Upkeep(a) → CatchUp + MaybeRelocate`. |
@@ -558,8 +553,8 @@ per-member identity/custody commit is authorized in 3.2B ([report § 6](PHASE32B
 
 New K IDs and bindings below show the **terminal-batch result**, not placement-time creation. Placement
 latches P0 eligibility; the same anonymous Pawns remain Episode-owned/reserved while any peer is Pending,
-then PLAN/VALIDATE/atomic COMMIT establishes these identities before RELEASE. This is future 3.2B design;
-the illustrative rescue visit requires a separately proven rescue path and is not authorized by readiness.
+then PLAN/VALIDATE/atomic COMMIT establishes these identities before RELEASE. The identity/conservation mechanism is implemented in 3.2B (Appendix M);
+the illustrative rescue visit still requires a separately proven rescue path and is not implemented.
 
 ```
  Crew "Kestrel" (5 living)  composition: Leader 1 · Rifleman 2 · Medic 1 · Heavy 1      [seat policy: presence suffices]
@@ -583,12 +578,11 @@ the illustrative rescue visit requires a separately proven rescue path and is no
 
 #### 4.5.7 What it persists
 
-`KnownCharacter.firstEncounterTick` (−1 = never; set at reconcile when the **seat policy** crystallized the person by
-presence on a player-visible map, or when **strong evidence** promoted them; drives § 4.5.4) and `EpisodeMember.seatRole`.
-These fields already exist. The future slice also needs durable Episode-local visibility/eligibility truth because
+`KnownCharacter.firstEncounterTick` (−1 = no proven dated visibility; set at reconciliation only from a valid `playerVisibleTick <= now`. Strong evidence without dated placement still promotes the same Pawn but leaves this bookmark −1; drives § 4.5.4) and `EpisodeMember.seatRole`.
+These fields already exist. The slice adds durable Episode-local `playerVisibleTick` (−1 default) and `p0Eligible` (false default) because
 placement cannot be inferred after departure ([report § 2.3](PHASE32B_READINESS_AUDIT.md#23-persistence-and-migration)).
 A concretized seat is an ordinary `KnownCharacter`; Composition v1 is an immutable pure derivation, not a new
-persisted roster/template requirement. This documentation adds no save field or version bump.
+persisted roster/template requirement. These safe additive fields preserve save format 5; old placement stays unknown/ineligible.
 
 ---
 
@@ -661,6 +655,8 @@ them are a *deployment* of troops. The name is not frozen.)
 | `state` | `Planned → Created → Present → Done` |
 | `outcome` | `Pending` until `Done`, then **set once**: `Returned`, `Killed`, `HeldByPlayer`, `JoinedPlayer`, `Kidnapped`, `HeldByOther`, `Missing`, `Lost`, `NeverPlaced` |
 | `observed: ObservedKind`, `observedTick` | last classification and when (diagnostics and the long-open warning) |
+| `playerVisibleTick: int = -1` | First successful proven player-visible placement; unknown old-save placement stays −1. |
+| `p0Eligible: bool = false` | Eligibility latched at that placement from actual living size/role policy; no later inferred encounter. |
 
 **`KnownCharacter` additions:** `pawn: PawnRef` (null when no pawn exists), `episode: EpisodeId` (the exclusive
 membership: set at Plan and cleared **only when that episode's RELEASE completes**, so a returned person stays non-abstract until then), `heldBy: HeldKind` + `heldSinceTick` (what vanilla holds them as), `opRole` (the **operational
@@ -673,10 +669,9 @@ name (a sanity check), `boundTick`. Write-once per character. Plus **`agedThroug
 pawn's *biological* age is **known to have actually been brought current**, not merely the last observation tick; the existing piece of bookkeeping truthful aging needs
 ([§ 6.4](#64-truthful-aging-of-a-retained-pawn)). Creation, successful catch-up and a proven exact vanilla aging boundary can establish that evidence. The current `Stored` fallback can instead use the commit tick without boundary evidence; that remains the open R-50 defect, not a truthful advance ([source audit](spikes/R50-held-aging-bookmark-audit.md)).
 
-**Organization composition (3.2B design):** the owner accepted pure **Composition v1**, derived from immutable
+**Organization composition (3.2B as built):** pure **Composition v1** is implemented, derived from immutable
 origin seed/capacity/specialties, without a mandatory persisted composition field ([§ 6.7](#67-organization-and-mission-composition),
-ADR-057). At most eight role-weight entries describe capacity, not anonymous people. The future whole-slice
-schema still needs Episode placement evidence and safe old-save defaults; no schema is added in this branch.
+ADR-057). At most eight role-weight entries describe capacity, not anonymous people. EpisodeMember placement facts `playerVisibleTick = -1` and `p0Eligible = false` add safe absent defaults; no composition field or save-version bump is introduced (Appendix M).
 
 **Operation marker:** when an episode resolves a Troubled operation, one durable marker records the result
 (`found` / `writtenOff`) in the same commit; the operation's own resolution then runs afterwards through its
@@ -965,8 +960,7 @@ and it would have been the same answer in year 1 or year 10. Examples:
 ```
 
 It is **not** a roster: no anonymous person or composition field is required. Old/new actors derive the same v1
-from immutable facts; composition alone needs no migration. The future Episode-local evidence schema still
-needs correct old-save defaults. A world-generated newcomer's original template is not retained, which is why
+from immutable facts; composition alone needs no migration. EpisodeMember placement facts use safe additive defaults −1/false under save format 5 (Appendix M). A world-generated newcomer's original template is not retained, which is why
 the inputs are the facts the actor keeps. The accepted weights, quotas, pin subtraction and deterministic role
 assignment are in [report § 2](PHASE32B_READINESS_AUDIT.md#2-seat-and-composition-model).
 
@@ -1205,9 +1199,9 @@ Phase 0's design stands, with three audit corrections and one open comparison.
   ADR-053). Vanilla consumers of the reservation are gated on `WorldPawns.Contains`; reservation is
   already present when vanilla passes the Pawn. Vanilla custody can independently keep a Pawn, as
   the audited private `WorldPawnGC.GetCriticalPawnReason` shows, but it does not replace M1 identity
-  protection. Named identity obligations may exceed the six discretionary seats. Future 3.2B also
+  protection. Named identity obligations may exceed the six discretionary seats. 3.2B also
   adds bounded temporary active-Episode reservation from durable anonymous PawnRefs until terminal
-  commit/RELEASE ([§ 4.5.5](#455-promotion-of-rank-and-file)); that coverage is **not implemented** yet.
+  commit/RELEASE ([§ 4.5.5](#455-promotion-of-rank-and-file)); that coverage is now implemented in the same M1 registry (Appendix M).
 - **Why `Free` is unacceptable (quantified).** A `Free` world pawn is a candidate for *any* generation request
   whose faction matches (or that sets `WorldPawnFactionDoesntMatter`; vanilla's
   `PrisonerWillingToJoinQuestUtility` does), with a per-generation chance up to 0.8. A `Free` retained contractor
@@ -1223,7 +1217,7 @@ Phase 0's design stands, with three audit corrections and one open comparison.
 - **Correction 2, cost.** `Pawn.Suspended` evaluates `GetSituation` which evaluates `IsReservedByAnyQuest(pawn)`:
   every active quest × every part × a `List<Pawn>.Contains`. That runs for each non-mothballed world pawn each tick.
   The reserved list length *R* therefore multiplies a vanilla per-tick cost. Keep reservation scoped
-  to retained named identities and, in future 3.2B, active Episode PawnRefs. Approximately 150 is a
+  to retained named identities and, in 3.2B, active Episode PawnRefs. Approximately 150 is a
   soft performance target, never a hard bound on *R*; **measure** cost and save/load around 150/300
   without dropping living encountered/held identity ([§ 18](#18-performance)).
 - **Correction 3, hooks.** `QuestManager.Notify_PawnKilled` reaches only `Ongoing` quests, `Notify_PawnDiscarded`
@@ -2157,9 +2151,10 @@ closed, and a person with an open episode is handled by the episode's own observ
 | `KnownCharacter.pawn`, `.episode`, `.heldBy`, `.heldSinceTick`, `.firstEncounterTick` | the characters store | absent ⇒ defaults (no pawn, no episode, not held, never met), which is **correct**: nobody has ever been materialized, and every saved `custody` is `0 = Unmaterialized` |
 | `KnownCharacter.opRole` (operational role, one byte) | the characters store | absent ⇒ *not yet stored*: **derived lazily from immutable origin facts**, so the value is the same whenever it is first needed ([§ 6.6.5](#665-identity-comes-from-immutable-origin-facts-never-from-when-the-player-first-looks)); new actors store it at `Instantiate`. No migration pass touches 130 contractors |
 | `PawnRef.agedThroughTick` | inside the binding | written with the binding; n/a for old saves (no binding exists) |
-| Composition v1 (accepted 3.2B direction) | pure derivation, **no persisted field required** | immutable seed/capacity/specialties give the same v1 for old/new actors; future semantic v2 changes require explicit version/migration/design policy (ADR-057) |
+| Composition v1 (implemented 3.2B) | pure derivation, **no persisted field required** | immutable seed/capacity/specialties give the same v1 for old/new actors; future semantic v2 changes require explicit version/migration/design policy (ADR-057) |
 | one operation marker (the episode's result for an `OpStatus.Physical` operation) | `Operation` | absent ⇒ none; `OpStatus.Physical` never occurs in an old save |
 | `PhysicalEpisode.committedTick`, `EpisodeMember.seatRole` | the episode store | new with the store |
+| (3.2B) `EpisodeMember.playerVisibleTick`, `p0Eligible` | additive placement truth in the episode store | absent ⇒ −1/false; old anonymous Episodes gain no invented encounter |
 | a new entity-id kind | `EntityKind.Deployment` renamed `Episode` (value 9), added to `NetworkState.MaxEntityId` and its test | n/a |
 | (3.1) the registry quest | created lazily by vanilla's `QuestManager`; **not** a Network store | n/a |
 
@@ -2225,7 +2220,7 @@ Prefer **fail safe, preserve truth, quarantine and diagnose, retry idempotently*
 | the contractor actor is missing from the store | an episode referencing it | `Quarantined(ActorMissing)`; **detach** (strip tags, pawns untouched) | delete pawns |
 | a bound pawn is missing on load | member `Present` with a null pointer | outcome `Lost`, status `Lost`, history "vanished", one warning | regenerate or mark `Returned` |
 | a held person cannot be classified | `OutOfCustody` | stays held, logged at most once per day | abstract them |
-| an unsupported custody appears in 3.1 (arrest, recruit, kidnap, caravan) *(3.2A: superseded for a **named** person, whose held custody is now a terminal outcome, Appendix L; an **anonymous** member still quarantines until 3.2B)* | member observed `HeldBy…`/`InCaravan` | **`Quarantined(UnsupportedCustody)`**: pawn untouched, person blocked from abstraction, a dev diagnostic | fake capture support |
+| an unsupported custody appears in 3.1 (arrest, recruit, kidnap, caravan) *(3.2A supports named custody, Appendix L; 3.2B promotes a positively held anonymous member in the terminal batch, Appendix M; unsupported custody/transit still fails closed)* | member observed `HeldBy…`/`InCaravan` | **`Quarantined(UnsupportedCustody)`**: pawn untouched, person blocked from abstraction, a dev diagnostic | fake capture support |
 
 ---
 
@@ -2245,7 +2240,7 @@ Prefer **fail safe, preserve truth, quarantine and diagnose, retry idempotently*
 | an Open episode (≤ 8 members) | ≤ 0.05 ms average per tick, spread | one `episode.watch` job per episode, every 250 ticks, ≤ 8 classifications (~15 hash/contains operations each) |
 | held people (≤ 20) | negligible | one global `custody.watch`, every 2,500 ticks, **only while ≥ 1 person is held** |
 | signals | O(1) | prefix test, runtime index lookup, enqueue |
-| reconcile | < 1 ms typical target, to be measured | bounded member observation; future 3.2B evidence reads use the fixed S27 scan budget below |
+| reconcile | < 1 ms typical target, to be measured | bounded member observation; 3.2B evidence reads use the fixed S27 scan budget below |
 | materialize ≤ 8 pawns | vanilla generation cost (≈ ms per pawn) | bounded group size; larger groups (not in Phase 3) would spread generation across ticks |
 | registry (retained named identities; future temporary active-Episode reservations) | a vanilla cost multiplied by *R*; ≈ 150 is a soft target | `IsReservedByAnyQuest` runs per non-mothballed world pawn per tick; **measure** *R* × *W* and save/load around 150/300 (§ 7.4) |
 | save size | vanilla pawn saves (≈ 10–40 KB each), to be measured | no hard identity bound: the accepted target may reach ≈ 285+ ([§ 4.5.4](#454-retention-and-the-performance-cap)); observe actual save size around 150/300; our own data ≈ 0.5 KB per episode, ≈ 50 B per binding |
@@ -2429,11 +2424,12 @@ persisted field · the source scan.
 | RT-PHYX-011 | **role-constrained creation on real pawns**: for N seeds and every role the created pawn satisfies the role's constraints (violence/Shooting/doctoring capability, role-skill floor), including on modded races; a failure is a contained abort, never a contradicting pawn | 3.1 (S25) |
 | RT-PHYX-012 | **truthful aging**: store a pawn, advance game time by N years (dev time-skip), materialize: chronological age is N years older, biological age advanced by the full interval, birthday effects consistent, no errors | 3.1 (S12) |
 | RT-PHYX-013 | **future cohesion probe**: bounded generated crews under the accepted construction policy, observe opinions/compatibility without guaranteed floors, verify request consistency and preserved bound history | 3.2 (S26 PARTIAL; not run) |
-| RT-PHYX-014 | **concretization**: a crew of five appears twice and the same five pawns appear; a company detachment leaves no roster | 3.2 (S27) |
+| RT-PHYX-014 | **reserved original concretization ID**; as-built 3.2B scenarios 026–032 cover crew continuity/company presence/promotion/load | 3.2 (S27 PARTIAL; current 026–032 owner PASS does not close broader evidence probes) |
 | RT-PHYX-015 | **normal exit of a retained named pawn** *(implemented in 3.1; the owner's physical run is pending; S31 itself passed with M1; an ACTUAL Free is a FAIL)*: materialize one retained named contractor; confirm the pawn is the **bound** pawn; let **vanilla** perform a normal `ExitMap`; assert **no Network `PassToWorld` call** for the already-world pawn and no "already here" error; **no interval in which the pawn is legally reusable, redressable, GC-eligible or faction-rewritten, (M1: the pawn is reserved from its binding on; an actual `Free` is the reservation failing)**; custody becomes `Stored` only through the lifecycle; the reservation is active when required; RELEASE completes **once**; abstract authority reopens **only after RELEASE complete**; save/load while stored; materialize again and assert the **same `Pawn` object and binding** (no second insertion into `WorldPawns`) (P3-INV-006, 029, 031, 032) | 3.1 (S31) |
 | RT-PHYX-016 | **map-removal variant of RT-PHYX-015** *(implemented in 3.1; the owner's physical run is pending; an ACTUAL Free is a FAIL)*: the contractor is still on the episode map when the map is removed, so vanilla passes it with **no `LeftMap` and no `Notify_PawnLeftMap`** (materially different timing); several retained named pawns removed together; a populated world-pawn pool; a save/load after vanilla's pass but before RELEASE completes; the same assertions as RT-PHYX-015 | 3.1 (S31) |
 | RT-PHYX-020+ | arrest/recruit/kidnap/caravan/rescue-site custody, group of five, anonymous members, held-person watch | 3.2 |
-| RT-PHYX-030+ | handoff scenarios: pay, decline, rob, abandon, contractor killed (design direction only) | 3.3 (S28–S30) |
+| RT-PHYX-026–032 | As-built groups/concretization/capture/load/succession/retention scenarios, including 030A/B/V and 032A/B/V; exact menu/action inventory in [runtime § 19](RUNTIME_TESTING.md#19-phase-32b-groups-and-progressive-concretization) | 3.2B (current implemented runtime slice OWNER PASS; independent final audit pending) |
+| Future handoff IDs (unassigned) | pay, decline, rob, abandon, contractor killed (design direction only); the original illustrative 030+ range is superseded by allocated 3.2B IDs | 3.3 (S28–S30) |
 
 ### 21.3 What Phase 3 adds to the Phase 2.9 infrastructure
 
@@ -2531,7 +2527,7 @@ No player-as-contractor board, no NPC-issued market, no full rival simulation in
 
 **Implementation status.** 3.0 is implemented (Appendix H). **3.1 is implemented on the accepted M1, corrected after review (Appendix J), and
 owner runtime validated** (Appendix K.9). **3.2A (held custody) is merged / headless validated / owner runtime validated** (Appendix L); the historical 194-PASS baseline is preserved and final `e768fef` acceptance reported 022 41/0/0, clean save/load and 025 11/0/0 (focused total 52/0/0),
-and its rescue site is not built because S11 failed. 3.2B (groups) and 3.2C (mixed-group reconciliation) are not started.
+and its rescue site is not built because S11 failed. 3.2B (groups + progressive concretization) is implemented/headless validated and owner runtime validated for the current slice; independent final audit pending (Appendix M); full 3.2C mixed-group reconciliation remains unimplemented.
 
 **Design note for 3.2: group extraction (owner requirement; not built in 3.1).** A physical Network group should normally
 **regroup and leave together** through a shared extraction route or extraction region, with bounded cohesion and a safe fallback
@@ -2621,7 +2617,7 @@ Do **not** read an OPEN item as a decision. Each names the narrowest experiment.
 | **S29** | **Physical cargo at a handoff** (3.3): the representation of contractor-held cargo (faction-owned items in carrier pawns' inventories, a pack animal, a container), and what vanilla does with it when the map is removed or the carriers die | not statically provable | a scripted handoff on the test map: pay, decline, rob, abandon; assert exactly-once transfer and no duplication | 3.3 |
 | **S30** | **A rendezvous site** (3.3): a temporary `MapParent` for a meetup; caravan arrival and departure; retention and removal of the map; the player leaving without completing | needs real maps | a rendezvous on the test map; the player's caravan arrives, transacts, declines, leaves | 3.3 |
 | **S31** | **Status: PASSED in the owner's runtime; M1 accepted (ADR-053).** **Retained pawn exit reservation / the Free-world-pawn window** ([§ 7.6](#76-the-vanilla-exit-window-resolved-by-m1-spike-s31-owner-validated)): the smallest safe 1.6 mechanism that keeps a retained named pawn from ever being a redress, discard or quest candidate between a **vanilla** exit and `Stored` authority. In order: **(1)** can the registry reserve the pawn **while it is spawned**, and does that change nothing about its AI, ticking, Lord, needs, health, movement or map exit (note `Thing.Suspended` is holder-based, so this cannot be inferred from `GetSituation`); **(2)** otherwise a synchronous vanilla callback before anything else can observe the pawn (the `LeftMap` signal inside `ExitMap`; `Notify_SiteMapAboutToBeRemoved` for a map removal); **(3)** otherwise the narrowest Harmony contingency (**C-4**), and only if (1) and (2) are proven insufficient | the audit fixes the ordering and shows who consumes `Free`, and that every reservation consumer is gated on `WorldPawns.Contains`, but not the runtime behaviour of a reserved spawned pawn, the timing of temporary-faction removal and the GC pass against the Network's wake-up, or which map types expose a pre-removal hook | scripted on the physical tier's own map: **A** a normal Lord / visitor edge exit; **B** a map removal with the contractor still on the map (no `LeftMap`); **C** a named pawn returning injured; **D** a save/load immediately after vanilla's exit and before RELEASE completes; **E** several retained named pawns leaving together; **F** a heavily populated world-pawn pool (no redress, discard or reuse between exit and storage); **G** rematerialization of the **same** `Pawn` (no twin, no second insertion into `WorldPawns`, no faction corruption). Record the mechanism, the evidence and the residual window (target: none) | **Phase 3.1 (mandatory, owner-reviewed): done, M1** |
-| O-2 | Initial **concretization/cap/retention policy** | **ACCEPTED (ADR-057)**: 6/12 constants, six discretionary living seats with strong/held overflow in existing membership, terminal-batch promotion/reservation, identity above soft 150 | Implement and observe runtime/save-load at 150/300; no automatic identity-breaking tuning | 3.2B, not implemented |
+| O-2 | Initial **concretization/cap/retention policy** | **ACCEPTED (ADR-057)**: 6/12 constants, six discretionary living seats with strong/held overflow in existing membership, terminal-batch promotion/reservation, identity above soft 150 | Current ~150/~300 runtime/save-load PASS; continue measured observation without identity-breaking tuning | 3.2B implemented/headless validated; current Create/Reset and 026–032 owner PASS; independent final audit pending |
 | O-3 | Equipment tier → kind/loadout selection; the `condition` step on gear loss | mod-dependent | S23 + playtest | 3.1 |
 | O-6 | Resurrection detection cadence for dead characters that keep a `PawnRef` | no hook | opportunistic + bounded sweep; measure | 3.2 |
 | O-7 | Name and generation behaviour for modded races | mod-dependent | S23 | 3.1 |
@@ -2633,7 +2629,7 @@ Do **not** read an OPEN item as a decision. Each names the narrowest experiment.
 | O-12 | What truthful aging means for the **abstract** record (a contractor who is 70 and chronically unfit: retire, remain Active but un-materializable, or die of age) | a content / lifecycle decision | the owner | 3.1 / later |
 | O-15 | Freight capability model, the charter-fee economics (a pass-through sink or contractor income), and handoff time windows ([§ 27](#27-phase-33-procurement-fulfillment-and-physical-handoff-design-direction)) | design | 3.3 design review | 3.3 |
 | O-17 | The separation of professional reputation, visibility and regional scope: the later focused phase's design and migration ([§ 6.10](#610-professional-reputation-fame-and-capability)) | design | a focused phase before compensation work | later |
-| O-18 | Organization **composition/role assignment** from immutable origin facts | **Direction ACCEPTED (ADR-057)**: seed/capacity/original specialties and deterministic cohort/slot assignment in report § 2; no mandatory composition persistence | Freeze implemented v1; aggressively test old/new saves, rank/succession and reload for no role drift | 3.2B, not implemented |
+| O-18 | Organization **composition/role assignment** from immutable origin facts | **Direction ACCEPTED (ADR-057)**: seed/capacity/original specialties and deterministic cohort/slot assignment in report § 2; no mandatory composition persistence | Freeze implemented v1; aggressively test old/new saves, rank/succession and reload for no role drift | 3.2B implemented/headless validated; current Create/Reset and 026–032 owner PASS; independent final audit pending |
 | **Harmony** | Is Harmony truly avoidable for every required event? | **Yes for 3.1 and 3.2** (§ 14.2); the three hook gaps are polls | if S21 fails: document the one method, specify a postfix, **do not implement** | — *(3.2A: not triggered; every held state is observed from public vanilla state)* |
 
 ---
@@ -3708,3 +3704,134 @@ Headless only. The full suite, run twice on the final corrected source: **466 te
 33,241), zero C# compiler warnings, save format 5, no Harmony. The original 28 `Custody.*` / `Rescue.*` tests are preserved; the PR #11 correction
 adds six custody regressions and strengthens the existing death/loss tests. RT-PHYS-031…033 remain. The owner's
 physical run of `RT-PHYX-020…025` is the evidence still owed.
+
+## Appendix M: Phase 3.2B as built (groups and progressive concretization)
+
+> **PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED FOR THE CURRENT CREATE/RESET AND 026–032 SLICE; INDEPENDENT FINAL AUDIT PENDING.**
+> This developer-triggered slice implements the accepted [ADR-057](DECISIONS.md#adr-057--phase-32b-readiness-owner-decisions)
+> policy over merged PR #12 `main` `e251c61`. It adds bounded groups without a persistent anonymous Pawn population.
+> Final source/build, full-suite counts, fault/conservation proof and DLL provenance are recorded in
+> [PHASE32B_VALIDATION](PHASE32B_VALIDATION.md). [Runtime § 19](RUNTIME_TESTING.md#19-phase-32b-groups-and-progressive-concretization)
+> gives the reproduction scenarios/checkpoints. The [final owner record](PHASE32B_VALIDATION.md#pr-13-final-owner-runtime-acceptance) now accepts Create/Reset, final-lab 026–029, terminal 030A and active Pending 030B loads, simple 031 and ~150/~300 retained 032 loads. Earlier 029 escape/FAIL and automatic-provisioning/debris refusal remain historical. S26/S27 stay PARTIAL, S21 stays PARTIAL,
+> S11 FAIL / rescue STOPPED, R-50 OPEN, O-20 locked. The accepted 3.1 and 3.2A owner evidence in Appendices K/L is unchanged.
+
+### M.1 Where each piece lives
+
+| Piece | Implementation | As-built contract |
+|---|---|---|
+| Composition v1 | `Domain/Physical/OrganizationComposition.cs` | Pure immutable seed/origin-capacity/original-specialty weights; ≤8 recipe entries; no persisted template/anonymous identities. |
+| Operational role initialization | `OrganizationCompositionV1.TryPlanRoleInitialization` | Full origin cohort in CharacterId order, stable later-person fallback, write once; no current-rank inference or bound-person repair. |
+| Seats and mission | `OrganizationSeatPolicy` / `PhysicalLifecycleService.PlanGroup` | Actual living membership, named matching pins first, healthy matching anonymous stock; ≤8; one unreleased group Episode per org; required shortages refuse, optional shrink. |
+| Real group adapter | `Integration/Physical/RimWorldPhysicalWorldPort.cs` | Existing temporary faction and vanilla Visit Lord; role-constrained anonymous creation, durable binding before reservation/spawn, Solo path retained. |
+| Temporary protection | `RetainedPawnRegistry` / the existing hidden registry quest part | Durable active Episode PawnRefs through incomplete RELEASE; runtime early-ID and resolved-pointer indexes distinguish named/temporary coverage. |
+| Placement truth | `EpisodeMember.playerVisibleTick` / `p0Eligible` | Latch only successful visible placement; no CharacterStore mutation at spawn. Old fields absent → −1/false. |
+| Evidence | `ConcretizationEvidence` / `ConcretizationEvidenceCollector` | Mandatory material S1; S2 exact-subject seam without invented producer; bounded exact-type player-endpoint S3 and public direct S4; no PlayLog/reflection/GC/world scan. |
+| Atomic same-Pawn promotion | `ReconciliationPlanner` / `ReconciliationApplier` | Preview new IDs/name/role/provenance/custody and committed-to-named conversion; existing snapshot transaction, CharacterStore append/index rollback and allocator rollback; exactly-once flag last. |
+| Runtime QA | `Diagnostics/RuntimePhysicalTests/` | Stable 026–032 scenarios, 030A/B/V and 032A/B/V load/observation menus, existing session arm/test-map/sentinel boundaries and measured retention diagnostics; strict compilation/headless tests PASS, owner run PENDING. |
+
+### M.2 Policies implemented
+
+Composition v1 supports origin capacities 3/7/14/32 and refuses malformed/nonstandard origins. Leader weight is one;
+Rifleman/Technician/Logistician weight two; other selected roles weight one. Largest-remainder quotas and residual
+allocation conserve living membership while every living pin consumes its role seat. Dead/departed pins do not consume
+current capacity; their identity/history remains. CharacterRole standing can change without changing operational identity.
+
+Size is actual living current membership at placement: 2–6 anonymous seats may use P0, 7–12 only non-Rifleman role-defining
+seats may use P0, 13+ needs strong evidence for every anonymous seat. The six discretionary target includes leader/lieutenants;
+strong identity obligations can overflow the same knownMembers model. Existing pins remain identities across size changes.
+
+First-created Pawns retain their creation RoleSpec verification. Bound rematerialized identities keep the exact Pawn,
+CharacterId and durable `opRole`; today's mutable capability band does not re-project/revalidate the person's current skills
+or rewrite physical/social history. `VeteranShare` includes healthy, wounded and committed anonymous tier populations, so
+matching-tier checkout/return preserves ratio and ExperienceBand. Its genuinely-empty fallback stays 0.5. Named people gain
+no source-tier field; anonymous-to-named promotion may still alter accepted abstract capability/strength representation.
+
+The owner QA for 026 and the first 027 rematerialization has a 240-ordinary-game-tick step/wait dwell before ExitMap. It checks
+same live owned map/Pawn/role/faction/Lord, active Episode and registry protection without freezing AI or repairing Pawns.
+The final 027 full-crew repeat stays fast; later scenarios do not gain that generic dwell. The owner accepted
+026 / 027 / 028, including the live dwell. Headless coverage alone does not prove real map ticks or Lord/job/social behavior.
+
+While any peer remains Pending, a created anonymous held Pawn remains Episode-owned/reserved; no temporary KnownCharacter
+exists. Whole-Episode terminal reconciliation creates the same Pawn's durable person before RELEASE. Positive custody always
+wins over missing logs and discretionary caps. Free returning promotions transfer one committed aggregate human into one
+named current member without restoring anonymous stock. Recruited promotions become Defected and leave old NPC availability;
+capture retains current membership and a held pin. Death/departure is counted once. Post-commit interruptions retain safe
+reservation coverage until named M1 takes over; completed ordinary anonymous return relinquishes Network ownership safely to
+vanilla. No vanilla-owned Pawn is force-discarded to meet a count target.
+
+The existing COMPLETE boundary forgets `EpisodeMember.pawn` for anonymous operational-role slots with Returned, Killed,
+Lost, NeverPlaced or Detached outcomes **only after RELEASE succeeds**. A Detached prepare-for-removal slot has already
+restored its one aggregate human through `AnonymousBack`; routing-only release and binding forgetting leave the actual
+vanilla Pawn untouched. Named history and continuing named identity/custody are preserved. Rebuild/Resume cannot use
+completed anonymous history as a temporary owner or hidden roster. Malformed retained anonymous history is reported,
+never silently repaired.
+
+Promotion name facts preserve the actual bound Pawn's exact identity: NameTriple supplies first/nick/last/display; every
+other Verse.Name subtype with nonblank `ToStringFull` supplies display only with null structured fields. Null/blank display
+is unknown. No display parsing, name generation or mutation of Pawn.Name is performed.
+
+Evidence is conservative: exact MeleeCombat/RangedFire/ExplosionImpact endpoints, guarded RangedImpact actual==original
+shape, current player faction/host endpoint and validated absolute Episode window; at most 32×128 entries/candidate and eight
+candidates, plus 128 direct relation records. Unsupported/pruned/out-of-window S3 evidence does not authorize an identity; valid S1/S4 qualify independently. S2 has a clean exact
+planned-subject predicate but no fabricated production publisher. PlayLog is omitted and cannot independently promote.
+
+Construction-only cohesion sets force-new and disables vanilla initial relation generation; eligible new adults use request-time
+FixedIdeo selected from established members or the first valid batch candidate and are verified. Existing social history remains
+physical truth. No opinion floors, friendship/memory/trait/relation edits or post-bind sanitization are implemented.
+
+#### Historical dedicated-lab setup snapshot (source 6162748)
+
+The setup snapshot below predates the wildlife-reset correction. Its ANY-Pawn refusal is superseded by [source 98ddc71 and the frozen removal policy](PHASE32B_VALIDATION.md#pr-13-qa-lab-wildlife-reset-current-owner-review-record); live Create/Reset and sustained custody now have [owner PASS](PHASE32B_VALIDATION.md#pr-13-final-owner-runtime-acceptance). Geometry and ordinary prison behavior remain as described.
+
+The explicit developer QA lab replaces automatic compound Ensure. Runtime infrastructure provisioning is confined to the armed Create and destructive Reset actions; scenarios require read-only GetPrepared/Validate before fixtures and at placement.
+
+All **3,600 cells** of a new **60×60** map use vanilla **Concrete**; an approved legacy **100×100** map uses **10,000 cells** without resizing. Offsets are `(x, z)` from `map.Center`. The central **13×13 camp** spans **−6..+6** on both axes: one wooden North-facing `Table2x2c` at **(0, 4)** and four wooden stools at **(−1, 4), (2, 4), (0, 3), (0, 6)**. The west ordinary room has a **9×9** perimeter **x −23..−15 / z −4..+4**, a **7×7** interior, east wooden door **(−15, 0)** and one North-facing normal wooden bed **(−20, −1)**. The east prison retains its **9×9** perimeter **x +15..+23 / z −4..+4**, **7×7** interior, west wooden door **(+15, 0)** and two North-facing prisoner beds **(+18, −1), (+21, −1)**. The plan contains **62 granite walls, 2 wooden doors, 3 wooden beds, 1 wooden table and 4 wooden stools: 72 structures**. Constructed roof covers only the two 81-cell room footprints (**162 cells**); the remaining field is unroofed. The camp retains at least eight free staging cells and a route to the map edge.
+
+Dev Mode and a current one-action PHYX arm are required. The read-only preflight requires the exact unique current TestSite, exactly plain `MapParent`, null parent faction, `IsPlayerHome == false`, unchanged narrow def (no home eligibility/comps/incident targets), approved 60×60 or 100×100 size, available enabled room/path services and expected vanilla layout definitions. No physical runner may be active; the Network must be running with resolved physical ownership. Associated incomplete Episodes block by target map, fallback tile/layer or a member’s `MapHeld`, including CLOSED but not fully released/followed-up/published Episodes. Retained bound physical obligations block by actual `MapHeld` or a deployed Episode link. Fully complete historical references alone do not block and are never erased. A deduplicated census combines recursive map/holder contents with `allowUnreal: true`, every cell’s Thing grid and `MapPawns.AllPawns`: **ANY Pawn**, including held/unspawned and corpse-contained Pawns, refuses reset. Unknown/unresolved Thing ownership, non-destroyable or quest-tagged Things, occupied/assigned beds or `CompAssignableToPawn` structures (including off-map owners), and `CompExplosive.Props.explodeOnDestroyed` and the callback classes `CompHasPawnSources`, `CompTreeConnection` and `CompObelisk_Abductor` also refuse before any map write: their Vanish callbacks can alter WorldPawns retention, off-map Pawns or another pocket map.
+
+Only the explicit armed destructive Dev action calls `QaLab.InitializeOrReset(TestSite.Map, ...)`. After complete preflight and spending the one-action arm, remove all roofs first; destroy the snapshotted spawned **non-Pawn exact-map Things** through vanilla `Destroy(DestroyMode.Vanish)`; require no leftover/new Things before terrain or building writes; normalize every map cell to Concrete; spawn the deterministic ordinary vanilla structures and roof only the rooms; update real room/district state; then validate actual results. There is no debris DefName whitelist. Failed hard guards change nothing. Unexpected vanilla callbacks, leftover Things or setup exceptions **STOP for inspection** and can leave a partially normalized map; there is no automatic cleanup, callback-object deletion or transactional reset claim. Repeating Reset on a proven empty eligible lab may rebuild it deterministically, with a new arm and the same guards.
+
+029/030B retain the same exact anonymous Episode/member/Pawn binding, one pre-capture owned relocation, one real `CapturedBy`, valid real prisoner-bed claim without eviction, immutable 17-fact fail-closed guard, **two WatchPeriod intervals (at least 500 ordinary game ticks)** while peers remain Pending, zero early Character/commit, terminal-batch same-Pawn promotion and named retention. The prior capture-helper source tail is unchanged apart from its `TestCompound` → `QaLab` API name; loaded 030V remains read-only. The lab setup itself proves no live custody survival. Transient capture→escape-before-batch stays unlatched and deferred to separate temporal-design review, likely 3.2C.
+
+### M.3 Save/load and compatibility
+
+Save format stays **5**. Only additive EpisodeMember placement fields are added: `playerVisibleTick` defaults **−1** and
+`p0Eligible` defaults **false**. Unknown old placement is never invented into P0. Composition and reservation indexes are derived,
+not persisted rosters. FinalizeInit's durable thing-id bridge includes active Episode slots before pointers resolve; PostLoadInit
+installs validated pointer indexes before the first vanilla world tick. Queries use durable owner eligibility, and diagnostics
+separate named and temporary coverage. Invalid/unresolved provenance produces findings/refusal rather than a replacement Pawn.
+
+Headless tests cover actual Scribe absent/default and additive-field persistence, active ownership reconstruction, reservation
+handoff, operational-role stability/reload, terminal conservation, every promotion commit fault point and interrupted post-commit
+retry. Actual active Pending (030B) and terminal/released (030A) game loads now have owner PASS. A committed-before-RELEASE checkpoint remains separate broader evidence; the current menu does not freeze between COMMIT and RELEASE.
+
+### M.4 Evidence and exact scope limits
+
+The [final owner acceptance](PHASE32B_VALIDATION.md#pr-13-final-owner-runtime-acceptance) closes the current Create/Reset and 026–032 runtime gates, including terminal 030A, active Pending 030B and ~150/~300 retained 032 save/load. Validated source remains `98ddc71f77920592b81845eb23c63f291f18843e`; frozen DLL SHA-256 `610cb8feadef228e746bb43254ee78a87ff8071d69f2d4d756b91632894ca580`, **1,291,776 bytes**, stamp `built 2026-10-07T10:38Z, source commit 98ddc71`. Prior final headless evidence remains **633 / 45,174 / 0 ×2**; no source/tests/DLL change or rebuild in this acceptance update. Owner lookup timings are environment observations, not universal benchmarks. Independent final audit pending; PR #13 draft/open/unmerged. S11 FAIL / rescue STOPPED, R-50 OPEN, O-20 LOCKED, S21/S26/S27 PARTIAL, transient capture→escape/full 3.2C deferred and 3.3/Phase 4 unimplemented remain. **DO NOT MERGE YET.**
+
+#### Historical pre-acceptance evidence
+
+> The records below preserve prior deliveries. Their former current-source and pending/rerun statements are historical, superseded by the acceptance above.
+
+Current dedicated-lab source `6162748` and its 37-item report are in [PHASE32B_VALIDATION](PHASE32B_VALIDATION.md#pr-13-dedicated-qa-lab-current-owner-review-record). **QaLab 10 tests / 753 checks / 0 failures**; physical runtime wiring/safety **Phys31 88 / 9,847 / 0**; **Phys32b 112 / 5,359 / 0**; capture guards **9 / 107 / 0**; 030B pending capture with real Scribe reload **1 / 27 / 0**. These overlapping filters are not added together. Full pass 1: **626 tests / 45,090 checks / 0 failures, exit 0**; full pass 2: **626 tests / 45,090 checks / 0 failures, exit 0**. Exact shipped DLL provenance is recorded there. Headless tests prove policy, deterministic geometry, source/API wiring, preflight/write ordering, transitive read-only infrastructure validation, no-Pawn destruction boundary and fake-world/real-Scribe custody continuity. They do not execute Unity generation/reset, map/holder callbacks, actual room/path/AI ticks or real 500-tick custody; **owner Create → Reset → 029 and 030 save/load remain required**.
+
+Use a **fresh disposable save**: ARM → **Create 60×60 Test Map**; inspect the raw map if desired; ARM again → **Initialize / Reset QA Lab [DESTRUCTIVE]**; ARM → **RT-PHYX-029**. 026–028 are not prerequisites for reaching 029. If 029 passes, continue to 030 save/load. Before final merge, one 026 sanity run on the final lab is recommended because the physical environment changed; repeat the full 026–028 sequence only if that check or later evidence reveals a shared visitor problem. **DO NOT MERGE.**
+
+The prior automatic compound delivery’s source `5548f0b` passed two accepted fresh runs of **616 / 44,269 / 0**, strict 0 warnings/errors and all nine gates, with DLL SHA `b929ad26f82d500bc8e74924a0143e6bb1e756e961c323c07ebe22ed7257b502`, stamp `built 2026-10-06T13:02Z, source commit 5548f0b`. Its 34-item report, initial wilderness custody failure and subsequent owner debris refusal remain historical. That artifact does not validate the new explicit lab.
+
+The prior rematerialization/dwell correction's source `bd59bd0` passed 602 tests / 43,431 checks / 0 failures in two fresh runs, strict 0 warnings/errors and nine gates PASS, with DLL SHA `758be09235ef6e879e5a02eca1d395df703aafa9d3da94fe26e8e402f749d81b`, stamp `built 2026-10-06T11:49Z, source commit bd59bd0`. Its historical 30-item report, abort disclosure and subsequent owner acceptance remain preserved.
+
+The prior surgical delivery's source `809e835` passed two fresh full runs of **586 tests / 43,106 checks / 0 failures** each, with strict **0 compiler warnings/errors** and all **nine source gates PASS**. Its shipped exact tested run 2 DLL had SHA-256 `8ef464be121f0fabb26eb98a811a16071c6e57d3f9f2949a4df1560362b82ff2`, stamp `built 2026-10-06T10:59Z, source commit 809e835`. Exact focused regressions, corrected artifact provenance and the 27-item report are in the [historical surgical record](PHASE32B_VALIDATION.md#prior-pr-13-surgical-correction-historical). At that delivery, owner runtime remained pending.
+
+The original delivery's two fresh full runs against source `5b403fe` each passed **581 tests / 42,946 checks / 0 failures**, with **0 compiler warnings/errors**, warnings treated as errors and all **nine source gates PASS**. Its run 2 DLL had SHA-256 `c8acac8534822dfa3e55521019c1379f2acd3fd3084266ad63739cfad7270adc`, stamp `built 2026-10-06T10:10Z, source commit 5b403fe`. Original changed files and measured headless retention/Scribe costs remain historical evidence in the validation report. Retention fixtures around 150/300 report measured headless registry costs;
+Unity TPS, actual save-size deltas and active-mod runtime safety are pending. 150 is a soft warning region, never an identity cap.
+
+Store-aware current named counts exclude dead/lost/defected/retired history from service headcount/capacity/reserve inputs without changing formulas. `firstEncounterTick` is set only from a proven `playerVisibleTick <= now`; strong evidence without dated placement leaves −1 and still creates mandatory identity. Episode RELEASE completion drops derived temporary cache ownership.
+
+Placement/observation/Closed-release entry points validate the ≤8 member bound before walking engine members; malformed overbound Episodes fail closed with durable ownership preserved, including committed Episodes.
+
+3.2B covers bounded group return, selective P0/strong promotion and one held anonymous member with ordinary peers returning
+into the terminal batch. It does not deliberately implement the full return/wound/death/capture/recruit/missing/combat-promoted/
+ephemeral mixed matrix, its operation/morale/succession combinations or partial extraction; those remain **3.2C**. Independent
+early per-member identity/custody commit is excluded. The slice is dev-triggered, with no new player-facing UI/group content,
+rescue site/GenStep, R-50 fix, 3.3 handoff, Phase 4, permanent organization faction or Harmony.

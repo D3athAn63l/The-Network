@@ -192,9 +192,21 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
     /// </summary>
     public static class TestSite
     {
-        public const int MapSize = 100;
+        public const int MapSize = 60;
 
         public static WorldObjectDef Def => DefDatabase<WorldObjectDef>.GetNamedSilentFail(PhysicalTestIds.TestMapDef);
+
+        public static int Count
+        {
+            get
+            {
+                int count = 0;
+                if (Def != null && Find.WorldObjects != null)
+                    foreach (WorldObject site in Find.WorldObjects.AllWorldObjects)
+                        if (site.def == Def && !site.Destroyed) count++;
+                return count;
+            }
+        }
 
         /// <summary>The narrowness check on the def actually loaded (a patch could have widened it).</summary>
         public static string DefRefusal(WorldObjectDef def)
@@ -230,8 +242,9 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         }
 
         /// <summary>Creates the world object (once) and its map (again after a removal). Null with a reason on refusal.</summary>
-        public static Map Ensure(out string report)
+        public static Map Create(out string report)
         {
+            if (Count > 1) { report = "refused: multiple dedicated TestSites exist; resolve ownership before provisioning"; return null; }
             WorldObjectDef def = Def;
             string why = DefRefusal(def);
             if (why != null)
@@ -240,6 +253,12 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 return null;
             }
             MapParent parent = FindParent();
+            if (Count == 1 && parent == null) { report = "refused: the existing TestSite object is not an approved MapParent"; return null; }
+            if (parent != null && (parent.GetType() != typeof(MapParent) || parent.Faction != null || (parent.HasMap && parent.Map.IsPlayerHome)))
+            {
+                report = "refused: the dedicated test site has acquired faction ownership or home-map status";
+                return null;
+            }
             if (parent == null)
             {
                 PlanetTile tile = TileFinder.RandomSettlementTileFor(Faction.OfPlayer, false, t => !Find.WorldObjects.AnyWorldObjectAt(t)
@@ -257,11 +276,32 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             if (!parent.HasMap)
             {
                 Map m = GetOrGenerateMapUtility.GetOrGenerateMap(parent.Tile, new IntVec3(MapSize, 1, MapSize), def);
+                if (m == null || !ReferenceEquals(m.Parent, parent) || m.IsPlayerHome)
+                { report = "refused: map generation did not return the exact non-home TestSite"; return null; }
                 m.fogGrid.ClearAllFog();
                 PhysLog.Info("test map generated: map " + m.uniqueID + " (" + MapSize + "x" + MapSize + ") on world object " + parent.ID);
             }
-            report = "test map " + parent.Map.uniqueID + " on world object " + parent.ID + ", tile " + parent.Tile;
+            string labReport;
+            bool valid = QaLab.Validate(parent.Map, out labReport);
+            report = "TestSite world object " + parent.ID + ", map " + parent.Map.uniqueID + ", " + parent.Map.Size.x + "x" + parent.Map.Size.z
+                + "; QA Lab valid=" + valid + ": " + labReport + ". Create does not initialize or reset the lab.";
             return parent.Map;
+        }
+
+        public static Map GetExisting(out string report)
+        {
+            if (Count > 1) { report = "Multiple dedicated TestSites exist; lab ownership is ambiguous."; return null; }
+            Map map = Map;
+            report = map == null ? "No physical TestSite map exists. Use Dev Mode -> PHYX — Create 60×60 Test Map first." : "existing TestSite map " + map.uniqueID;
+            return map;
+        }
+
+        public static Map GetPrepared(out string report)
+        {
+            Map map = GetExisting(out report);
+            if (map == null) return null;
+            if (!QaLab.Validate(map, out report)) { report = QaLab.SetupInstruction + " " + report; return null; }
+            return map;
         }
 
         /// <summary>
@@ -570,6 +610,8 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             if (p.questTags == null || !p.questTags.Contains(PhysicalTestIds.RunTag(runId))) return "not tagged by this run";
             if (p.Spawned || p.SpawnedOrAnyParentSpawned) return "spawned";
             if (Find.WorldPawns.Contains(p)) return "a world pawn";
+            if (RetainedPawnRegistry.Active != null && RetainedPawnRegistry.Active.Reserves(p)) return "reserved by a named person or an active Episode";
+            if (GroupQaRules.HasUnreleasedBinding(ctx?.episodes?.episodes, p.thingIDNumber)) return "bound to an unreleased Episode member";
             if (RetainedPawnRegistry.Active != null && RetainedPawnRegistry.Active.CharacterOf(p).IsValid) return "bound to a Network person (registry)";
             if (ctx?.characters != null) foreach (KnownCharacter c in ctx.characters.characters) if (c.pawn != null && ReferenceEquals(c.pawn.pawn, p)) return "bound to Network person " + c.id;
             return null;

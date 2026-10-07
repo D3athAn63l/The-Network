@@ -97,7 +97,10 @@ namespace TheNetwork.Domain.Physical
         CharacterHeld = 26,
 
         /// <summary>Phase 3.2A: recruited by the player (§ 8.2: JoinedPlayer ⇒ status Defected), through the shared status setter (never revives).</summary>
-        CharacterDefected = 27
+        CharacterDefected = 27,
+
+        /// <summary>One real anonymous slot becomes a named member, debiting its committed copy exactly once.</summary>
+        SlotPromotion = 28
     }
 
     /// <summary>One durable assignment of the plan. Plain data: the Applier interprets it; nothing here runs code.</summary>
@@ -149,12 +152,15 @@ namespace TheNetwork.Domain.Physical
 
         /// <summary>Phase 3.2A, a held outcome only: a captive custody (the person becomes Captured), not a carry, a recruitment or a keeping.</summary>
         public bool captive;
+
+        /// <summary>Runtime-only facts from this member's existing pawn, gathered after the whole batch is terminal.</summary>
+        public PhysicalPromotionFacts promotionFacts;
     }
 
     /// <summary>
     /// The complete, immutable reconciliation plan (§ 15.2 step 3): the decisions, the succession decision, and the flat ordered
     /// list of every durable assignment the commit will make. Built from a READ-ONLY view of state; building it changes nothing.
-    /// The Applier never alters it (its one result, a promoted record, lives on the <see cref="CommitTarget"/>).
+    /// The Applier follows the fixed operations; created-record results live on the <see cref="CommitTarget"/>.
     /// </summary>
     public sealed class ReconciliationPlan
     {
@@ -172,6 +178,9 @@ namespace TheNetwork.Domain.Physical
 
         /// <summary>Every character an op writes (members, the old leader, the successor): the character part of the touched set.</summary>
         public readonly List<KnownCharacter> touchedCharacters = new List<KnownCharacter>();
+
+        /// <summary>Prospective identities built in PLAN; attached to the store only by SlotPromotion.</summary>
+        public readonly List<KnownCharacter> promotedCharacters = new List<KnownCharacter>();
 
         public FateRules.SuccessionPlan succession;
 
@@ -248,6 +257,9 @@ namespace TheNetwork.Domain.Physical
 
         /// <summary>The record a Promotion op created (runtime only; read by the NewLeader op that follows).</summary>
         public KnownCharacter promoted;
+
+        /// <summary>Real slot identities this commit attached, in allocator order. Runtime only.</summary>
+        public readonly List<KnownCharacter> slotPromotions = new List<KnownCharacter>();
     }
 
     /// <summary>A plan that failed VALIDATE: nothing has been touched (§ 15.2 step 4).</summary>

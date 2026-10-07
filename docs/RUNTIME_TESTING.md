@@ -35,6 +35,7 @@
 16. [What was and was not validated](#16-what-was-and-was-not-validated)
 17. [The physical tier (Phase 3.1)](#17-the-physical-tier-phase-31)
 18. [Phase 3.2A: held custody](#18-phase-32a-held-custody)
+19. [Phase 3.2B: groups and progressive concretization](#19-phase-32b-groups-and-progressive-concretization)
 
 ---
 
@@ -753,7 +754,7 @@ Mode category **"The Network (PHYSICAL TESTS: disposable environment only)"**, i
 or *Live integration scan* (a source scan proves the safe code never names the real adapter or the tier).
 
 **Use a disposable save.** The tier turns Network Solo contractors into retained people of the save (they become `Stored` for good),
-creates a test map on an empty tile, hidden temporary factions and a hidden registry quest, and applies deliberate dev damage, a dev
+uses the explicitly created/prepared test map, creates hidden temporary factions and a hidden registry quest, and applies deliberate dev damage, a dev
 arrest and test-map removals. It never touches the colony's maps or colonists, and it never decides by itself that a save is
 disposable.
 
@@ -762,6 +763,8 @@ disposable.
 | Menu item | Arm | What it does |
 |---|---|---|
 | `PHYX — Arm physical tests (type the phrase)...` | — | a modal; typing `ARM PHYSICAL TESTS` arms **one** action for this game (cleared on load and quit, never saved) |
+| `PHYX — Create 60×60 Test Map [armed]` | yes | raw dedicated map/fog only; reuse/report existing IDs, actual size and lab validity; never initialize/reset |
+| `PHYX — Initialize / Reset QA Lab [DESTRUCTIVE] [armed]` | yes | explicit whole-map normalization after exact-site/protected-Pawn/no-obligation preflight; arm separately after Create |
 | `PHYX — Show status (read-only)` | no | the arm, the active run and step, the test site, incomplete episodes, the adapter and lifecycle counters, the guard's answer |
 | `PHYX — Last reports (read-only)` | no | the last five run blocks |
 | `PHYX — Stop current run (preserves evidence)` | no | stops pumping the run; nothing is undone |
@@ -778,6 +781,10 @@ The guard checks facts only: Dev Mode on, armed, the Network running, the adapte
 `[TheNetwork][PHYS] ===== RT-PHYX-0NN — <name>: PASS|FAIL|INCONCLUSIVE (run …) =====` and ends with `===== end RT-PHYX-0NN …`, and
 shows a message. **INCONCLUSIVE is never a PASS** (for example: no synchronous `LeftMap` was seen). On a FAIL nothing is cleaned up.
 A suite visit lasts 1,250 ticks at the chill spot (the same vanilla Lord as production, a runtime-only shortened stay).
+
+Current setup for every armed physical scenario: Use a **fresh disposable save**: ARM → **Create 60×60 Test Map**; inspect the raw map if desired; ARM again → **Initialize / Reset QA Lab [DESTRUCTIVE]**; ARM → **RT-PHYX-029**. 026–028 are not prerequisites for reaching 029. If 029 passes, continue to 030 save/load. Before final merge, one 026 sanity run on the final lab is recommended because the physical environment changed; repeat the full 026–028 sequence only if that check or later evidence reveals a shared visitor problem. **DO NOT MERGE.**
+
+The prepared lab is checked before any fixture is made and at placement. A map removed by a deliberate map-removal scenario must be explicitly recreated and reset before the next armed scenario. Never reset around surviving subjects or active obligations.
 
 ### 17.2 The scenarios
 
@@ -798,7 +805,7 @@ A suite visit lasts 1,250 ticks at the chill spot (the same vanilla Lord as prod
 | RT-PHYX-015 | Normal-exit M1 regression | any Solo | at vanilla's synchronous `LeftMap` (after vanilla's own pass): ReservedByQuest, reserved, faction unchanged, custody still Deployed; per frame: covered while spawned, **an actual Free (or a `ReservationBroken` quarantine) is a FAIL**, authority closed until COMPLETE; then the same pawn rematerializes and leaves again; **0 passes, 0 skipped, 0 refused (no pass action exists in a Returned release)** |
 | RT-PHYX-016 | Map-removal M1 regression | 1–3 Solos | up to three Solos (one episode each) on the test map when vanilla removes it: each a reserved world pawn at once (an actual Free is a FAIL), no `LeftMap`, faction unchanged; each Returned once; 0 Network passes |
 
-`RT-PHYX-013` and `014` (cohesion, concretization) are Phase 3.2B and do not exist. `RT-PHYX-020…025` (held custody) are Phase 3.2A: [§ 18](#18-phase-32a-held-custody).
+`RT-PHYX-013` and `014` retain their reserved meanings; Phase 3.2B implementation scenarios use `026–032` ([§ 19](#19-phase-32b-groups-and-progressive-concretization)). `RT-PHYX-020…025` (held custody) are Phase 3.2A: [§ 18](#18-phase-32a-held-custody).
 
 **"Solo" in the Needs column means an NPC Solo _contractor_** (`ContractorService.IsNpcSoloContractor`: an individual that is not an organization, with a contractor profile and simulation). **A Fixer is never selected**: Phase 3.1 exercises one existing NPC Solo contractor, and the picker, still deterministic (the lowest eligible actor id), keeps every other check (active, embodied, alive, abstractly simulatable, not on an operation, binding and custody agreement, the scenario's need). A world with only Fixers has no candidate and the run says so.
 
@@ -952,7 +959,7 @@ Existing headless evidence is **481 tests / 35,084 checks / 0 failures ×2**, ze
 This acceptance update is documentation-only; there is no rebuild or new gameplay test run.
 
 S21 stays PARTIAL for the remaining headless-only caravan/transport/other-faction-prisoner observations. R-50 stays OPEN,
-O-20 stays locked, S11 stays FAIL / rescue STOPPED, and 3.2B, 3.2C, 3.3 and Phase 4 remain unimplemented.
+O-20 stays locked, S11 stays FAIL / rescue STOPPED. Since this 3.2A acceptance, 3.2B is implemented/headless validated and owner runtime validated for the current Create/Reset and 026–032 suite (§ 19); independent final audit is pending. 3.2C, 3.3 and Phase 4 remain unimplemented.
 
 **Historical correction sequence (preserved):**
 
@@ -996,3 +1003,116 @@ they are not outstanding acceptance work.
 **What a FAIL looks like.** The episode quarantined on an arrest; a second commit or Custody episode for one transition; a held person
 `Stored` or abstract; an actual `Free` world pawn or a `ReservationBroken` (the M1 reservation failing for a held pawn); any Network
 `PassToWorld`; a different `Pawn` after the return; a recruited person sent home.
+
+
+## 19. Phase 3.2B: groups and progressive concretization
+
+**PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATION COMPLETE FOR THE CURRENT CREATE/RESET AND 026–032 SCENARIO SET. INDEPENDENT FINAL AUDIT PENDING.**
+
+The owner completed the final dedicated lab, **026–032**, **030A terminal and 030B active Pending SAVE/LOAD → unarmed 030V**, and **032A/032B ~150/~300 SAVE/LOAD → unarmed 032V**. See [final owner acceptance and frozen source/artifact](PHASE32B_VALIDATION.md#pr-13-final-owner-runtime-acceptance) and the matrix in [§ 19.4](#194-final-phase-32b-owner-runtime-evidence). Validated source remains `98ddc71f77920592b81845eb23c63f291f18843e`; this record is documentation-only. Scenarios consume a prepared lab; the two explicit armed actions own provisioning. S21/S26/S27 PARTIAL, S11 FAIL / rescue STOPPED, R-50 OPEN and O-20 LOCKED remain.
+
+The earlier wilderness-edge 029 escape/FAIL, automatic-provisioning/debris refusal and Test 4 verifier protocol errors remain historical; fresh final-lab results supersede their outstanding gates. There is no pending formal 032V rerun. The instructions below preserve the setup/menu/save-load protocols **for reproduction**, not as outstanding formal acceptance work. **Owner runtime gate complete; independent final audit pending. PR #13 remains draft/open/unmerged. DO NOT MERGE YET.**
+
+### 19.0 Explicit lab setup
+
+Under **The Network (PHYSICAL TESTS: disposable environment only)**, use:
+
+1. Arm with `ARM PHYSICAL TESTS`, then **PHYX — Create 60×60 Test Map [armed]**. This creates only the raw map/fog, or reports an existing map/actual size/lab status.
+2. Inspect if desired, arm again, then **PHYX — Initialize / Reset QA Lab [DESTRUCTIVE] [armed]**. This normalizes the whole dedicated map when no Humanlike or Network-owned/bound Pawn or physical obligation is present. Other non-humanlike Pawns on that exact disposable TestSite are removed during this explicit Reset.
+3. Arm each runtime action separately. Start with **029**; if PASS, continue to **030**.
+
+Dev Mode and a current one-action PHYX arm are required. The read-only preflight requires the exact unique current TestSite, exactly plain `MapParent`, null parent faction, `IsPlayerHome == false`, unchanged narrow def (no home eligibility/comps/incident targets), approved 60×60 or 100×100 size, available enabled room/path services and expected vanilla layout definitions. No physical runner may be active; the Network must be running with resolved physical ownership. Associated incomplete Episodes block by target map, fallback tile/layer or a member’s `MapHeld`, including CLOSED but not fully released/followed-up/published Episodes. Retained bound physical obligations block by actual `MapHeld` or a deployed Episode link. Fully complete historical references alone do not block and are never erased. A deduplicated census combines recursive map/holder contents with `allowUnreal: true`, every cell’s Thing grid and `MapPawns.AllPawns`: **Humanlike or Network-owned/bound Pawns**, including held/unspawned and corpse-contained Pawns, refuse reset before any map write. Other non-humanlike Pawns become disposable reset subjects only after this complete census and ownership preflight. Network protection independently checks positive retained-registry ownership, all KnownCharacter bindings, and every incomplete Episode binding by actual Pawn pointer or durable ThingID. Unknown ownership or an unresolved/inert registry fails closed. Unknown/unresolved Thing ownership, non-destroyable Things, quest-tagged non-Pawn Things, occupied/assigned beds or `CompAssignableToPawn` structures (including off-map owners), and `CompExplosive.Props.explodeOnDestroyed` and the callback classes `CompHasPawnSources`, `CompTreeConnection` and `CompObelisk_Abductor` also refuse before any map write: their Vanish callbacks can alter WorldPawns retention, off-map Pawns or another pocket map.
+
+Only the explicit armed destructive Dev action calls `QaLab.InitializeOrReset(TestSite.Map, ...)`. After complete preflight and spending the one-action arm, remove all roofs first; recheck each preflight-approved non-humanlike Pawn's exact-map scope, race and Network ownership, detach it from its map/holder, then use vanilla `WorldPawns.PassToWorld(pawn, PawnDiscardDecideMode.Discard)` and require Discarded with no WorldPawns retention; destroy the snapshotted spawned **non-Pawn exact-map Things** through vanilla `Destroy(DestroyMode.Vanish)`; require no leftover/new Things before terrain or building writes; normalize every map cell to Concrete; spawn the deterministic ordinary vanilla structures and roof only the rooms; update real room/district state; then validate actual results. There is no debris DefName whitelist. Failed hard guards change nothing. Unexpected vanilla callbacks, leftover Things or setup exceptions **STOP for inspection** and can leave a partially normalized map; there is no automatic cleanup, callback-object deletion or transactional reset claim. Repeating Reset on a proven empty eligible lab may rebuild it deterministically, with a new arm and the same guards.
+
+`TestSite.GetPrepared` → read-only `GetExisting` → `QaLab.Validate`. Validation and its transitive helpers perform no construction, terrain/roof/faction writes, bed designation/assignment or repair. They inspect the exact map/scope/size, expected Things/footprints/materials/factions, every Concrete/roof cell, free field and camp capacity, ordinary normal-bed room, recognized prison beds sharing a proper non-edge prison room, closed player-owned prison door, and actual `NoPassClosedDoors` camp-to-edge / prison-no-edge reachability. `RoomCanBePrisonCell` supplies the proper/non-huge condition. Actual captive bed eligibility, `PawnCanOpen == false` and ByPawn no-edge reachability are checked in the unchanged capture helper. Prepared validation permits runtime subjects and benign extra Things that leave required layout/standability intact; all armed starts require it before fixture creation, Solo/group placements revalidate, and read-only 030/032 starts require it. Missing/invalid labs report the explicit Create or Reset instruction.
+
+Incidental animals, insects and mechs are not required test subjects. The owner explicitly authorized their removal and vanilla linked-entity cleanup in this disposable QA save, including off-map relationships and mechanitor control groups. Reset never directly targets an off-map Pawn. Success reports disposable non-humanlike Pawns removed and zero protected Pawns; a refusal reports Humanlike and Network-owned counts. Ordinary scenario starts still only validate/use the prepared lab and cannot remove wildlife. See the [removal audit](PHASE32B_CUSTODY_QA_AUDIT.md#disposable-non-humanlike-pawn-removal-audit).
+
+### 19.1 Exact menu inventory and visibility boundary
+
+Use **Dev Mode → The Network (PHYSICAL TESTS: disposable environment only)** in a fresh disposable save. For each destructive action, use the existing **PHYX — Arm physical tests (type the phrase)...** action and type `ARM PHYSICAL TESTS`. The arm is cleared after each run and on load. The cases deliberately create owned organization/person fixtures and leave durable identities or a captive in that disposable save; cleanup preserves identity and custody. Failure preserves the tagged scenario and its report. These cases never join Quick smoke or Full safe regression.
+
+The test map is the suite's owned **TestSite**. A scoped, exact-active-Episode fixture injects **SYNTHETIC P0** there; the log states that this is not naturally player-visible placement. A generated/unspawned/failed Pawn and ordinary dev-map presence do not qualify. This exercises size/promotion policy without claiming the production home/player-occupied-map visibility rule was observed. The real adapter has a separate typed home-map visibility scope API, naming the map and save modification. **There is no new home-map menu action/UI for it**; the ordinary arm never grants it. Genuine home/player-occupied-map P0 remains a separately gated owner verification item.
+
+The old reserved 013/014 meanings remain absent; no existing ID is renumbered. The family IDs 030 and 032 have multiple short menu labels, analogous to 010A/B/V. Exact menu entries:
+
+| Menu label | Action and assertions |
+|---|---|
+| `RT-PHYX-026 — Small crew first visit [armed]` | Create five living seats with only the Leader initially known: Leader 1 / Rifleman 2 / Medic 1 / Heavy 1. Place Leader/Medic/Rifleman with synthetic visibility, share one temporary faction/Visit Lord, dwell for **240 ordinary game ticks**, then return through vanilla ExitMap and commit exactly **two** new same-Pawn identities; conserve five humans. |
+| `RT-PHYX-027 — Small crew same-pawn second visit [armed]` | Requires completed 026 and its unchanged five-person crew. Reuse the exact Leader/Medic/Rifleman and fill the previously abstract Heavy/second Rifleman. Dwell for **240 ordinary game ticks** while remembered identities remain intact, then return into five known humans/zero abstract copies, then perform a full five-person repeat with **zero new projections/identities** and every exact Pawn binding preserved; that final repeat stays fast. |
+| `RT-PHYX-028 — Large company ordinary presence [armed]` | Create a sixteen-person company with one known leader. Place six anonymous Riflemen under synthetic visibility; large size supplies no discretionary P0. Ordinary vanilla exits restore committed stock once and create **zero** new KnownCharacters; remove temporary reservation/slot PawnRefs safely. |
+| `RT-PHYX-029 — Anonymous arrest and atomic promotion [armed]` | Place three anonymous company Riflemen without P0; validate the real compound cell/available bed, relocate only the owned captive once, then call real `CapturedBy(Faction.OfPlayer)` and claim its real prisoner bed. Hold ordinary peers Pending across two watches: actual prisoner/HeldByPlayer/PlayerPrisoner and same temporary binding are checked before waiting and during relevant frames; failure aborts once before downstream promotion checks. No early Character. Exit peers, then terminal-batch commit exactly one Captured / OutOfCustody(PlayerPrisoner) person with the same name/Pawn/role/org, conservative counts and named retention/custody watch after RELEASE. Leaves the captive held. |
+| `030A SAVE — concretized group [armed]` | Complete the small first-visit group, validate its two promotions and all post-commit stages, then pause for owner SAVE. This is a **released/concretized** checkpoint. |
+| `030B SAVE — anonymous arrest Pending [armed]` | Use the same validated compound/bed/capture helper as 029 while two peers remain Pending; preserve any prior 029 captive in its other bed and verify real custody plus temporary coverage and **zero early identity commit**, then pause for owner SAVE. This is an **active pre-commit** checkpoint. |
+| `030V VERIFY — loaded group (read-only)` | No arm. Select the newest unambiguous checkpoint of exact family 030 or 031, validate loaded same-Pawn bindings, roles, named/temporary coverage and zero findings. If still incomplete, watch read-only while vanilla peers leave and production finishes; accept already-terminal durable truth if time resumed before verification. At a loaded Pending arrest checkpoint, verify actual prisoner/HeldByPlayer/PlayerPrisoner and exact binding read-only; loss latches one failure before terminal assertions, without inventing a Pending peer requirement. Never exits a Pawn, reconciles, regenerates or repairs. |
+| `RT-PHYX-031 — Medic organizational succession [armed]` | Concretize the initial three-seat crew. Change only the owned fixture Medic's mutable notability, rematerialize its same Leader/Medic, kill only that owned Leader and return the Medic. Production succession yields CharacterRole.Leader / OperationalRole.Medic and one death/count decrement; pause for SAVE → LOAD → 030V. No long-held aging claim. |
+| `032A BUILD — 150 retained [armed]` | Generate bounded owned groups, one at a time, toward the existing named-retained count of approximately 150, preserving every identity. Report actual registry rebuild and bounded lookup cost in the running game, validate coverage, then pause for owner SAVE and manual file-size observation. |
+| `032B BUILD — 300 retained [armed]` | Continue toward approximately 300 with the same bounded construction/measurements. A one-person shortfall may overshoot by one; exceeding 150 is **never** itself a failure and identities are never deleted to reduce the number. |
+| `032V OBSERVE — retained load (read-only)` | No arm. Check resolved registry, durable coverage and zero findings after owner SAVE/LOAD, and measure a bounded sample of reservation lookups. Does not rebuild, generate, prune or save. Report TPS/save bytes/load elapsed manually; those are not inferred from lookup timings. |
+
+### 19.1a Retained identity and live dwell
+
+Role capability floors apply at first creation. New candidates, including an initially unbound known leader, are verified against the captured RoleSpec used to create them. A bound retained person is checked by expected CharacterId, exact Pawn/durable binding, `opRole == seatRole`, zero replacements and healthy reservation; a later stricter organization band does not re-admit/revoke/reproject that person or correct its skills/history. Skill/passions and concrete history are compared immediately across Materialize; normal dwell ticks may add skill XP, memories and social history.
+
+026 and the first rematerialization portion of 027 use a **240-game-tick** step/wait checkpoint before ExitPeers. Run ordinary game time so the owner can inspect movement/jobs/social behavior. The checkpoint checks live same owned Pawn/binding/slot/role, Spawned on the expected TestSite, encounter faction/shared Lord, active unreleased Episode, registry protection, no unexpected Free state and no elapsed-time identity creation. 027 also preserves every remembered CharacterId/Pawn/opRole and zero replacement projection. No Pawn is kept still, teleported, repaired or retested against today's capability floor. The final five-person repeat in 027 stays fast; 028+ do not gain a dwell.
+
+Failure leaves the fixture and detailed CharacterId/slot/ThingID/role/spawn/map/faction/HostFaction/prisoner/slave/reservation/Episode/release/elapsed-tick report. Headless dwell state tests prove deadlines and rejection of invalid ownership/reservation, not vanilla map ticks or Lord/job/social behavior. An unexpected live failure remains evidence to report; do not repair it to pass.
+
+### 19.1b Deterministic lab and sustained custody
+
+All **3,600 cells** of a new **60×60** map use vanilla **Concrete**; an approved legacy **100×100** map uses **10,000 cells** without resizing. Offsets are `(x, z)` from `map.Center`. The central **13×13 camp** spans **−6..+6** on both axes: one wooden North-facing `Table2x2c` at **(0, 4)** and four wooden stools at **(−1, 4), (2, 4), (0, 3), (0, 6)**. The west ordinary room has a **9×9** perimeter **x −23..−15 / z −4..+4**, a **7×7** interior, east wooden door **(−15, 0)** and one North-facing normal wooden bed **(−20, −1)**. The east prison retains its **9×9** perimeter **x +15..+23 / z −4..+4**, **7×7** interior, west wooden door **(+15, 0)** and two North-facing prisoner beds **(+18, −1), (+21, −1)**. The plan contains **62 granite walls, 2 wooden doors, 3 wooden beds, 1 wooden table and 4 wooden stools: 72 structures**. Constructed roof covers only the two 81-cell room footprints (**162 cells**); the remaining field is unroofed. The camp retains at least eight free staging cells and a route to the map edge.
+
+029/030B retain the same exact anonymous Episode/member/Pawn binding, one pre-capture owned relocation, one real `CapturedBy`, valid real prisoner-bed claim without eviction, immutable 17-fact fail-closed guard, **two WatchPeriod intervals (at least 500 ordinary game ticks)** while peers remain Pending, zero early Character/commit, terminal-batch same-Pawn promotion and named retention. The prior capture-helper source tail is unchanged apart from its `TestCompound` → `QaLab` API name; loaded 030V remains read-only. The lab setup itself proves no live custody survival. Transient capture→escape-before-batch stays unlatched and deferred to separate temporal-design review, likely 3.2C.
+
+Prison AI, hunger, movement and ordinary random prison breaks remain active. No fake colonist/warden, recapture loop, timer reset or escape suppression is used. Headless tests prove policy, deterministic geometry, source/API wiring, preflight/write ordering, transitive read-only infrastructure validation, protected-Pawn refusal, the explicit Reset-only disposable-Pawn removal boundary and fake-world/real-Scribe custody continuity. The separate final owner run now proves successful live Create/Reset, disposal of four non-humanlike Pawns with zero protected removals, sustained real 029 custody through both watches (approximately 500+ ordinary ticks), and the scoped 030 save/load results in § 19.4. Headless policy coverage is not reclassified as an additional live protected-refusal fixture.
+
+### 19.2 Owner-assisted save/load sequence
+
+These steps are retained for reproduction. The completed 030A/030B and 032A/032B load cases are recorded in § 19.4. The supplied final record reports 031's simple succession PASS, without a separate independent 031 load-verifier result.
+
+1. Run **030A SAVE** to its completed pause/report, SAVE, return to the main menu, LOAD, then run **030V VERIFY** without arming. Record same Pawn ThingIDs, CharacterIds, roles, covered named bindings and zero integrity findings.
+2. Separately run **030B SAVE** to its Pending-arrest pause/report, SAVE, return to the main menu, LOAD, then run **030V VERIFY** without arming. At an active checkpoint, anonymous PawnRefs must resolve and temporary reservation must cover them without dummy people. Allow game time to run if the loaded peers are still Pending; only vanilla/production finishes them. After completion, verify the same captive is one named held person and ordinary peer stock was restored once.
+3. Run **031**, SAVE its succession checkpoint, LOAD and use **030V**. Record the same Medic Pawn/role despite organizational Leader standing.
+4. Run **032A**, SAVE and record file bytes/load elapsed/TPS as available, LOAD and use **032V**. Repeat with **032B** and compare actual save/load integrity and measured costs. These builders create real retained test identities; run only in the armed disposable save.
+
+The verifier selects by existing durable Episode cause family and valid greatest EpisodeId, never translated labels, a cached pre-load Pawn or new persisted QA state. Ambiguous duplicate checkpoint IDs refuse selection. If a saved Episode already completed before the verifier started, the report verifies its **terminal** state; it does not prove the instantaneous active/pre-commit load frame. The early thing-id bridge and PostLoadInit pointer switch have separate headless Scribe/load-order tests. Time may resume on LOAD: none of these checks relies on pause persisting.
+
+The current menu exposes active-pre-commit and completed-release saves. **A committed-before-RELEASE owner save checkpoint remains separate from this completed runtime slice**; the menu does not claim to freeze between atomic COMMIT and RELEASE. Headless fault/load/retry coverage of that boundary is recorded in the validation report. Do not present 030A as that checkpoint or infer it from a terminal verifier result. 030A proves terminal durability; the actual still-incomplete loaded 030B state closes the active Pending gate represented by that case.
+
+### 19.3 Remaining owner evidence and scope limits
+
+The current 029 / 030B company fixture starts with one known leader. Above-six strong/held promotion is covered by production planner/commit/lifecycle **headless tests**; a cap-full/overflow **runtime** demonstration still requires an additional owned owner fixture and is not claimed by these menus.
+
+The formal final-lab Create/Reset and 026–032 totals, sustained custody, active Pending/terminal loads and retained coverage are now recorded in § 19.4. Broader genuine separately gated player-visible-map placement, request-time generation/FixedIdeo/history probes, committed-before-RELEASE game loads and source-qualified player combat/direct-relationship probes on the actual mod list remain separate evidence. No S2 production individual-identification producer is invented; PlayLog is omitted. Bounded S3 windows can miss evidence without suppressing valid S1/S4 identity.
+
+026–029 verify production role/identity/custody behavior on normally generated game Pawns, but synthetic visibility is not a genuine map-eligibility test. Their construction assertions are not S26 hostility-frequency sampling, pairwise before/after opinion recording or a guarantee of harmonious crews. S26 remains PARTIAL until the separate bounded opinion/construction probe and active-mod safety observations are supplied. S27 remains PARTIAL until actual combat endpoint negatives/positives, game save/load references and mod timing are recorded; headless exact-entry checks do not close it.
+
+032 measures registry/lookup cost in the owner's running game. Unity TPS, full save bytes, save-size delta and load elapsed are separate owner observations. The cloud headless 150/300 fixture measurements in [PHASE32B_VALIDATION](PHASE32B_VALIDATION.md) are explicitly fixture XML and process-local timings; they are not game-save/TPS results.
+
+The full return/wound/death/capture/recruit/missing/combat-promoted/ephemeral matrix, its operation/morale/succession combinations and partial extraction remain **3.2C**. 031 exercises the existing simple leader-death/Medic-return succession path; it does not establish that full matrix. Rescue remains STOPPED by S11 FAIL, R-50 remains OPEN for held suspension/aging, and 3.3 / Phase 4 remain unimplemented.
+
+### 19.4 Final Phase 3.2B owner runtime evidence
+
+**2026-10-07: OWNER RUNTIME GATE COMPLETE FOR THE CURRENT IMPLEMENTED SLICE; INDEPENDENT FINAL AUDIT PENDING.** This matrix records the owner's final runtime validation brief. Counts are **PASS / FAIL / GAP**, not a sum across overlapping checkpoint/verifier reports. All listed load cases used actual SAVE → main menu → LOAD; **030V/032V ran WITHOUT ARMING**.
+
+| Scenario / checkpoint | Final owner result | Scope |
+|---|---|---|
+| Create 60×60 Test Map | **PASS** | Dedicated disposable TestSite. |
+| Initialize / Reset QA Lab; wildlife disposal | **PASS** | 3,600 Concrete cells; 505 generated Things and 4 disposable non-humanlike Pawns removed; 0 protected removals; deterministic validation PASS. |
+| 026 final-lab sanity | **54 / 0 / 0** | Ordinary small-crew visitor path. |
+| 027 | **128 / 0 / 0** | Same-Pawn continuity. |
+| 028 | **75 / 0 / 0** | Company ordinary presence. |
+| 029 | **46 / 0 / 0** | Real sustained prisoner custody, continuous anonymous reservation and terminal exact same-Pawn/ThingID promotion. |
+| 030A checkpoint → SAVE/LOAD → 030V | **54 / 0 / 0 → 42 / 0 / 0** | Terminal durability; Episode already complete before verifier, not instantaneous active/pre-commit proof. |
+| 030B Pending checkpoint → SAVE/LOAD → 030V | **36 / 0 / 0 → 38 / 0 / 0** | Loaded incomplete state: 3 named + 3 anonymous, **6/6** covered, zero findings; normal continuation preserves captured identity/custody and returns peers once. |
+| Later terminal 030V | **29 / 0 / 0** | Additional 030B continuation confirmation, not another independent load case. |
+| 031 | **71 / 0 / 0** | Implemented simple succession only. |
+| 032A ~150 → SAVE/LOAD → 032V | **1,936 / 0 / 0 → 10 / 0 / 0** | 150 bound/healthy, **150/150** covered, zero anonymous subjects/physical findings, arm cleared. |
+| 032B ~300 → SAVE/LOAD → 032V | **1,936 / 0 / 0 → 10 / 0 / 0** | 300 bound/healthy, **300/300** covered, zero anonymous subjects/physical findings, arm cleared. |
+
+Owner-environment probes: loaded 150 retained, **15,000 lookups ~0.542 ms**; 300 retained before SAVE, registry rebuild **~0.118 ms**, **30,000 lookups ~1.216 ms**; after LOAD, **30,000 lookups ~1.030 ms**. These observations do not establish universal performance, TPS, full save bytes or load elapsed.
+
+Historical Test 4 **030V 37/1/0** and **032V 9/1/0** each failed only arm-cleared because the owner manually armed after LOAD. They are **operator workflow/protocol errors**, not production/persistence/registry/binding defects; fresh Test 5 and Test 6 supersede them respectively. General Kernel **~25 findings / 25 repaired** during Test 6 loads have no established root cause/category; subsequent retained coverage and physical integrity were clean. Test 4's isolated vanilla/Odyssey-side `InvalidOperationException: Stack empty` had no The Network frame, was not reproduced in the fresh runs and is not attributable to PR #13 on this evidence. Full chronology and precise scope are in [final owner acceptance](PHASE32B_VALIDATION.md#pr-13-final-owner-runtime-acceptance).
+
+This documentation update preserves source `98ddc71f77920592b81845eb23c63f291f18843e` and DLL SHA-256 `610cb8feadef228e746bb43254ee78a87ff8071d69f2d4d756b91632894ca580` (**1,291,776 bytes**; stamp `built 2026-10-07T10:38Z, source commit 98ddc71`). No source/tests/DLL change or rebuild. S11 FAIL / rescue STOPPED, R-50 OPEN, O-20 LOCKED and S21/S26/S27 PARTIAL remain. Transient capture→escape-before-terminal/full 3.2C remain deferred; 3.3/Phase 4 unimplemented. No blocker is established by the supplied final runtime record before independent audit; the audit itself remains pending. **DO NOT MERGE YET.**

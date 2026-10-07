@@ -22,6 +22,7 @@ namespace TheNetwork.Domain.Physical
             int now = ctx.Now;
 
             Dictionary<int, PhysicalEpisode> incompleteByMember = new Dictionary<int, PhysicalEpisode>();
+            Dictionary<int, PhysicalEpisode> unreleasedByPawn = new Dictionary<int, PhysicalEpisode>();
             HashSet<int> ids = new HashSet<int>();
             for (int i = 0; i < store.episodes.Count; i++)
             {
@@ -48,11 +49,25 @@ namespace TheNetwork.Domain.Physical
                 {
                     EpisodeMember m = e.members[k];
                     if (m == null) continue;
-                    int actions = ReleasePolicy.ActionsFor(m).Length;
+                    if (e.releaseApplied && !m.IsNamed && m.pawn != null && OrganizationCompositionV1.IsRole(m.seatRole)
+                        && (m.outcome == MemberOutcome.Returned || m.outcome == MemberOutcome.Killed
+                            || m.outcome == MemberOutcome.Lost || m.outcome == MemberOutcome.NeverPlaced || m.outcome == MemberOutcome.Detached))
+                        findings.Add("Episode " + e.id + " " + m + ": released anonymous operational member still retains a PawnRef that COMPLETE must forget; reported, not cleared.");
+                    bool clearedOrdinaryHistory = e.releaseApplied && !m.IsNamed && !m.IsBound && OrganizationCompositionV1.IsRole(m.seatRole) && m.releaseStep > 0;
+                    int actions = ReleasePolicy.ActionsFor(m.IsBound || clearedOrdinaryHistory, m.IsNamed, m.outcome).Length;
                     if (m.releaseStep > actions) findings.Add("Episode " + e.id + " " + m + ": release cursor " + m.releaseStep + " beyond its " + actions + " actions.");
                     if (e.releaseApplied && m.releaseStep < actions) findings.Add("Episode " + e.id + " " + m + ": released, yet the member's cursor is " + m.releaseStep + " of " + actions + ".");
                     if (e.state == EpisodeState.Closed && m.state != MemberState.Done) findings.Add("Episode " + e.id + " " + m + ": Closed with a member not Done.");
                     if (m.IsBound && m.pawn.thingIdNumber > 0 && !pawns.Add(m.pawn.thingIdNumber)) findings.Add("Episode " + e.id + ": two members share " + m.pawn + ".");
+                    if (!e.releaseApplied && m.IsBound && m.pawn.thingIdNumber > 0)
+                    {
+                        PhysicalEpisode owner;
+                        if (unreleasedByPawn.TryGetValue(m.pawn.thingIdNumber, out owner) && owner != e)
+                            findings.Add("Pawn " + m.pawn.thingIdNumber + " has two unreleased Episode owners (" + owner.id + ", " + e.id + ").");
+                        else unreleasedByPawn[m.pawn.thingIdNumber] = e;
+                    }
+                    if (m.p0Eligible && (m.playerVisibleTick < 0 || !OrganizationCompositionV1.IsRole(m.seatRole)))
+                        findings.Add("Episode " + e.id + " " + m + ": P0 eligibility lacks placement or operational-role evidence.");
                     if (!m.IsNamed) continue;
                     KnownCharacter c = ctx.characters.Get(m.character);
                     if (c == null)

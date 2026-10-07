@@ -110,7 +110,7 @@ namespace TheNetwork.Domain.Physical
     /// <summary>The plain facts of one living, unspawned, unheld world pawn.</summary>
     public sealed class WorldPawnFacts
     {
-        /// <summary>The Network's registry predicate: a living bound named person whose custody is Deployed, Stored or (3.2A, ADR-056) OutOfCustody MUST be reserved (M1, ADR-053).</summary>
+        /// <summary>The Network's registry predicate: named retained custody or a living bound unreleased Episode slot requires the existing M1 reservation.</summary>
         public bool retained;
 
         public WorldSituation situation = WorldSituation.None;
@@ -123,7 +123,7 @@ namespace TheNetwork.Domain.Physical
     /// § 9.3 rows WorldFree / WorldOther, after ADR-053 (M1). For a retained named person the registry reservation is in force from its binding
     /// on, so a successful return is a pawn vanilla sees as <c>ReservedByQuest</c> by the Network's OWN registry. An actual <c>Free</c> is not a
     /// return: it is evidence that the reservation failed (P3-INV-032), reported as <see cref="ObservedKind.ReservationBroken"/>. A pawn the
-    /// registry never covers (an anonymous slot) keeps the ordinary reading: <c>Free</c> is a world pawn vanilla owns, and it is
+    /// registry never covers (an ordinary slot after its Episode released it) keeps the ordinary reading: <c>Free</c> is a world pawn vanilla owns, and it is
     /// <see cref="ObservedKind.WorldFree"/>.
     /// </summary>
     public static class WorldPawnRules

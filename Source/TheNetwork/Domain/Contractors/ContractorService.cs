@@ -183,6 +183,54 @@ namespace TheNetwork.Domain.Contractors
             return org == null ? 1 : Math.Max(1, org.Healthy + org.Wounded + org.Committed + org.knownMembers.Count);
         }
 
+        /// <summary>Current living named seats, including mandatory overflow, without historical dead/defected/retired records.</summary>
+        public static int CurrentNamedCount(NetworkActor a, CharacterStore characters)
+        {
+            OrganizationProfile org = a?.Get<OrganizationProfile>();
+            if (org == null) return 0;
+            if (characters == null) return org.knownMembers.Count; // compatibility for legacy static read callers
+            HashSet<int> seen = new HashSet<int>();
+            int count = 0;
+            foreach (CharacterId id in org.knownMembers)
+                if (seen.Add(id.Value) && OrganizationSeatPolicy.IsCurrentMember(characters.Get(id), a.id)) count++;
+            return count;
+        }
+
+        /// <summary>The existing service formula/floor with the canonical current named-seat count.</summary>
+        public static int Headcount(NetworkActor a, CharacterStore characters)
+        {
+            OrganizationProfile org = a?.Get<OrganizationProfile>();
+            return org == null ? 1 : Math.Max(1, org.Healthy + org.Wounded + org.Committed + CurrentNamedCount(a, characters));
+        }
+
+        /// <summary>
+        /// Phase 3.2B write-once organization role compatibility. The immutable-origin cohort includes historical people;
+        /// current rank/status never chooses the role. Validate an organization's complete plan before storing any role.
+        /// A malformed/bound-Unset organization fails closed without rewriting physical history. Uses the existing v5 field.
+        /// </summary>
+        public int EnsureOrganizationRoles()
+        {
+            if (ctx.actors == null || ctx.characters == null) return 0;
+            int stored = 0;
+            foreach (NetworkActor actor in ctx.actors.actors)
+            {
+                if (actor == null || actor.kind != ActorKind.Organization || !IsNpcContractor(actor)) continue;
+                List<OrganizationRoleAssignment> assignments;
+                string refusal;
+                if (!OrganizationCompositionV1.TryPlanRoleInitialization(actor, ctx.characters.characters, out assignments, out refusal))
+                {
+                    NetLog.WarnOnce(LogCategory.Physical, "organization-role:" + actor.id.Value, "Organization role initialization refused for " + actor.id + ": " + refusal);
+                    continue;
+                }
+                foreach (OrganizationRoleAssignment assignment in assignments)
+                {
+                    assignment.character.opRole = assignment.role;
+                    stored++;
+                }
+            }
+            return stored;
+        }
+
         private int SeedFor(ActorId id, string salt)
         {
             return NetHash.Combine(NetHash.Combine(ctx.networkSeed, id.Value), salt);
@@ -248,9 +296,7 @@ namespace TheNetwork.Domain.Contractors
             a.reputation.SetBand(t.startingFame);
             NetRng rng = new NetRng(a.seed, "contractor.create");
 
-            ContractorProfile profile = new ContractorProfile { capability = CapabilitySource.NpcSimulation, registeredTick = ctx.Now };
-            profile.kinds.Add(ContractKinds.Procurement);
-            profile.specialties.AddRange(t.specialties ?? new List<string>());
+            ContractorProfile profile = CreateOriginProfile(t.specialties, ctx.Now);
             a.Add(profile);
 
             ContractorSimulation sim = BuildSimulation(t, rng, solo);
@@ -276,6 +322,11 @@ namespace TheNetwork.Domain.Contractors
             {
                 OrganizationProfile org = BuildRoster(t, rng, a, names, people);
                 a.Add(org);
+                List<OrganizationRoleAssignment> assignments;
+                string refusal;
+                if (!OrganizationCompositionV1.TryPlanRoleInitialization(a, people, out assignments, out refusal))
+                    throw new InvalidOperationException("Organization role initialization refused: " + refusal);
+                foreach (OrganizationRoleAssignment assignment in assignments) assignment.character.opRole = assignment.role;
                 float vetShare = VeteranShare(org);
                 sim.skill = Clamp((BandCenter(t.startingExperience) - 0.4f * vetShare) / 0.6f + rng.Range(-0.02f, 0.02f), 0.05f, 1f);
             }
@@ -290,6 +341,15 @@ namespace TheNetwork.Domain.Contractors
             ctx.Spatial?.EnsureInitialized(a);
             StateVersion.Bump();
             return a;
+        }
+
+        /// <summary>Birth-time NPC contractor origin facts, shared by production Instantiate and owned developer fixtures.</summary>
+        internal static ContractorProfile CreateOriginProfile(IList<string> specialties, int registeredTick)
+        {
+            ContractorProfile profile = new ContractorProfile { capability = CapabilitySource.NpcSimulation, registeredTick = registeredTick };
+            profile.kinds.Add(ContractKinds.Procurement);
+            profile.specialties.AddRange(specialties ?? new List<string>());
+            return profile;
         }
 
         private ContractorSimulation BuildSimulation(ContractorTemplate t, NetRng rng, bool solo)
@@ -507,6 +567,11 @@ namespace TheNetwork.Domain.Contractors
                 total += org.tiers[i].healthy + org.tiers[i].wounded;
                 if (org.tiers[i].tier == Tier.Veteran) vets += org.tiers[i].healthy + org.tiers[i].wounded;
             }
+            for (int i = 0; i < org.committed.Count; i++)
+            {
+                total += org.committed[i].healthy;
+                if (org.committed[i].tier == Tier.Veteran) vets += org.committed[i].healthy;
+            }
             return total == 0 ? 0.5f : vets / (float)total;
         }
 
@@ -575,9 +640,14 @@ namespace TheNetwork.Domain.Contractors
         /// </summary>
         public static int JobCapacity(NetworkActor a)
         {
+            return JobCapacity(a, null);
+        }
+
+        public static int JobCapacity(NetworkActor a, CharacterStore characters)
+        {
             OrganizationProfile org = a?.Get<OrganizationProfile>();
             if (org == null) return 1;
-            int people = org.Healthy + org.Committed + org.knownMembers.Count;
+            int people = org.Healthy + org.Committed + CurrentNamedCount(a, characters);
             return Math.Max(1, Math.Min(3, people / 6));
         }
 
@@ -585,7 +655,7 @@ namespace TheNetwork.Domain.Contractors
         public bool AtCapacity(NetworkActor a)
         {
             ContractorSimulation sim = a?.Get<ContractorSimulation>();
-            return sim != null && sim.commitments.Count >= JobCapacity(a);
+            return sim != null && sim.commitments.Count >= JobCapacity(a, ctx.characters);
         }
 
         /// <summary>Checkouts that took a contractor past its job capacity (runtime diagnostic; always 0).</summary>
@@ -629,7 +699,7 @@ namespace TheNetwork.Domain.Contractors
                 if (WoundedShare(a) > 0.5f) return Availability.Recovering;
             }
             if (sim.morale.descriptor == MoraleDescriptor.Exhausted) return Availability.Exhausted;
-            if (sim.commitments.Count >= JobCapacity(a)) return Availability.Committed;
+            if (sim.commitments.Count >= JobCapacity(a, ctx.characters)) return Availability.Committed;
             return Availability.Available;
         }
 
@@ -718,10 +788,10 @@ namespace TheNetwork.Domain.Contractors
             ContractorSimulation sim = a.Get<ContractorSimulation>();
             if (sim != null && !sim.commitments.Contains(op))
             {
-                if (sim.commitments.Count >= JobCapacity(a))
+                if (sim.commitments.Count >= JobCapacity(a, ctx.characters))
                 {
                     overCapacityCheckouts++;
-                    NetLog.WarnOnce(LogCategory.Contracts, "contractor.overcapacity." + a.id.Value, a.name.Display + " was checked out beyond its job capacity (" + sim.commitments.Count + " of " + JobCapacity(a) + ").");
+                    NetLog.WarnOnce(LogCategory.Contracts, "contractor.overcapacity." + a.id.Value, a.name.Display + " was checked out beyond its job capacity (" + sim.commitments.Count + " of " + JobCapacity(a, ctx.characters) + ").");
                 }
                 sim.commitments.Add(op);
             }
@@ -733,7 +803,7 @@ namespace TheNetwork.Domain.Contractors
             }
             else
             {
-                float share = Clamp(0.45f + 0.25f * danger, 0.4f, 0.85f) / Math.Max(1, JobCapacity(a) - sim.commitments.Count + 1);
+                float share = Clamp(0.45f + 0.25f * danger, 0.4f, 0.85f) / Math.Max(1, JobCapacity(a, ctx.characters) - sim.commitments.Count + 1);
                 for (int i = 0; i < org.tiers.Count; i++)
                 {
                     TierCount t = org.tiers[i];

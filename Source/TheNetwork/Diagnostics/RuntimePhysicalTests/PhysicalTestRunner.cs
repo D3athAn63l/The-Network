@@ -55,6 +55,11 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         public string StepName => index < steps.Count ? steps[index].name : "finished";
         public readonly int startTick;
 
+        public bool OwnsEpisode(PhysicalEpisode episode)
+        {
+            return episode != null && episodes.Contains(episode);
+        }
+
         protected LogMark logMark;
         protected PhysicalSentinel before;
         protected readonly HashSet<int> testPeople = new HashSet<int>();
@@ -225,7 +230,7 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         protected StepResult MaterializeOnTestMap()
         {
             string report;
-            Map map = TestSite.Ensure(out report);
+            Map map = TestSite.GetPrepared(out report);
             if (map == null)
             {
                 v.Fail("test map: " + report);
@@ -349,7 +354,10 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
         public const string ArmWarning = "The physical tests create and change REAL game state in this save: a dedicated test map on an empty tile (never your "
             + "colony map), temporary hidden encounter and fixture factions, real pawns for Network Solo contractors (who become retained, stored people of "
             + "this save for good), disposable test pawns, a hidden registry quest, and deliberate dev damage, dev arrests, a dev recruitment, enslavement "
-            + "and kidnapping (3.2A custody: those people stay held by vanilla) and test-map removals. They never touch your colonists or maps. Use a DISPOSABLE save. One arm authorises exactly ONE action; it is never saved and is cleared on load and on quit.";
+            + "and kidnapping (3.2A custody: those people stay held by vanilla) and test-map removals. Group tests also create owned organizations and selectively retained identities; "
+            + "the 032 builders deliberately retain approximately 150 or 300 REAL Pawns permanently in this disposable save. Synthetic P0 is labelled and scoped to the owned test map. "
+            + "Create provisions only the raw TestSite. Initialize / Reset QA Lab DESTRUCTIVELY clears every non-Pawn Thing, terrain and roof on that dedicated map, only with zero Pawns and no active physical obligations. "
+            + "They never touch your colonists or maps. Use a DISPOSABLE save. One arm authorises exactly ONE action; it is never saved and is cleared on load and on quit.";
 
         /// <summary>A new game object (load, new game) clears the arm and forgets the old run. Called by FinalizeInit and every frame.</summary>
         public static void ResetForNewGame()
@@ -378,6 +386,14 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
 
         public static bool IsRunning => active != null;
 
+        /// <summary>The exact active run owns this Episode; a prior run's provenance alone grants no visibility override.</summary>
+        public static bool IsActiveOwnedEpisode(PhysicalEpisode episode)
+        {
+            PhysicalRun run = active;
+            return run != null && ReferenceEquals(run.game, Current.Game) && run.OwnsEpisode(episode)
+                && GroupQaRules.OwnedByRun(episode, run.runId, run.info.id);
+        }
+
         private static void EnsureGame()
         {
             if (ReferenceEquals(Current.Game, trackedGame)) return;
@@ -400,10 +416,35 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
                 rt?.PhysicalWorld != null && rt.PhysicalWorld.Available, active != null, incomplete);
         }
 
+        public static string ProvisioningRefusal()
+        {
+            EnsureGame();
+            return PhysicalTestGuard.Refusal(Prefs.DevMode, Arm.IsArmedFor(Current.Game), true, true, active != null, 0);
+        }
+
+        public static void CreateTestMap()
+        {
+            string report = ProvisioningRefusal();
+            if (report != null) { Messages.Message("[TheNetwork] Create TestSite refused: " + report, MessageTypeDefOf.RejectInput, false); return; }
+            Arm.Spend(Current.Game, "create test map");
+            Map map = TestSite.Create(out report);
+            PhysLog.Info(report);
+            Messages.Message("[TheNetwork] " + report, map == null ? MessageTypeDefOf.RejectInput : MessageTypeDefOf.NeutralEvent, false);
+        }
+
+        public static void ResetQaLab()
+        {
+            string report;
+            bool ok = QaLab.InitializeOrReset(TestSite.Map, out report);
+            PhysLog.Info(report);
+            Messages.Message("[TheNetwork] " + report, ok ? MessageTypeDefOf.NeutralEvent : MessageTypeDefOf.RejectInput, false);
+        }
+
         /// <summary>Spends the arm and starts a run, or refuses by name (and the arm is NOT spent on a refusal).</summary>
         public static bool Start(Func<NetworkRuntime, string, PhysicalRun> make, PhysicalScenarioInfo info)
         {
             string refusal = Refusal(true);
+            if (refusal == null && TestSite.GetPrepared(out string labReport) == null) refusal = labReport;
             if (refusal != null)
             {
                 Messages.Message("[TheNetwork] " + info.Label + " refused: " + refusal, MessageTypeDefOf.RejectInput, false);
@@ -425,6 +466,8 @@ namespace TheNetwork.Diagnostics.RuntimePhysicalTests
             EnsureGame();
             NetworkRuntime rt = NetworkRuntime.Current;
             string refusal = !Prefs.DevMode ? "Dev Mode is off" : rt?.PhysicalWorld == null ? "no Network runtime in this game" : active != null ? "another physical test run is in progress" : null;
+            if (refusal == null && (info.id == "RT-PHYX-030" || info.id == "RT-PHYX-032")
+                && TestSite.GetPrepared(out string labReport) == null) refusal = labReport;
             if (refusal != null)
             {
                 Messages.Message("[TheNetwork] " + info.Label + " refused: " + refusal, MessageTypeDefOf.RejectInput, false);
