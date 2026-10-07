@@ -4,9 +4,127 @@
 
 This report describes the developer-triggered group slice delivered on `codex/phase32b-groups-concretization`, based on merged PR #12 `main` **`e251c61efcbb7773f36e31e4862373e22930173e`**. The owner accepted Composition v1, the promotion policy and the 3.2B boundary in [ADR-057](DECISIONS.md#adr-057--phase-32b-readiness-owner-decisions). The earlier [readiness audit](PHASE32B_READINESS_AUDIT.md) remains a historical design/source record.
 
-The owner accepted 026 / 027 / 028 on the prior corrected DLL, including 240-tick dwell; previous 029 lost real custody before batch and failed. The current compound/029 correction remains owner-rerun work. Phase 3.2A remains **MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED**: PR #11's final `e768fef` result remains 022 **41/0/0** → clean SAVE/LOAD → 025 **11/0/0**, total **52/0/0**. S26 and S27 remain **PARTIAL**; S21 remains **PARTIAL** for the previously unrun observation paths. S11 remains **FAIL / rescue STOPPED**, R-50 remains **OPEN**, O-20 remains locked, and full 3.2C, 3.3 and Phase 4 remain unimplemented.
+Previous owner 026–028 PASS remains historical evidence; generated Encounter debris then blocked automatic compound provisioning before Plan. The current explicit Create/Reset lab and corrected 029 require owner runtime continuation. Phase 3.2A remains **MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED**: PR #11's final `e768fef` result remains 022 **41/0/0** → clean SAVE/LOAD → 025 **11/0/0**, total **52/0/0**. S26 and S27 remain **PARTIAL**; S21 remains **PARTIAL** for the previously unrun observation paths. S11 remains **FAIL / rescue STOPPED**, R-50 remains **OPEN**, O-20 remains locked, and full 3.2C, 3.3 and Phase 4 remain unimplemented.
 
-## PR #13 custody QA correction: current owner review record
+## PR #13 dedicated QA lab: current owner review record
+
+This dedicated-lab update continues [PR #13](https://github.com/D3athAn63l/The-Network/pull/13) on `codex/phase32b-groups-concretization`,
+from pre-task HEAD **`e0d4a3a85bcfa1bc4bc2ec3a845a59df8afab71d`**. Final source/tests commit: **`6162748424d4bdb125e878812ed9a7765bc1b7cb`**.
+The prior source `5548f0b`, its two **616 / 44,269 / 0** accepted runs and DLL `b929ad26…` remain historical below.
+
+### Owner finding and resulting behavior
+
+The owner found `Filth_RubbleRock`, `Filth_MachineBits`, `Filth_Ash`, plants, mechanoid slag chunks and factionless
+`AncientShipBeacon` / `AncientMechDropBeacon` inside the generated Encounter-map footprint. The old automatic
+`TestSite.Ensure` → `TestCompound.Ensure` correctly refused unexpected Things; 026/028/029 aborted **before PlanGroup/materialization**.
+This identifies QA provisioning ownership, not a production lifecycle failure. Setup now belongs to two explicit Dev actions;
+scenarios validate/use the prepared infrastructure and do not automatically create, clear, build or repair it.
+
+Previous owner **026/027/028 PASS**, including 240-tick dwell, remains historical evidence. The earlier edge-arrest
+029 escape/FAIL and rejected automatic setup are preserved; no PASS is claimed for the new lab or corrected 029.
+
+### Explicit provisioning and actual lab
+
+| Exact Dev Mode label | Effect |
+|---|---|
+| `PHYX — Create 60×60 Test Map [armed]` | One arm; create only the narrow WorldObject/map when absent and clear new-map fog. No fixtures/Pawns/Episodes or normalization. Reuse existing map without reset/resize; report WorldObject/map IDs, actual size and read-only lab validation. |
+| `PHYX — Initialize / Reset QA Lab [DESTRUCTIVE] [armed]` | A separate arm; the sole full-map mutating setup path after complete safety preflight. |
+
+Dev Mode and a current one-action PHYX arm are required. The read-only preflight requires the exact unique current TestSite, exactly plain `MapParent`, null parent faction, `IsPlayerHome == false`, unchanged narrow def (no home eligibility/comps/incident targets), approved 60×60 or 100×100 size, available enabled room/path services and expected vanilla layout definitions. No physical runner may be active; the Network must be running with resolved physical ownership. Associated incomplete Episodes block by target map, fallback tile/layer or a member’s `MapHeld`, including CLOSED but not fully released/followed-up/published Episodes. Retained bound physical obligations block by actual `MapHeld` or a deployed Episode link. Fully complete historical references alone do not block and are never erased. A deduplicated census combines recursive map/holder contents with `allowUnreal: true`, every cell’s Thing grid and `MapPawns.AllPawns`: **ANY Pawn**, including held/unspawned and corpse-contained Pawns, refuses reset. Unknown/unresolved Thing ownership, non-destroyable or quest-tagged Things, occupied/assigned beds or `CompAssignableToPawn` structures (including off-map owners), and `CompExplosive.Props.explodeOnDestroyed` and the callback classes `CompHasPawnSources`, `CompTreeConnection` and `CompObelisk_Abductor` also refuse before any map write: their Vanish callbacks can alter WorldPawns retention, off-map Pawns or another pocket map.
+
+Only the explicit armed destructive Dev action calls `QaLab.InitializeOrReset(TestSite.Map, ...)`. After complete preflight and spending the one-action arm, remove all roofs first; destroy the snapshotted spawned **non-Pawn exact-map Things** through vanilla `Destroy(DestroyMode.Vanish)`; require no leftover/new Things before terrain or building writes; normalize every map cell to Concrete; spawn the deterministic ordinary vanilla structures and roof only the rooms; update real room/district state; then validate actual results. There is no debris DefName whitelist. Failed hard guards change nothing. Unexpected vanilla callbacks, leftover Things or setup exceptions **STOP for inspection** and can leave a partially normalized map; there is no automatic cleanup, callback-object deletion or transactional reset claim. Repeating Reset on a proven empty eligible lab may rebuild it deterministically, with a new arm and the same guards.
+
+All **3,600 cells** of a new **60×60** map use vanilla **Concrete**; an approved legacy **100×100** map uses **10,000 cells** without resizing. Offsets are `(x, z)` from `map.Center`. The central **13×13 camp** spans **−6..+6** on both axes: one wooden North-facing `Table2x2c` at **(0, 4)** and four wooden stools at **(−1, 4), (2, 4), (0, 3), (0, 6)**. The west ordinary room has a **9×9** perimeter **x −23..−15 / z −4..+4**, a **7×7** interior, east wooden door **(−15, 0)** and one North-facing normal wooden bed **(−20, −1)**. The east prison retains its **9×9** perimeter **x +15..+23 / z −4..+4**, **7×7** interior, west wooden door **(+15, 0)** and two North-facing prisoner beds **(+18, −1), (+21, −1)**. The plan contains **62 granite walls, 2 wooden doors, 3 wooden beds, 1 wooden table and 4 wooden stools: 72 structures**. Constructed roof covers only the two 81-cell room footprints (**162 cells**); the remaining field is unroofed. The camp retains at least eight free staging cells and a route to the map edge.
+
+`TestSite.GetPrepared` → read-only `GetExisting` → `QaLab.Validate`. Validation and its transitive helpers perform no construction, terrain/roof/faction writes, bed designation/assignment or repair. They inspect the exact map/scope/size, expected Things/footprints/materials/factions, every Concrete/roof cell, free field and camp capacity, ordinary normal-bed room, recognized prison beds sharing a proper non-edge prison room, closed player-owned prison door, and actual `NoPassClosedDoors` camp-to-edge / prison-no-edge reachability. `RoomCanBePrisonCell` supplies the proper/non-huge condition. Actual captive bed eligibility, `PawnCanOpen == false` and ByPawn no-edge reachability are checked in the unchanged capture helper. Prepared validation permits runtime subjects and benign extra Things that leave required layout/standability intact; all armed starts require it before fixture creation, Solo/group placements revalidate, and read-only 030/032 starts require it. Missing/invalid labs report the explicit Create or Reset instruction.
+
+029/030B retain the same exact anonymous Episode/member/Pawn binding, one pre-capture owned relocation, one real `CapturedBy`, valid real prisoner-bed claim without eviction, immutable 17-fact fail-closed guard, **two WatchPeriod intervals (at least 500 ordinary game ticks)** while peers remain Pending, zero early Character/commit, terminal-batch same-Pawn promotion and named retention. The prior capture-helper source tail is unchanged apart from its `TestCompound` → `QaLab` API name; loaded 030V remains read-only. The lab setup itself proves no live custody survival. Transient capture→escape-before-batch stays unlatched and deferred to separate temporal-design review, likely 3.2C.
+
+The [actual 1.6 custody/reset API audit](PHASE32B_CUSTODY_QA_AUDIT.md) separates supplied assembly predicates from pinned
+XML definitions. The map remains factionless/non-home/no-comp/no-incident-target; ownership of individual lab buildings
+by Player does not convert the parent to a colony. No colonist, warden, food/production/power system or persistent lab marker is added.
+
+### Validation and exact shipped artifact
+
+| Check | Current result |
+|---|---|
+| Source commit | `6162748424d4bdb125e878812ed9a7765bc1b7cb` |
+| Focused | **QaLab 10 tests / 753 checks / 0 failures**; physical runtime wiring/safety **Phys31 88 / 9,847 / 0**; **Phys32b 112 / 5,359 / 0**; capture guards **9 / 107 / 0**; 030B pending capture with real Scribe reload **1 / 27 / 0**. These overlapping filters are not added together. |
+| Fresh full pass 1 | **626 tests / 45,090 checks / 0 failures, exit 0** |
+| Fresh full pass 2 | **626 tests / 45,090 checks / 0 failures, exit 0** |
+| Compiler | **0 warnings / 0 errors**, strict production/tests, warnings as errors; final full-run evidence below. |
+| Source gates | All **9 unchanged shell gates PASS**; existing narrow Pawn-safety source test updated for the explicit reset boundary. |
+| Links/whitespace/history | **774** changed-document local links checked, **0** errors; `git diff --check` PASS; all **444,780 bytes** before Appendix M and **81,181 bytes** of prior validation bodies preserved byte-for-byte. All 37 current report rows present; production core unchanged and Source/tests frozen. |
+| DLL | `1.6/Assemblies/TheNetwork.dll`, exact validated final run 2 output; Copied byte-for-byte from final full-run-2 output, also equal to production build output; no later rebuild. |
+| Build stamp | `built 2026-10-07T08:49Z, source commit 6162748` |
+| Informational version | `0.1.0+6162748424d4bdb125e878812ed9a7765bc1b7cb` |
+| SHA-256 | `c408b863123b08f24c2f7ebdea21af09db0a1df23fdb884e4f23e1698ccccb67` |
+| Bytes | **1,289,728** |
+| Save / Harmony | **5**, no lab marker/registry/version/migration; no production Harmony. |
+| Remote PR body | The remote body was stale at the owner’s last external audit. The latest authorized REST PATCH returned **Forbidden**; current remote content is unconfirmed and requires manual owner update. The complete local description and GitHub-ready body are available; this is not a code blocker |
+
+Headless tests prove policy, deterministic geometry, source/API wiring, preflight/write ordering, transitive read-only infrastructure validation, no-Pawn destruction boundary and fake-world/real-Scribe custody continuity. They do not execute Unity generation/reset, map/holder callbacks, actual room/path/AI ticks or real 500-tick custody; **owner Create → Reset → 029 and 030 save/load remain required**.
+
+Final source `6162748` → focused validation → full run 1 → fresh full run 2 → exact tested DLL → artifact/docs commit. All final invocations exited 0; both production and test builds had 0 warnings/errors with warnings as errors, and all 9 shell gates passed. No source/tests changed after final validation. Earlier local candidate validation was superseded when the callback audit added three narrow refusal guards; no candidate artifact was published.
+
+Before publication, independent read-only review identified actual vanilla Vanish callbacks that affect WorldPawns retention sources, off-map dryads or a linked pocket map. The final reset preflight refuses `CompHasPawnSources`, `CompTreeConnection` and `CompObelisk_Abductor`; the narrow destruction-safety source checks assert these refusals before writes. No WorldPawns, off-map Pawn or other-map mutation is authorized.
+
+The source/tests commit has **10 changed entries, 555 insertions / 158 deletions**, including `TestCompound.cs` → `QaLab.cs`, new `QaLabRules.cs`, `PhysicalTestDevActions.cs`, `PhysicalTestRunner.cs`, `PhysicalTestWorld.cs`, `PhysicalGroupScenarios.cs`, `Phase31Tests.cs`, `Phase32bCompoundCustodyTests.cs`, new `QaLabTests.cs` and `TestMain.cs`. The separate artifact/docs delivery updates `1.6/Assemblies/TheNetwork.dll`, `README.md`, `RUNTIME_TESTING.md`, `PHASE32B_VALIDATION.md`, `PHYSICAL_LIFECYCLE.md`, `PHASE32B_CUSTODY_QA_AUDIT.md` and `PHASE32B_PR_DESCRIPTION.md` (documentation under `docs/`). Core lifecycle, planning, projection, evidence, observer, reservation/M1, reconciliation/rollback, conservation, CareerService and ContractorService source remain unchanged.
+
+### Requested 37-item dedicated-lab report
+
+| Item | Evidence / result |
+|---|---|
+| 1. Source SHA | `6162748424d4bdb125e878812ed9a7765bc1b7cb` |
+| 2. Final PR HEAD | Read after artifact/docs commit in task delivery / [existing PR #13 commits](https://github.com/D3athAn63l/The-Network/pull/13/commits); no self-hash invented. |
+| 3. Files changed | The source/tests commit has **10 changed entries, 555 insertions / 158 deletions**, including `TestCompound.cs` → `QaLab.cs`, new `QaLabRules.cs`, `PhysicalTestDevActions.cs`, `PhysicalTestRunner.cs`, `PhysicalTestWorld.cs`, `PhysicalGroupScenarios.cs`, `Phase31Tests.cs`, `Phase32bCompoundCustodyTests.cs`, new `QaLabTests.cs` and `TestMain.cs`. The separate artifact/docs delivery updates `1.6/Assemblies/TheNetwork.dll`, `README.md`, `RUNTIME_TESTING.md`, `PHASE32B_VALIDATION.md`, `PHYSICAL_LIFECYCLE.md`, `PHASE32B_CUSTODY_QA_AUDIT.md` and `PHASE32B_PR_DESCRIPTION.md` (documentation under `docs/`). Core lifecycle, planning, projection, evidence, observer, reservation/M1, reconciliation/rollback, conservation, CareerService and ContractorService source remain unchanged. |
+| 4. Dev action labels | `PHYX — Create 60×60 Test Map [armed]`; `PHYX — Initialize / Reset QA Lab [DESTRUCTIVE] [armed]`. |
+| 5. Create semantics | Raw 60×60 WorldObject/map plus new-map fog only; no lab/fixtures/subjects. Existing actual IDs/size/validation reported, no duplicate/reset/resize. |
+| 6. Reset semantics | Only the explicit armed destructive Dev action calls `QaLab.InitializeOrReset(TestSite.Map, ...)`. After complete preflight and spending the one-action arm, remove all roofs first; destroy the snapshotted spawned **non-Pawn exact-map Things** through vanilla `Destroy(DestroyMode.Vanish)`; require no leftover/new Things before terrain or building writes; normalize every map cell to Concrete; spawn the deterministic ordinary vanilla structures and roof only the rooms; update real room/district state; then validate actual results. There is no debris DefName whitelist. Failed hard guards change nothing. Unexpected vanilla callbacks, leftover Things or setup exceptions **STOP for inspection** and can leave a partially normalized map; there is no automatic cleanup, callback-object deletion or transactional reset claim. Repeating Reset on a proven empty eligible lab may rebuild it deterministically, with a new arm and the same guards. |
+| 7. Complete hard guards | Dev Mode and a current one-action PHYX arm are required. The read-only preflight requires the exact unique current TestSite, exactly plain `MapParent`, null parent faction, `IsPlayerHome == false`, unchanged narrow def (no home eligibility/comps/incident targets), approved 60×60 or 100×100 size, available enabled room/path services and expected vanilla layout definitions. No physical runner may be active; the Network must be running with resolved physical ownership. Associated incomplete Episodes block by target map, fallback tile/layer or a member’s `MapHeld`, including CLOSED but not fully released/followed-up/published Episodes. Retained bound physical obligations block by actual `MapHeld` or a deployed Episode link. Fully complete historical references alone do not block and are never erased. A deduplicated census combines recursive map/holder contents with `allowUnreal: true`, every cell’s Thing grid and `MapPawns.AllPawns`: **ANY Pawn**, including held/unspawned and corpse-contained Pawns, refuses reset. Unknown/unresolved Thing ownership, non-destroyable or quest-tagged Things, occupied/assigned beds or `CompAssignableToPawn` structures (including off-map owners), and `CompExplosive.Props.explodeOnDestroyed` and the callback classes `CompHasPawnSources`, `CompTreeConnection` and `CompObelisk_Abductor` also refuse before any map write: their Vanish callbacks can alter WorldPawns retention, off-map Pawns or another pocket map. |
+| 8. ANY Pawn refusal | Recursive holders (allowUnreal), full cell grid and AllPawns census; held/unspawned/corpse-contained Pawns block. No classification, movement, Pawn Destroy/Discard/Kill/PassToWorld or cleanup. |
+| 9. Active ownership refusal | Target-map/member MapHeld/fallback tile-layer incomplete Episodes and retained map/deployed links block; unresolved ownership refuses. Complete historical references are preserved without blocking alone. |
+| 10. Full-map clearing | Roofs first, one snapshotted exact-map non-Pawn Vanish loop, no debris whitelist; callback leftovers STOP before terrain/buildings. |
+| 11. Floor | Vanilla Concrete on all 3,600 / legacy 10,000 cells. |
+| 12. Dimensions/layout | All **3,600 cells** of a new **60×60** map use vanilla **Concrete**; an approved legacy **100×100** map uses **10,000 cells** without resizing. Offsets are `(x, z)` from `map.Center`. The central **13×13 camp** spans **−6..+6** on both axes: one wooden North-facing `Table2x2c` at **(0, 4)** and four wooden stools at **(−1, 4), (2, 4), (0, 3), (0, 6)**. The west ordinary room has a **9×9** perimeter **x −23..−15 / z −4..+4**, a **7×7** interior, east wooden door **(−15, 0)** and one North-facing normal wooden bed **(−20, −1)**. The east prison retains its **9×9** perimeter **x +15..+23 / z −4..+4**, **7×7** interior, west wooden door **(+15, 0)** and two North-facing prisoner beds **(+18, −1), (+21, −1)**. The plan contains **62 granite walls, 2 wooden doors, 3 wooden beds, 1 wooden table and 4 wooden stools: 72 structures**. Constructed roof covers only the two 81-cell room footprints (**162 cells**); the remaining field is unroofed. The camp retains at least eight free staging cells and a route to the map edge. |
+| 13. Camp | 13×13; Table2x2c (0,4), four stools (−1,4)/(2,4)/(0,3)/(0,6); ≥8 free staging cells and edge path. |
+| 14. Ordinary room | West 9×9 / 7×7 interior, east door (−15,0), one normal wooden North bed (−20,−1), separate proper non-prison room. |
+| 15. Prison | East 9×9 / 7×7 interior, west door (+15,0), prisoner beds (+18,−1)/(+21,−1), constructed roof; two beds permit 029 then 030B without eviction. |
+| 16. Vanilla prison facts | Proper non-edge/non-huge recognized IsPrisonCell with actual ForPrisoners beds; closed player-owned door, actual room/path facts; captive PawnCanOpen/ByPawn edge denial and IsValidBedFor checked at arrest/claim. |
+| 17. Non-home/factionless | Exact plain MapParent, null faction, narrow no-home/no-comp/no-incident-target def and IsPlayerHome false; individual Player building ownership only. |
+| 18. Scenario/setup separation | No scenario Create/Reset/Ensure/debris/terrain/roof/building provisioning; deliberate existing test-subject actions remain. |
+| 19. Prepared path | `TestSite.GetPrepared` → read-only `GetExisting` → `QaLab.Validate`. Validation and its transitive helpers perform no construction, terrain/roof/faction writes, bed designation/assignment or repair. They inspect the exact map/scope/size, expected Things/footprints/materials/factions, every Concrete/roof cell, free field and camp capacity, ordinary normal-bed room, recognized prison beds sharing a proper non-edge prison room, closed player-owned prison door, and actual `NoPassClosedDoors` camp-to-edge / prison-no-edge reachability. `RoomCanBePrisonCell` supplies the proper/non-huge condition. Actual captive bed eligibility, `PawnCanOpen == false` and ByPawn no-edge reachability are checked in the unchanged capture helper. Prepared validation permits runtime subjects and benign extra Things that leave required layout/standability intact; all armed starts require it before fixture creation, Solo/group placements revalidate, and read-only 030/032 starts require it. Missing/invalid labs report the explicit Create or Reset instruction. |
+| 20. 026–032 fail clearly | All armed starts validate before fixture creation; placements revalidate; read-only 030/032 validate. Missing/invalid lab supplies explicit Create/Reset instructions. |
+| 21. Custody architecture | 029/030B retain the same exact anonymous Episode/member/Pawn binding, one pre-capture owned relocation, one real `CapturedBy`, valid real prisoner-bed claim without eviction, immutable 17-fact fail-closed guard, **two WatchPeriod intervals (at least 500 ordinary game ticks)** while peers remain Pending, zero early Character/commit, terminal-batch same-Pawn promotion and named retention. The prior capture-helper source tail is unchanged apart from its `TestCompound` → `QaLab` API name; loaded 030V remains read-only. The lab setup itself proves no live custody survival. Transient capture→escape-before-batch stays unlatched and deferred to separate temporal-design review, likely 3.2C. |
+| 22. Focused | **QaLab 10 tests / 753 checks / 0 failures**; physical runtime wiring/safety **Phys31 88 / 9,847 / 0**; **Phys32b 112 / 5,359 / 0**; capture guards **9 / 107 / 0**; 030B pending capture with real Scribe reload **1 / 27 / 0**. These overlapping filters are not added together. |
+| 23. Full pass 1 | **626 tests / 45,090 checks / 0 failures, exit 0** |
+| 24. Full pass 2 | **626 tests / 45,090 checks / 0 failures, exit 0** |
+| 25. Compiler | Strict production/tests **0 warnings / 0 errors**, warnings as errors. |
+| 26. Gates | All **9 unchanged shell gates PASS**; no broad QaLab exemption in the existing destructive-Pawn safety test. |
+| 27. Save | **5**, no new persisted QA state. |
+| 28. Harmony | No production Harmony or AI patch. |
+| 29. Build stamp | `built 2026-10-07T08:49Z, source commit 6162748` |
+| 30. Informational version | `0.1.0+6162748424d4bdb125e878812ed9a7765bc1b7cb` |
+| 31. SHA-256 | `c408b863123b08f24c2f7ebdea21af09db0a1df23fdb884e4f23e1698ccccb67` |
+| 32. DLL bytes | **1,289,728** |
+| 33. PR body | The remote body was stale at the owner’s last external audit. The latest authorized REST PATCH returned **Forbidden**; current remote content is unconfirmed and requires manual owner update. The complete local description and GitHub-ready body are available; this is not a code blocker |
+| 34. Owner runtime | Historical 026–028 PASS; owner debris caused pre-Plan refusal of automatic setup. New explicit lab/029 has no owner PASS. |
+| 35. Corrected 029 | **OWNER CREATE → RESET → RT-PHYX-029 REQUIRED**; 026–028 not prerequisites; 030 follows 029 PASS. |
+| 36. Open/deferred status | S11 **FAIL / rescue STOPPED**, R-50 **OPEN**, O-20 **LOCKED**, S21/S26/S27 **PARTIAL**; transient capture→escape review and full 3.2C/3.3/Phase 4 remain deferred/unimplemented. |
+| 37. Final verdict | **PR #13 DEDICATED QA LAB COMPLETE — OWNER CREATE → RESET → RT-PHYX-029 REQUIRED** |
+
+Use a **fresh disposable save**: ARM → **Create 60×60 Test Map**; inspect the raw map if desired; ARM again → **Initialize / Reset QA Lab [DESTRUCTIVE]**; ARM → **RT-PHYX-029**. 026–028 are not prerequisites for reaching 029. If 029 passes, continue to 030 save/load. Before final merge, one 026 sanity run on the final lab is recommended because the physical environment changed; repeat the full 026–028 sequence only if that check or later evidence reveals a shared visitor problem. **DO NOT MERGE.**
+
+PR-body copy/review artifact: [PHASE32B_PR_DESCRIPTION](PHASE32B_PR_DESCRIPTION.md); GitHub-ready root-relative body:
+`/workspace/.onboarding/pr13-lab-pr-body.md`. Latest authorized REST PATCH failed: `Patch https://api.github.com/repos/D3athAn63l/The-Network/pulls/13: Forbidden`; log `/workspace/.onboarding/pr13-lab-pr-body-update.log`. This API denial was not an automatic approval-review or sandbox rejection. The failed request establishes no successful body update; the current local body is ready for manual application to existing PR #13.
+
+<a id="pr-13-custody-qa-correction-current-owner-review-record"></a>
+
+## Prior PR #13 custody QA correction (historical)
+
+> Historical 34-item delivery from source `5548f0b` and pre-task HEAD `e0d4a3a`. Automatic bounded TestCompound provisioning is superseded by the explicit QA lab above. Its source, validation, artifact and owner-pending claims describe that delivery; the full body is preserved.
+
+
 
 This continues existing [PR #13](https://github.com/D3athAn63l/The-Network/pull/13) on `codex/phase32b-groups-concretization`, from **`be3088cefd496e453c9e60d67a87fea9444faac2`**. The previous validated source `bd59bd0`, two **602 / 43,431 / 0** passes and DLL hash `758be092…` now form the historical runtime-correction record below. No new PR or merge.
 

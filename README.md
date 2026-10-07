@@ -21,7 +21,7 @@ developer wrote.
 
 ## Repository status
 
-**PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED — OWNER RUNTIME VALIDATION PENDING.** The accepted [readiness audit](docs/PHASE32B_READINESS_AUDIT.md) now has an [as-built implementation and validation record](docs/PHASE32B_VALIDATION.md): immutable Composition v1, ≤8 role-correct Episode members, temporary anonymous reservation, selective same-Pawn promotion and conservative accounting. The owner accepted 026–028; corrected 029 and the remaining runtime/save-load evidence still await owner verification. S26/S27 remain PARTIAL, S11 remains FAIL / rescue STOPPED and R-50 remains OPEN.
+**PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED — OWNER RUNTIME VALIDATION PENDING.** The accepted [readiness audit](docs/PHASE32B_READINESS_AUDIT.md) now has an [as-built implementation and validation record](docs/PHASE32B_VALIDATION.md): immutable Composition v1, ≤8 role-correct Episode members, temporary anonymous reservation, selective same-Pawn promotion and conservative accounting. Previous 026–028 owner passes are historical; explicit QA lab Create/Reset and corrected 029 require owner runtime continuation. S26/S27 remain PARTIAL, S11 remains FAIL / rescue STOPPED and R-50 remains OPEN.
 
 **Phase 1 (Foundation + Intel + Fixers)** is implemented on top of the frozen Phase 0 architecture:
 the global cast in Mod Settings, the world cast snapshot, Fixers, the Comms Console gate, the item
@@ -127,7 +127,7 @@ decision on the documented alternative. Its domain half is proven headlessly. Sa
 The contract board, the player as contractor and the social layer are later phases
 ([docs/IMPLEMENTATION_PHASES.md](docs/IMPLEMENTATION_PHASES.md)).
 
-**Test status.** The [current PR #13 compound/custody QA report](docs/PHASE32B_VALIDATION.md#pr-13-custody-qa-correction-current-owner-review-record) records source `5548f0b`, focused validation and the exact shipped DLL. Full pass 1: **616 tests / 44,269 checks / 0 failures, exit 0**; full pass 2: **616 tests / 44,269 checks / 0 failures, exit 0**. **0 warnings / 0 errors** in strict production and test builds for each accepted full run; warnings as errors; **PASS**, all 9 source gates in each accepted full run. Owner **026 / 027 / 028 PASS** remain accepted, including the 240-tick dwell. Previous **029 FAIL** followed real prisoner escape after arrest at the edge spawn. Corrected **029 requires an owner rerun**; the terminal-batch architecture remains unchanged. Prior `bd59bd0`/602-test delivery and older artifact evidence are historical.
+**Test status.** The [current PR #13 dedicated QA lab report](docs/PHASE32B_VALIDATION.md#pr-13-dedicated-qa-lab-current-owner-review-record) records source `6162748`, focused checks and the exact shipped DLL. Full pass 1: **626 tests / 45,090 checks / 0 failures, exit 0**; full pass 2: **626 tests / 45,090 checks / 0 failures, exit 0**; strict production/tests have 0 warnings/errors and all nine gates PASS. Explicit armed **Create** and destructive **Reset** provision the whole Concrete test pad; runtime scenarios validate/use it. Previous 026–028 owner passes and prior 029 escape are historical. The owner’s generated-debris refusal occurred before Plan, and the new **Create → Reset → 029** path still requires runtime verification. One 026 sanity run is recommended before final merge. S21/S26/S27 remain PARTIAL; S11 FAIL / rescue STOPPED and R-50 OPEN remain unchanged.
 
 **Owner runtime evidence** ([RUNTIME_TESTING § 15](docs/RUNTIME_TESTING.md#15-owner-observed-runtime-evidence)):
 
