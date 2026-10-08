@@ -959,7 +959,7 @@ Existing headless evidence is **481 tests / 35,084 checks / 0 failures ×2**, ze
 This acceptance update is documentation-only; there is no rebuild or new gameplay test run.
 
 S21 stays PARTIAL for the remaining headless-only caravan/transport/other-faction-prisoner observations. R-50 stays OPEN,
-O-20 stays locked, S11 stays FAIL / rescue STOPPED. Since this 3.2A acceptance, 3.2B is implemented/headless validated and owner runtime validated for the current Create/Reset and 026–032 suite (§ 19); independent final audit is pending. 3.2C, 3.3 and Phase 4 remain unimplemented.
+O-20 stays locked, S11 stays FAIL / rescue STOPPED. Since this 3.2A acceptance, 3.2B is merged/headless validated and owner runtime validated for the current Create/Reset and 026–032 suite (§ 19); independent final audit PASSED. 3.2C, 3.3 and Phase 4 remain unimplemented.
 
 **Historical correction sequence (preserved):**
 
@@ -1007,11 +1007,11 @@ they are not outstanding acceptance work.
 
 ## 19. Phase 3.2B: groups and progressive concretization
 
-**PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATION COMPLETE FOR THE CURRENT CREATE/RESET AND 026–032 SCENARIO SET. INDEPENDENT FINAL AUDIT PENDING.**
+**PHASE 3.2B MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED / INDEPENDENT FINAL AUDIT PASSED.**
 
 The owner completed the final dedicated lab, **026–032**, **030A terminal and 030B active Pending SAVE/LOAD → unarmed 030V**, and **032A/032B ~150/~300 SAVE/LOAD → unarmed 032V**. See [final owner acceptance and frozen source/artifact](PHASE32B_VALIDATION.md#pr-13-final-owner-runtime-acceptance) and the matrix in [§ 19.4](#194-final-phase-32b-owner-runtime-evidence). Validated source remains `98ddc71f77920592b81845eb23c63f291f18843e`; this record is documentation-only. Scenarios consume a prepared lab; the two explicit armed actions own provisioning. S21/S26/S27 PARTIAL, S11 FAIL / rescue STOPPED, R-50 OPEN and O-20 LOCKED remain.
 
-The earlier wilderness-edge 029 escape/FAIL, automatic-provisioning/debris refusal and Test 4 verifier protocol errors remain historical; fresh final-lab results supersede their outstanding gates. There is no pending formal 032V rerun. The instructions below preserve the setup/menu/save-load protocols **for reproduction**, not as outstanding formal acceptance work. **Owner runtime gate complete; independent final audit pending. PR #13 remains draft/open/unmerged. DO NOT MERGE YET.**
+The earlier wilderness-edge 029 escape/FAIL, automatic-provisioning/debris refusal and Test 4 verifier protocol errors remain historical; fresh final-lab results supersede their outstanding gates. There is no pending formal 032V rerun. The instructions below preserve the setup/menu/save-load protocols **for reproduction**, not as outstanding formal acceptance work. **Owner runtime gate complete; independent final audit PASSED. PR #13 is CLOSED / MERGED.**
 
 ### 19.0 Explicit lab setup
 
@@ -1094,7 +1094,7 @@ The full return/wound/death/capture/recruit/missing/combat-promoted/ephemeral ma
 
 ### 19.4 Final Phase 3.2B owner runtime evidence
 
-**2026-10-07: OWNER RUNTIME GATE COMPLETE FOR THE CURRENT IMPLEMENTED SLICE; INDEPENDENT FINAL AUDIT PENDING.** This matrix records the owner's final runtime validation brief. Counts are **PASS / FAIL / GAP**, not a sum across overlapping checkpoint/verifier reports. All listed load cases used actual SAVE → main menu → LOAD; **030V/032V ran WITHOUT ARMING**.
+**2026-10-07: OWNER RUNTIME GATE COMPLETE FOR THE CURRENT IMPLEMENTED SLICE; INDEPENDENT FINAL AUDIT PASSED.** This matrix records the owner's final runtime validation brief. Counts are **PASS / FAIL / GAP**, not a sum across overlapping checkpoint/verifier reports. All listed load cases used actual SAVE → main menu → LOAD; **030V/032V ran WITHOUT ARMING**.
 
 | Scenario / checkpoint | Final owner result | Scope |
 |---|---|---|
@@ -1115,4 +1115,4 @@ Owner-environment probes: loaded 150 retained, **15,000 lookups ~0.542 ms**; 300
 
 Historical Test 4 **030V 37/1/0** and **032V 9/1/0** each failed only arm-cleared because the owner manually armed after LOAD. They are **operator workflow/protocol errors**, not production/persistence/registry/binding defects; fresh Test 5 and Test 6 supersede them respectively. General Kernel **~25 findings / 25 repaired** during Test 6 loads have no established root cause/category; subsequent retained coverage and physical integrity were clean. Test 4's isolated vanilla/Odyssey-side `InvalidOperationException: Stack empty` had no The Network frame, was not reproduced in the fresh runs and is not attributable to PR #13 on this evidence. Full chronology and precise scope are in [final owner acceptance](PHASE32B_VALIDATION.md#pr-13-final-owner-runtime-acceptance).
 
-This documentation update preserves source `98ddc71f77920592b81845eb23c63f291f18843e` and DLL SHA-256 `610cb8feadef228e746bb43254ee78a87ff8071d69f2d4d756b91632894ca580` (**1,291,776 bytes**; stamp `built 2026-10-07T10:38Z, source commit 98ddc71`). No source/tests/DLL change or rebuild. S11 FAIL / rescue STOPPED, R-50 OPEN, O-20 LOCKED and S21/S26/S27 PARTIAL remain. Transient capture→escape-before-terminal/full 3.2C remain deferred; 3.3/Phase 4 unimplemented. No blocker is established by the supplied final runtime record before independent audit; the audit itself remains pending. **DO NOT MERGE YET.**
+This documentation update preserves source `98ddc71f77920592b81845eb23c63f291f18843e` and DLL SHA-256 `610cb8feadef228e746bb43254ee78a87ff8071d69f2d4d756b91632894ca580` (**1,291,776 bytes**; stamp `built 2026-10-07T10:38Z, source commit 98ddc71`). No source/tests/DLL change or rebuild. S11 FAIL / rescue STOPPED, R-50 OPEN, O-20 LOCKED and S21/S26/S27 PARTIAL remain. Transient capture→escape-before-terminal/full 3.2C remain deferred; 3.3/Phase 4 unimplemented. Independent final audit passed after owner Test 6 with **APPROVED / MERGE READY** and no technical blocker; PR #13 merged as `8986997afb9809bd66309684e7b01d3e58570292`. No current Phase 3.2B merge blocker remains.

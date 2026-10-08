@@ -1139,10 +1139,10 @@
 
 ### ADR-057 · Phase 3.2B readiness owner decisions
 
-- **Status. Accepted (design/readiness 2026-10-06); PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED FOR THE CURRENT CREATE/RESET AND 026–032 SLICE; INDEPENDENT FINAL AUDIT PENDING.** The owner reviewed audit HEAD
+- **Status. Accepted (design/readiness 2026-10-06); PHASE 3.2B MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED / INDEPENDENT FINAL AUDIT PASSED.** The owner reviewed audit HEAD
   `7d5e4ebc9308a12d4a1416c08e1a3db1c14b8bac` and accepted the
   [readiness report](PHASE32B_READINESS_AUDIT.md). Its pre-implementation verdict was **READY FOR 3.2B IMPLEMENTATION**.
-  The implementation now follows this accepted direction ([Appendix M](PHYSICAL_LIFECYCLE.md#appendix-m-phase-32b-as-built-groups-and-progressive-concretization), [validation](PHASE32B_VALIDATION.md)). PR #11 / Phase 3.2A is already merged and owner validated.
+  PR #13 merged as [8986997afb9809bd66309684e7b01d3e58570292](https://github.com/D3athAn63l/The-Network/commit/8986997afb9809bd66309684e7b01d3e58570292) after the independent final audit returned **APPROVED / MERGE READY**. The implementation follows this accepted direction ([Appendix M](PHYSICAL_LIFECYCLE.md#appendix-m-phase-32b-as-built-groups-and-progressive-concretization), [validation](PHASE32B_VALIDATION.md)). PR #11 / Phase 3.2A is already merged and owner validated.
 - **Decisions.**
   1. `MaxKnownMembers == 6` is the normal **living discretionary seat-concretization target**, with
      leader/lieutenants included. Accepted strong identity obligations may overflow; a held person
@@ -1185,7 +1185,7 @@
   audit / isolated headless experiment**. No future runtime scenario is claimed passed. S11 FAIL /
   rescue STOPPED, R-50 OPEN, S21 PARTIAL and O-20's locked direction remain unchanged. Save format
   remains 5 with additive EpisodeMember placement defaults, no production Harmony. Production implementation
-  and headless verification plus [final owner runtime acceptance](PHASE32B_VALIDATION.md#pr-13-final-owner-runtime-acceptance) are recorded separately: Create/Reset, 026–032, terminal 030A, active Pending 030B and ~150/~300 retained 032 loads now pass. Genuine player-visible-map eligibility, committed-before-RELEASE saves and broader S26/S27 probes remain separate. PR #13 stays draft/open/unmerged for independent final audit; no source/tests/DLL change or rebuild.
+  and headless verification plus [final owner runtime acceptance](PHASE32B_VALIDATION.md#pr-13-final-owner-runtime-acceptance) are recorded separately: Create/Reset, 026–032, terminal 030A, active Pending 030B and ~150/~300 retained 032 loads now pass. Genuine player-visible-map eligibility, committed-before-RELEASE saves and broader S26/S27 probes remain separate. PR #13 is CLOSED / MERGED after independent final audit PASS; no source/tests/DLL change or rebuild.
 - **Supersedes.** The audit's pending owner choices and readiness verdict at `7d5e4eb`, older
   discretionary-cap arithmetic, mandatory persisted-composition direction and initial opinion-floor
   screening direction. Historical records retain the earlier statements as history. It does not
