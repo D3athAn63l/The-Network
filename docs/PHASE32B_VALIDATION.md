@@ -1,6 +1,6 @@
 # Phase 3.2B implementation and validation
 
-**PHASE 3.2B IMPLEMENTED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATION COMPLETE FOR THE CURRENT CREATE/RESET AND 026–032 SCENARIO SET. INDEPENDENT FINAL AUDIT PENDING.**
+**PHASE 3.2B MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED / INDEPENDENT FINAL AUDIT PASSED.**
 
 This report describes the developer-triggered group slice delivered on `codex/phase32b-groups-concretization`, based on merged PR #12 `main` **`e251c61efcbb7773f36e31e4862373e22930173e`**. The owner accepted Composition v1, the promotion policy and the 3.2B boundary in [ADR-057](DECISIONS.md#adr-057--phase-32b-readiness-owner-decisions). The earlier [readiness audit](PHASE32B_READINESS_AUDIT.md) remains a historical design/source record.
 
@@ -8,14 +8,31 @@ Phase 3.2A remains **MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED**: PR
 
 ## PR #13 final owner runtime acceptance
 
-**2026-10-07 · owner-reported in-game evidence · documentation/PR metadata update only.** The owner's final runtime validation record covers the dedicated QA lab and the frozen wildlife-reset build below. **Phase 3.2B implemented runtime slice: owner runtime validation complete for the current Create/Reset, 026–032 scenario set, including 030 and 032 save/load. Owner runtime gate complete; independent final audit pending.** Existing [PR #13](https://github.com/D3athAn63l/The-Network/pull/13) remains **OPEN / DRAFT / UNMERGED** on `codex/phase32b-groups-concretization`.
+**2026-10-07 · owner-reported in-game evidence · documentation/PR metadata update only.** The owner's final runtime validation record covers the dedicated QA lab and the frozen wildlife-reset build below. **Phase 3.2B implemented runtime slice: owner runtime validation complete for the current Create/Reset, 026–032 scenario set, including 030 and 032 save/load. Owner runtime gate complete; independent final audit PASSED.** PR #13 is **CLOSED / MERGED**, accepted as [8986997afb9809bd66309684e7b01d3e58570292](https://github.com/D3athAn63l/The-Network/commit/8986997afb9809bd66309684e7b01d3e58570292). Its final pre-merge HEAD was `4b1af08fe80873a3f8c140a7aaada384b3c09de0`.
+
+### Independent final audit and merge signoff
+
+This post-merge record reflects the owner's completed independent final audit **after Test 6**. Its verdict was **APPROVED / MERGE READY**; no technical blocker remained for the accepted implemented slice. The owner subsequently merged PR #13, and GitHub confirms it is **CLOSED / MERGED**.
+
+| Final audit item | Accepted evidence |
+|---|---|
+| Final pre-merge PR #13 HEAD | `4b1af08fe80873a3f8c140a7aaada384b3c09de0` |
+| Final publication | `4d6ca01` → `4b1af08` was documentation-only; no source/test/DLL change after the frozen validated build. |
+| Pre-merge technical readiness | GitHub reported mergeable; the independent audit found no branch-protection or required-status-check blocker and no technical blocker for this slice. |
+| Validated source / DLL | Source `98ddc71f77920592b81845eb23c63f291f18843e`; DLL SHA-256 `610cb8feadef228e746bb43254ee78a87ff8071d69f2d4d756b91632894ca580`; exact stamp/version/bytes below unchanged. |
+| Headless / strict compiler / source gates | Two complete **633 tests / 45,174 checks / 0 failures**, exit 0 each; **0 warnings / 0 errors**; all **nine source gates PASS**. Prior evidence, not new executions in this cleanup. |
+| Save format / production Harmony | **5 / none**, unchanged. |
+| Owner runtime acceptance | Dedicated Create/Reset/disposable non-humanlike cleanup and current **026–032**, including terminal 030A, active Pending 030B and ~150/~300 retained 032 real save/load; final 030V/032V correctly **WITHOUT ARMING**. |
+| PR #13 merge commit | `8986997afb9809bd66309684e7b01d3e58570292` — Phase 3.2B accepted and merged. |
+
+The documentation-only owner acceptance commit and final GitHub merge do **not** replace validated source or DLL provenance. This cleanup performs no source/test/DLL change, compilation, rebuild or runtime rerun. S11 **FAIL / rescue STOPPED**, R-50 **OPEN**, O-20 **LOCKED**, S21/S26/S27 **PARTIAL** and all broader/deferred scope remain unchanged; S26/S27 cover evidence beyond this accepted runtime suite.
 
 ### Frozen source and artifact
 
 | Value | Validated build, unchanged by this documentation update |
 |---|---|
 | Validated source commit | `98ddc71f77920592b81845eb23c63f291f18843e` |
-| Artifact/docs HEAD before this update | `4d6ca01dfaf0e0d491072307065063e484618fcf` |
+| Artifact/docs HEAD before the owner runtime acceptance record | `4d6ca01dfaf0e0d491072307065063e484618fcf` |
 | DLL | `1.6/Assemblies/TheNetwork.dll` |
 | Build stamp | `built 2026-10-07T10:38Z, source commit 98ddc71` |
 | Informational version | `0.1.0+98ddc71f77920592b81845eb23c63f291f18843e` |
@@ -23,9 +40,9 @@ Phase 3.2A remains **MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED**: PR
 | Bytes | **1,291,776** |
 | Save format / production Harmony | **5 / none** |
 
-A documentation-only commit advances PR HEAD without replacing the validated source SHA or artifact provenance. No production source, QA source, tests or DLL change; no compilation or rebuild. The existing two complete fresh-process headless passes remain **633 tests / 45,174 checks / 0 failures**, exit 0 each, with zero strict compiler warnings/errors and all nine source gates PASS. These are prior validated-build results, not new runs for this update. Detailed source/audit/build evidence is preserved in the historical wildlife-reset delivery below.
+The owner acceptance documentation commit `4b1af08fe80873a3f8c140a7aaada384b3c09de0` and merge `8986997afb9809bd66309684e7b01d3e58570292` do not replace the validated source SHA or artifact provenance. This post-merge cleanup is documentation/PR metadata only. No production source, QA source, tests or DLL change; no compilation or rebuild. The existing two complete fresh-process headless passes remain **633 tests / 45,174 checks / 0 failures**, exit 0 each, with zero strict compiler warnings/errors and all nine source gates PASS. These are prior validated-build results, not new runs for this update. Detailed source/audit/build evidence is preserved in the historical wildlife-reset delivery below.
 
-Documentation verification: `git diff --check` PASS; **732 local Markdown links checked / zero new link or anchor errors**. Two pre-existing repository-root links remain unchanged inside the preserved historical PR handoff. All prior validation delivery bodies, custody/removal audit bodies, readiness/spike audit bodies and Phase 3.1/3.2A acceptance appendices are preserved byte-for-byte. The diff from `4d6ca01` contains **13 Markdown documentation files only**; source/tests and DLL bytes, hash, stamp and informational version remain unchanged. No current-status contradiction or new runtime blocker was found.
+Pre-merge documentation verification (`4d6ca01` → `4b1af08`): `git diff --check` PASS; **732 local Markdown links checked / zero new link or anchor errors**. Two pre-existing repository-root links remain unchanged inside the preserved historical PR handoff. All prior validation delivery bodies, custody/removal audit bodies, readiness/spike audit bodies and Phase 3.1/3.2A acceptance appendices are preserved byte-for-byte. The diff from `4d6ca01` contains **13 Markdown documentation files only**; source/tests and DLL bytes, hash, stamp and informational version remain unchanged. No current-status contradiction or new runtime blocker was found.
 
 ### Final owner runtime matrix
 
@@ -85,11 +102,9 @@ Test 4 also contained one isolated **`InvalidOperationException: Stack empty`**,
 
 The implemented runtime slice now has owner evidence for dedicated disposable setup, bounded role-correct group materialization, same-Pawn visit continuity, anonymous sustained custody and terminal promotion, active Pending and terminal save/load, simple succession and retained coverage around 150/300. **S11 FAIL / rescue STOPPED; R-50 OPEN; O-20 LOCKED; S21/S26/S27 PARTIAL** remain. Transient capture→escape-before-terminal and full 3.2C are deferred; 3.3 and Phase 4 remain unimplemented. Genuine separately gated player-visible-map eligibility, cap-full/above-six runtime demonstration, committed-before-RELEASE saves, broader S26/S27 probes and full game-save/TPS/load measurements are not closed by this suite. No future physical procurement/handoff or player-contractor phase is claimed complete.
 
-No blocker is established by the supplied final owner runtime record before starting the independent final audit. That audit is **pending**; this documentation update does not assume merge readiness or change PR draft state.
+The independent final audit completed after owner Test 6 and found no technical blocker for the accepted Phase 3.2B implemented slice. Its verdict was **APPROVED / MERGE READY**; the owner subsequently merged PR #13. No current Phase 3.2B merge blocker remains. Broader/deferred evidence and implementation scope above remain unchanged.
 
-**PR #13 PHASE 3.2B OWNER RUNTIME VALIDATION COMPLETE — CREATE / RESET / 026–032 INCLUDING 030 AND 032 SAVE-LOAD PASS — INDEPENDENT FINAL AUDIT NEXT**
-
-**DO NOT MERGE YET.**
+**PHASE 3.2B MERGED / HEADLESS VALIDATED / OWNER RUNTIME VALIDATED / INDEPENDENT FINAL AUDIT PASSED.**
 
 > **Historical deliveries follow.** Every delivery body below is preserved from pre-update HEAD `4d6ca01`. Former “current owner review” headings, pending/rerun instructions, API-denial observations and superseded artifact hashes describe their delivery dates. Current runtime acceptance is the section above; the wildlife-reset source/DLL remain the frozen validated build.
 

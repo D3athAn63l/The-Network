@@ -552,7 +552,7 @@
   ([§ 4.5](PHYSICAL_LIFECYCLE.md#45-progressive-concretization)).
 - **Proven by.** `RT-PHYS-023`, `RT-PHYX-014`, the Phase 3 soak (retained-pawn growth); spike **S27** (encounter evidence,
   including the reliability of the narrowed log tests).
-- **3.2B implemented/headless evidence and scoped owner runtime PASS; S27 remains PARTIAL.** [S27](spikes/S27-progressive-concretization-evidence.md)
+- **3.2B merged/headless evidence and scoped owner runtime PASS; independent audit PASS; S27 remains PARTIAL.** [S27](spikes/S27-progressive-concretization-evidence.md)
   is PARTIAL (source/headless). The [opportunity model](PHASE32B_READINESS_AUDIT.md#8-retention-opportunity-model)
   reaches roughly 285 retained identities for a repeatedly encountered representative 100-contractor cast;
   the owner accepted this architectural outcome and 150 as a soft target, with owner runtime/save-load observation now completed around 150/300 Pawns and further measurement still available.
@@ -560,7 +560,7 @@
   remain Episode-owned/reserved while others are Pending, then promote in the atomic whole-Episode commit before RELEASE.
   Temporary reservation now derives from durable Episode PawnRefs through the existing M1 registry, with
   early thing-id and resolved-pointer load coverage; headless Scribe/handoff tests pass ([validation](PHASE32B_VALIDATION.md)).
-  Actual active Pending 030B, terminal 030A and retained ~150/~300 save-load observations now have [owner PASS](PHASE32B_VALIDATION.md#pr-13-final-owner-runtime-acceptance). Committed-before-RELEASE saves and broader S27 combat/direct-relation probes remain separate; independent final audit is pending. No dummy KnownCharacter or early per-member commit is authorized.
+  Actual active Pending 030B, terminal 030A and retained ~150/~300 save-load observations now have [owner PASS](PHASE32B_VALIDATION.md#pr-13-final-owner-runtime-acceptance). Committed-before-RELEASE saves and broader S27 combat/direct-relation probes remain separate; independent final audit PASSED. No dummy KnownCharacter or early per-member commit is authorized.
 
 ## R-37 · The reconciliation commit crosses services and is half-applied (Phase 3)
 - **Failure modes.** The existing casualty, succession and actor-ending paths interleave durable mutation with inline
@@ -599,7 +599,7 @@
   returned Pawns. The Network never writes relations, opinions, thoughts, memories, traits or ideology of a bound
   pawn to manufacture cohesion ([§ 6.9](PHYSICAL_LIFECYCLE.md#69-team-cohesion)).
 - **Proven by.** Spike **S26**; `RT-PHYS-024` (initial-only; source scan), `RT-PHYX-013`.
-- **3.2B construction implemented; current runtime slice owner validated; broader S26 probes remain pending.** [S26](spikes/S26-team-cohesion.md) is PARTIAL (source audit): core
+- **3.2B construction merged; current runtime slice owner validated; independent audit PASS; broader S26 probes remain pending.** [S26](spikes/S26-team-cohesion.md) is PARTIAL (source audit): core
   same-faction opinions can be meaningful before spawn, but map/mod thoughts, compatibility and
   query-cache residue limit a screen. BEST-EFFORT initial construction is accepted; guaranteed opinion floors,
   fabricated friendships, positive memories, relation writing, trait removal and broad friction blacklists are outside
